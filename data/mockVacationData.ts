@@ -56,7 +56,6 @@ export const mockVacationRequests: VacationRequest[] = [
     status: VacationRequestStatus.ON_APPROVAL,
     comment: 'Летний отпуск',
     hasTravel: true,
-    travelDays: 2,
     createdAt: '2026-01-06T16:00:00',
     statusHistory: [
       {
@@ -175,7 +174,6 @@ export const mockVacationRequests: VacationRequest[] = [
     status: VacationRequestStatus.APPROVED,
     comment: 'Ежегодный отпуск',
     hasTravel: true,
-    travelDays: 2,
     createdAt: '2026-01-08T10:00:00',
     reviewedAt: '2026-01-10T14:30:00',
     reviewedBy: '2',

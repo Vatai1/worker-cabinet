@@ -42,7 +42,6 @@ export function CreateVacationModal({
   const start = new Date(startDate)
   const end = new Date(endDate)
   const duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-  const durationWithTravel = duration + (hasTravel ? 2 : 0)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,7 +55,7 @@ export function CreateVacationModal({
   const canUseTravel = balance?.travelAvailable && hasTravel
   const vacationTypeInfo = VACATION_TYPES[vacationType]
   const countsInCounter = vacationTypeInfo?.countedInCounter
-  const requiredDays = countsInCounter ? durationWithTravel : 0
+  const requiredDays = countsInCounter ? duration : 0
   const hasEnoughDays = !countsInCounter || (balance?.availableDays || 0) >= requiredDays
 
   return (
@@ -118,7 +117,7 @@ export function CreateVacationModal({
             />
             <div className="flex-1">
               <label htmlFor="hasTravel" className="block text-sm font-medium text-gray-700">
-                С проездом к месту проведения отпуска (+2 дня)
+                С проездом к месту проведения отпуска
               </label>
               {balance?.travelAvailable ? (
                 <p className="text-xs text-gray-600 mt-1">
@@ -158,7 +157,6 @@ export function CreateVacationModal({
                 </div>
                 <div className="text-gray-600">
                   Требуется: {requiredDays} дней
-                  {hasTravel && ` (включая 2 дня проезда)`}
                 </div>
                 {balance && (
                   <div className="text-gray-600">
