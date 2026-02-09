@@ -90,7 +90,7 @@ export function Vacation() {
     }
   }
 
-  const currentYear = new Date().getFullYear()
+  const currentYear = 2026
   const isManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin'
 
   return (
