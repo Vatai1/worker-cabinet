@@ -105,9 +105,9 @@ async function seed() {
     for (const user of createdUsers) {
       await query(
         `INSERT INTO vacation_balances 
-         (user_id, total_days, used_days, available_days, reserved_days, travel_available, hire_date)
-         VALUES ($1, 28, 0, 28, 0, true, $2)`,
-        [user.id, user.id === managerId ? '2018-01-15' : '2020-03-01']
+         (user_id, total_days, used_days, available_days, reserved_days, travel_available)
+         VALUES ($1, 28, 0, 28, 0, true)`,
+        [user.id]
       )
     }
 
