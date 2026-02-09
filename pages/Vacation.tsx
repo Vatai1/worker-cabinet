@@ -4,6 +4,7 @@ import { useVacationStore } from '@/store/vacationStore'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { YearCalendar } from '@/components/calendar/YearCalendar'
+import { CreateVacationModal } from '@/components/modals/CreateVacationModal'
 import { VacationRequestStatus, VacationType } from '@/types'
 import { getVacationRequestStatusBadge } from '@/data/mockVacationData'
 
@@ -67,19 +68,25 @@ export function Vacation() {
     setSelectedEndDate(endDate)
     if (startDate && endDate) {
       setShowCreateFromCalendar(true)
+    } else {
+      setShowCreateFromCalendar(false)
     }
   }
 
-  const handleCreateFromCalendar = async () => {
+  const handleCreateFromModal = async (data: {
+    vacationType: VacationType
+    hasTravel: boolean
+    comment: string
+  }) => {
     if (!user || !selectedStartDate || !selectedEndDate) return
     
     try {
       await useVacationStore.getState().createRequest(user.id, {
         startDate: selectedStartDate,
         endDate: selectedEndDate,
-        vacationType: VacationType.ANNUAL_PAID,
-        comment: '',
-        hasTravel: false,
+        vacationType: data.vacationType,
+        comment: data.comment,
+        hasTravel: data.hasTravel,
       })
       setSelectedStartDate(null)
       setSelectedEndDate(null)
@@ -88,6 +95,10 @@ export function Vacation() {
     } catch (err) {
       console.error('Error creating request:', err)
     }
+  }
+
+  const handleCloseModal = () => {
+    setShowCreateFromCalendar(false)
   }
 
   const currentYear = 2026
@@ -157,34 +168,15 @@ export function Vacation() {
               selectedEndDate={selectedEndDate}
             />
             {showCreateFromCalendar && selectedStartDate && selectedEndDate && (
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-semibold text-blue-900">
-                      Создать заявку на отпуск?
-                    </div>
-                    <div className="text-sm text-blue-700">
-                      {new Date(selectedStartDate).toLocaleDateString('ru-RU')} - {new Date(selectedEndDate).toLocaleDateString('ru-RU')}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleCreateFromCalendar}>
-                      Создать
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        setSelectedStartDate(null)
-                        setSelectedEndDate(null)
-                        setShowCreateFromCalendar(false)
-                      }}
-                    >
-                      Отмена
-                    </Button>
-                  </div>
-                </div>
-              </div>
+              <CreateVacationModal
+                isOpen={showCreateFromCalendar}
+                startDate={selectedStartDate}
+                endDate={selectedEndDate}
+                onClose={handleCloseModal}
+                onSubmit={handleCreateFromModal}
+                loading={loading}
+                balance={balance}
+              />
             )}
           </div>
         </Card>
