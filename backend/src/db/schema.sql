@@ -74,7 +74,7 @@ CREATE TABLE vacation_balances (
   user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   total_days INTEGER DEFAULT 28 NOT NULL,
   used_days INTEGER DEFAULT 0 NOT NULL,
-  available_days INTEGER GENERATED ALWAYS AS (total_days - used_days) STORED,
+  available_days INTEGER DEFAULT 28 NOT NULL,
   reserved_days INTEGER DEFAULT 0 NOT NULL,
   last_accrual_date DATE,
   
@@ -172,3 +172,16 @@ CREATE TRIGGER update_vacation_requests_updated_at BEFORE UPDATE ON vacation_req
 
 CREATE TRIGGER update_departments_updated_at BEFORE UPDATE ON departments
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to update available_days balance
+CREATE OR REPLACE FUNCTION update_available_days()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.available_days := NEW.total_days - NEW.used_days;
+  RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_balance_available_days 
+  BEFORE INSERT OR UPDATE ON vacation_balances
+  FOR EACH ROW EXECUTE FUNCTION update_available_days();
