@@ -9,6 +9,7 @@ import { Requests } from '@/pages/Requests'
 import { Documents } from '@/pages/Documents'
 import { Notifications } from '@/pages/Notifications'
 import { ManagerDashboard } from '@/pages/ManagerDashboard'
+import { Vacation } from '@/pages/Vacation'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -46,6 +47,7 @@ function App() {
           />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="manager" element={<ManagerDashboard />} />
+          <Route path="vacation" element={<Vacation />} />
           <Route path="profile" element={<Profile />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="requests" element={<Requests />} />

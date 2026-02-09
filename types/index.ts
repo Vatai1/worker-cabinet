@@ -1,4 +1,4 @@
-export type UserRole = 'employee' | 'manager' | 'admin'
+export type UserRole = 'employee' | 'manager' | 'hr' | 'admin'
 
 export interface User {
   id: string
@@ -8,13 +8,15 @@ export interface User {
   middleName?: string
   position: string
   department: string
+  departmentId?: string
   avatar?: string
   phone?: string
   birthDate?: string
   hireDate: string
   status: 'active' | 'inactive' | 'on_leave'
   role: UserRole
-  subordinates?: string[] // ID сотрудников для начальника
+  subordinates?: string[] 
+  managerId?: string
 }
 
 export interface Salary {
@@ -81,3 +83,6 @@ export interface AppState {
   notifications: Notification[]
   sidebarOpen: boolean
 }
+
+export * from './vacation'
+
