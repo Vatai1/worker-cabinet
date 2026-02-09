@@ -189,7 +189,8 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                     onMouseLeave={() => setHoverDate(null)}
                     className={`
                       relative p-1 text-center cursor-pointer rounded transition-all
-                      ${isWeekend ? 'bg-gray-50' : 'hover:bg-gray-100'}
+                      ${isWeekend && !isSelected ? 'bg-gray-50 text-gray-700' : ''}
+                      ${!isWeekend && !isSelected ? 'hover:bg-gray-100' : ''}
                       ${isSelected ? 'bg-blue-500 text-white hover:bg-blue-600' : ''}
                       ${isHovered ? 'bg-blue-200' : ''}
                       ${vacations.length > 0 && !isSelected ? 'font-semibold' : ''}
