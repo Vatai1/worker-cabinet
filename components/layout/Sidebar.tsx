@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/Badge'
 
 const employeeNavigation = [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Отпуска', href: '/vacation', icon: Plane },
+  { name: 'Отпуск', href: '/vacation', icon: Plane },
   { name: 'Профиль', href: '/profile', icon: User },
   { name: 'График', href: '/schedule', icon: Calendar },
   { name: 'Заявления', href: '/requests', icon: FileText },
@@ -31,7 +31,7 @@ const employeeNavigation = [
 
 const managerNavigation = [
   { name: 'Панель руководителя', href: '/manager', icon: Users },
-  { name: 'Отпуска', href: '/vacation', icon: Plane },
+  { name: 'Отпуск', href: '/vacation', icon: Plane },
   { name: 'Профиль', href: '/profile', icon: User },
   { name: 'График', href: '/schedule', icon: Calendar },
   { name: 'Заявления', href: '/requests', icon: FileText },
