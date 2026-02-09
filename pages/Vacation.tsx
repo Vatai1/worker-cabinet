@@ -208,7 +208,7 @@ export function Vacation() {
                             <div className="text-sm text-gray-600 mt-1">Комментарий: {request.comment}</div>
                           )}
                           {request.hasTravel && (
-                            <div className="text-sm text-blue-600 mt-1">✈️ С проездом (+2 дня)</div>
+                            <div className="text-sm text-blue-600 mt-1">✈️ С проездом</div>
                           )}
                         </div>
                         <div className="flex gap-2">
@@ -309,7 +309,7 @@ export function Vacation() {
                         )}
                         {request.hasTravel && (
                           <div className="text-sm text-blue-600 mt-1">
-                            ✈️ С проездом (+{request.travelDays || 2} дня)
+                            ✈️ С проездом
                           </div>
                         )}
                         {(request.rejectionReason || request.cancellationReason) && (

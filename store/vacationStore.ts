@@ -201,14 +201,12 @@ export const useVacationStore = create<VacationStore>()(
         
         try {
           const duration = calculateVacationDuration(data.startDate, data.endDate)
-          const travelDays = data.hasTravel ? 2 : 0
-          const totalDuration = duration + travelDays
           
           const balance = get().balances[userId]
           if (balance) {
             const newBalance = {
               ...balance,
-              reservedDays: balance.reservedDays + totalDuration,
+              reservedDays: balance.reservedDays + duration,
             }
             set((state) => ({
               balances: {
@@ -234,7 +232,6 @@ export const useVacationStore = create<VacationStore>()(
             status: VacationRequestStatus.ON_APPROVAL,
             comment: data.comment,
             hasTravel: data.hasTravel,
-            travelDays: data.hasTravel ? 2 : undefined,
             createdAt: new Date().toISOString(),
             statusHistory: [
               {
@@ -300,7 +297,6 @@ export const useVacationStore = create<VacationStore>()(
             ...(data.comment !== undefined && { comment: data.comment }),
             ...(data.hasTravel !== undefined && {
               hasTravel: data.hasTravel,
-              travelDays: data.hasTravel ? 2 : undefined,
             }),
             ...(newDuration !== oldDuration && { duration: newDuration }),
           }
