@@ -3,7 +3,8 @@ import { useAuthStore } from '@/store/authStore'
 import { useVacationStore } from '@/store/vacationStore'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { VacationRequestStatus } from '@/types'
+import { YearCalendar } from '@/components/calendar/YearCalendar'
+import { VacationRequestStatus, VacationType } from '@/types'
 import { getVacationRequestStatusBadge } from '@/data/mockVacationData'
 
 export function Vacation() {
@@ -22,8 +23,12 @@ export function Vacation() {
 
   const [balance, setBalance] = useState<any>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [showCalendar, setShowCalendar] = useState(true)
   const [rejectionReason, setRejectionReason] = useState('')
   const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null)
+  const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null)
+  const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null)
+  const [showCreateFromCalendar, setShowCreateFromCalendar] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -57,6 +62,35 @@ export function Vacation() {
     }
   }
 
+  const handleDateRangeSelect = (startDate: string | null, endDate: string | null) => {
+    setSelectedStartDate(startDate)
+    setSelectedEndDate(endDate)
+    if (startDate && endDate) {
+      setShowCreateFromCalendar(true)
+    }
+  }
+
+  const handleCreateFromCalendar = async () => {
+    if (!user || !selectedStartDate || !selectedEndDate) return
+    
+    try {
+      await useVacationStore.getState().createRequest(user.id, {
+        startDate: selectedStartDate,
+        endDate: selectedEndDate,
+        vacationType: VacationType.ANNUAL_PAID,
+        comment: '',
+        hasTravel: false,
+      })
+      setSelectedStartDate(null)
+      setSelectedEndDate(null)
+      setShowCreateFromCalendar(false)
+      window.location.reload()
+    } catch (err) {
+      console.error('Error creating request:', err)
+    }
+  }
+
+  const currentYear = new Date().getFullYear()
   const isManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin'
 
   return (
@@ -105,6 +139,50 @@ export function Vacation() {
               <div className="mt-4 pt-4 border-t">
                 <div className="text-sm text-gray-600">
                   ✈️ Проезд доступен (следующая дата: {new Date(balance.travelNextAvailableDate || '').toLocaleDateString('ru-RU')})
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {showCalendar && (
+        <Card>
+          <div className="p-6">
+            <YearCalendar
+              year={currentYear}
+              requests={departmentRequests}
+              onDateRangeSelect={handleDateRangeSelect}
+              selectedStartDate={selectedStartDate}
+              selectedEndDate={selectedEndDate}
+            />
+            {showCreateFromCalendar && selectedStartDate && selectedEndDate && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="font-semibold text-blue-900">
+                      Создать заявку на отпуск?
+                    </div>
+                    <div className="text-sm text-blue-700">
+                      {new Date(selectedStartDate).toLocaleDateString('ru-RU')} - {new Date(selectedEndDate).toLocaleDateString('ru-RU')}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleCreateFromCalendar}>
+                      Создать
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setSelectedStartDate(null)
+                        setSelectedEndDate(null)
+                        setShowCreateFromCalendar(false)
+                      }}
+                    >
+                      Отмена
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
