@@ -5,8 +5,11 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { YearCalendar } from '@/components/calendar/YearCalendar'
 import { CreateVacationModal } from '@/components/modals/CreateVacationModal'
+import { CreateVacationFormModal } from '@/components/modals/CreateVacationFormModal'
+import { VacationDetailModal } from '@/components/modals/VacationDetailModal'
+import { VacationHistoryModal } from '@/components/modals/VacationHistoryModal'
+import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { VacationRequestStatus, VacationType } from '@/types'
-import { getVacationRequestStatusBadge } from '@/data/mockVacationData'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -15,31 +18,39 @@ export function Vacation() {
     departmentRequests,
     loading,
     error,
+    fetchAllRequests,
     fetchUserRequests,
     fetchDepartmentRequests,
     fetchBalance,
     approveRequest,
     rejectRequest,
+    cancelRequest,
   } = useVacationStore()
 
   const [balance, setBalance] = useState<any>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [showCalendar, setShowCalendar] = useState(true)
   const [rejectionReason, setRejectionReason] = useState('')
   const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null)
   const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null)
   const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null)
   const [showCreateFromCalendar, setShowCreateFromCalendar] = useState(false)
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [detailRequest, setDetailRequest] = useState<any>(null)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
 
   useEffect(() => {
     if (user) {
       fetchUserRequests(user.id)
       if (user.role === 'manager' || user.role === 'hr' || user.role === 'admin') {
-        fetchDepartmentRequests(user.departmentId || 'dept1')
+        if (user.role === 'manager') {
+          fetchAllRequests()
+        } else {
+          fetchDepartmentRequests(user.departmentId || '1')
+        }
       }
       fetchBalance(user.id).then(setBalance)
     }
-  }, [user, fetchUserRequests, fetchDepartmentRequests, fetchBalance])
+  }, [user, fetchAllRequests, fetchUserRequests, fetchDepartmentRequests, fetchBalance])
 
   const handleApprove = async (requestId: string) => {
     if (!user) return
@@ -64,6 +75,19 @@ export function Vacation() {
   }
 
   const handleDateRangeSelect = (startDate: string | null, endDate: string | null) => {
+    console.log('handleDateRangeSelect called', { startDate, endDate })
+
+    if (startDate && !endDate && startDate.startsWith('vr-')) {
+      const requestId = startDate.replace('vr-', '')
+      const request = departmentRequests.find(r => r.id === requestId)
+      console.log('Found request:', request)
+      if (request) {
+        setDetailRequest(request)
+        setShowDetailModal(true)
+      }
+      return
+    }
+
     setSelectedStartDate(startDate)
     setSelectedEndDate(endDate)
     if (startDate && endDate) {
@@ -101,6 +125,37 @@ export function Vacation() {
     setShowCreateFromCalendar(false)
   }
 
+  const handleCreateFromForm = async (data: {
+    startDate: string
+    endDate: string
+    vacationType: VacationType
+    hasTravel: boolean
+    comment: string
+    referenceDocument?: string
+  }) => {
+    if (!user) return
+    
+    try {
+      await useVacationStore.getState().createRequest(user.id, {
+        startDate: data.startDate,
+        endDate: data.endDate,
+        vacationType: data.vacationType,
+        comment: data.comment,
+        hasTravel: data.hasTravel,
+        referenceDocument: data.referenceDocument,
+      })
+      setShowCreateForm(false)
+      window.location.reload()
+    } catch (err) {
+      console.error('Error creating request:', err)
+    }
+  }
+
+  const handleCloseDetailModal = () => {
+    setShowDetailModal(false)
+    setDetailRequest(null)
+  }
+
   const currentYear = 2026
   const isManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin'
 
@@ -113,8 +168,11 @@ export function Vacation() {
             {isManager ? 'Управление отпусками сотрудников' : 'Управление вашими отпусками'}
           </p>
         </div>
-        <Button onClick={() => setShowCreateForm(!showCreateForm)}>
-          {showCreateForm ? 'Скрыть форму' : 'Создать заявку'}
+        <Button
+          variant="secondary"
+          onClick={() => setShowHistoryModal(true)}
+        >
+          История заявок
         </Button>
       </div>
 
@@ -126,9 +184,9 @@ export function Vacation() {
 
       {balance && (
         <Card>
-          <div className="p-6">
+            <div className="p-6">
             <h2 className="text-xl font-semibold mb-4">Баланс отпускных дней</h2>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="text-center">
                 <div className="text-3xl font-bold text-blue-600">{balance.totalDays}</div>
                 <div className="text-sm text-gray-600">Всего дней</div>
@@ -141,15 +199,14 @@ export function Vacation() {
                 <div className="text-3xl font-bold text-green-600">{balance.availableDays}</div>
                 <div className="text-sm text-gray-600">Доступно</div>
               </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-yellow-600">{balance.reservedDays}</div>
-                <div className="text-sm text-gray-600">Зарезервировано</div>
-              </div>
             </div>
             {balance.travelAvailable && (
               <div className="mt-4 pt-4 border-t">
                 <div className="text-sm text-gray-600">
-                  ✈️ Проезд доступен (следующая дата: {new Date(balance.travelNextAvailableDate || '').toLocaleDateString('ru-RU')})
+                  ✈️ Проезд доступен
+                  {balance.travelNextAvailableDate && (
+                    <span> (следующая дата: {new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')})</span>
+                  )}
                 </div>
               </div>
             )}
@@ -157,9 +214,8 @@ export function Vacation() {
         </Card>
       )}
 
-      {showCalendar && (
-        <Card>
-          <div className="p-6">
+      <Card>
+        <div className="p-6">
             <YearCalendar
               year={currentYear}
               requests={departmentRequests}
@@ -180,7 +236,6 @@ export function Vacation() {
             )}
           </div>
         </Card>
-      )}
 
       {isManager && departmentRequests.length > 0 && (
         <Card>
@@ -200,6 +255,23 @@ export function Vacation() {
                             {request.userLastName} {request.userFirstName}
                           </div>
                           <div className="text-sm text-gray-600">{request.userPosition}</div>
+                          <div className="text-sm mt-1 text-gray-700">
+                            {request.vacationType === 'annual_paid'
+                              ? 'Ежегодный оплачиваемый отпуск'
+                              : request.vacationType === 'unpaid'
+                              ? 'Отпуск без сохранения заработной платы'
+                              : request.vacationType === 'educational'
+                              ? 'Учебный отпуск'
+                              : request.vacationType === 'maternity'
+                              ? 'Отпуск по беременности и родам'
+                              : request.vacationType === 'child_care'
+                              ? 'Отпуск по уходу за ребёнком'
+                              : request.vacationType === 'additional'
+                              ? 'Дополнительный отпуск'
+                              : request.vacationType === 'veteran'
+                              ? 'Ветеранский отпуск'
+                              : 'Отпуск'}
+                          </div>
                           <div className="text-sm mt-2">
                             {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
                             {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
@@ -266,71 +338,46 @@ export function Vacation() {
         </Card>
       )}
 
-      <Card>
-        <div className="p-6">
-          <h2 className="text-xl font-semibold mb-4">
-            {isManager ? 'Все заявки отдела' : 'Мои заявки'}
-          </h2>
-          {loading ? (
-            <div className="text-center py-8 text-gray-600">Загрузка...</div>
-          ) : (
-            <div className="space-y-4">
-              {(isManager ? departmentRequests : currentUserRequests).map((request) => {
-                const statusBadge = getVacationRequestStatusBadge(request.status)
-                return (
-                  <div key={request.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">
-                            {isManager && (
-                              <>
-                                {request.userLastName} {request.userFirstName} •{' '}
-                              </>
-                            )}
-                            {request.vacationType === 'annual_paid'
-                              ? 'Ежегодный отпуск'
-                              : request.vacationType === 'unpaid'
-                              ? 'Без сохранения ЗП'
-                              : 'Другой'}
-                          </span>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadge.className}`}
-                          >
-                            {statusBadge.label}
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-600 mt-2">
-                          {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
-                          {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
-                        </div>
-                        {request.comment && (
-                          <div className="text-sm text-gray-600 mt-1">Комментарий: {request.comment}</div>
-                        )}
-                        {request.hasTravel && (
-                          <div className="text-sm text-blue-600 mt-1">
-                            ✈️ С проездом
-                          </div>
-                        )}
-                        {(request.rejectionReason || request.cancellationReason) && (
-                          <div className="text-sm text-red-600 mt-1">
-                            Причина: {request.rejectionReason || request.cancellationReason}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-              {(isManager ? departmentRequests : currentUserRequests).length === 0 && (
-                <div className="text-center py-8 text-gray-600">
-                  {isManager ? 'Нет заявок в отделе' : 'У вас пока нет заявок на отпуск'}
-                </div>
-              )}
-            </div>
+
+
+          {showDetailModal && (
+            <VacationDetailModal
+              isOpen={showDetailModal}
+              request={detailRequest}
+              onClose={handleCloseDetailModal}
+            />
           )}
-        </div>
-      </Card>
-    </div>
-  )
-}
+          
+           {showCreateForm && (
+             <CreateVacationFormModal
+               isOpen={showCreateForm}
+               onClose={() => setShowCreateForm(false)}
+               onSubmit={handleCreateFromForm}
+               loading={loading}
+               balance={balance}
+             />
+           )}
+
+          {showCancelConfirm && (
+             <ConfirmModal
+               isOpen={showCancelConfirm}
+               title="Подтверждение отмены"
+               message="Вы уверены, что хотите отменить заявку на отпуск? Дни вернутся на ваш баланс."
+               onConfirm={handleConfirmCancel}
+               onCancel={handleCloseCancelConfirm}
+               confirmText="Отменить заявку"
+               cancelText="Назад"
+               loading={loading}
+             />
+           )}
+
+          {showHistoryModal && (
+            <VacationHistoryModal
+              isOpen={showHistoryModal}
+              requests={isManager ? departmentRequests : currentUserRequests}
+              onClose={() => setShowHistoryModal(false)}
+            />
+          )}
+          </div>
+        )
+    }
