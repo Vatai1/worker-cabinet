@@ -144,8 +144,23 @@ router.post('/requests', authenticateToken, async (req, res) => {
     await client.query('BEGIN')
 
     // Валидация
-    const start = new Date(startDate)
-    const end = new Date(endDate)
+    // Парсим дату как локальное время (не UTC)
+    const parseLocalDate = (dateStr) => {
+      const [year, month, day] = dateStr.split('-').map(Number)
+      return new Date(year, month - 1, day)
+    }
+
+    const start = parseLocalDate(startDate)
+    const end = parseLocalDate(endDate)
+
+    // Форматирование даты для сохранения в базу (используем локальную дату, а не UTC)
+    const formatDate = (date) => {
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
@@ -165,8 +180,8 @@ router.post('/requests', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Для учебного отпуска необходимо приложить справку' })
     }
 
-    // Расчёт длительности
-    const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+    // Расчёт длительности в днях (включая обе границы)
+    const duration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
 
     // Добавляем 2 дня при включении проезда
     const finalDuration = hasTravel ? duration + 2 : duration
@@ -187,17 +202,17 @@ router.post('/requests', authenticateToken, async (req, res) => {
       })
     }
 
-    // Проверка пересечений
+    // Проверка пересечений (используем отформатированные локальные даты)
     const overlapResult = await client.query(
       `SELECT id FROM vacation_requests 
-       WHERE user_id = $1 
-       AND status IN ('on_approval', 'approved')
-       AND (
-         (start_date <= $2 AND end_date >= $2)
-         OR (start_date <= $3 AND end_date >= $3)
-         OR (start_date >= $2 AND end_date <= $3)
-       )`,
-      [userId, startDate, endDate]
+        WHERE user_id = $1 
+        AND status IN ('on_approval', 'approved')
+        AND (
+          (start_date <= $2 AND end_date >= $2)
+          OR (start_date <= $3 AND end_date >= $3)
+          OR (start_date >= $2 AND end_date <= $3)
+        )`,
+      [userId, formatDate(start), formatDate(end)]
     )
 
     if (overlapResult.rows.length > 0) {
@@ -208,10 +223,20 @@ router.post('/requests', authenticateToken, async (req, res) => {
     // Создание заявки
     const result = await client.query(
       `INSERT INTO vacation_requests 
-       (user_id, start_date, end_date, duration, vacation_type, comment, has_travel, travel_destination, reference_document, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'on_approval')
-       RETURNING *`,
-      [userId, startDate, endDate, finalDuration, vacationType, comment, hasTravel || false, travelDestination || null, referenceDocument || null]
+        (user_id, start_date, end_date, duration, vacation_type, comment, has_travel, travel_destination, reference_document, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'on_approval')
+        RETURNING *`,
+      [
+        userId,
+        formatDate(start),
+        formatDate(end),
+        finalDuration,
+        vacationType,
+        comment,
+        hasTravel || false,
+        travelDestination || null,
+        referenceDocument || null
+      ]
     )
 
     const request = result.rows[0]

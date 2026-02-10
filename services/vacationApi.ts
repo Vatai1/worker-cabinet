@@ -35,6 +35,22 @@ const handleResponse = async (response: Response) => {
   return response.json()
 }
 
+const formatLocalDate = (date: any): string => {
+  if (!date) return ''
+
+  // Если это строка без времени
+  if (typeof date === 'string' && !date.includes('T')) {
+    return date
+  }
+
+  // Если это строка с временем или Date объект, конвертируем в локальную дату
+  const d = new Date(date)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
   id: dbRequest.id?.toString(),
   userId: dbRequest.user_id?.toString(),
@@ -43,8 +59,8 @@ const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
   userMiddleName: dbRequest.middle_name,
   userPosition: dbRequest.position || '',
   userDepartment: dbRequest.department_name || '',
-  startDate: dbRequest.start_date?.split('T')[0] || '',
-  endDate: dbRequest.end_date?.split('T')[0] || '',
+  startDate: formatLocalDate(dbRequest.start_date),
+  endDate: formatLocalDate(dbRequest.end_date),
   duration: dbRequest.duration || 0,
   vacationType: dbRequest.vacation_type || 'annual_paid',
   status: dbRequest.status || 'pending',
