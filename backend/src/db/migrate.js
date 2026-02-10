@@ -156,6 +156,7 @@ async function runMigrations() {
         rejection_reason TEXT,
         cancellation_reason TEXT,
         has_travel BOOLEAN DEFAULT false,
+        reference_document VARCHAR(500),
         reviewed_at TIMESTAMP,
         reviewed_by INTEGER REFERENCES users(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -188,6 +189,25 @@ async function runMigrations() {
     `).catch(e => console.log('  - vacation_restrictions:', e.message))
 
     console.log('✅ Tables created')
+
+    // Step 2.5: Add new columns to existing tables
+    console.log('Adding new columns...')
+    
+    try {
+      await db.query(`
+        ALTER TABLE vacation_requests 
+        ADD COLUMN IF NOT EXISTS reference_document VARCHAR(500)
+      `)
+      console.log('  ✓ reference_document column added to vacation_requests')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ reference_document (already exists)')
+      } else {
+        console.log('  - reference_document:', e.message)
+      }
+    }
+
+    console.log('✅ New columns added')
 
     // Step 3: Create indexes
     console.log('Creating indexes...')

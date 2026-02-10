@@ -4,7 +4,7 @@ import { Login } from '@/pages/Login'
 import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
 import { Profile } from '@/pages/Profile'
-import { Schedule } from '@/pages/Schedule'
+
 import { Requests } from '@/pages/Requests'
 import { Documents } from '@/pages/Documents'
 import { Notifications } from '@/pages/Notifications'
@@ -13,16 +13,20 @@ import { Vacation } from '@/pages/Vacation'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  
+  console.log('[App] ProtectedRoute - isAuthenticated:', isAuthenticated)
+
   if (!isAuthenticated) {
+    console.log('[App] Redirecting to login')
     return <Navigate to="/login" replace />
   }
-  
+
   return <>{children}</>
 }
 
 function App() {
   const user = useAuthStore((state) => state.user)
+
+  console.log('[App] User:', user ? `${user.firstName} ${user.lastName} (${user.role})` : 'null')
 
   return (
     <BrowserRouter>
@@ -36,20 +40,20 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route 
-            index 
+          <Route
+            index
             element={
-              <Navigate 
-                to={user?.role === 'manager' ? '/manager' : '/dashboard'} 
-                replace 
+              <Navigate
+                to={user?.role === 'manager' ? '/manager' : '/dashboard'}
+                replace
               />
-            } 
+            }
           />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="manager" element={<ManagerDashboard />} />
           <Route path="vacation" element={<Vacation />} />
           <Route path="profile" element={<Profile />} />
-          <Route path="schedule" element={<Schedule />} />
+
           <Route path="requests" element={<Requests />} />
           <Route path="documents" element={<Documents />} />
           <Route path="notifications" element={<Notifications />} />

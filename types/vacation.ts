@@ -123,7 +123,10 @@ export interface VacationRequest {
   cancellationReason?: string
   
   hasTravel: boolean
+  travelDestination?: string
   travelDays?: number
+  
+  referenceDocument?: string
   
   createdAt: string
   reviewedAt?: string
@@ -191,10 +194,12 @@ export interface VacationFormData {
   vacationType: VacationType
   comment?: string
   hasTravel: boolean
+  travelDestination?: string
+  referenceDocument?: string
 }
 
 export interface VacationValidationError {
-  field: 'startDate' | 'endDate' | 'duration' | 'balance' | 'overlap' | 'travel'
+  field: 'startDate' | 'endDate' | 'duration' | 'balance' | 'overlap' | 'travel' | 'referenceDocument'
   message: string
   details?: any
 }

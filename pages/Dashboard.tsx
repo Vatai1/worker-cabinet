@@ -9,7 +9,6 @@ import {
   DollarSign,
   FileText,
   TrendingUp,
-  Users,
   Clock,
 } from 'lucide-react'
 
@@ -169,20 +168,7 @@ export function Dashboard() {
                   </p>
                 </div>
               </a>
-              <a
-                href="/schedule"
-                className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent transition-colors"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Calendar className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">Просмотреть график</p>
-                  <p className="text-sm text-muted-foreground">
-                    Посмотреть расписание на ближайшие дни
-                  </p>
-                </div>
-              </a>
+
               <a
                 href="/documents"
                 className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent transition-colors"
