@@ -11,9 +11,6 @@ import type {
 import { VacationRequestStatus, VacationType } from '@/types'
 import { vacationApi } from '@/services/vacationApi'
 import {
-  mockVacationRequests,
-  mockVacationBalances,
-  mockVacationRestrictions,
   calculateVacationDuration,
   checkDateOverlap,
 } from '@/data/mockVacationData'
@@ -63,9 +60,9 @@ interface VacationStore {
 export const useVacationStore = create<VacationStore>()(
   persist(
     (set, get) => ({
-      requests: mockVacationRequests,
-      balances: mockVacationBalances,
-      restrictions: mockVacationRestrictions,
+      requests: [],
+      balances: {},
+      restrictions: [],
       
       currentUserRequests: [],
       departmentRequests: [],

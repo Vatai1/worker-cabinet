@@ -15,15 +15,25 @@ router.get('/requests', authenticateToken, async (req, res) => {
 
     // Фильтр по правам доступа
     if (user.role === 'employee') {
-      whereClause += ' AND vr.user_id = $1'
-      params.push(user.id)
+      if (departmentId) {
+        // Сотрудник видит все одобренные заявки своего отдела + свои заявки всех статусов
+        whereClause += ` AND (
+          (u.department_id = $1 AND vr.status = 'approved')
+          OR (vr.user_id = $2)
+        )`
+        params.push(departmentId, user.id)
+      } else {
+        // Без departmentId - только свои заявки
+        whereClause += ' AND vr.user_id = $1'
+        params.push(user.id)
+      }
     } else if (user.role === 'manager' || user.role === 'hr' || user.role === 'admin') {
       if (departmentId) {
         whereClause += ' AND u.department_id = $' + (params.length + 1)
         params.push(departmentId)
       } else if (user.role === 'manager') {
-        // Руководитель видит своих подчинённых
-        whereClause += ' AND u.manager_id = $' + (params.length + 1)
+        // Руководитель видит свои заявки + своих подчинённых
+        whereClause += ' AND (vr.user_id = $1 OR u.manager_id = $1)'
         params.push(user.id)
       }
     } else if (userId) {
@@ -51,35 +61,36 @@ router.get('/requests', authenticateToken, async (req, res) => {
         u.middle_name,
         u.position,
         u.department_id,
-        d.name as department_name
+        d.name as department_name,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', vrsh.id,
+              'status', vrsh.status,
+              'changedAt', vrsh.changed_at,
+              'changedBy', vrsh.changed_by,
+              'changedByName', hu.last_name || ' ' || hu.first_name,
+              'comment', vrsh.comment
+            ) ORDER BY vrsh.changed_at
+          ) FILTER (WHERE vrsh.id IS NOT NULL),
+          '[]'
+        ) as status_history
       FROM vacation_requests vr
       JOIN users u ON vr.user_id = u.id
       LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN vacation_request_status_history vrsh ON vr.id = vrsh.request_id
+      LEFT JOIN users hu ON vrsh.changed_by = hu.id
       ${whereClause}
+      GROUP BY vr.id, u.id, d.id
       ORDER BY vr.created_at DESC
     `
 
     const result = await query(sql, params)
 
-    // Get status history for each request
-    const requests = await Promise.all(
-      result.rows.map(async (request) => {
-        const historyResult = await query(
-          'SELECT * FROM vacation_request_status_history WHERE request_id = $1 ORDER BY changed_at',
-          [request.id]
-        )
-        return {
-          ...request,
-          statusHistory: historyResult.rows.map((history) => ({
-            id: history.id,
-            status: history.status,
-            changedAt: history.changed_at,
-            changedBy: history.changed_by,
-            comment: history.comment,
-          })),
-        }
-      })
-    )
+    const requests = result.rows.map((request) => ({
+      ...request,
+      statusHistory: request.status_history,
+    }))
 
     res.json(requests)
   } catch (error) {
@@ -205,11 +216,10 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     const request = result.rows[0]
 
-    // Сразу списываем дни как использованные
+    // Резервируем дни (заявка на согласовании)
     await client.query(
       `UPDATE vacation_balances 
-       SET used_days = used_days + $1,
-           available_days = available_days - $1
+       SET reserved_days = reserved_days + $1
        WHERE user_id = $2`,
       [finalDuration, userId]
     )
@@ -273,14 +283,22 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     const end = new Date(endDate)
     const newDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
 
-    // Обновление баланса (так как дни уже списаны как использованные)
-    await client.query(
-      `UPDATE vacation_balances 
-       SET used_days = used_days - $1 + $2,
-           available_days = available_days + $1 - $2
-       WHERE user_id = $3`,
-      [request.duration, newDuration, request.user_id]
-    )
+    // Обновление баланса в зависимости от статуса
+    if (request.status === 'on_approval') {
+      await client.query(
+        `UPDATE vacation_balances 
+         SET reserved_days = reserved_days - $1 + $2
+         WHERE user_id = $3`,
+        [request.duration, newDuration, request.user_id]
+      )
+    } else if (request.status === 'approved') {
+      await client.query(
+        `UPDATE vacation_balances 
+         SET used_days = used_days - $1 + $2
+         WHERE user_id = $3`,
+        [request.duration, newDuration, request.user_id]
+      )
+    }
 
     // Обновление заявки
     const result = await client.query(
@@ -306,37 +324,40 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 // Approve vacation request
 router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   const client = await getClient()
-  
+
   try {
     const { id } = req.params
     const managerId = req.user.id
 
     await client.query('BEGIN')
 
-    const requestResult = await client.query(
-      'SELECT * FROM vacation_requests WHERE id = $1',
-      [id]
+    // Переносим дни из зарезервированных в использованные и обновляем заявку одним запросом
+    const result = await client.query(
+      `UPDATE vacation_requests vr
+       SET status = 'approved', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
+       FROM vacation_balances vb
+       WHERE vr.id = $2 AND vr.status = 'on_approval' AND vb.user_id = vr.user_id
+       RETURNING 
+         vr.*,
+         vb.user_id as balance_user_id,
+         vr.duration
+      `,
+      [managerId, id]
     )
 
-    if (requestResult.rows.length === 0) {
+    if (result.rows.length === 0) {
       await client.query('ROLLBACK')
-      return res.status(404).json({ error: 'Request not found' })
+      return res.status(404).json({ error: 'Request not found or not pending approval' })
     }
 
-    const request = requestResult.rows[0]
+    const request = result.rows[0]
 
-    if (request.status !== 'on_approval') {
-      await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'Request is not pending approval' })
-    }
-
-    // Обновление статуса заявки (дни уже списаны при создании)
-    const result = await client.query(
-      `UPDATE vacation_requests 
-       SET status = 'approved', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
-       WHERE id = $2
-       RETURNING *`,
-      [managerId, id]
+    await client.query(
+      `UPDATE vacation_balances 
+       SET reserved_days = reserved_days - $1,
+           used_days = used_days + $1
+       WHERE user_id = $2`,
+      [request.duration, request.balance_user_id]
     )
 
     // Запись в историю
@@ -362,7 +383,7 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
 // Reject vacation request
 router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   const client = await getClient()
-  
+
   try {
     const { id } = req.params
     const { reason } = req.body
@@ -374,42 +395,28 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
 
     await client.query('BEGIN')
 
-    const requestResult = await client.query(
-      'SELECT * FROM vacation_requests WHERE id = $1',
-      [id]
+    const result = await client.query(
+      `UPDATE vacation_requests vr
+       SET status = 'rejected', rejection_reason = $1, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $2
+       WHERE vr.id = $3 AND vr.status = 'on_approval'
+       RETURNING vr.*`,
+      [reason, managerId, id]
     )
 
-    if (requestResult.rows.length === 0) {
+    if (result.rows.length === 0) {
       await client.query('ROLLBACK')
-      return res.status(404).json({ error: 'Request not found' })
+      return res.status(404).json({ error: 'Request not found or not pending approval' })
     }
 
-    const request = requestResult.rows[0]
+    const request = result.rows[0]
 
-    if (request.status !== 'on_approval') {
-      await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'Request is not pending approval' })
-    }
-
-    // Возврат дней на баланс (так как они уже были списаны при создании)
     await client.query(
       `UPDATE vacation_balances 
-       SET used_days = used_days - $1,
-           available_days = available_days + $1
+       SET reserved_days = reserved_days - $1
        WHERE user_id = $2`,
       [request.duration, request.user_id]
     )
 
-    // Обновление статуса заявки
-    const result = await client.query(
-      `UPDATE vacation_requests 
-       SET status = 'rejected', rejection_reason = $1, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $2
-       WHERE id = $3
-       RETURNING *`,
-      [reason, managerId, id]
-    )
-
-    // Запись в историю
     await client.query(
       `INSERT INTO vacation_request_status_history 
        (request_id, status, changed_by, comment) 
@@ -461,14 +468,22 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Можно отменять только заявки на согласовании или согласованные заявки' })
     }
 
-    // Возврат дней на баланс (так как они уже были списаны при создании)
-    await client.query(
-      `UPDATE vacation_balances 
-       SET used_days = used_days - $1,
-           available_days = available_days + $1
-       WHERE user_id = $2`,
-      [request.duration, userId]
-    )
+    // Возврат дней в зависимости от статуса
+    if (request.status === 'on_approval') {
+      await client.query(
+        `UPDATE vacation_balances 
+         SET reserved_days = reserved_days - $1
+         WHERE user_id = $2`,
+        [request.duration, userId]
+      )
+    } else {
+      await client.query(
+        `UPDATE vacation_balances 
+         SET used_days = used_days - $1
+         WHERE user_id = $2`,
+        [request.duration, userId]
+      )
+    }
 
     // Обновление статуса заявки
     const result = await client.query(
@@ -493,6 +508,62 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Error cancelling vacation request:', error)
+    res.status(500).json({ error: 'Failed to cancel vacation request' })
+  } finally {
+    client.release()
+  }
+})
+
+// Cancel vacation request (by manager)
+router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  const client = await getClient()
+
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    const managerId = req.user.id
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ error: 'Reason is required' })
+    }
+
+    await client.query('BEGIN')
+
+    const result = await client.query(
+      `UPDATE vacation_requests vr
+       SET status = 'cancelled_by_manager', cancellation_reason = $1
+       WHERE vr.id = $2 AND vr.status = 'approved'
+       RETURNING vr.*`,
+      [reason, id]
+    )
+
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Request not found or not approved' })
+    }
+
+    const request = result.rows[0]
+
+    await client.query(
+      `UPDATE vacation_balances 
+       SET used_days = used_days - $1
+       WHERE user_id = $2`,
+      [request.duration, request.user_id]
+    )
+
+    await client.query(
+      `INSERT INTO vacation_request_status_history 
+       (request_id, status, changed_by, comment) 
+       VALUES ($1, 'cancelled_by_manager', $2, $3)`,
+      [id, managerId, reason]
+    )
+
+    await client.query('COMMIT')
+
+    res.json(result.rows[0])
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Error cancelling vacation request by manager:', error)
     res.status(500).json({ error: 'Failed to cancel vacation request' })
   } finally {
     client.release()

@@ -13,41 +13,10 @@ interface UIStore {
   removeNotification: (id: string) => void
 }
 
-// Mock notifications
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    userId: '1',
-    title: 'Заявление на отпуск одобрено',
-    message: 'Ваше заявление на отпуск с 15.01.2025 по 29.01.2025 одобрено.',
-    type: 'success',
-    read: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-  },
-  {
-    id: '2',
-    userId: '1',
-    title: 'Новый график работы',
-    message: 'График работы на следующий месяц обновлен. Проверьте изменения.',
-    type: 'info',
-    read: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-  },
-  {
-    id: '3',
-    userId: '1',
-    title: 'Напоминание о прохождении обучения',
-    message: 'Не забудьте пройти обязательное обучение по безопасности до 20.01.2025.',
-    type: 'warning',
-    read: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-  },
-]
-
-export const useUIStore = create<UIStore>((set, get) => ({
+export const useUIStore = create<UIStore>((set) => ({
   sidebarOpen: true,
-  notifications: mockNotifications,
-  unreadCount: mockNotifications.filter((n) => !n.read).length,
+  notifications: [],
+  unreadCount: 0,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
   addNotification: (notification) => {

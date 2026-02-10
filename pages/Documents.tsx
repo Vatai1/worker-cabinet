@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { mockDocuments, getDocumentTypeLabel, formatFileSize } from '@/data/mockData'
+import { formatFileSize } from '@/data/mockData'
+import type { Document } from '@/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate } from '@/lib/utils'
-import { FileText, Download, Search, Filter, Upload } from 'lucide-react'
+import { FileText, Download, Search, Upload } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
 
 type DocumentType = 'all' | 'contract' | 'nda' | 'policy' | 'certificate' | 'other'
@@ -12,15 +13,16 @@ type DocumentType = 'all' | 'contract' | 'nda' | 'policy' | 'certificate' | 'oth
 export function Documents() {
   const [filterType, setFilterType] = useState<DocumentType>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [documents] = useState<Document[]>([])
 
-  const filteredDocuments = mockDocuments.filter((doc) => {
+  const filteredDocuments = documents.filter((doc) => {
     const matchesType = filterType === 'all' || doc.type === filterType
     const matchesSearch = searchQuery === '' ||
       doc.name.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesType && matchesSearch
   })
 
-  const getDocumentTypeBadge = (type: typeof mockDocuments[0]['type']) => {
+  const getDocumentTypeBadge = (type: Document['type']) => {
     const badges = {
       contract: { label: 'Договор', className: 'bg-blue-100 text-blue-800' },
       nda: { label: 'NDA', className: 'bg-purple-100 text-purple-800' },
@@ -159,7 +161,7 @@ export function Documents() {
             <CardTitle className="text-sm font-medium">Всего документов</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockDocuments.length}</div>
+            <div className="text-2xl font-bold">{documents.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -168,7 +170,7 @@ export function Documents() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockDocuments.filter((d) => d.type === 'contract').length}
+              {documents.filter((d) => d.type === 'contract').length}
             </div>
           </CardContent>
         </Card>
@@ -178,7 +180,7 @@ export function Documents() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockDocuments.filter((d) => d.type === 'certificate').length}
+              {documents.filter((d) => d.type === 'certificate').length}
             </div>
           </CardContent>
         </Card>
@@ -188,7 +190,7 @@ export function Documents() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatFileSize(mockDocuments.reduce((acc, doc) => acc + doc.size, 0))}
+              {formatFileSize(documents.reduce((acc, doc) => acc + doc.size, 0))}
             </div>
           </CardContent>
         </Card>

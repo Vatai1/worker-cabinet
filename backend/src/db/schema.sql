@@ -177,7 +177,7 @@ CREATE TRIGGER update_departments_updated_at BEFORE UPDATE ON departments
 CREATE OR REPLACE FUNCTION update_available_days()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.available_days := NEW.total_days - NEW.used_days;
+  NEW.available_days := NEW.total_days - NEW.used_days - NEW.reserved_days;
   RETURN NEW;
 END;
 $$ language 'plpgsql';

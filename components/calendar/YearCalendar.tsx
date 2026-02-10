@@ -46,8 +46,11 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
     date: Date
   } | null>(null)
 
-  const approvedRequests = useMemo(() =>
-    requests.filter(r => r.status === VacationRequestStatus.APPROVED),
+  const visibleRequests = useMemo(() =>
+    requests.filter(r =>
+      r.status === VacationRequestStatus.APPROVED ||
+      r.status === VacationRequestStatus.ON_APPROVAL
+    ),
     [requests]
   )
 
@@ -73,12 +76,11 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
   }, [year])
 
   const getVacationsForDay = (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd')
-    return approvedRequests.filter(request => {
+    return visibleRequests.filter(request => {
       const start = new Date(request.startDate)
       const end = new Date(request.endDate)
-      return isWithinInterval(date, { start, end }) || 
-             isSameDay(date, start) || 
+      return isWithinInterval(date, { start, end }) ||
+             isSameDay(date, start) ||
              isSameDay(date, end)
     })
   }
@@ -191,6 +193,10 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
         )}
       </div>
 
+      <div className="text-sm text-gray-600">
+        💡 <strong>Подсказка:</strong> Дни с заявками на отпуск заштрихованы. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки.
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {months.map(month => (
           <div key={month.index} className="border rounded-lg p-3 bg-white">
@@ -215,6 +221,9 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                 const isHovered = !isSelected && isDateInHoverRange(day)
                 const isWeekend = getDay(day) === 0 || getDay(day) === 6
                 const dateStr = format(day, 'yyyy-MM-dd')
+                const hasVacation = vacations.length > 0
+                const visibleVacations = vacations.slice(0, 3)
+                const remainingCount = vacations.length > 3 ? vacations.length - 3 : 0
                 
                 return (
                   <div
@@ -232,32 +241,58 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                     onMouseLeave={() => setHoverDate(null)}
                     className={`
                       relative p-1 text-center cursor-pointer rounded transition-all
-                      ${isWeekend && !isSelected ? 'bg-gray-50 text-gray-700' : ''}
-                      ${!isWeekend && !isSelected ? 'hover:bg-gray-100' : ''}
+                      ${isWeekend && !isSelected && !hasVacation ? 'bg-gray-200 text-gray-600 font-medium' : ''}
+                      ${!isWeekend && !isSelected && !hasVacation ? 'hover:bg-gray-100' : ''}
                       ${isSelected ? 'bg-blue-500 text-white hover:bg-blue-600' : ''}
                       ${isHovered ? 'bg-blue-200' : ''}
-                      ${vacations.length > 0 && !isSelected ? 'font-semibold' : ''}
+                      ${hasVacation && !isSelected ? 'font-semibold' : ''}
+                      ${hasVacation && !isSelected ? 'bg-white' : ''}
                     `}
-                    title={vacations.map(v =>
-                      `${v.userLastName} ${v.userFirstName}`
-                    ).join(', ')}
+                    style={(hasVacation && !isSelected && visibleVacations.some(v => v.status === 'on_approval')) ? {
+                      backgroundImage: visibleVacations
+                        .filter(v => v.status === 'on_approval')
+                        .map(v => {
+                          const colorClass = getUserColor(v.userId)
+                          const colorMap: Record<string, string> = {
+                            'bg-blue-500': '#3b82f6',
+                            'bg-green-500': '#22c55e',
+                            'bg-purple-500': '#a855f7',
+                            'bg-pink-500': '#ec4899',
+                            'bg-orange-500': '#f97316',
+                            'bg-teal-500': '#14b8a6',
+                            'bg-indigo-500': '#6366f1',
+                            'bg-red-500': '#ef4444',
+                          }
+                          const color = colorMap[colorClass] || '#3b82f6'
+                          return `repeating-linear-gradient(45deg, ${color}40 0px, ${color}40 2px, transparent 2px, transparent 4px)`
+                        }).join(', ')
+                    } : undefined}
+                    title={vacations.map(v => {
+                      const statusText = v.status === 'approved' ? '(одобрено)' : v.status === 'on_approval' ? '(на согласовании)' : `(${v.status})`
+                      return `${v.userLastName} ${v.userFirstName} ${statusText}`
+                    }).join(', ')}
                   >
-                    <div className="text-xs">{format(day, 'd')}</div>
-                    
-                    {vacations.length > 0 && !isSelected && (
-                      <div className="flex flex-wrap gap-px mt-px">
-                        {vacations.slice(0, 3).map((vacation) => (
-                          <div
-                            key={vacation.id}
-                            className={`w-1.5 h-1.5 rounded-full ${getUserColor(vacation.userId)}`}
-                            title={`${vacation.userLastName} ${vacation.userFirstName}`}
-                          />
-                        ))}
-                        {vacations.length > 3 && (
-                          <div className="text-xs text-gray-600">+</div>
-                        )}
-                      </div>
-                    )}
+                    <div className="relative">
+                      <div className="text-xs relative z-10">{format(day, 'd')}</div>
+                      {hasVacation && !isSelected && (
+                        <div className="absolute -bottom-1 left-0 right-0 flex justify-center gap-0.5">
+                          {visibleVacations.filter(v => v.status === 'approved').map(v => {
+                            const colorClass = getUserColor(v.userId)
+                            return (
+                              <div
+                                key={v.id}
+                                className={`w-1.5 h-1.5 rounded-full ${colorClass}`}
+                              />
+                            )
+                          })}
+                        </div>
+                      )}
+                      {remainingCount > 0 && (
+                        <div className="absolute -bottom-1 -right-0.5 text-xs font-bold text-gray-500">
+                          +{remainingCount}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -266,23 +301,43 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
         ))}
       </div>
 
-       {approvedRequests.length > 0 && (
-         <div className="border rounded-lg p-4 bg-white">
-           <h3 className="font-semibold mb-3">Легенда</h3>
-           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-             {Array.from(new Set(approvedRequests.map(r => r.userId))).map(userId => {
-               const userRequests = approvedRequests.filter(r => r.userId === userId)
-               const request = userRequests[0]
-               return (
-                 <div key={userId} className="flex items-center gap-2 text-sm">
-                   <div className={`w-3 h-3 rounded ${getUserColor(userId)}`} />
-                   <span>{request.userLastName} {request.userFirstName[0]}.</span>
+       {visibleRequests.length > 0 && (
+          <div className="border rounded-lg p-4 bg-white">
+            <h3 className="font-semibold mb-3">Легенда</h3>
+
+             <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
+               <div className="flex items-center gap-2">
+                 <div className="w-6 h-6 rounded border bg-white flex items-center justify-center">
+                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                  </div>
-               )
-             })}
-           </div>
-         </div>
-       )}
+                 <span>Одобрено</span>
+               </div>
+               <div className="flex items-center gap-2">
+                 <div
+                   className="w-6 h-6 rounded border bg-white"
+                   style={{
+                     backgroundImage: 'repeating-linear-gradient(45deg, #3b82f640 0px, #3b82f640 2px, transparent 2px, transparent 4px)'
+                   }}
+                 />
+                 <span>На согласовании</span>
+               </div>
+             </div>
+
+            <h4 className="font-medium text-sm mb-2">Сотрудники</h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+              {Array.from(new Set(visibleRequests.map(r => r.userId))).map(userId => {
+                const userRequests = visibleRequests.filter(r => r.userId === userId)
+                const request = userRequests[0]
+                return (
+                  <div key={userId} className="flex items-center gap-2 text-sm">
+                    <div className={`w-3 h-3 rounded ${getUserColor(userId)}`} />
+                    <span>{request.userLastName} {request.userFirstName[0]}.</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {contextMenu && (
           <div

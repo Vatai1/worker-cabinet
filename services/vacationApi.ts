@@ -112,12 +112,12 @@ export const vacationApi = {
     const data = await handleResponse(response)
     return {
       userId: data.user_id?.toString() || userId,
-      totalDays: data.total_days || 28,
-      usedDays: data.used_days || 0,
-      availableDays: data.available_days || 28,
-      reservedDays: data.reserved_days || 0,
+      totalDays: data.total_days ?? 28,
+      usedDays: data.used_days ?? 0,
+      availableDays: data.available_days ?? 28,
+      reservedDays: data.reserved_days ?? 0,
       lastAccrualDate: data.last_accrual_date,
-      travelAvailable: data.travel_available || false,
+      travelAvailable: data.travel_available ?? false,
       travelNextAvailableDate: data.travel_next_available_date,
       hireDate: data.hire_date?.split('T')[0],
     }

@@ -10,34 +10,8 @@ interface RequestsStore {
   getPendingRequests: () => Request[]
 }
 
-// Initial mock requests
-const initialRequests: Request[] = [
-  {
-    id: '1',
-    userId: '1',
-    type: 'vacation',
-    startDate: '2025-01-15',
-    endDate: '2025-01-29',
-    reason: 'Ежегодный оплачиваемый отпуск',
-    status: 'approved',
-    createdAt: '2024-12-01T10:00:00',
-    reviewedAt: '2024-12-05T14:30:00',
-  },
-  {
-    id: '2',
-    userId: '1',
-    type: 'remote_work',
-    startDate: '2025-01-08',
-    endDate: '2025-01-08',
-    reason: 'Работа на дому по семейным обстоятельствам',
-    status: 'approved',
-    createdAt: '2025-01-05T09:00:00',
-    reviewedAt: '2025-01-05T11:30:00',
-  },
-]
-
 export const useRequestsStore = create<RequestsStore>((set, get) => ({
-  requests: initialRequests,
+  requests: [],
   
   addRequest: (request) => {
     const newRequest: Request = {
