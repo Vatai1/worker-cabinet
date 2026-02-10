@@ -1,5 +1,5 @@
 import express from 'express'
-import { query } from '../config/database.js'
+import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -70,7 +70,13 @@ router.get('/requests', authenticateToken, async (req, res) => {
         )
         return {
           ...request,
-          statusHistory: historyResult.rows,
+          statusHistory: historyResult.rows.map((history) => ({
+            id: history.id,
+            status: history.status,
+            changedAt: history.changed_at,
+            changedBy: history.changed_by,
+            comment: history.comment,
+          })),
         }
       })
     )
@@ -118,10 +124,10 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
 
 // Create vacation request
 router.post('/requests', authenticateToken, async (req, res) => {
-  const client = await query.getClient()
+  const client = await getClient()
   
   try {
-    const { startDate, endDate, vacationType, comment, hasTravel } = req.body
+    const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, referenceDocument } = req.body
     const userId = req.user.id
 
     await client.query('BEGIN')
@@ -142,8 +148,17 @@ router.post('/requests', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Дата окончания не может быть раньше даты начала' })
     }
 
+    // Проверка справки для учебного отпуска
+    if (vacationType === 'educational' && !referenceDocument) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Для учебного отпуска необходимо приложить справку' })
+    }
+
     // Расчёт длительности
     const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+
+    // Добавляем 2 дня при включении проезда
+    const finalDuration = hasTravel ? duration + 2 : duration
 
     // Проверка баланса
     const balanceResult = await client.query(
@@ -152,12 +167,12 @@ router.post('/requests', authenticateToken, async (req, res) => {
     )
 
     const balance = balanceResult.rows[0]
-    if (!balance || balance.availableDays < duration) {
+    if (!balance || balance.available_days < finalDuration) {
       await client.query('ROLLBACK')
       return res.status(400).json({ 
         error: 'Недостаточно дней на балансе',
-        available: balance?.availableDays || 0,
-        required: duration
+        available: balance?.available_days || 0,
+        required: finalDuration
       })
     }
 
@@ -182,18 +197,21 @@ router.post('/requests', authenticateToken, async (req, res) => {
     // Создание заявки
     const result = await client.query(
       `INSERT INTO vacation_requests 
-       (user_id, start_date, end_date, duration, vacation_type, comment, has_travel, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'on_approval')
+       (user_id, start_date, end_date, duration, vacation_type, comment, has_travel, travel_destination, reference_document, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'on_approval')
        RETURNING *`,
-      [userId, startDate, endDate, duration, vacationType, comment, hasTravel || false]
+      [userId, startDate, endDate, finalDuration, vacationType, comment, hasTravel || false, travelDestination || null, referenceDocument || null]
     )
 
     const request = result.rows[0]
 
-    // Резервирование дней
+    // Сразу списываем дни как использованные
     await client.query(
-      'UPDATE vacation_balances SET reserved_days = reserved_days + $1 WHERE user_id = $2',
-      [duration, userId]
+      `UPDATE vacation_balances 
+       SET used_days = used_days + $1,
+           available_days = available_days - $1
+       WHERE user_id = $2`,
+      [finalDuration, userId]
     )
 
     // Запись в историю
@@ -218,11 +236,11 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
 // Update vacation request
 router.put('/requests/:id', authenticateToken, async (req, res) => {
-  const client = await query.getClient()
+  const client = await getClient()
   
   try {
     const { id } = req.params
-    const { startDate, endDate, vacationType, comment, hasTravel } = req.body
+    const { startDate, endDate, vacationType, comment, hasTravel, referenceDocument } = req.body
     const userId = req.user.id
 
     await client.query('BEGIN')
@@ -255,19 +273,22 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     const end = new Date(endDate)
     const newDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
 
-    // Обновление баланса
+    // Обновление баланса (так как дни уже списаны как использованные)
     await client.query(
-      'UPDATE vacation_balances SET reserved_days = reserved_days - $1 + $2 WHERE user_id = $3',
+      `UPDATE vacation_balances 
+       SET used_days = used_days - $1 + $2,
+           available_days = available_days + $1 - $2
+       WHERE user_id = $3`,
       [request.duration, newDuration, request.user_id]
     )
 
     // Обновление заявки
     const result = await client.query(
       `UPDATE vacation_requests 
-       SET start_date = $1, end_date = $2, duration = $3, vacation_type = $4, comment = $5, has_travel = $6
-       WHERE id = $7
+       SET start_date = $1, end_date = $2, duration = $3, vacation_type = $4, comment = $5, has_travel = $6, reference_document = $7
+       WHERE id = $8
        RETURNING *`,
-      [startDate, endDate, newDuration, vacationType, comment, hasTravel || false, id]
+      [startDate, endDate, newDuration, vacationType, comment, hasTravel || false, referenceDocument || null, id]
     )
 
     await client.query('COMMIT')
@@ -284,7 +305,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 
 // Approve vacation request
 router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
-  const client = await query.getClient()
+  const client = await getClient()
   
   try {
     const { id } = req.params
@@ -309,17 +330,7 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
       return res.status(400).json({ error: 'Request is not pending approval' })
     }
 
-    // Обновление баланса - списываем резервированные дни
-    await client.query(
-      `UPDATE vacation_balances 
-       SET used_days = used_days + $1,
-           reserved_days = reserved_days - $1,
-           available_days = available_days - $1
-       WHERE user_id = $2`,
-      [request.duration, request.user_id]
-    )
-
-    // Обновление статуса заявки
+    // Обновление статуса заявки (дни уже списаны при создании)
     const result = await client.query(
       `UPDATE vacation_requests 
        SET status = 'approved', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
@@ -350,7 +361,7 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
 
 // Reject vacation request
 router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
-  const client = await query.getClient()
+  const client = await getClient()
   
   try {
     const { id } = req.params
@@ -380,10 +391,10 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
       return res.status(400).json({ error: 'Request is not pending approval' })
     }
 
-    // Возврат дней на баланс
+    // Возврат дней на баланс (так как они уже были списаны при создании)
     await client.query(
       `UPDATE vacation_balances 
-       SET reserved_days = reserved_days - $1,
+       SET used_days = used_days - $1,
            available_days = available_days + $1
        WHERE user_id = $2`,
       [request.duration, request.user_id]
@@ -420,7 +431,7 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
 
 // Cancel vacation request (by employee)
 router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
-  const client = await query.getClient()
+  const client = await getClient()
   
   try {
     const { id } = req.params
@@ -445,15 +456,15 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
-    if (request.status !== 'on_approval') {
+    if (request.status !== 'on_approval' && request.status !== 'approved') {
       await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'Can only cancel pending requests' })
+      return res.status(400).json({ error: 'Можно отменять только заявки на согласовании или согласованные заявки' })
     }
 
-    // Возврат дней на баланс
+    // Возврат дней на баланс (так как они уже были списаны при создании)
     await client.query(
       `UPDATE vacation_balances 
-       SET reserved_days = reserved_days - $1,
+       SET used_days = used_days - $1,
            available_days = available_days + $1
        WHERE user_id = $2`,
       [request.duration, userId]

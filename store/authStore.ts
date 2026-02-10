@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User, AuthState } from '@/types'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
 
 interface AuthStore extends AuthState {
   login: (email: string, password: string) => Promise<void>
@@ -18,6 +18,7 @@ export const useAuthStore = create<AuthStore>()(
       token: null,
       login: async (email: string, password: string) => {
         try {
+          console.log('[AuthStore] Attempting login for:', email)
           const response = await fetch(`${API_BASE_URL}/auth/login`, {
             method: 'POST',
             headers: {
@@ -26,12 +27,15 @@ export const useAuthStore = create<AuthStore>()(
             body: JSON.stringify({ email, password }),
           })
 
+          console.log('[AuthStore] Response status:', response.status)
           if (!response.ok) {
             const error = await response.json()
+            console.log('[AuthStore] Login error:', error)
             throw new Error(error.error || 'Неверный email или пароль')
           }
 
           const data = await response.json()
+          console.log('[AuthStore] Login successful:', data.user.email, '- Role:', data.user.role)
 
           set({
             user: {
@@ -54,7 +58,9 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: true,
             token: data.token,
           })
+          console.log('[AuthStore] Token saved to state')
         } catch (error) {
+          console.log('[AuthStore] Login failed:', error)
           throw error
         }
       },

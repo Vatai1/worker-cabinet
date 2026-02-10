@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
   User,
-  Calendar,
   FileText,
   FolderOpen,
   Bell,
@@ -23,7 +22,6 @@ const employeeNavigation = [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
   { name: 'Профиль', href: '/profile', icon: User },
-  { name: 'График', href: '/schedule', icon: Calendar },
   { name: 'Заявления', href: '/requests', icon: FileText },
   { name: 'Документы', href: '/documents', icon: FolderOpen },
   { name: 'Уведомления', href: '/notifications', icon: Bell },
@@ -33,7 +31,6 @@ const managerNavigation = [
   { name: 'Панель руководителя', href: '/manager', icon: Users },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
   { name: 'Профиль', href: '/profile', icon: User },
-  { name: 'График', href: '/schedule', icon: Calendar },
   { name: 'Заявления', href: '/requests', icon: FileText },
   { name: 'Документы', href: '/documents', icon: FolderOpen },
   { name: 'Уведомления', href: '/notifications', icon: Bell },

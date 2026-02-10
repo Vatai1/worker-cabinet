@@ -9,7 +9,7 @@ import type {
 } from '@/types'
 import { VacationRequestStatus, VacationType } from '@/types'
 
-const API_BASE_URL = process.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
 
 class VacationApiError extends Error implements VacationApiError {
   code: string
@@ -35,39 +35,92 @@ const handleResponse = async (response: Response) => {
   return response.json()
 }
 
+const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
+  id: dbRequest.id?.toString(),
+  userId: dbRequest.user_id?.toString(),
+  userFirstName: dbRequest.first_name || '',
+  userLastName: dbRequest.last_name || '',
+  userMiddleName: dbRequest.middle_name,
+  userPosition: dbRequest.position || '',
+  userDepartment: dbRequest.department_name || '',
+  startDate: dbRequest.start_date?.split('T')[0] || '',
+  endDate: dbRequest.end_date?.split('T')[0] || '',
+  duration: dbRequest.duration || 0,
+  vacationType: dbRequest.vacation_type || 'annual_paid',
+  status: dbRequest.status || 'pending',
+  comment: dbRequest.comment,
+  hasTravel: dbRequest.has_travel || false,
+  rejectionReason: dbRequest.rejection_reason,
+  cancellationReason: dbRequest.cancellation_reason,
+  referenceDocument: dbRequest.reference_document,
+  reviewedAt: dbRequest.reviewed_at,
+  reviewedBy: dbRequest.reviewed_by?.toString(),
+  createdAt: dbRequest.created_at,
+  statusHistory: dbRequest.statusHistory || [],
+})
+
 const getAuthHeaders = () => {
   const authStorage = localStorage.getItem('auth-storage')
+  console.log('[vacationApi] Auth storage:', authStorage ? 'exists' : 'not found')
   if (authStorage) {
-    const { state } = JSON.parse(authStorage)
-    if (state?.token) {
-      return {
-        'Authorization': `Bearer ${state.token}`,
+    try {
+      const { state } = JSON.parse(authStorage)
+      console.log('[vacationApi] State:', state)
+      console.log('[vacationApi] Token:', state?.token ? `${state.token.substring(0, 30)}...` : 'not found')
+      if (state?.token) {
+        return {
+          'Authorization': `Bearer ${state.token}`,
+        }
       }
+    } catch (e) {
+      console.log('[vacationApi] Error parsing auth storage:', e)
     }
   }
+  console.log('[vacationApi] No auth headers')
   return {}
 }
 
 export const vacationApi = {
+  async getAllRequests(): Promise<VacationRequest[]> {
+    const response = await fetch(`${API_BASE_URL}/vacation/requests`, {
+      headers: getAuthHeaders(),
+    })
+    const data = await handleResponse(response)
+    return data.map(mapDbRequestToApi)
+  },
+
   async getUserRequests(userId: string): Promise<VacationRequest[]> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests?userId=${userId}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    const data = await handleResponse(response)
+    return data.map(mapDbRequestToApi)
   },
 
   async getDepartmentRequests(departmentId: string): Promise<VacationRequest[]> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests?departmentId=${departmentId}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    const data = await handleResponse(response)
+    return data.map(mapDbRequestToApi)
   },
 
   async getBalance(userId: string): Promise<VacationBalance> {
     const response = await fetch(`${API_BASE_URL}/vacation/balance/${userId}`, {
       headers: getAuthHeaders(),
     })
-    return handleResponse(response)
+    const data = await handleResponse(response)
+    return {
+      userId: data.user_id?.toString() || userId,
+      totalDays: data.total_days || 28,
+      usedDays: data.used_days || 0,
+      availableDays: data.available_days || 28,
+      reservedDays: data.reserved_days || 0,
+      lastAccrualDate: data.last_accrual_date,
+      travelAvailable: data.travel_available || false,
+      travelNextAvailableDate: data.travel_next_available_date,
+      hireDate: data.hire_date?.split('T')[0],
+    }
   },
 
   async getRestrictions(departmentId: string): Promise<VacationRestriction[]> {
@@ -98,9 +151,11 @@ export const vacationApi = {
         vacationType: data.vacationType,
         comment: data.comment,
         hasTravel: data.hasTravel,
+        referenceDocument: data.referenceDocument,
       }),
     })
-    return handleResponse(response)
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
   },
 
   async updateRequest(requestId: string, data: Partial<VacationFormData>): Promise<VacationRequest> {
@@ -112,7 +167,8 @@ export const vacationApi = {
       },
       body: JSON.stringify(data),
     })
-    return handleResponse(response)
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
   },
 
   async cancelRequest(requestId: string): Promise<VacationRequest> {
@@ -123,7 +179,8 @@ export const vacationApi = {
         ...getAuthHeaders(),
       },
     })
-    return handleResponse(response)
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
   },
 
   async approveRequest(requestId: string, managerId: string): Promise<VacationRequest> {
@@ -133,9 +190,9 @@ export const vacationApi = {
         'Content-Type': 'application/json',
         ...getAuthHeaders(),
       },
-      body: JSON.stringify({ managerId }),
     })
-    return handleResponse(response)
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
   },
 
   async rejectRequest(
@@ -151,7 +208,8 @@ export const vacationApi = {
       },
       body: JSON.stringify({ reason }),
     })
-    return handleResponse(response)
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
   },
 
   async cancelByManager(

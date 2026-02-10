@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isWithinInterval } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import type { VacationRequest } from '@/types'
@@ -7,7 +7,7 @@ import { VacationRequestStatus } from '@/types'
 interface YearCalendarProps {
   year: number
   requests: VacationRequest[]
-  onDateRangeSelect?: (startDate: string, endDate: string) => void
+  onDateRangeSelect?: (startDate: string | null, endDate: string | null) => void
   selectedStartDate?: string | null
   selectedEndDate?: string | null
 }
@@ -40,8 +40,13 @@ function getUserColor(userId: string): string {
 
 export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartDate, selectedEndDate }: YearCalendarProps) {
   const [hoverDate, setHoverDate] = useState<string | null>(null)
-  
-  const approvedRequests = useMemo(() => 
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    date: Date
+  } | null>(null)
+
+  const approvedRequests = useMemo(() =>
     requests.filter(r => r.status === VacationRequestStatus.APPROVED),
     [requests]
   )
@@ -124,7 +129,37 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
     onDateRangeSelect?.(null, null)
   }
 
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>, date: Date) => {
+    e.preventDefault()
+    e.stopPropagation()
+    console.log('Context menu triggered', date)
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      date,
+    })
+  }
+
+  const handleViewDetails = (request: VacationRequest) => {
+    setContextMenu(null)
+    onDateRangeSelect?.(`vr-${request.id}`, null)
+  }
+
   const hasSelection = selectedStartDate || selectedEndDate
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (contextMenu) {
+        setContextMenu(null)
+      }
+    }
+
+    document.addEventListener('click', handleClickOutside)
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside)
+    }
+  }, [contextMenu])
 
   return (
     <div className="space-y-6">
@@ -184,7 +219,15 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                 return (
                   <div
                     key={dateStr}
-                    onClick={() => handleDateClick(day)}
+                    data-date-cell="true"
+                    onClick={() => {
+                      console.log('Date clicked', dateStr)
+                      handleDateClick(day)
+                    }}
+                    onContextMenu={(e) => {
+                      console.log('Context menu attempt', dateStr)
+                      handleContextMenu(e as any, day)
+                    }}
                     onMouseEnter={() => setHoverDate(dateStr)}
                     onMouseLeave={() => setHoverDate(null)}
                     className={`
@@ -195,7 +238,7 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                       ${isHovered ? 'bg-blue-200' : ''}
                       ${vacations.length > 0 && !isSelected ? 'font-semibold' : ''}
                     `}
-                    title={vacations.map(v => 
+                    title={vacations.map(v =>
                       `${v.userLastName} ${v.userFirstName}`
                     ).join(', ')}
                   >
@@ -203,7 +246,7 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                     
                     {vacations.length > 0 && !isSelected && (
                       <div className="flex flex-wrap gap-px mt-px">
-                        {vacations.slice(0, 3).map((vacation, idx) => (
+                        {vacations.slice(0, 3).map((vacation) => (
                           <div
                             key={vacation.id}
                             className={`w-1.5 h-1.5 rounded-full ${getUserColor(vacation.userId)}`}
@@ -223,23 +266,68 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
         ))}
       </div>
 
-      {approvedRequests.length > 0 && (
-        <div className="border rounded-lg p-4 bg-white">
-          <h3 className="font-semibold mb-3">Легенда</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-            {Array.from(new Set(approvedRequests.map(r => r.userId))).map(userId => {
-              const userRequests = approvedRequests.filter(r => r.userId === userId)
-              const request = userRequests[0]
-              return (
-                <div key={userId} className="flex items-center gap-2 text-sm">
-                  <div className={`w-3 h-3 rounded ${getUserColor(userId)}`} />
-                  <span>{request.userLastName} {request.userFirstName[0]}.</span>
+       {approvedRequests.length > 0 && (
+         <div className="border rounded-lg p-4 bg-white">
+           <h3 className="font-semibold mb-3">Легенда</h3>
+           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+             {Array.from(new Set(approvedRequests.map(r => r.userId))).map(userId => {
+               const userRequests = approvedRequests.filter(r => r.userId === userId)
+               const request = userRequests[0]
+               return (
+                 <div key={userId} className="flex items-center gap-2 text-sm">
+                   <div className={`w-3 h-3 rounded ${getUserColor(userId)}`} />
+                   <span>{request.userLastName} {request.userFirstName[0]}.</span>
+                 </div>
+               )
+             })}
+           </div>
+         </div>
+       )}
+
+        {contextMenu && (
+          <div
+            className="fixed bg-white rounded-lg shadow-xl border z-50 min-w-48"
+            style={{
+              left: contextMenu.x,
+              top: contextMenu.y,
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="p-2">
+              <div className="text-xs text-gray-500 mb-2 px-2">
+                {format(contextMenu.date, 'dd MMMM yyyy', { locale: ru })}
+              </div>
+              {getVacationsForDay(contextMenu.date).length > 0 ? (
+                <div className="space-y-1">
+                  {getVacationsForDay(contextMenu.date).map((request) => (
+                    <button
+                      key={request.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        console.log('View details button clicked', request.id)
+                        handleViewDetails(request)
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                      }}
+                      className="w-full text-left px-2 py-2 text-sm hover:bg-blue-50 rounded flex items-center gap-2"
+                    >
+                      <div className={`w-2 h-2 rounded-full ${getUserColor(request.userId)}`} />
+                      <span>{request.userLastName} {request.userFirstName}</span>
+                    </button>
+                  ))}
                 </div>
-              )
-            })}
+              ) : (
+                <div className="text-sm text-gray-500 px-2 py-2">
+                  Нет отпусков в этот день
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-  )
-}
+        )}
+     </div>
+   )
+ }
