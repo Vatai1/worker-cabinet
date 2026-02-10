@@ -8,7 +8,6 @@ import { CreateVacationModal } from '@/components/modals/CreateVacationModal'
 import { CreateVacationFormModal } from '@/components/modals/CreateVacationFormModal'
 import { VacationDetailModal } from '@/components/modals/VacationDetailModal'
 import { VacationHistoryModal } from '@/components/modals/VacationHistoryModal'
-import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { VacationRequestStatus, VacationType } from '@/types'
 
 export function Vacation() {
@@ -24,7 +23,6 @@ export function Vacation() {
     fetchBalance,
     approveRequest,
     rejectRequest,
-    cancelRequest,
   } = useVacationStore()
 
   const [balance, setBalance] = useState<any>(null)
@@ -130,6 +128,7 @@ export function Vacation() {
     endDate: string
     vacationType: VacationType
     hasTravel: boolean
+    travelDestination?: string
     comment: string
     referenceDocument?: string
   }) => {
@@ -142,6 +141,7 @@ export function Vacation() {
         vacationType: data.vacationType,
         comment: data.comment,
         hasTravel: data.hasTravel,
+        travelDestination: data.travelDestination,
         referenceDocument: data.referenceDocument,
       })
       setShowCreateForm(false)
@@ -280,7 +280,7 @@ export function Vacation() {
                             <div className="text-sm text-gray-600 mt-1">Комментарий: {request.comment}</div>
                           )}
                           {request.hasTravel && (
-                            <div className="text-sm text-blue-600 mt-1">✈️ С проездом</div>
+                            <div className="text-sm text-blue-600 mt-1">✈️ С проездом{request.travelDestination && ` до ${request.travelDestination}`}</div>
                           )}
                         </div>
                         <div className="flex gap-2">
@@ -355,19 +355,6 @@ export function Vacation() {
                onSubmit={handleCreateFromForm}
                loading={loading}
                balance={balance}
-             />
-           )}
-
-          {showCancelConfirm && (
-             <ConfirmModal
-               isOpen={showCancelConfirm}
-               title="Подтверждение отмены"
-               message="Вы уверены, что хотите отменить заявку на отпуск? Дни вернутся на ваш баланс."
-               onConfirm={handleConfirmCancel}
-               onCancel={handleCloseCancelConfirm}
-               confirmText="Отменить заявку"
-               cancelText="Назад"
-               loading={loading}
              />
            )}
 
