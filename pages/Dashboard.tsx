@@ -1,48 +1,38 @@
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
-import { mockSalaries } from '@/data/mockData'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import {
   Calendar,
-  DollarSign,
   FileText,
   TrendingUp,
-  Clock,
 } from 'lucide-react'
+import { useVacationStore } from '@/store/vacationStore'
 
 export function Dashboard() {
   const { user } = useAuthStore()
   const { notifications } = useUIStore()
+  const { balances } = useVacationStore()
 
-  const latestSalary = mockSalaries[0]
-  const pendingRequests = 1 // Mock data
+  const userBalance = user?.id ? balances[user.id] : undefined
+  const availableVacationDays = userBalance?.availableDays ?? 0
 
   const stats = [
     {
-      title: 'Зарплата',
-      value: formatCurrency(latestSalary.total),
-      description: `за ${new Date(latestSalary.period + '-01').toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}`,
-      icon: DollarSign,
-      trend: '+10% по сравнению с прошлым месяцем',
-      trendUp: true,
-    },
-    {
       title: 'Дни отпуска',
-      value: '14',
+      value: availableVacationDays.toString(),
       description: 'доступно',
       icon: Calendar,
-      trend: '3 дня использовано в этом году',
+      trend: `${userBalance?.usedDays ?? 0} дней использовано`,
       trendUp: true,
     },
     {
-      title: 'Заявления',
-      value: pendingRequests.toString(),
-      description: 'на рассмотрении',
+      title: 'Уведомления',
+      value: notifications.filter(n => !n.read).length.toString(),
+      description: 'непрочитанных',
       icon: FileText,
-      trend: '1 одобрено, 0 отклонено',
-      trendUp: true,
+      trend: `${notifications.length} всего`,
+      trendUp: false,
     },
     {
       title: 'Стаж',
@@ -119,27 +109,31 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {notifications.slice(0, 3).map((notification) => (
-                <div key={notification.id} className="flex gap-3">
-                  <div className={`mt-0.5 h-2 w-2 rounded-full ${
-                    notification.type === 'success' ? 'bg-green-500' :
-                    notification.type === 'warning' ? 'bg-yellow-500' :
-                    notification.type === 'error' ? 'bg-red-500' :
-                    'bg-blue-500'
-                  }`} />
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      {notification.title}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(notification.createdAt)}
-                    </p>
+              {notifications.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Нет уведомлений</p>
+              ) : (
+                notifications.slice(0, 3).map((notification) => (
+                  <div key={notification.id} className="flex gap-3">
+                    <div className={`mt-0.5 h-2 w-2 rounded-full ${
+                      notification.type === 'success' ? 'bg-green-500' :
+                      notification.type === 'warning' ? 'bg-yellow-500' :
+                      notification.type === 'error' ? 'bg-red-500' :
+                      'bg-blue-500'
+                    }`} />
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm font-medium leading-none">
+                        {notification.title}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {notification.message}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(notification.createdAt)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -197,33 +191,7 @@ export function Dashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {[
-              { date: 'Завтра', time: '09:00 - 18:00', title: 'Рабочий день', type: 'work' },
-              { date: '15 января', time: '09:00 - 18:00', title: 'Начало отпуска', type: 'vacation' },
-              { date: '20 января', time: '10:00', title: 'Встреча с командой', type: 'meeting' },
-            ].map((event, i) => (
-              <div key={i} className="flex items-center gap-4 rounded-lg border p-3">
-                <div className="flex h-12 w-12 flex-col items-center justify-center rounded-lg bg-muted">
-                  <Clock className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{event.title}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {event.date} • {event.time}
-                  </p>
-                </div>
-                <Badge variant={
-                  event.type === 'vacation' ? 'success' :
-                  event.type === 'meeting' ? 'warning' :
-                  'default'
-                }>
-                  {event.type === 'vacation' ? 'Отпуск' :
-                   event.type === 'meeting' ? 'Встреча' : 'Работа'}
-                </Badge>
-              </div>
-            ))}
-          </div>
+          <p className="text-sm text-muted-foreground">Ближайшие события будут отображаться здесь</p>
         </CardContent>
       </Card>
     </div>
