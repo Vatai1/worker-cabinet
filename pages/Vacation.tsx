@@ -39,6 +39,7 @@ export function Vacation() {
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null)
+  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -293,105 +294,143 @@ export function Vacation() {
             {loading ? (
               <div className="text-center py-8 text-muted-foreground">Загрузка...</div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {departmentRequests
                   .filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
-                  .map((request) => (
-                    <div key={request.id} className="border-2 border-amber-500/20 rounded-2xl p-5 bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/40 hover:shadow-lg transition-all duration-300">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-lg">
+                  .map((request) => {
+                    const isExpanded = expandedRequestId === `manager-${request.id}`
+                    return (
+                      <div key={request.id} className="border-2 border-amber-500/20 rounded-2xl overflow-hidden bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/40 transition-all duration-300">
+                        <div
+                          className="p-4 cursor-pointer flex items-center justify-between gap-4"
+                          onClick={() => setExpandedRequestId(isExpanded ? null : `manager-${request.id}`)}
+                        >
+                          <div className="flex items-center gap-4 flex-1">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-lg shrink-0">
                               {request.userFirstName[0]}{request.userLastName[0]}
                             </div>
-                            <div>
-                              <div className="font-bold text-lg">
+                            <div className="flex-1">
+                              <div className="font-bold text-sm">
                                 {request.userLastName} {request.userFirstName}
                               </div>
-                              <div className="text-sm text-muted-foreground">{request.userPosition}</div>
+                              <div className="text-xs text-muted-foreground">{request.userPosition}</div>
+                              <div className="text-xs mt-1 text-foreground/70">
+                                {request.vacationType === 'annual_paid'
+                                  ? 'Ежегодный оплачиваемый отпуск'
+                                  : request.vacationType === 'unpaid'
+                                  ? 'Отпуск без сохранения заработной платы'
+                                  : request.vacationType === 'educational'
+                                  ? 'Учебный отпуск'
+                                  : request.vacationType === 'maternity'
+                                  ? 'Отпуск по беременности и родам'
+                                  : request.vacationType === 'child_care'
+                                  ? 'Отпуск по уходу за ребёнком'
+                                  : request.vacationType === 'additional'
+                                  ? 'Дополнительный отпуск'
+                                  : request.vacationType === 'veteran'
+                                  ? 'Ветеранский отпуск'
+                                  : 'Отпуск'}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
+                                {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
+                              </div>
+                            </div>
+                            <svg
+                              className={`w-5 h-5 text-muted-foreground transition-transform duration-200 shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
+                        <div
+                          className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
+                        >
+                          <div className="p-4 pt-0 border-t border-border/50 mt-2">
+                            <div className="space-y-3 mt-4">
+                              {request.comment && (
+                                <div className="flex items-start gap-2">
+                                  <svg className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                  </svg>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground mb-1">Комментарий</div>
+                                    <div className="text-sm">{request.comment}</div>
+                                  </div>
+                                </div>
+                              )}
+                              {request.hasTravel && (
+                                <div className="flex items-start gap-2">
+                                  <svg className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064" />
+                                  </svg>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground mb-1">Проезд</div>
+                                    <div className="text-sm">
+                                      С проездом{request.travelDestination && ` до ${request.travelDestination}`}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              <div className="pt-2 flex gap-3">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleApprove(request.id)}
+                                  disabled={loading}
+                                  className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-lg shadow-emerald-500/30"
+                                >
+                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Согласовать
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setRejectingRequestId(request.id)}
+                                  disabled={loading}
+                                  className="border-destructive/30 text-destructive hover:bg-destructive/10"
+                                >
+                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  Отклонить
+                                </Button>
+                              </div>
+                              {rejectingRequestId === request.id && (
+                                <div className="pt-3">
+                                  <textarea
+                                    className="w-full rounded-xl border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    placeholder="Причина отклонения..."
+                                    value={rejectionReason}
+                                    onChange={(e) => setRejectionReason(e.target.value)}
+                                  />
+                                  <div className="flex gap-2 mt-2">
+                                    <Button size="sm" onClick={() => handleReject(request.id)}>
+                                      Подтвердить
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setRejectingRequestId(null)
+                                        setRejectionReason('')
+                                      }}
+                                    >
+                                      Отмена
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div className="text-sm mt-1 text-foreground/80">
-                            {request.vacationType === 'annual_paid'
-                              ? 'Ежегодный оплачиваемый отпуск'
-                              : request.vacationType === 'unpaid'
-                              ? 'Отпуск без сохранения заработной платы'
-                              : request.vacationType === 'educational'
-                              ? 'Учебный отпуск'
-                              : request.vacationType === 'maternity'
-                              ? 'Отпуск по беременности и родам'
-                              : request.vacationType === 'child_care'
-                              ? 'Отпуск по уходу за ребёнком'
-                              : request.vacationType === 'additional'
-                              ? 'Дополнительный отпуск'
-                              : request.vacationType === 'veteran'
-                              ? 'Ветеранский отпуск'
-                              : 'Отпуск'}
-                          </div>
-                          <div className="text-sm mt-2">
-                            {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
-                            {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
-                          </div>
-                          {request.comment && (
-                            <div className="text-sm text-muted-foreground mt-1">Комментарий: {request.comment}</div>
-                          )}
-                          {request.hasTravel && (
-                            <div className="text-sm text-primary/70 mt-1">С проездом{request.travelDestination && ` до ${request.travelDestination}`}</div>
-                          )}
-                        </div>
-                        <div className="flex gap-3">
-                          <Button
-                            size="sm"
-                            onClick={() => handleApprove(request.id)}
-                            disabled={loading}
-                            className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-lg shadow-emerald-500/30"
-                          >
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Согласовать
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setRejectingRequestId(request.id)}
-                            disabled={loading}
-                            className="border-destructive/30 text-destructive hover:bg-destructive/10"
-                          >
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                            Отклонить
-                          </Button>
                         </div>
                       </div>
-                      {rejectingRequestId === request.id && (
-                        <div className="mt-4 pt-4 border-t">
-                          <textarea
-                            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            placeholder="Причина отклонения..."
-                            value={rejectionReason}
-                            onChange={(e) => setRejectionReason(e.target.value)}
-                          />
-                          <div className="flex gap-2 mt-2">
-                            <Button size="sm" onClick={() => handleReject(request.id)}>
-                              Подтвердить
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setRejectingRequestId(null)
-                                setRejectionReason('')
-                              }}
-                            >
-                              Отмена
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    )
+                  })}
                 {departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
                   .length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">Нет заявок на согласовании</div>
@@ -416,71 +455,124 @@ export function Vacation() {
             {loading ? (
               <div className="text-center py-8 text-muted-foreground">Загрузка...</div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {currentUserRequests
                   .filter((r) =>
                     r.status === VacationRequestStatus.ON_APPROVAL ||
                     r.status === VacationRequestStatus.APPROVED
                   )
-                  .map((request) => (
-                  <div key={request.id} className={`border-2 rounded-2xl p-5 transition-all duration-300 hover:shadow-lg ${
-                    request.status === VacationRequestStatus.APPROVED
-                      ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent hover:border-emerald-500/50'
-                      : 'border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/50'
-                  }`}>
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 space-y-3">
-                        <div className="text-sm mt-1 text-foreground/80">
-                          {request.vacationType === 'annual_paid'
-                            ? 'Ежегодный оплачиваемый отпуск'
-                            : request.vacationType === 'unpaid'
-                            ? 'Отпуск без сохранения заработной платы'
-                            : request.vacationType === 'educational'
-                            ? 'Учебный отпуск'
-                            : request.vacationType === 'maternity'
-                            ? 'Отпуск по беременности и родам'
-                            : request.vacationType === 'child_care'
-                            ? 'Отпуск по уходу за ребёнком'
-                            : request.vacationType === 'additional'
-                            ? 'Дополнительный отпуск'
-                            : request.vacationType === 'veteran'
-                            ? 'Ветеранский отпуск'
-                            : 'Отпуск'}
-                        </div>
-                        <div className="text-sm mt-2">
-                          {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
-                          {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
-                        </div>
-                        {request.comment && (
-                          <div className="text-sm text-muted-foreground mt-1">Комментарий: {request.comment}</div>
-                        )}
-                        {request.hasTravel && (
-                          <div className="text-sm text-primary/70 mt-1">С проездом{request.travelDestination && ` до ${request.travelDestination}`}</div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {request.status === VacationRequestStatus.ON_APPROVAL && (
-                          <Badge variant="warning">
-                            На согласовании
-                          </Badge>
-                        )}
-                        {request.status === VacationRequestStatus.APPROVED && (
-                          <Badge variant="success">
-                            Согласовано
-                          </Badge>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleCancelClick(request.id)}
-                          disabled={loading}
+                  .map((request) => {
+                    const isExpanded = expandedRequestId === request.id
+                    return (
+                      <div key={request.id} className={`border-2 rounded-2xl overflow-hidden transition-all duration-300 ${
+                        request.status === VacationRequestStatus.APPROVED
+                          ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent'
+                          : 'border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent'
+                      } ${isExpanded ? 'shadow-lg hover:shadow-xl' : 'hover:shadow-md'}`}>
+                        <div
+                          className="p-4 cursor-pointer flex items-center justify-between gap-4"
+                          onClick={() => setExpandedRequestId(isExpanded ? null : request.id)}
                         >
-                          Отменить
-                        </Button>
+                          <div className="flex items-center gap-4 flex-1">
+                            <div className={`p-2 rounded-xl ${request.status === VacationRequestStatus.APPROVED ? 'bg-emerald-500/15' : 'bg-amber-500/15'}`}>
+                              <svg className={`w-5 h-5 ${request.status === VacationRequestStatus.APPROVED ? 'text-emerald-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                {request.status === VacationRequestStatus.APPROVED ? (
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                ) : (
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                )}
+                              </svg>
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-sm font-semibold text-foreground/80">
+                                {request.vacationType === 'annual_paid'
+                                  ? 'Ежегодный оплачиваемый отпуск'
+                                  : request.vacationType === 'unpaid'
+                                  ? 'Отпуск без сохранения заработной платы'
+                                  : request.vacationType === 'educational'
+                                  ? 'Учебный отпуск'
+                                  : request.vacationType === 'maternity'
+                                  ? 'Отпуск по беременности и родам'
+                                  : request.vacationType === 'child_care'
+                                  ? 'Отпуск по уходу за ребёнком'
+                                  : request.vacationType === 'additional'
+                                  ? 'Дополнительный отпуск'
+                                  : request.vacationType === 'veteran'
+                                  ? 'Ветеранский отпуск'
+                                  : 'Отпуск'}
+                              </div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
+                                {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {request.status === VacationRequestStatus.ON_APPROVAL && (
+                                <Badge variant="warning">На согласовании</Badge>
+                              )}
+                              {request.status === VacationRequestStatus.APPROVED && (
+                                <Badge variant="success">Согласовано</Badge>
+                              )}
+                              <svg
+                                className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
+                        >
+                          <div className="p-4 pt-0 border-t border-border/50 mt-2">
+                            <div className="space-y-3 mt-4">
+                              {request.comment && (
+                                <div className="flex items-start gap-2">
+                                  <svg className="w-4 h-4 text-muted-foreground mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                  </svg>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground mb-1">Комментарий</div>
+                                    <div className="text-sm">{request.comment}</div>
+                                  </div>
+                                </div>
+                              )}
+                              {request.hasTravel && (
+                                <div className="flex items-start gap-2">
+                                  <svg className="w-4 h-4 text-muted-foreground mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064" />
+                                  </svg>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground mb-1">Проезд</div>
+                                    <div className="text-sm">
+                                      С проездом{request.travelDestination && ` до ${request.travelDestination}`}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              <div className="pt-2">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleCancelClick(request.id)}
+                                  disabled={loading}
+                                  className="w-full sm:w-auto"
+                                >
+                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  Отменить заявку
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
+                    )
+                  })}
                 {currentUserRequests.filter((r) =>
                   r.status === VacationRequestStatus.ON_APPROVAL ||
                   r.status === VacationRequestStatus.APPROVED
