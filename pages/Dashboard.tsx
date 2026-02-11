@@ -23,24 +23,21 @@ export function Dashboard() {
       value: availableVacationDays.toString(),
       description: 'доступно',
       icon: Calendar,
-      trend: `${userBalance?.usedDays ?? 0} дней использовано`,
-      trendUp: true,
+      subtext: `${userBalance?.usedDays ?? 0} дней использовано`,
     },
     {
       title: 'Уведомления',
       value: notifications.filter(n => !n.read).length.toString(),
       description: 'непрочитанных',
       icon: FileText,
-      trend: `${notifications.length} всего`,
-      trendUp: false,
+      subtext: `${notifications.length} всего`,
     },
     {
       title: 'Стаж',
       value: `${calculateWorkExperience(user?.hireDate)}`,
       description: 'в компании',
       icon: TrendingUp,
-      trend: 'с ' + formatDate(user?.hireDate || ''),
-      trendUp: true,
+      subtext: 'с ' + formatDate(user?.hireDate || ''),
     },
   ]
 
@@ -50,7 +47,7 @@ export function Dashboard() {
     const now = new Date()
     const years = now.getFullYear() - hire.getFullYear()
     const months = now.getMonth() - hire.getMonth()
-    
+
     if (months < 0) {
       return `${years - 1} лет`
     }
@@ -58,39 +55,49 @@ export function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in">
       {/* Welcome section */}
-      <div>
+      <div className="rounded-2xl gradient-primary p-8 text-white shadow-glow">
         <h1 className="text-3xl font-bold tracking-tight">
-          Добро пожаловать, {user?.firstName}!
+          Добро пожаловать, {user?.firstName}! 👋
         </h1>
-        <p className="text-muted-foreground">
+        <p className="mt-2 text-white/90 text-lg">
           Вот обзор вашей информации на сегодня
         </p>
       </div>
 
       {/* Stats grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => {
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {stats.map((stat, index) => {
           const Icon = stat.icon
+          const gradients = [
+            'from-purple-500 to-purple-600',
+            'from-blue-500 to-blue-600',
+            'from-emerald-500 to-emerald-600',
+          ]
           return (
-            <Card key={stat.title}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+            <Card key={stat.title} className="group cursor-pointer overflow-hidden relative hover:scale-105 transition-transform duration-300" style={{ animationDelay: `${index * 100}ms` }}>
+              <div className={`absolute inset-0 bg-gradient-to-br ${gradients[index]} opacity-0 group-hover:opacity-5 transition-opacity duration-300`}></div>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   {stat.title}
                 </CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" />
+                <div className={`p-3 rounded-xl bg-gradient-to-br ${gradients[index]} shadow-lg`}>
+                  <Icon className="h-5 w-5 text-white" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <p className="text-xs text-muted-foreground">
+                <div className="text-4xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                  {stat.value}
+                </div>
+                <p className="text-sm text-muted-foreground mt-2 font-medium">
                   {stat.description}
                 </p>
-                <div className="mt-2 flex items-center text-xs">
-                  {stat.trendUp && <TrendingUp className="mr-1 h-3 w-3 text-green-500" />}
-                  <span className={stat.trendUp ? 'text-green-500' : 'text-red-500'}>
-                    {stat.trend}
-                  </span>
+                <div className="mt-4 pt-4 border-t border-border/50">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary/60"></span>
+                    {stat.subtext}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -114,11 +121,11 @@ export function Dashboard() {
               ) : (
                 notifications.slice(0, 3).map((notification) => (
                   <div key={notification.id} className="flex gap-3">
-                    <div className={`mt-0.5 h-2 w-2 rounded-full ${
-                      notification.type === 'success' ? 'bg-green-500' :
-                      notification.type === 'warning' ? 'bg-yellow-500' :
-                      notification.type === 'error' ? 'bg-red-500' :
-                      'bg-blue-500'
+                    <div className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                      notification.type === 'success' ? 'bg-emerald-500' :
+                      notification.type === 'warning' ? 'bg-amber-500' :
+                      notification.type === 'error' ? 'bg-destructive' :
+                      'bg-primary/40'
                     }`} />
                     <div className="flex-1 space-y-1">
                       <p className="text-sm font-medium leading-none">
@@ -150,32 +157,38 @@ export function Dashboard() {
             <div className="grid gap-3">
               <a
                 href="/requests/new"
-                className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent transition-colors"
+                className="group flex items-center gap-4 rounded-xl border-2 border-border/50 p-4 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 hover:scale-105"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <FileText className="h-5 w-5 text-primary" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-lg group-hover:shadow-xl transition-shadow">
+                  <FileText className="h-6 w-6 text-white" />
                 </div>
-                <div>
-                  <p className="font-medium">Создать заявление</p>
-                  <p className="text-sm text-muted-foreground">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold group-hover:text-primary transition-colors">Создать заявление</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Подать заявление на отпуск или больничный
                   </p>
                 </div>
+                <svg className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               </a>
 
               <a
                 href="/documents"
-                className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent transition-colors"
+                className="group flex items-center gap-4 rounded-xl border-2 border-border/50 p-4 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 hover:scale-105"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <FileText className="h-5 w-5 text-primary" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg group-hover:shadow-xl transition-shadow">
+                  <FileText className="h-6 w-6 text-white" />
                 </div>
-                <div>
-                  <p className="font-medium">Мои документы</p>
-                  <p className="text-sm text-muted-foreground">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold group-hover:text-primary transition-colors">Мои документы</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Доступ к трудовым документам
                   </p>
                 </div>
+                <svg className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               </a>
             </div>
           </CardContent>
