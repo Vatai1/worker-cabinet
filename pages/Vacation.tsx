@@ -40,6 +40,9 @@ export function Vacation() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null)
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null)
+  const [myRequestsExpanded, setMyRequestsExpanded] = useState(true)
+  const [addingComment, setAddingComment] = useState<string | null>(null)
+  const [newComment, setNewComment] = useState('')
 
   useEffect(() => {
     if (user) {
@@ -180,6 +183,23 @@ export function Vacation() {
   const handleCloseDetailModal = () => {
     setShowDetailModal(false)
     setDetailRequest(null)
+  }
+
+  const handleAddCommentClick = (requestId: string) => {
+    setAddingComment(addingComment === requestId ? null : requestId)
+    setNewComment('')
+  }
+
+  const handleAddCommentSubmit = async (requestId: string) => {
+    if (!newComment.trim()) return
+    try {
+      await useVacationStore.getState().addComment(requestId, newComment)
+      setAddingComment(null)
+      setNewComment('')
+      window.location.reload()
+    } catch (err) {
+      console.error('Error adding comment:', err)
+    }
   }
 
   const currentYear = 2026
@@ -399,6 +419,20 @@ export function Vacation() {
                                   </svg>
                                   Отклонить
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleAddCommentClick(`manager-${request.id}`)
+                                  }}
+                                  disabled={loading}
+                                >
+                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                  </svg>
+                                  Комментарий
+                                </Button>
                               </div>
                               {rejectingRequestId === request.id && (
                                 <div className="pt-3">
@@ -441,19 +475,36 @@ export function Vacation() {
         </Card>
       )}
 
-      {currentUserRequests.length > 0 && (
-        <Card>
-          <div className="p-6">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <span className="p-2 bg-primary/10 rounded-lg">
-                <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </span>
-              Мои заявки
-            </h2>
+      <Card>
+        <div
+          className="p-6 cursor-pointer flex items-center justify-between gap-4"
+          onClick={() => setMyRequestsExpanded(!myRequestsExpanded)}
+        >
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <span className="p-2 bg-primary/10 rounded-lg">
+              <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </span>
+            Мои заявки
+          </h2>
+          <svg
+            className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${myRequestsExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+        <div
+          className={`overflow-hidden transition-all duration-300 ${myRequestsExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}
+        >
+          <div className="px-6 pb-6">
             {loading ? (
               <div className="text-center py-8 text-muted-foreground">Загрузка...</div>
+            ) : currentUserRequests.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">Нет активных заявок</div>
             ) : (
               <div className="space-y-3">
                 {currentUserRequests
@@ -463,6 +514,7 @@ export function Vacation() {
                   )
                   .map((request) => {
                     const isExpanded = expandedRequestId === request.id
+                    const isAddingComment = addingComment === request.id
                     return (
                       <div key={request.id} className={`border-2 rounded-2xl overflow-hidden transition-all duration-300 ${
                         request.status === VacationRequestStatus.APPROVED
@@ -471,7 +523,12 @@ export function Vacation() {
                       } ${isExpanded ? 'shadow-lg hover:shadow-xl' : 'hover:shadow-md'}`}>
                         <div
                           className="p-4 cursor-pointer flex items-center justify-between gap-4"
-                          onClick={() => setExpandedRequestId(isExpanded ? null : request.id)}
+                          onClick={() => {
+                            setExpandedRequestId(isExpanded ? null : request.id)
+                            if (isAddingComment) {
+                              setAddingComment(null)
+                            }
+                          }}
                         >
                           <div className="flex items-center gap-4 flex-1">
                             <div className={`p-2 rounded-xl ${request.status === VacationRequestStatus.APPROVED ? 'bg-emerald-500/15' : 'bg-amber-500/15'}`}>
@@ -553,7 +610,21 @@ export function Vacation() {
                                   </div>
                                 </div>
                               )}
-                              <div className="pt-2">
+                              <div className="flex flex-wrap gap-3 pt-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleAddCommentClick(request.id)
+                                  }}
+                                  disabled={loading}
+                                >
+                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                  </svg>
+                                  Добавить комментарий
+                                </Button>
                                 <Button
                                   size="sm"
                                   variant="destructive"
@@ -567,23 +638,46 @@ export function Vacation() {
                                   Отменить заявку
                                 </Button>
                               </div>
+                              {isAddingComment && (
+                                <div className="pt-3">
+                                  <textarea
+                                    className="w-full rounded-xl border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    placeholder="Введите комментарий..."
+                                    value={newComment}
+                                    onChange={(e) => setNewComment(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  <div className="flex gap-2 mt-2">
+                                    <Button size="sm" onClick={() => handleAddCommentSubmit(request.id)}>
+                                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      Сохранить
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setAddingComment(null)
+                                        setNewComment('')
+                                      }}
+                                    >
+                                      Отмена
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
                       </div>
                     )
                   })}
-                {currentUserRequests.filter((r) =>
-                  r.status === VacationRequestStatus.ON_APPROVAL ||
-                  r.status === VacationRequestStatus.APPROVED
-                ).length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">Нет активных заявок</div>
-                )}
               </div>
             )}
           </div>
-        </Card>
-      )}
+        </div>
+      </Card>
 
       {showDetailModal && (
         <VacationDetailModal

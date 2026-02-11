@@ -39,7 +39,9 @@ interface VacationStore {
   approveRequest: (requestId: string, managerId: string) => Promise<void>
   rejectRequest: (requestId: string, managerId: string, reason: string) => Promise<void>
   cancelByManager: (requestId: string, managerId: string, reason: string) => Promise<void>
-  
+
+  addComment: (requestId: string, comment: string) => Promise<void>
+
   validateRequest: (
     userId: string,
     data: VacationFormData
@@ -374,7 +376,30 @@ export const useVacationStore = create<VacationStore>()(
           set({ error: 'Ошибка при отмене заявки руководителем', loading: false })
         }
       },
-      
+
+      addComment: async (requestId: string, comment: string) => {
+        set({ loading: true, error: null })
+        try {
+          const updatedRequest = await vacationApi.addComment(requestId, comment)
+
+          set((state) => ({
+            requests: state.requests.map((r) =>
+              r.id === requestId ? updatedRequest : r
+            ),
+            currentUserRequests: state.currentUserRequests.map((r) =>
+              r.id === requestId ? updatedRequest : r
+            ),
+            departmentRequests: state.departmentRequests.map((r) =>
+              r.id === requestId ? updatedRequest : r
+            ),
+            loading: false,
+          }))
+        } catch (error: any) {
+          set({ error: error.message || 'Ошибка при добавлении комментария', loading: false })
+          throw error
+        }
+      },
+
       createRestriction: async (
         departmentId: string,
         data: Omit<VacationRestriction, 'id' | 'departmentId' | 'createdAt' | 'createdBy' | 'createdByName'>
