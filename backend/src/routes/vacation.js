@@ -13,32 +13,48 @@ router.get('/requests', authenticateToken, async (req, res) => {
     let whereClause = 'WHERE 1=1'
     const params = []
 
-    // Фильтр по правам доступа
-    if (user.role === 'employee') {
-      if (departmentId) {
-        // Сотрудник видит все одобренные заявки своего отдела + свои заявки всех статусов
-        whereClause += ` AND (
-          (u.department_id = $1 AND vr.status = 'approved')
-          OR (vr.user_id = $2)
-        )`
-        params.push(departmentId, user.id)
-      } else {
-        // Без departmentId - только свои заявки
-        whereClause += ' AND vr.user_id = $1'
-        params.push(user.id)
+    // Приоритет: если явно указан userId, используем его (для "Мои заявки")
+    if (userId) {
+      // Проверка прав доступа к чужим заявкам
+      if (parseInt(userId) !== user.id) {
+        if (user.role === 'employee') {
+          // Сотрудник не может видеть чужие заявки
+          return res.status(403).json({ error: 'Forbidden' })
+        }
+        // Менеджеры/HR/админы могут видеть заявки только своих подчинённых
+        const hasAccess = await query(
+          'SELECT 1 FROM users WHERE id = $1 AND manager_id = $2',
+          [userId, user.id]
+        )
+        if (hasAccess.rows.length === 0) {
+          return res.status(403).json({ error: 'Forbidden' })
+        }
       }
-    } else if (user.role === 'manager' || user.role === 'hr' || user.role === 'admin') {
-      if (departmentId) {
+      whereClause += ' AND vr.user_id = $' + (params.length + 1)
+      params.push(userId)
+    } else if (departmentId) {
+      // Фильтр по отделу (для календаря, списка отдела)
+      if (user.role === 'employee') {
+        // Сотрудник видит только одобренные заявки отдела
+        whereClause += ' AND u.department_id = $1 AND vr.status = $2'
+        params.push(departmentId, 'approved')
+      } else {
+        // Менеджеры/HR/админы видят все заявки отдела
         whereClause += ' AND u.department_id = $' + (params.length + 1)
         params.push(departmentId)
+      }
+    } else {
+      // Без параметров - по правам роли
+      if (user.role === 'employee') {
+        // Сотрудник видит только свои заявки
+        whereClause += ' AND vr.user_id = $1'
+        params.push(user.id)
       } else if (user.role === 'manager') {
         // Руководитель видит свои заявки + своих подчинённых
         whereClause += ' AND (vr.user_id = $1 OR u.manager_id = $1)'
         params.push(user.id)
       }
-    } else if (userId) {
-      whereClause += ' AND vr.user_id = $' + (params.length + 1)
-      params.push(userId)
+      // HR и админы видят всё (без фильтра)
     }
 
     // Фильтр по статусу
