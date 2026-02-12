@@ -1,6 +1,7 @@
 import express from 'express'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { TelegramService } from '../services/telegramService.js'
 
 const router = express.Router()
 
@@ -267,13 +268,28 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     // Запись в историю
     await client.query(
-      `INSERT INTO vacation_request_status_history 
-       (request_id, status, changed_by) 
+      `INSERT INTO vacation_request_status_history
+       (request_id, status, changed_by)
        VALUES ($1, 'on_approval', $2)`,
       [request.id, userId]
     )
 
     await client.query('COMMIT')
+
+    const managerResult = await client.query(
+      `SELECT id, first_name, last_name FROM users WHERE id = 
+       (SELECT manager_id FROM users WHERE id = $1)`,
+      [userId]
+    )
+    const manager = managerResult.rows[0]
+    const employee = await client.query(
+      'SELECT id, first_name, last_name, position FROM users WHERE id = $1',
+      [userId]
+    )
+
+    if (manager) {
+      TelegramService.sendNewRequestNotification(manager, request, employee.rows[0]).catch(console.error)
+    }
 
     res.status(201).json(request)
   } catch (error) {
@@ -403,13 +419,21 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
 
     // Запись в историю
     await client.query(
-      `INSERT INTO vacation_request_status_history 
-       (request_id, status, changed_by, comment) 
+      `INSERT INTO vacation_request_status_history
+       (request_id, status, changed_by, comment)
        VALUES ($1, 'approved', $2, 'Согласовано')`,
       [id, managerId]
     )
 
     await client.query('COMMIT')
+
+    const userResult = await client.query(
+      'SELECT id, first_name, last_name FROM users WHERE id = $1',
+      [request.user_id]
+    )
+    const user = userResult.rows[0]
+
+    TelegramService.sendVacationApprovedNotification(user, request).catch(console.error)
 
     res.json(result.rows[0])
   } catch (error) {
@@ -459,13 +483,21 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     )
 
     await client.query(
-      `INSERT INTO vacation_request_status_history 
-       (request_id, status, changed_by, comment) 
+      `INSERT INTO vacation_request_status_history
+       (request_id, status, changed_by, comment)
        VALUES ($1, 'rejected', $2, $3)`,
       [id, managerId, reason]
     )
 
     await client.query('COMMIT')
+
+    const userResult = await client.query(
+      'SELECT id, first_name, last_name FROM users WHERE id = $1',
+      [request.user_id]
+    )
+    const user = userResult.rows[0]
+
+    TelegramService.sendVacationRejectedNotification(user, request).catch(console.error)
 
     res.json(result.rows[0])
   } catch (error) {
@@ -537,13 +569,21 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
 
     // Запись в историю
     await client.query(
-      `INSERT INTO vacation_request_status_history 
-       (request_id, status, changed_by) 
+      `INSERT INTO vacation_request_status_history
+       (request_id, status, changed_by)
        VALUES ($1, 'cancelled_by_employee', $2)`,
       [id, userId]
     )
 
     await client.query('COMMIT')
+
+    const userResult = await client.query(
+      'SELECT id, first_name, last_name FROM users WHERE id = $1',
+      [userId]
+    )
+    const user = userResult.rows[0]
+
+    TelegramService.sendVacationCancelledNotification(user, request).catch(console.error)
 
     res.json(result.rows[0])
   } catch (error) {
