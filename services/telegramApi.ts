@@ -1,18 +1,27 @@
 const TELEGRAM_API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
 
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const token = localStorage.getItem('token')
-  const headers: HeadersInit = {
+function getAuthHeaders(): HeadersInit {
+  const authStorage = localStorage.getItem('auth-storage')
+  if (authStorage) {
+    try {
+      const { state } = JSON.parse(authStorage)
+      if (state?.token) {
+        return {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${state.token}`
+        }
+      }
+    } catch (e) {
+      console.error('[telegramApi] Error parsing auth storage:', e)
+    }
+  }
+  return {
     'Content-Type': 'application/json'
   }
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
-  return headers
 }
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const headers = await getAuthHeaders()
+  const headers = getAuthHeaders()
   const response = await fetch(`${TELEGRAM_API_URL}${url}`, {
     ...options,
     headers: { ...headers, ...options.headers }
