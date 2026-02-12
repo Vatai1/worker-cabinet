@@ -20,9 +20,12 @@ export class TelegramService {
     }
 
     try {
-      return await bot.sendMessage(chatId, text, options)
+      console.log('Telegram: Sending message to chat:', chatId)
+      const result = await bot.sendMessage(chatId, text, options)
+      console.log('Telegram: Message sent successfully to:', chatId)
+      return result
     } catch (error) {
-      console.error('Error sending Telegram message:', error)
+      console.error('Telegram: Error sending message to chat', chatId, ':', error)
       return null
     }
   }
@@ -46,7 +49,12 @@ _Сотрудник: ${user.firstName} ${user.lastName}_
   }
 
   static async sendVacationRequestNotification(user, request) {
+    console.log('Telegram: sendVacationRequestNotification called for user:', user.id, user.first_name, user.last_name)
+    console.log('Telegram: User telegram_chat_id:', user.telegram_chat_id)
+    console.log('Telegram: User telegram_notifications_enabled:', user.telegram_notifications_enabled)
+
     if (!user.telegram_chat_id || !user.telegram_notifications_enabled) {
+      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
       return null
     }
 
@@ -62,7 +70,12 @@ _Сотрудник: ${user.firstName} ${user.lastName}_
   }
 
   static async sendVacationApprovedNotification(user, request) {
+    console.log('Telegram: sendVacationApprovedNotification called for user:', user.id, user.first_name, user.last_name)
+    console.log('Telegram: User telegram_chat_id:', user.telegram_chat_id)
+    console.log('Telegram: User telegram_notifications_enabled:', user.telegram_notifications_enabled)
+
     if (!user.telegram_chat_id || !user.telegram_notifications_enabled) {
+      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
       return null
     }
 
@@ -78,7 +91,12 @@ _Сотрудник: ${user.firstName} ${user.lastName}_
   }
 
   static async sendVacationRejectedNotification(user, request) {
+    console.log('Telegram: sendVacationRejectedNotification called for user:', user.id, user.first_name, user.last_name)
+    console.log('Telegram: User telegram_chat_id:', user.telegram_chat_id)
+    console.log('Telegram: User telegram_notifications_enabled:', user.telegram_notifications_enabled)
+
     if (!user.telegram_chat_id || !user.telegram_notifications_enabled) {
+      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
       return null
     }
 
@@ -94,7 +112,12 @@ _Сотрудник: ${user.firstName} ${user.lastName}_
   }
 
   static async sendVacationCancelledNotification(user, request) {
+    console.log('Telegram: sendVacationCancelledNotification called for user:', user.id, user.first_name, user.last_name)
+    console.log('Telegram: User telegram_chat_id:', user.telegram_chat_id)
+    console.log('Telegram: User telegram_notifications_enabled:', user.telegram_notifications_enabled)
+
     if (!user.telegram_chat_id || !user.telegram_notifications_enabled) {
+      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
       return null
     }
 
@@ -110,7 +133,12 @@ _Сотрудник: ${user.firstName} ${user.lastName}_
   }
 
   static async sendNewRequestNotification(manager, request, employee) {
+    console.log('Telegram: sendNewRequestNotification called for manager:', manager.id, manager.first_name, manager.last_name)
+    console.log('Telegram: Manager telegram_chat_id:', manager.telegram_chat_id)
+    console.log('Telegram: Manager telegram_notifications_enabled:', manager.telegram_notifications_enabled)
+
     if (!manager.telegram_chat_id || !manager.telegram_notifications_enabled) {
+      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
       return null
     }
 
