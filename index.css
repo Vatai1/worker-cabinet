@@ -87,8 +87,16 @@
     background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(220 20% 99%) 100%);
   }
 
+  .dark .gradient-card {
+    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(220 20% 12%) 100%);
+  }
+
   .gradient-bg {
     background: linear-gradient(135deg, hsl(220 20% 98%) 0%, hsl(262 83% 98%) 50%, hsl(220 20% 98%) 100%);
+  }
+
+  .dark .gradient-bg {
+    background: linear-gradient(135deg, hsl(222 47% 4%) 0%, hsl(262 47% 8%) 50%, hsl(222 47% 4%) 100%);
   }
 
   .animate-in {
@@ -124,6 +132,11 @@
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .dark .glass {
+    background: rgba(30, 30, 40, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .shadow-glow {

@@ -14,6 +14,8 @@ import {
   Users,
   Plane,
   Settings,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -41,7 +43,7 @@ const managerNavigation = [
 
 export function Sidebar() {
   const { user, logout } = useAuthStore()
-  const { sidebarOpen, toggleSidebar, unreadCount } = useUIStore()
+  const { sidebarOpen, toggleSidebar, unreadCount, darkMode, toggleTheme } = useUIStore()
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -90,14 +92,24 @@ export function Sidebar() {
               )}
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden hover:bg-destructive/10"
-            onClick={toggleSidebar}
-          >
-            <X className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hover:bg-primary/10 hover:text-primary"
+              onClick={toggleTheme}
+            >
+              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden hover:bg-destructive/10"
+              onClick={toggleSidebar}
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
         {/* Navigation */}
