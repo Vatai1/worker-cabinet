@@ -47,6 +47,7 @@ export function Vacation() {
   const [newComment, setNewComment] = useState('')
   const [showRestrictionModal, setShowRestrictionModal] = useState(false)
   const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
+  const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<any[]>([])
 
   useEffect(() => {
     if (user) {
@@ -268,6 +269,19 @@ export function Vacation() {
     setRestrictionWarnings(warnings)
   }
 
+  const handleCheckRestrictionsCalendar = async (userId: string, data: { startDate: string; endDate: string }) => {
+    console.log('[Vacation] handleCheckRestrictionsCalendar called', { userId, startDate: data.startDate, endDate: data.endDate })
+    const warnings = await useVacationStore.getState().checkRestrictions(userId, {
+      startDate: data.startDate,
+      endDate: data.endDate,
+      vacationType: VacationType.ANNUAL_PAID,
+      comment: '',
+      hasTravel: false,
+    })
+    console.log('[Vacation] warnings received (calendar):', warnings)
+    setRestrictionWarningsCalendar(warnings)
+  }
+
   const handleDownload = (request: any) => {
     if (!user) return
 
@@ -440,6 +454,9 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
               onSubmit={handleCreateFromModal}
               loading={loading}
               balance={balance}
+              userId={user?.id}
+              restrictionWarnings={restrictionWarningsCalendar}
+              onCheckRestrictions={handleCheckRestrictionsCalendar}
             />
           )}
         </div>
