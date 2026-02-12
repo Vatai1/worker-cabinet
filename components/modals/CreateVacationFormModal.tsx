@@ -54,9 +54,10 @@ export function CreateVacationFormModal({
 
   useEffect(() => {
     checkRestrictions()
-  }, [startDate, endDate])
+  }, [startDate, endDate, userId, onCheckRestrictions])
 
   const checkRestrictions = () => {
+    console.log('[CreateVacationFormModal] checkRestrictions called', { userId, startDate, endDate, hasOnCheck: !!onCheckRestrictions })
     if (userId && startDate && endDate && onCheckRestrictions) {
       onCheckRestrictions(userId, { startDate, endDate })
     }

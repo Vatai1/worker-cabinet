@@ -256,6 +256,7 @@ export function Vacation() {
   }
 
   const handleCheckRestrictions = async (userId: string, data: { startDate: string; endDate: string }) => {
+    console.log('[Vacation] handleCheckRestrictions called', { userId, startDate: data.startDate, endDate: data.endDate })
     const warnings = await useVacationStore.getState().checkRestrictions(userId, {
       startDate: data.startDate,
       endDate: data.endDate,
@@ -263,6 +264,7 @@ export function Vacation() {
       comment: '',
       hasTravel: false,
     })
+    console.log('[Vacation] warnings received:', warnings)
     setRestrictionWarnings(warnings)
   }
 
