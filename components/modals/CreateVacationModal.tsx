@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { VacationType, VACATION_TYPES } from '@/types'
 import { Button } from '@/components/ui/Button'
-import { Upload, FileText, X } from 'lucide-react'
+import { Upload, FileText, X, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 
@@ -22,6 +22,12 @@ interface CreateVacationModalProps {
     travelAvailable: boolean
     travelNextAvailableDate?: string
   }
+  userId?: string
+  restrictionWarnings?: Array<{
+    message: string
+    details?: any
+  }>
+  onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
 }
 
 export function CreateVacationModal({
@@ -32,11 +38,39 @@ export function CreateVacationModal({
   onSubmit,
   loading = false,
   balance,
+  userId,
+  restrictionWarnings = [],
+  onCheckRestrictions,
 }: CreateVacationModalProps) {
   const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
   const [hasTravel, setHasTravel] = useState(false)
   const [comment, setComment] = useState('')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
+
+  useEffect(() => {
+    checkRestrictions()
+  }, [isOpen, startDate, endDate, userId, onCheckRestrictions])
+
+  useEffect(() => {
+    if (isOpen) {
+      console.log('[CreateVacationModal] Modal opened', { userId, startDate, endDate })
+    }
+  }, [isOpen])
+
+  const checkRestrictions = () => {
+    console.log('[CreateVacationModal] checkRestrictions called', { userId, startDate, endDate, hasOnCheck: !!onCheckRestrictions })
+    if (userId && startDate && endDate && onCheckRestrictions) {
+      console.log('[CreateVacationModal] Calling onCheckRestrictions')
+      onCheckRestrictions(userId, { startDate, endDate })
+    } else {
+      console.log('[CreateVacationModal] Not calling onCheckRestrictions:', {
+        hasUserId: !!userId,
+        hasStartDate: !!startDate,
+        hasEndDate: !!endDate,
+        hasOnCheck: !!onCheckRestrictions
+      })
+    }
+  }
 
   if (!isOpen || !startDate || !endDate) {
     return null
@@ -224,6 +258,28 @@ export function CreateVacationModal({
                     Доступно: {balance.availableDays} дней
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Предупреждения о нарушении ограничений */}
+          {restrictionWarnings.length > 0 && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <div className="text-sm">
+                <div className="font-medium mb-2 flex items-center gap-2 text-amber-800">
+                  <AlertTriangle className="h-4 w-4" />
+                  ⚠️ Внимание
+                </div>
+                {restrictionWarnings.map((warning, index) => (
+                  <div key={index} className="text-amber-700 mb-2 last:mb-0">
+                    <div>{warning.message}</div>
+                    {warning.details?.conflictingEmployee && (
+                      <div className="text-xs text-amber-600 mt-1">
+                        Даты: {warning.details.conflictingEmployee.dates}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}

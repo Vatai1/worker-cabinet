@@ -757,6 +757,7 @@ router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 
 router.post('/check-restrictions', authenticateToken, async (req, res) => {
   try {
     const { userId, startDate, endDate } = req.body
+    console.log('[Backend check-restrictions] Called with:', { userId, startDate, endDate })
 
     if (!userId || !startDate || !endDate) {
       return res.status(400).json({ error: 'Missing required fields' })
@@ -776,6 +777,8 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
        AND $2 = ANY(employee_ids)`,
       [departmentId, userId]
     )
+
+    console.log('[Backend check-restrictions] Found restrictions:', restrictionsResult.rows.length)
 
     const warnings = []
 

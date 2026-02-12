@@ -49,17 +49,33 @@ export function CreateVacationFormModal({
   const [comment, setComment] = useState('')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [hasCheckedRestrictions, setHasCheckedRestrictions] = useState(false)
 
   if (!isOpen) return null
 
   useEffect(() => {
     checkRestrictions()
+    setHasCheckedRestrictions(true)
   }, [startDate, endDate, userId, onCheckRestrictions])
+
+  useEffect(() => {
+    if (isOpen) {
+      console.log('[CreateVacationFormModal] Modal opened', { userId })
+    }
+  }, [isOpen])
 
   const checkRestrictions = () => {
     console.log('[CreateVacationFormModal] checkRestrictions called', { userId, startDate, endDate, hasOnCheck: !!onCheckRestrictions })
     if (userId && startDate && endDate && onCheckRestrictions) {
+      console.log('[CreateVacationFormModal] Calling onCheckRestrictions')
       onCheckRestrictions(userId, { startDate, endDate })
+    } else {
+      console.log('[CreateVacationFormModal] Not calling onCheckRestrictions:', {
+        hasUserId: !!userId,
+        hasStartDate: !!startDate,
+        hasEndDate: !!endDate,
+        hasOnCheck: !!onCheckRestrictions
+      })
     }
   }
 
