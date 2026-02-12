@@ -288,7 +288,24 @@ router.post('/requests', authenticateToken, async (req, res) => {
     )
 
     if (manager) {
-      TelegramService.sendNewRequestNotification(manager, request, employee.rows[0]).catch(console.error)
+      TelegramService.sendNewRequestNotification(
+        {
+          firstName: manager.first_name,
+          lastName: manager.last_name,
+          telegram_chat_id: manager.telegram_chat_id,
+          telegram_notifications_enabled: manager.telegram_notifications_enabled
+        },
+        {
+          startDate: request.start_date,
+          endDate: request.end_date,
+          comment: request.comment
+        },
+        {
+          firstName: employee.rows[0].first_name,
+          lastName: employee.rows[0].last_name,
+          position: employee.rows[0].position
+        }
+      ).catch(console.error)
     }
 
     res.status(201).json(request)
@@ -433,7 +450,19 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
     )
     const user = userResult.rows[0]
 
-    TelegramService.sendVacationApprovedNotification(user, request).catch(console.error)
+    TelegramService.sendVacationApprovedNotification(
+      {
+        firstName: user.first_name,
+        lastName: user.last_name,
+        telegram_chat_id: user.telegram_chat_id,
+        telegram_notifications_enabled: user.telegram_notifications_enabled
+      },
+      {
+        startDate: request.start_date,
+        endDate: request.end_date,
+        comment: request.comment
+      }
+    ).catch(console.error)
 
     res.json(result.rows[0])
   } catch (error) {
@@ -497,7 +526,19 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     )
     const user = userResult.rows[0]
 
-    TelegramService.sendVacationRejectedNotification(user, request).catch(console.error)
+    TelegramService.sendVacationRejectedNotification(
+      {
+        firstName: user.first_name,
+        lastName: user.last_name,
+        telegram_chat_id: user.telegram_chat_id,
+        telegram_notifications_enabled: user.telegram_notifications_enabled
+      },
+      {
+        startDate: request.start_date,
+        endDate: request.end_date,
+        rejectionReason: request.rejection_reason
+      }
+    ).catch(console.error)
 
     res.json(result.rows[0])
   } catch (error) {
@@ -583,7 +624,18 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     )
     const user = userResult.rows[0]
 
-    TelegramService.sendVacationCancelledNotification(user, request).catch(console.error)
+    TelegramService.sendVacationCancelledNotification(
+      {
+        firstName: user.first_name,
+        lastName: user.last_name,
+        telegram_chat_id: user.telegram_chat_id,
+        telegram_notifications_enabled: user.telegram_notifications_enabled
+      },
+      {
+        startDate: request.start_date,
+        endDate: request.end_date
+      }
+    ).catch(console.error)
 
     res.json(result.rows[0])
   } catch (error) {
@@ -647,7 +699,18 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
     )
     const user = userResult.rows[0]
 
-    TelegramService.sendVacationCancelledNotification(user, request).catch(console.error)
+    TelegramService.sendVacationCancelledNotification(
+      {
+        firstName: user.first_name,
+        lastName: user.last_name,
+        telegram_chat_id: user.telegram_chat_id,
+        telegram_notifications_enabled: user.telegram_notifications_enabled
+      },
+      {
+        startDate: request.start_date,
+        endDate: request.end_date
+      }
+    ).catch(console.error)
 
     res.json(result.rows[0])
   } catch (error) {
