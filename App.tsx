@@ -9,7 +9,10 @@ import { Requests } from '@/pages/Requests'
 import { Documents } from '@/pages/Documents'
 import { Notifications } from '@/pages/Notifications'
 import { ManagerDashboard } from '@/pages/ManagerDashboard'
+import { LeaderDashboard } from '@/pages/LeaderDashboard'
 import { Vacation } from '@/pages/Vacation'
+import { Employees } from '@/pages/Employees'
+import { Settings } from '@/pages/Settings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -44,15 +47,18 @@ function App() {
             index
             element={
               <Navigate
-                to={user?.role === 'manager' ? '/manager' : '/dashboard'}
+                to={user?.role === 'manager' ? '/leader' : '/dashboard'}
                 replace
               />
             }
           />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="leader" element={<LeaderDashboard />} />
           <Route path="manager" element={<ManagerDashboard />} />
           <Route path="vacation" element={<Vacation />} />
+          <Route path="employees" element={<Employees />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="settings" element={<Settings />} />
 
           <Route path="requests" element={<Requests />} />
           <Route path="documents" element={<Documents />} />
