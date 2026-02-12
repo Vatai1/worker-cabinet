@@ -17,3 +17,13 @@ export async function down() {
     DROP COLUMN IF EXISTS telegram_notifications_enabled
   `)
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  up().then(() => {
+    console.log('✅ Telegram migration completed successfully')
+    process.exit(0)
+  }).catch((error) => {
+    console.error('❌ Migration failed:', error)
+    process.exit(1)
+  })
+}
