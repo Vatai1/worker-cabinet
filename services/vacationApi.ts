@@ -146,6 +146,21 @@ export const vacationApi = {
     return handleResponse(response)
   },
 
+  async checkRestrictions(
+    userId: string,
+    data: { startDate: string; endDate: string }
+  ): Promise<VacationValidationError[]> {
+    const response = await fetch(`${API_BASE_URL}/vacation/check-restrictions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ userId, startDate: data.startDate, endDate: data.endDate }),
+    })
+    return handleResponse(response)
+  },
+
   async validateRequest(
     userId: string,
     data: VacationFormData

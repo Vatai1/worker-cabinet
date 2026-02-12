@@ -54,6 +54,7 @@ export function Vacation() {
 
       if (user.role === 'manager') {
         fetchAllRequests()
+        fetchRestrictions(user.departmentId || '1')
       } else {
         fetchDepartmentRequests(user.departmentId || '1')
       }
@@ -249,8 +250,8 @@ export function Vacation() {
     return Array.from(uniqueUsers.values())
   }
 
-  const handleCheckRestrictions = (userId: string, data: { startDate: string; endDate: string }) => {
-    const warnings = useVacationStore.getState().checkRestrictions(userId, {
+  const handleCheckRestrictions = async (userId: string, data: { startDate: string; endDate: string }) => {
+    const warnings = await useVacationStore.getState().checkRestrictions(userId, {
       startDate: data.startDate,
       endDate: data.endDate,
       vacationType: VacationType.ANNUAL_PAID,

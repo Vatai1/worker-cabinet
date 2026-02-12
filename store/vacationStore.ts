@@ -50,7 +50,7 @@ interface VacationStore {
   checkRestrictions: (
     userId: string,
     data: VacationFormData
-  ) => VacationValidationError[]
+  ) => Promise<VacationValidationError[]>
   
   createRestriction: (
     departmentId: string,
@@ -126,9 +126,10 @@ export const useVacationStore = create<VacationStore>()(
       fetchRestrictions: async (departmentId: string) => {
         set({ loading: true, error: null })
         try {
-          set({ loading: false })
-        } catch (error) {
-          set({ error: 'Ошибка при загрузке ограничений', loading: false })
+          const data = await vacationApi.getRestrictions(departmentId)
+          set({ restrictions: data, loading: false })
+        } catch (error: any) {
+          set({ error: error.message || 'Ошибка при загрузке ограничений', loading: false })
         }
       },
       
@@ -209,60 +210,17 @@ export const useVacationStore = create<VacationStore>()(
         return errors
       },
 
-      checkRestrictions: (userId: string, data: VacationFormData) => {
-        const warnings: VacationValidationError[] = []
-        const { startDate, endDate } = data
-
-        const restrictions = get().restrictions
-        const departmentRequests = get().departmentRequests
-
-        for (const restriction of restrictions) {
-          if (!restriction.employeeIds.includes(userId)) continue
-
-          const overlappingRequests = departmentRequests.filter((request) => {
-            if (request.status !== VacationRequestStatus.APPROVED) return false
-            if (request.userId === userId) return false
-            if (!restriction.employeeIds.includes(request.userId)) return false
-            return checkDateOverlap(startDate, endDate, request.startDate, request.endDate)
+      checkRestrictions: async (userId: string, data: VacationFormData) => {
+        try {
+          const warnings = await vacationApi.checkRestrictions(userId, {
+            startDate: data.startDate,
+            endDate: data.endDate,
           })
-
-          if (overlappingRequests.length > 0) {
-            if (restriction.type === 'pair') {
-              const conflictingEmployee = overlappingRequests[0]
-              warnings.push({
-                field: 'restriction',
-                message: `Пересечение с отпуском сотрудника: ${conflictingEmployee.userLastName} ${conflictingEmployee.userFirstName}`,
-                details: {
-                  restrictionId: restriction.id,
-                  restrictionType: restriction.type,
-                  conflictingEmployee: {
-                    id: conflictingEmployee.userId,
-                    name: `${conflictingEmployee.userLastName} ${conflictingEmployee.userFirstName}`,
-                    dates: `${conflictingEmployee.startDate} - ${conflictingEmployee.endDate}`,
-                  },
-                },
-              })
-            } else if (restriction.type === 'group' && restriction.maxConcurrent) {
-              const concurrentVacations = overlappingRequests.length + 1
-              if (concurrentVacations > restriction.maxConcurrent) {
-                const conflictingEmployees = overlappingRequests.map((r) => `${r.userLastName} ${r.userFirstName}`).join(', ')
-                warnings.push({
-                  field: 'restriction',
-                  message: `Превышен лимит одновременно находящихся в отпуске сотрудников (${concurrentVacations} из ${restriction.maxConcurrent})`,
-                  details: {
-                    restrictionId: restriction.id,
-                    restrictionType: restriction.type,
-                    maxConcurrent: restriction.maxConcurrent,
-                    concurrentVacations,
-                    conflictingEmployees,
-                  },
-                })
-              }
-            }
-          }
+          return warnings
+        } catch (error: any) {
+          console.error('Error checking restrictions:', error)
+          return []
         }
-
-        return warnings
       },
       
       createRequest: async (userId: string, data: VacationFormData) => {
