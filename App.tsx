@@ -13,6 +13,7 @@ import { ManagerDashboard } from '@/pages/ManagerDashboard'
 import { LeaderDashboard } from '@/pages/LeaderDashboard'
 import { Vacation } from '@/pages/Vacation'
 import { Employees } from '@/pages/Employees'
+import { EmployeeProfile } from '@/pages/EmployeeProfile'
 import { Settings } from '@/pages/Settings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -65,6 +66,7 @@ function App() {
           <Route path="requests" element={<Requests />} />
           <Route path="documents" element={<Documents />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="employees/:id" element={<EmployeeProfile />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
