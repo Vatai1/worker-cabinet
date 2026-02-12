@@ -680,7 +680,7 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
       id: r.id.toString(),
       departmentId: r.department_id.toString(),
       type: r.restriction_type,
-      employeeIds: r.employee_ids.map((id: number) => id.toString()),
+      employeeIds: r.employee_ids.map((id) => id.toString()),
       maxConcurrent: r.max_concurrent,
       createdAt: r.created_at,
       createdBy: r.created_by?.toString(),
@@ -727,7 +727,7 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
       id: restriction.id.toString(),
       departmentId: restriction.department_id.toString(),
       type: restriction.restriction_type,
-      employeeIds: restriction.employee_ids.map((id: number) => id.toString()),
+      employeeIds: restriction.employee_ids.map((id) => id.toString()),
       maxConcurrent: restriction.max_concurrent,
       description: restriction.description,
       createdAt: restriction.created_at,
@@ -780,7 +780,7 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
     const warnings = []
 
     for (const restriction of restrictionsResult.rows) {
-      const employeeIds = restriction.employee_ids.map((id: number) => id.toString())
+      const employeeIds = restriction.employee_ids.map((id) => id.toString())
 
       const overlappingRequestsResult = await query(
         `SELECT vr.*, u.first_name, u.last_name
