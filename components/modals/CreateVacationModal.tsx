@@ -46,21 +46,25 @@ export function CreateVacationModal({
   const [hasTravel, setHasTravel] = useState(false)
   const [comment, setComment] = useState('')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
-
-  useEffect(() => {
-    checkRestrictions()
-  }, [isOpen, startDate, endDate, userId, onCheckRestrictions])
+  const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
 
   useEffect(() => {
     if (isOpen) {
       console.log('[CreateVacationModal] Modal opened', { userId, startDate, endDate })
+      checkRestrictions()
     }
   }, [isOpen])
 
   const checkRestrictions = () => {
     console.log('[CreateVacationModal] checkRestrictions called', { userId, startDate, endDate, hasOnCheck: !!onCheckRestrictions })
     if (userId && startDate && endDate && onCheckRestrictions) {
+      const dateKey = `${startDate}-${endDate}`
+      if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
+        console.log('[CreateVacationModal] Already checked these dates, skipping')
+        return
+      }
       console.log('[CreateVacationModal] Calling onCheckRestrictions')
+      setLastCheckedDates({ startDate, endDate })
       onCheckRestrictions(userId, { startDate, endDate })
     } else {
       console.log('[CreateVacationModal] Not calling onCheckRestrictions:', {
