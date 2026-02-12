@@ -24,6 +24,7 @@ export function Vacation() {
     fetchUserRequests,
     fetchDepartmentRequests,
     fetchBalance,
+    fetchRestrictions,
     approveRequest,
     rejectRequest,
   } = useVacationStore()
