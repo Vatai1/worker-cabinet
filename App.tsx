@@ -4,6 +4,7 @@ import { Login } from '@/pages/Login'
 import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
 import { Profile } from '@/pages/Profile'
+import { ThemeProvider } from '@/components/ThemeProvider'
 
 import { Requests } from '@/pages/Requests'
 import { Documents } from '@/pages/Documents'
@@ -33,7 +34,8 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
+      <ThemeProvider>
+        <Routes>
         <Route path="/login" element={<Login />} />
         <Route
           path="/"
@@ -66,6 +68,7 @@ function App() {
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      </ThemeProvider>
     </BrowserRouter>
   )
 }

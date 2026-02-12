@@ -3,10 +3,13 @@ import type { Notification } from '@/types'
 
 interface UIStore {
   sidebarOpen: boolean
+  darkMode: boolean
   notifications: Notification[]
   unreadCount: number
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
+  toggleTheme: () => void
+  setTheme: (dark: boolean) => void
   addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => void
   markAsRead: (id: string) => void
   markAllAsRead: () => void
@@ -15,10 +18,34 @@ interface UIStore {
 
 export const useUIStore = create<UIStore>((set) => ({
   sidebarOpen: true,
+  darkMode: (() => {
+    const saved = localStorage.getItem('darkMode')
+    if (saved !== null) return saved === 'true'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })(),
   notifications: [],
   unreadCount: 0,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
+  toggleTheme: () => set((state) => {
+    const newMode = !state.darkMode
+    localStorage.setItem('darkMode', String(newMode))
+    if (newMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    return { darkMode: newMode }
+  }),
+  setTheme: (dark: boolean) => set(() => {
+    localStorage.setItem('darkMode', String(dark))
+    if (dark) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    return { darkMode: dark }
+  }),
   addNotification: (notification) => {
     const newNotification: Notification = {
       ...notification,

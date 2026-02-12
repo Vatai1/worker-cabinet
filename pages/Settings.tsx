@@ -1,16 +1,14 @@
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Switch } from '@/components/ui/Switch'
-import { Bell, Moon, Sun, Globe, Lock } from 'lucide-react'
+import { Bell, Moon, Sun } from 'lucide-react'
+import { useUIStore } from '@/store/uiStore'
 
 export function Settings() {
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [pushNotifications, setPushNotifications] = useState(false)
-  const [darkMode, setDarkMode] = useState(false)
-  const [language, setLanguage] = useState('ru')
+  const { darkMode, toggleTheme } = useUIStore()
 
   return (
     <div className="space-y-6">
@@ -80,80 +78,12 @@ export function Settings() {
               </div>
               <Switch
                 checked={darkMode}
-                onCheckedChange={setDarkMode}
+                onCheckedChange={toggleTheme}
               />
             </div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5" />
-              Язык и регион
-            </CardTitle>
-            <CardDescription>
-              Настройка языка и локализации
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="language">Язык интерфейса</Label>
-              <select
-                id="language"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="ru">Русский</option>
-                <option value="en">English</option>
-                <option value="kk">Қазақ тілі</option>
-              </select>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5" />
-              Безопасность
-            </CardTitle>
-            <CardDescription>
-              Настройки безопасности аккаунта
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="current-password">Текущий пароль</Label>
-              <Input id="current-password" type="password" placeholder="••••••••" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-password">Новый пароль</Label>
-              <Input id="new-password" type="password" placeholder="••••••••" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Подтвердите пароль</Label>
-              <Input id="confirm-password" type="password" placeholder="••••••••" />
-            </div>
-            <Button className="w-full">Изменить пароль</Button>
-          </CardContent>
-        </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Опасные действия</CardTitle>
-          <CardDescription>
-            Действия, которые невозможно отменить
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="destructive">
-            Удалить аккаунт
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   )
 }
