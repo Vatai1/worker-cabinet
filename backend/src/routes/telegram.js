@@ -1,11 +1,11 @@
 import express from 'express'
 import { query } from '../config/database.js'
 import { TelegramService } from '../services/telegramService.js'
-import { verifyToken } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 
 const router = express.Router()
 
-router.get('/bot-info', verifyToken, async (req, res) => {
+router.get('/bot-info', authenticateToken, async (req, res) => {
   try {
     const isAvailable = TelegramService.isAvailable()
 
@@ -27,7 +27,7 @@ router.get('/bot-info', verifyToken, async (req, res) => {
   }
 })
 
-router.get('/user-status', verifyToken, async (req, res) => {
+router.get('/user-status', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
 
@@ -52,7 +52,7 @@ router.get('/user-status', verifyToken, async (req, res) => {
   }
 })
 
-router.post('/connect', verifyToken, async (req, res) => {
+router.post('/connect', authenticateToken, async (req, res) => {
   try {
     const { telegramUsername } = req.body
     const userId = req.user.id
@@ -90,7 +90,7 @@ router.post('/connect', verifyToken, async (req, res) => {
   }
 })
 
-router.post('/disconnect', verifyToken, async (req, res) => {
+router.post('/disconnect', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
 
@@ -109,7 +109,7 @@ router.post('/disconnect', verifyToken, async (req, res) => {
   }
 })
 
-router.post('/toggle-notifications', verifyToken, async (req, res) => {
+router.post('/toggle-notifications', authenticateToken, async (req, res) => {
   try {
     const { enabled } = req.body
     const userId = req.user.id
