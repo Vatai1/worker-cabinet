@@ -13,13 +13,44 @@ npm run backend:install
 npm run backend:migrate
 npm run backend:seed
 
-# Запуск
+# Запуск (рекомендуемый способ)
+./scripts/manage-server.sh start
+
+# Или стандартный способ
 npm run dev
 ```
 
 Приложение будет доступно по адресам:
 - **Frontend**: http://localhost:3000
-- **Backend**: http://localhost:5000
+- **Backend**: http://localhost:5001
+
+### Управление сервером
+
+Для удобного управления сервером используйте скрипт:
+
+```bash
+# Запуск
+./scripts/manage-server.sh start
+
+# Остановка
+./scripts/manage-server.sh stop
+
+# Статус
+./scripts/manage-server.sh status
+
+# Перезапуск
+./scripts/manage-server.sh restart
+
+# Просмотр логов
+./scripts/manage-server.sh logs
+./scripts/manage-server.sh logs frontend
+./scripts/manage-server.sh logs backend
+
+# Мониторинг логов в реальном времени
+./scripts/manage-server.sh tail
+```
+
+Подробнее см. [SERVER_MANAGEMENT.md](./SERVER_MANAGEMENT.md)
 
 ## 📝 Документация
 
