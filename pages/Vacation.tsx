@@ -61,7 +61,9 @@ export function Vacation() {
     if (!user) return
     try {
       await approveRequest(requestId, user.id)
-      window.location.reload()
+      fetchUserRequests(user.id)
+      fetchDepartmentRequests(user.departmentId || '1')
+      fetchBalance(user.id).then(setBalance)
     } catch (err) {
       console.error('Error approving request:', err)
     }
@@ -73,7 +75,9 @@ export function Vacation() {
       await rejectRequest(requestId, user.id, rejectionReason)
       setRejectingRequestId(null)
       setRejectionReason('')
-      window.location.reload()
+      fetchUserRequests(user.id)
+      fetchDepartmentRequests(user.departmentId || '1')
+      fetchBalance(user.id).then(setBalance)
     } catch (err) {
       console.error('Error rejecting request:', err)
     }
@@ -90,7 +94,9 @@ export function Vacation() {
       await useVacationStore.getState().cancelRequest(cancellingRequestId)
       setShowCancelModal(false)
       setCancellingRequestId(null)
-      window.location.reload()
+      fetchUserRequests(user.id)
+      fetchDepartmentRequests(user.departmentId || '1')
+      fetchBalance(user.id).then(setBalance)
     } catch (err) {
       console.error('Error canceling request:', err)
     }
@@ -142,7 +148,9 @@ export function Vacation() {
       setSelectedStartDate(null)
       setSelectedEndDate(null)
       setShowCreateFromCalendar(false)
-      window.location.reload()
+      fetchUserRequests(user.id)
+      fetchDepartmentRequests(user.departmentId || '1')
+      fetchBalance(user.id).then(setBalance)
     } catch (err) {
       console.error('Error creating request:', err)
     }
@@ -174,7 +182,9 @@ export function Vacation() {
         referenceDocument: data.referenceDocument,
       })
       setShowCreateForm(false)
-      window.location.reload()
+      fetchUserRequests(user.id)
+      fetchDepartmentRequests(user.departmentId || '1')
+      fetchBalance(user.id).then(setBalance)
     } catch (err) {
       console.error('Error creating request:', err)
     }
@@ -191,15 +201,81 @@ export function Vacation() {
   }
 
   const handleAddCommentSubmit = async (requestId: string) => {
-    if (!newComment.trim()) return
+    if (!user || !newComment.trim()) return
     try {
       await useVacationStore.getState().addComment(requestId, newComment)
       setAddingComment(null)
       setNewComment('')
-      window.location.reload()
+      fetchUserRequests(user.id)
+      fetchDepartmentRequests(user.departmentId || '1')
     } catch (err) {
       console.error('Error adding comment:', err)
     }
+  }
+
+  const handleDownload = (request: any) => {
+    if (!user) return
+
+    const vacationTypeName = request.vacationType === 'annual_paid'
+      ? 'Ежегодный оплачиваемый отпуск'
+      : request.vacationType === 'unpaid'
+      ? 'Отпуск без сохранения заработной платы'
+      : request.vacationType === 'educational'
+      ? 'Учебный отпуск'
+      : request.vacationType === 'maternity'
+      ? 'Отпуск по беременности и родам'
+      : request.vacationType === 'child_care'
+      ? 'Отпуск по уходу за ребёнком'
+      : request.vacationType === 'additional'
+      ? 'Дополнительный отпуск'
+      : request.vacationType === 'veteran'
+      ? 'Ветеранский отпуск'
+      : 'Отпуск'
+
+    const statusName = request.status === 'on_approval'
+      ? 'На согласовании'
+      : request.status === 'approved'
+      ? 'Согласовано'
+      : request.status === 'rejected'
+      ? 'Отклонено'
+      : request.status === 'cancelled_by_employee'
+      ? 'Отменено сотрудником'
+      : request.status === 'cancelled_by_manager'
+      ? 'Отменено руководителем'
+      : request.status
+
+    const content = `
+ЗЯВЛЕНИЕ НА ОТПУСК
+
+Сотрудник: ${user.lastName} ${user.firstName} ${user.middleName || ''}
+Должность: ${user.position}
+Отдел: ${user.department}
+
+Тип отпуска: ${vacationTypeName}
+Дата начала: ${new Date(request.startDate).toLocaleDateString('ru-RU')}
+Дата окончания: ${new Date(request.endDate).toLocaleDateString('ru-RU')}
+Количество дней: ${request.duration}
+
+Комментарий: ${request.comment || 'Не указан'}
+
+${request.hasTravel ? 'Включая проезд' + (request.travelDestination ? ` до ${request.travelDestination}` : '') : ''}
+
+Статус: ${statusName}
+Дата создания: ${new Date(request.createdAt).toLocaleDateString('ru-RU')}
+${request.reviewedAt ? `Дата рассмотрения: ${new Date(request.reviewedAt).toLocaleDateString('ru-RU')}` : ''}
+${request.rejectionReason ? `Причина отклонения: ${request.rejectionReason}` : ''}
+${request.cancellationReason ? `Причина отмены: ${request.cancellationReason}` : ''}
+    `.trim()
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `заявление-отпуск-${request.id}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   const currentYear = 2026
@@ -607,6 +683,22 @@ export function Vacation() {
                                 </div>
                               )}
                               <div className="flex flex-wrap gap-3 pt-2">
+                                {request.status !== VacationRequestStatus.ON_APPROVAL && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDownload(request)
+                                    }}
+                                    disabled={loading}
+                                  >
+                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Скачать заявление
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="outline"
