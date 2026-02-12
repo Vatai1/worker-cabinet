@@ -13,6 +13,7 @@ import {
   X,
   Users,
   Plane,
+  Settings,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -21,6 +22,7 @@ import { Badge } from '@/components/ui/Badge'
 const employeeNavigation = [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Профиль', href: '/profile', icon: User },
   { name: 'Заявления', href: '/requests', icon: FileText },
   { name: 'Документы', href: '/documents', icon: FolderOpen },
@@ -28,10 +30,11 @@ const employeeNavigation = [
 ]
 
 const managerNavigation = [
-  { name: 'Панель руководителя', href: '/manager', icon: Users },
-  { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Дашборд', href: '/leader', icon: Users },
   { name: 'Профиль', href: '/profile', icon: User },
-  { name: 'Заявления', href: '/requests', icon: FileText },
+  { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
+  { name: 'Отпуск', href: '/vacation', icon: Plane },
   { name: 'Документы', href: '/documents', icon: FolderOpen },
   { name: 'Уведомления', href: '/notifications', icon: Bell },
 ]
@@ -99,7 +102,7 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-6">
-          {navigation.map((item, index) => {
+          {navigation.map((item) => {
             const Icon = item.icon
             const hasBadge = item.href === '/notifications' && unreadCount > 0
 
@@ -164,9 +167,18 @@ export function Sidebar() {
               </p>
             </div>
           </div>
+          <NavLink
+            to="/settings"
+            className="mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground"
+          >
+            <div className="p-1.5 rounded-lg bg-muted">
+              <Settings className="h-4 w-4" />
+            </div>
+            Настройки
+          </NavLink>
           <Button
             variant="ghost"
-            className="mt-3 w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all"
+            className="mt-1 w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-all"
             onClick={handleLogout}
           >
             <div className="p-1.5 rounded-lg bg-muted">
