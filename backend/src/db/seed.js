@@ -160,10 +160,27 @@ async function seed() {
 
     // Заявка Петровой (одобрена)
     await query(
-      `INSERT INTO vacation_requests 
-       (user_id, start_date, end_date, duration, vacation_type, status, has_travel)
-       VALUES ($1, '2026-05-01', '2026-05-14', 14, 'annual_paid', 'approved', false)`,
+      `INSERT INTO vacation_requests
+        (user_id, start_date, end_date, duration, vacation_type, status, has_travel)
+        VALUES ($1, '2026-05-01', '2026-05-14', 14, 'annual_paid', 'approved', false)`,
       [petrova.id]
+    )
+
+    // Создание ограничений на пересечение отпусков
+    // Парное ограничение между Ивановым и Сидоровым
+    await query(
+      `INSERT INTO vacation_restrictions
+        (department_id, restriction_type, employee_ids, max_concurrent, description, created_by)
+        VALUES ($1, 'pair', ARRAY[$2, $3], NULL, 'Парное ограничение: Иванов и Сидоров не могут одновременно быть в отпуске', $4)`,
+      [departmentId, ivanov.id, sidorov.id, petrov.id]
+    )
+
+    // Групповое ограничение для Ивановой и Петровой (максимум 1 одновременно)
+    await query(
+      `INSERT INTO vacation_restrictions
+        (department_id, restriction_type, employee_ids, max_concurrent, description, created_by)
+        VALUES ($1, 'group', ARRAY[$2, $3], 1, 'Групповое ограничение: не более 1 из Ивановой и Петровой', $4)`,
+      [departmentId, ivanova.id, petrova.id, petrov.id]
     )
 
     console.log('✅ Seed completed successfully')

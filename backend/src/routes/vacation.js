@@ -615,13 +615,13 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
 router.get('/calendar', authenticateToken, async (req, res) => {
   try {
     const { departmentId, year } = req.query
-    
+
     if (!year) {
       return res.status(400).json({ error: 'Year parameter is required' })
     }
 
     let sql = `
-      SELECT 
+      SELECT
         vr.id as request_id,
         vr.user_id,
         u.first_name,
@@ -636,7 +636,7 @@ router.get('/calendar', authenticateToken, async (req, res) => {
       WHERE vr.status = 'approved'
       AND EXTRACT(YEAR FROM vr.start_date) = $1
     `
-    
+
     const params = [year]
 
     if (departmentId) {
@@ -651,6 +651,194 @@ router.get('/calendar', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching vacation calendar:', error)
     res.status(500).json({ error: 'Failed to fetch vacation calendar' })
+  }
+})
+
+// Get vacation restrictions for department
+router.get('/restrictions', authenticateToken, async (req, res) => {
+  try {
+    const { departmentId } = req.query
+    const user = req.user
+
+    if (!departmentId) {
+      return res.status(400).json({ error: 'departmentId parameter is required' })
+    }
+
+    if (user.role === 'employee') {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const result = await query(
+      `SELECT * FROM vacation_restrictions
+       WHERE department_id = $1
+       ORDER BY created_at DESC`,
+      [departmentId]
+    )
+
+    res.json(result.rows.map(r => ({
+      ...r,
+      id: r.id.toString(),
+      departmentId: r.department_id.toString(),
+      type: r.restriction_type,
+      employeeIds: r.employee_ids.map((id: number) => id.toString()),
+      maxConcurrent: r.max_concurrent,
+      createdAt: r.created_at,
+      createdBy: r.created_by?.toString(),
+    })))
+  } catch (error) {
+    console.error('Error fetching vacation restrictions:', error)
+    res.status(500).json({ error: 'Failed to fetch vacation restrictions' })
+  }
+})
+
+// Create vacation restriction
+router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  try {
+    const { departmentId, type, employeeIds, maxConcurrent, description } = req.body
+    const userId = req.user.id
+
+    if (!departmentId || !type || !employeeIds || employeeIds.length === 0) {
+      return res.status(400).json({ error: 'Missing required fields' })
+    }
+
+    if (type === 'pair' && employeeIds.length !== 2) {
+      return res.status(400).json({ error: 'Pair restrictions must have exactly 2 employees' })
+    }
+
+    if (type === 'group' && employeeIds.length < 2) {
+      return res.status(400).json({ error: 'Group restrictions must have at least 2 employees' })
+    }
+
+    if (type === 'group' && !maxConcurrent) {
+      return res.status(400).json({ error: 'Max concurrent is required for group restrictions' })
+    }
+
+    const result = await query(
+      `INSERT INTO vacation_restrictions
+        (department_id, restriction_type, employee_ids, max_concurrent, description, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *`,
+      [departmentId, type, employeeIds, maxConcurrent || null, description || null, userId]
+    )
+
+    const restriction = result.rows[0]
+
+    res.status(201).json({
+      id: restriction.id.toString(),
+      departmentId: restriction.department_id.toString(),
+      type: restriction.restriction_type,
+      employeeIds: restriction.employee_ids.map((id: number) => id.toString()),
+      maxConcurrent: restriction.max_concurrent,
+      description: restriction.description,
+      createdAt: restriction.created_at,
+      createdBy: restriction.created_by?.toString(),
+    })
+  } catch (error) {
+    console.error('Error creating vacation restriction:', error)
+    res.status(500).json({ error: 'Failed to create vacation restriction' })
+  }
+})
+
+// Delete vacation restriction
+router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+
+    await query('DELETE FROM vacation_restrictions WHERE id = $1', [id])
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting vacation restriction:', error)
+    res.status(500).json({ error: 'Failed to delete vacation restriction' })
+  }
+})
+
+// Check restrictions for dates
+router.post('/check-restrictions', authenticateToken, async (req, res) => {
+  try {
+    const { userId, startDate, endDate } = req.body
+
+    if (!userId || !startDate || !endDate) {
+      return res.status(400).json({ error: 'Missing required fields' })
+    }
+
+    const userResult = await query('SELECT department_id FROM users WHERE id = $1', [userId])
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    const departmentId = userResult.rows[0].department_id
+
+    const restrictionsResult = await query(
+      `SELECT * FROM vacation_restrictions
+       WHERE department_id = $1
+       AND $2 = ANY(employee_ids)`,
+      [departmentId, userId]
+    )
+
+    const warnings = []
+
+    for (const restriction of restrictionsResult.rows) {
+      const employeeIds = restriction.employee_ids.map((id: number) => id.toString())
+
+      const overlappingRequestsResult = await query(
+        `SELECT vr.*, u.first_name, u.last_name
+         FROM vacation_requests vr
+         JOIN users u ON vr.user_id = u.id
+         WHERE vr.status = 'approved'
+         AND vr.user_id != $1
+         AND vr.user_id = ANY($2)
+         AND (
+           (vr.start_date <= $3 AND vr.end_date >= $3)
+           OR (vr.start_date <= $4 AND vr.end_date >= $4)
+           OR (vr.start_date >= $3 AND vr.end_date <= $4)
+         )`,
+        [userId, employeeIds, startDate, endDate]
+      )
+
+      const overlappingRequests = overlappingRequestsResult.rows
+
+      if (overlappingRequests.length > 0) {
+        if (restriction.restriction_type === 'pair') {
+          const conflictingEmployee = overlappingRequests[0]
+          warnings.push({
+            field: 'restriction',
+            message: `Пересечение с отпуском сотрудника: ${conflictingEmployee.last_name} ${conflictingEmployee.first_name}`,
+            details: {
+              restrictionId: restriction.id.toString(),
+              restrictionType: restriction.restriction_type,
+              conflictingEmployee: {
+                id: conflictingEmployee.user_id.toString(),
+                name: `${conflictingEmployee.last_name} ${conflictingEmployee.first_name}`,
+                dates: `${conflictingEmployee.start_date} - ${conflictingEmployee.end_date}`,
+              },
+            },
+          })
+        } else if (restriction.restriction_type === 'group' && restriction.max_concurrent) {
+          const concurrentVacations = overlappingRequests.length + 1
+          if (concurrentVacations > restriction.max_concurrent) {
+            const conflictingEmployees = overlappingRequests.map(r => `${r.last_name} ${r.first_name}`).join(', ')
+            warnings.push({
+              field: 'restriction',
+              message: `Превышен лимит одновременно находящихся в отпуске сотрудников (${concurrentVacations} из ${restriction.max_concurrent})`,
+              details: {
+                restrictionId: restriction.id.toString(),
+                restrictionType: restriction.restriction_type,
+                maxConcurrent: restriction.max_concurrent,
+                concurrentVacations,
+                conflictingEmployees,
+              },
+            })
+          }
+        }
+      }
+    }
+
+    res.json(warnings)
+  } catch (error) {
+    console.error('Error checking vacation restrictions:', error)
+    res.status(500).json({ error: 'Failed to check vacation restrictions' })
   }
 })
 
