@@ -50,13 +50,10 @@ export function CreateVacationFormModal({
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [hasCheckedRestrictions, setHasCheckedRestrictions] = useState(false)
+  const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
+  const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null)
 
   if (!isOpen) return null
-
-  useEffect(() => {
-    checkRestrictions()
-    setHasCheckedRestrictions(true)
-  }, [startDate, endDate, userId, onCheckRestrictions])
 
   useEffect(() => {
     if (isOpen) {
@@ -64,10 +61,38 @@ export function CreateVacationFormModal({
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+    }
+
+    if (userId && startDate && endDate && onCheckRestrictions) {
+      const dateKey = `${startDate}-${endDate}`
+      if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
+        console.log('[CreateVacationFormModal] Already checked these dates, skipping')
+        return
+      }
+
+      const timer = setTimeout(() => {
+        console.log('[CreateVacationFormModal] Debounced checkRestrictions')
+        checkRestrictions()
+      }, 500)
+
+      setDebounceTimer(timer)
+    }
+
+    return () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
+    }
+  }, [startDate, endDate, userId, onCheckRestrictions, lastCheckedDates])
+
   const checkRestrictions = () => {
     console.log('[CreateVacationFormModal] checkRestrictions called', { userId, startDate, endDate, hasOnCheck: !!onCheckRestrictions })
     if (userId && startDate && endDate && onCheckRestrictions) {
       console.log('[CreateVacationFormModal] Calling onCheckRestrictions')
+      setLastCheckedDates({ startDate, endDate })
       onCheckRestrictions(userId, { startDate, endDate })
     } else {
       console.log('[CreateVacationFormModal] Not calling onCheckRestrictions:', {
