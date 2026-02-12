@@ -222,6 +222,7 @@ export function Vacation() {
     if (!user) return
     try {
       await useVacationStore.getState().createRestriction(user.departmentId || '1', restriction)
+      await fetchRestrictions(user.departmentId || '1')
     } catch (err) {
       console.error('Error creating restriction:', err)
     }
@@ -230,6 +231,9 @@ export function Vacation() {
   const handleDeleteRestriction = async (restrictionId: string) => {
     try {
       await useVacationStore.getState().deleteRestriction(restrictionId)
+      if (user) {
+        await fetchRestrictions(user.departmentId || '1')
+      }
     } catch (err) {
       console.error('Error deleting restriction:', err)
     }

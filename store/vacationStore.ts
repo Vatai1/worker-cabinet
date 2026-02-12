@@ -425,33 +425,30 @@ export const useVacationStore = create<VacationStore>()(
       ) => {
         set({ loading: true, error: null })
         try {
-          const newRestriction: VacationRestriction = {
-            ...data,
-            id: `vr-${Date.now()}`,
-            departmentId,
-            createdAt: new Date().toISOString(),
-            createdBy: 'current-user',
-            createdByName: 'Текущий пользователь',
-          }
-          
+          const newRestriction = await vacationApi.createRestriction(departmentId, data)
+
           set((state) => ({
             restrictions: [...state.restrictions, newRestriction],
             loading: false,
           }))
-        } catch (error) {
-          set({ error: 'Ошибка при создании ограничения', loading: false })
+        } catch (error: any) {
+          set({ error: error.message || 'Ошибка при создании ограничения', loading: false })
+          throw error
         }
       },
-      
+
       deleteRestriction: async (restrictionId: string) => {
         set({ loading: true, error: null })
         try {
+          await vacationApi.deleteRestriction(restrictionId)
+
           set((state) => ({
             restrictions: state.restrictions.filter((r) => r.id !== restrictionId),
             loading: false,
           }))
-        } catch (error) {
-          set({ error: 'Ошибка при удалении ограничения', loading: false })
+        } catch (error: any) {
+          set({ error: error.message || 'Ошибка при удалении ограничения', loading: false })
+          throw error
         }
       },
       
