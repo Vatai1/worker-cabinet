@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import authRoutes from './routes/auth.js'
 import vacationRoutes from './routes/vacation.js'
 import userRoutes from './routes/users.js'
+import telegramRoutes from './routes/telegram.js'
 
 dotenv.config()
 
@@ -31,6 +32,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/vacation', vacationRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/telegram', telegramRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {
