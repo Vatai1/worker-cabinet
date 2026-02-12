@@ -150,6 +150,7 @@ export const vacationApi = {
     userId: string,
     data: { startDate: string; endDate: string }
   ): Promise<VacationValidationError[]> {
+    console.log('[vacationApi] checkRestrictions called', { userId, startDate: data.startDate, endDate: data.endDate })
     const response = await fetch(`${API_BASE_URL}/vacation/check-restrictions`, {
       method: 'POST',
       headers: {
@@ -158,7 +159,9 @@ export const vacationApi = {
       },
       body: JSON.stringify({ userId, startDate: data.startDate, endDate: data.endDate }),
     })
-    return handleResponse(response)
+    const result = await handleResponse(response)
+    console.log('[vacationApi] checkRestrictions result:', result)
+    return result
   },
 
   async validateRequest(
