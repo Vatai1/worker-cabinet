@@ -558,7 +558,10 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
                               <div className="pt-2 flex gap-3">
                                 <Button
                                   size="sm"
-                                  onClick={() => handleApprove(request.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleApprove(request.id)
+                                  }}
                                   disabled={loading}
                                   className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-lg shadow-emerald-500/30"
                                 >
@@ -570,7 +573,10 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => setRejectingRequestId(request.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setRejectingRequestId(request.id)
+                                  }}
                                   disabled={loading}
                                   className="border-destructive/30 text-destructive hover:bg-destructive/10"
                                 >
@@ -603,13 +609,20 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
                                     onChange={(e) => setRejectionReason(e.target.value)}
                                   />
                                   <div className="flex gap-2 mt-2">
-                                    <Button size="sm" onClick={() => handleReject(request.id)}>
+                                    <Button
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleReject(request.id)
+                                      }}
+                                    >
                                       Подтвердить
                                     </Button>
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation()
                                         setRejectingRequestId(null)
                                         setRejectionReason('')
                                       }}
