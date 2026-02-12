@@ -277,7 +277,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     await client.query('COMMIT')
 
     const managerResult = await client.query(
-      `SELECT id, first_name, last_name FROM users WHERE id = 
+      `SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id =
        (SELECT manager_id FROM users WHERE id = $1)`,
       [userId]
     )
@@ -428,7 +428,7 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
     await client.query('COMMIT')
 
     const userResult = await client.query(
-      'SELECT id, first_name, last_name FROM users WHERE id = $1',
+      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
       [request.user_id]
     )
     const user = userResult.rows[0]
@@ -492,7 +492,7 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     await client.query('COMMIT')
 
     const userResult = await client.query(
-      'SELECT id, first_name, last_name FROM users WHERE id = $1',
+      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
       [request.user_id]
     )
     const user = userResult.rows[0]
@@ -578,7 +578,7 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     await client.query('COMMIT')
 
     const userResult = await client.query(
-      'SELECT id, first_name, last_name FROM users WHERE id = $1',
+      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
       [userId]
     )
     const user = userResult.rows[0]
@@ -633,13 +633,21 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
     )
 
     await client.query(
-      `INSERT INTO vacation_request_status_history 
-       (request_id, status, changed_by, comment) 
+      `INSERT INTO vacation_request_status_history
+       (request_id, status, changed_by, comment)
        VALUES ($1, 'cancelled_by_manager', $2, $3)`,
       [id, managerId, reason]
     )
 
     await client.query('COMMIT')
+
+    const userResult = await client.query(
+      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
+      [request.user_id]
+    )
+    const user = userResult.rows[0]
+
+    TelegramService.sendVacationCancelledNotification(user, request).catch(console.error)
 
     res.json(result.rows[0])
   } catch (error) {
