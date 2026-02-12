@@ -10,6 +10,7 @@ import { CreateVacationFormModal } from '@/components/modals/CreateVacationFormM
 import { VacationDetailModal } from '@/components/modals/VacationDetailModal'
 import { VacationHistoryModal } from '@/components/modals/VacationHistoryModal'
 import { ConfirmModal } from '@/components/modals/ConfirmModal'
+import { RestrictionModal } from '@/components/modals/RestrictionModal'
 import { VacationRequestStatus, VacationType } from '@/types'
 
 export function Vacation() {
@@ -43,6 +44,7 @@ export function Vacation() {
   const [myRequestsExpanded, setMyRequestsExpanded] = useState(true)
   const [addingComment, setAddingComment] = useState<string | null>(null)
   const [newComment, setNewComment] = useState('')
+  const [showRestrictionModal, setShowRestrictionModal] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -213,6 +215,39 @@ export function Vacation() {
     }
   }
 
+  const handleCreateRestriction = async (restriction: Omit<any, 'id'>) => {
+    if (!user) return
+    try {
+      await useVacationStore.getState().createRestriction(user.departmentId || '1', restriction)
+    } catch (err) {
+      console.error('Error creating restriction:', err)
+    }
+  }
+
+  const handleDeleteRestriction = async (restrictionId: string) => {
+    try {
+      await useVacationStore.getState().deleteRestriction(restrictionId)
+    } catch (err) {
+      console.error('Error deleting restriction:', err)
+    }
+  }
+
+  const getDepartmentUsers = () => {
+    const uniqueUsers = new Map()
+    departmentRequests.forEach((request) => {
+      const key = `${request.userId}-${request.userLastName}-${request.userFirstName}`
+      if (!uniqueUsers.has(key)) {
+        uniqueUsers.set(key, {
+          id: request.userId,
+          firstName: request.userFirstName,
+          lastName: request.userLastName,
+          position: request.userPosition,
+        })
+      }
+    })
+    return Array.from(uniqueUsers.values())
+  }
+
   const handleDownload = (request: any) => {
     if (!user) return
 
@@ -293,16 +328,30 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
             {isManager ? 'Управление отпусками сотрудников' : 'Управление вашими отпусками'}
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => setShowHistoryModal(true)}
-          size="default"
-        >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          История заявок
-        </Button>
+        <div className="flex gap-2">
+          {isManager && (
+            <Button
+              variant="outline"
+              onClick={() => setShowRestrictionModal(true)}
+              size="default"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              Настроить пересечения
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => setShowHistoryModal(true)}
+            size="default"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            История заявок
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -803,6 +852,17 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
           confirmText="Отменить"
           cancelText="Вернуться"
           loading={loading}
+        />
+      )}
+
+      {showRestrictionModal && (
+        <RestrictionModal
+          isOpen={showRestrictionModal}
+          restrictions={useVacationStore.getState().restrictions}
+          departmentUsers={getDepartmentUsers()}
+          onCreateRestriction={handleCreateRestriction}
+          onDeleteRestriction={handleDeleteRestriction}
+          onClose={() => setShowRestrictionModal(false)}
         />
       )}
     </div>
