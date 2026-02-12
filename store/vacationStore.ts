@@ -31,11 +31,11 @@ interface VacationStore {
   fetchDepartmentRequests: (departmentId: string) => Promise<void>
   fetchBalance: (userId: string) => Promise<VacationBalance>
   fetchRestrictions: (departmentId: string) => Promise<void>
-  
+
   createRequest: (userId: string, data: VacationFormData) => Promise<VacationRequest | null>
   updateRequest: (requestId: string, data: Partial<VacationFormData>) => Promise<void>
   cancelRequest: (requestId: string) => Promise<void>
-  
+
   approveRequest: (requestId: string, managerId: string) => Promise<void>
   rejectRequest: (requestId: string, managerId: string, reason: string) => Promise<void>
   cancelByManager: (requestId: string, managerId: string, reason: string) => Promise<void>
@@ -43,6 +43,11 @@ interface VacationStore {
   addComment: (requestId: string, comment: string) => Promise<void>
 
   validateRequest: (
+    userId: string,
+    data: VacationFormData
+  ) => VacationValidationError[]
+
+  checkRestrictions: (
     userId: string,
     data: VacationFormData
   ) => VacationValidationError[]
@@ -200,8 +205,64 @@ export const useVacationStore = create<VacationStore>()(
             message: 'Для учебного отпуска необходимо приложить справку',
           })
         }
-        
+
         return errors
+      },
+
+      checkRestrictions: (userId: string, data: VacationFormData) => {
+        const warnings: VacationValidationError[] = []
+        const { startDate, endDate } = data
+
+        const restrictions = get().restrictions
+        const departmentRequests = get().departmentRequests
+
+        for (const restriction of restrictions) {
+          if (!restriction.employeeIds.includes(userId)) continue
+
+          const overlappingRequests = departmentRequests.filter((request) => {
+            if (request.status !== VacationRequestStatus.APPROVED) return false
+            if (request.userId === userId) return false
+            if (!restriction.employeeIds.includes(request.userId)) return false
+            return checkDateOverlap(startDate, endDate, request.startDate, request.endDate)
+          })
+
+          if (overlappingRequests.length > 0) {
+            if (restriction.type === 'pair') {
+              const conflictingEmployee = overlappingRequests[0]
+              warnings.push({
+                field: 'restriction',
+                message: `Пересечение с отпуском сотрудника: ${conflictingEmployee.userLastName} ${conflictingEmployee.userFirstName}`,
+                details: {
+                  restrictionId: restriction.id,
+                  restrictionType: restriction.type,
+                  conflictingEmployee: {
+                    id: conflictingEmployee.userId,
+                    name: `${conflictingEmployee.userLastName} ${conflictingEmployee.userFirstName}`,
+                    dates: `${conflictingEmployee.startDate} - ${conflictingEmployee.endDate}`,
+                  },
+                },
+              })
+            } else if (restriction.type === 'group' && restriction.maxConcurrent) {
+              const concurrentVacations = overlappingRequests.length + 1
+              if (concurrentVacations > restriction.maxConcurrent) {
+                const conflictingEmployees = overlappingRequests.map((r) => `${r.userLastName} ${r.userFirstName}`).join(', ')
+                warnings.push({
+                  field: 'restriction',
+                  message: `Превышен лимит одновременно находящихся в отпуске сотрудников (${concurrentVacations} из ${restriction.maxConcurrent})`,
+                  details: {
+                    restrictionId: restriction.id,
+                    restrictionType: restriction.type,
+                    maxConcurrent: restriction.maxConcurrent,
+                    concurrentVacations,
+                    conflictingEmployees,
+                  },
+                })
+              }
+            }
+          }
+        }
+
+        return warnings
       },
       
       createRequest: async (userId: string, data: VacationFormData) => {

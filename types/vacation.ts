@@ -199,7 +199,7 @@ export interface VacationFormData {
 }
 
 export interface VacationValidationError {
-  field: 'startDate' | 'endDate' | 'duration' | 'balance' | 'overlap' | 'travel' | 'referenceDocument'
+  field: 'startDate' | 'endDate' | 'duration' | 'balance' | 'overlap' | 'travel' | 'referenceDocument' | 'restriction'
   message: string
   details?: any
 }

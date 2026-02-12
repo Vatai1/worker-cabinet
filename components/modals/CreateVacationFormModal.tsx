@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { VacationType, VACATION_TYPES } from '@/types'
 import { Button } from '@/components/ui/Button'
-import { X, FileText, Upload } from 'lucide-react'
+import { X, FileText, Upload, AlertTriangle } from 'lucide-react'
 import { ru } from 'date-fns/locale'
 
 interface CreateVacationFormModalProps {
@@ -23,6 +23,12 @@ interface CreateVacationFormModalProps {
     travelAvailable: boolean
     travelNextAvailableDate?: string
   }
+  restrictionWarnings?: Array<{
+    message: string
+    details?: any
+  }>
+  userId?: string
+  onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
 }
 
 export function CreateVacationFormModal({
@@ -31,6 +37,9 @@ export function CreateVacationFormModal({
   onSubmit,
   loading = false,
   balance,
+  restrictionWarnings = [],
+  userId,
+  onCheckRestrictions,
 }: CreateVacationFormModalProps) {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -42,6 +51,16 @@ export function CreateVacationFormModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   if (!isOpen) return null
+
+  useEffect(() => {
+    checkRestrictions()
+  }, [startDate, endDate])
+
+  const checkRestrictions = () => {
+    if (userId && startDate && endDate && onCheckRestrictions) {
+      onCheckRestrictions(userId, { startDate, endDate })
+    }
+  }
 
   const validateDates = () => {
     const newErrors: Record<string, string> = {}
@@ -320,6 +339,28 @@ export function CreateVacationFormModal({
                     Доступно: {balance.availableDays} дней
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Предупреждения о нарушении ограничений */}
+          {restrictionWarnings.length > 0 && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <div className="text-sm">
+                <div className="font-medium mb-2 flex items-center gap-2 text-amber-800">
+                  <AlertTriangle className="h-4 w-4" />
+                  ⚠️ Внимание
+                </div>
+                {restrictionWarnings.map((warning, index) => (
+                  <div key={index} className="text-amber-700 mb-2 last:mb-0">
+                    <div>{warning.message}</div>
+                    {warning.details?.conflictingEmployee && (
+                      <div className="text-xs text-amber-600 mt-1">
+                        Даты: {warning.details.conflictingEmployee.dates}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
