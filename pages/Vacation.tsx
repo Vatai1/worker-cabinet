@@ -45,6 +45,7 @@ export function Vacation() {
   const [addingComment, setAddingComment] = useState<string | null>(null)
   const [newComment, setNewComment] = useState('')
   const [showRestrictionModal, setShowRestrictionModal] = useState(false)
+  const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
 
   useEffect(() => {
     if (user) {
@@ -246,6 +247,17 @@ export function Vacation() {
       }
     })
     return Array.from(uniqueUsers.values())
+  }
+
+  const handleCheckRestrictions = (userId: string, data: { startDate: string; endDate: string }) => {
+    const warnings = useVacationStore.getState().checkRestrictions(userId, {
+      startDate: data.startDate,
+      endDate: data.endDate,
+      vacationType: VacationType.ANNUAL_PAID,
+      comment: '',
+      hasTravel: false,
+    })
+    setRestrictionWarnings(warnings)
   }
 
   const handleDownload = (request: any) => {
@@ -831,6 +843,9 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
           onSubmit={handleCreateFromForm}
           loading={loading}
           balance={balance}
+          restrictionWarnings={restrictionWarnings}
+          userId={user?.id}
+          onCheckRestrictions={handleCheckRestrictions}
         />
       )}
 
