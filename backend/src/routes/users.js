@@ -73,7 +73,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     }
 
     const result = await query(
-      `SELECT 
+      `SELECT
         u.id,
         u.email,
         u.first_name,
@@ -88,6 +88,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.status,
         u.role,
         u.manager_id,
+        u.responsibility_area,
         m.first_name || ' ' || m.last_name as manager_name,
         vb.total_days,
         vb.used_days,
@@ -319,6 +320,65 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
   } catch (error) {
     console.error('Error deleting project:', error)
     res.status(500).json({ error: 'Failed to delete project' })
+  }
+})
+
+// Update user profile
+router.put('/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { responsibility_area, phone, first_name, last_name, middle_name } = req.body
+    const currentUser = req.user
+
+    // Проверка прав: только владелец профиля или admin
+    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const updates = []
+    const values = []
+    let paramIndex = 1
+
+    if (responsibility_area !== undefined && typeof responsibility_area === 'string') {
+      updates.push(`responsibility_area = $${paramIndex++}`)
+      values.push(responsibility_area.trim())
+    }
+
+    if (phone !== undefined && typeof phone === 'string') {
+      updates.push(`phone = $${paramIndex++}`)
+      values.push(phone.trim())
+    }
+
+    if (first_name !== undefined && typeof first_name === 'string' && first_name.trim()) {
+      updates.push(`first_name = $${paramIndex++}`)
+      values.push(first_name.trim())
+    }
+
+    if (last_name !== undefined && typeof last_name === 'string' && last_name.trim()) {
+      updates.push(`last_name = $${paramIndex++}`)
+      values.push(last_name.trim())
+    }
+
+    if (middle_name !== undefined && typeof middle_name === 'string') {
+      updates.push(`middle_name = $${paramIndex++}`)
+      values.push(middle_name.trim())
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' })
+    }
+
+    values.push(id)
+
+    await query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+      values
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error updating user:', error)
+    res.status(500).json({ error: 'Failed to update user' })
   }
 })
 

@@ -9,7 +9,7 @@ import { AddProjectModal } from '@/components/modals/AddProjectModal'
 import { useAuthStore } from '@/store/authStore'
 import {
   Mail, Phone, Calendar, Building2, Briefcase, ArrowLeft, Loader2,
-  FolderKanban, Wrench, User, CheckCircle2, Clock, CircleDot, Plus, Trash,
+  FolderKanban, Wrench, User, CheckCircle2, Clock, CircleDot, Plus, Trash, Target,
 } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
@@ -47,6 +47,8 @@ interface EmployeeData {
   role: string
   skills?: string[]
   projects?: Project[]
+  responsibilityArea?: string
+  responsibility_area?: string
 }
 
 interface Project {
@@ -111,6 +113,8 @@ export function EmployeeProfile() {
   const [isAddSkillModalOpen, setIsAddSkillModalOpen] = useState(false)
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; skill: string } | null>(null)
+  const [editingResponsibility, setEditingResponsibility] = useState(false)
+  const [responsibilityText, setResponsibilityText] = useState('')
 
   const isOwnProfile = currentUser?.id === id
 
@@ -134,6 +138,7 @@ export function EmployeeProfile() {
           role:       data.role       || 'employee',
           skills:     data.skills     || [],
           projects:   data.projects   || [],
+          responsibilityArea: data.responsibilityArea || data.responsibility_area,
         })
       } catch (err: any) {
         setError(err.message)
@@ -215,6 +220,36 @@ export function EmployeeProfile() {
       y: e.clientY,
       skill,
     })
+  }
+
+  const handleStartEditingResponsibility = () => {
+    if (!isOwnProfile) return
+    setResponsibilityText(employee?.responsibilityArea || '')
+    setEditingResponsibility(true)
+  }
+
+  const handleSaveResponsibility = async () => {
+    if (!employee) return
+
+    const updatedEmployee = { ...employee, responsibilityArea: responsibilityText.trim() || undefined }
+    setEmployee(updatedEmployee)
+    setEditingResponsibility(false)
+
+    try {
+      await fetch(`${API_BASE_URL}/users/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ responsibility_area: responsibilityText.trim() }),
+      })
+    } catch (err) {
+      console.error('Failed to update responsibility:', err)
+      setEmployee(employee)
+    }
+  }
+
+  const handleCancelResponsibility = () => {
+    setResponsibilityText(employee?.responsibilityArea || '')
+    setEditingResponsibility(false)
   }
 
   useEffect(() => {
@@ -363,17 +398,77 @@ export function EmployeeProfile() {
                 <div className="font-medium">{employee.department || '—'}</div>
               </div>
             </div>
-            <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 shrink-0">
-                <Calendar className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Дата найма</div>
-                <div className="font-medium">{employee.hireDate ? formatDate(employee.hireDate) : '—'}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+             <div className="flex items-center gap-3 text-sm">
+               <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 shrink-0">
+                 <Calendar className="h-4 w-4 text-primary" />
+               </div>
+               <div>
+                 <div className="text-xs text-muted-foreground">Дата найма</div>
+                 <div className="font-medium">{employee.hireDate ? formatDate(employee.hireDate) : '—'}</div>
+               </div>
+             </div>
+             <div className="flex items-start gap-3 text-sm sm:col-span-2">
+               <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 shrink-0">
+                 <Target className="h-4 w-4 text-primary" />
+               </div>
+               <div className="flex-1">
+                 <div className="text-xs text-muted-foreground">Зона ответственности</div>
+                 {editingResponsibility ? (
+                   <div className="mt-1">
+                     <textarea
+                       value={responsibilityText}
+                       onChange={(e) => setResponsibilityText(e.target.value)}
+                       maxLength={500}
+                       className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                       rows={3}
+                       autoFocus
+                       onBlur={handleSaveResponsibility}
+                       onKeyDown={(e) => {
+                         if (e.key === 'Escape') {
+                           handleCancelResponsibility()
+                         } else if (e.key === 'Enter' && e.ctrlKey) {
+                           handleSaveResponsibility()
+                         }
+                       }}
+                     />
+                     <div className="flex items-center justify-between mt-1">
+                       <div className="text-xs text-muted-foreground">
+                         {responsibilityText.length}/500 символов
+                       </div>
+                       <div className="flex gap-2">
+                         <Button
+                           type="button"
+                           variant="ghost"
+                           size="sm"
+                           onClick={handleCancelResponsibility}
+                           className="h-7 px-2 text-xs"
+                         >
+                           Отмена
+                         </Button>
+                         <Button
+                           type="button"
+                           size="sm"
+                           onClick={handleSaveResponsibility}
+                           className="h-7 px-2 text-xs"
+                           disabled={!responsibilityText.trim()}
+                         >
+                           Сохранить
+                         </Button>
+                       </div>
+                     </div>
+                   </div>
+                 ) : (
+                   <div
+                     onClick={handleStartEditingResponsibility}
+                     className={`mt-1 font-medium cursor-pointer hover:text-primary transition-colors ${isOwnProfile ? 'hover:bg-primary/5 rounded px-2 py-1' : ''}`}
+                   >
+                     {employee.responsibilityArea || '—'}
+                   </div>
+                 )}
+               </div>
+             </div>
+           </CardContent>
+         </Card>
 
         {/* Навыки */}
         <Card className="md:col-span-2">

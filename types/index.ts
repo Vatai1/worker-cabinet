@@ -15,8 +15,9 @@ export interface User {
   hireDate: string
   status: 'active' | 'inactive' | 'on_leave'
   role: UserRole
-  subordinates?: string[] 
+  subordinates?: string[]
   managerId?: string
+  responsibilityArea?: string
 }
 
 export interface Salary {
