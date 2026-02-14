@@ -9,7 +9,7 @@ import { AddProjectModal } from '@/components/modals/AddProjectModal'
 import { useAuthStore } from '@/store/authStore'
 import {
   Mail, Phone, Calendar, Building2, Briefcase, ArrowLeft, Loader2,
-  FolderKanban, Wrench, User, CheckCircle2, Clock, CircleDot, Plus,
+  FolderKanban, Wrench, User, CheckCircle2, Clock, CircleDot, Plus, Trash,
 } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
@@ -110,6 +110,7 @@ export function EmployeeProfile() {
   const [error, setError] = useState<string | null>(null)
   const [isAddSkillModalOpen, setIsAddSkillModalOpen] = useState(false)
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; skill: string } | null>(null)
 
   const isOwnProfile = currentUser?.id === id
 
@@ -184,6 +185,45 @@ export function EmployeeProfile() {
       setEmployee(employee)
     }
   }
+
+  const handleRemoveSkill = async (skill: string) => {
+    if (!employee) return
+
+    const newSkills = employee.skills?.filter(s => s !== skill) || []
+    const updatedEmployee = { ...employee, skills: newSkills }
+    setEmployee(updatedEmployee)
+    setContextMenu(null)
+
+    try {
+      await fetch(`${API_BASE_URL}/users/${id}/skills`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ skill }),
+      })
+    } catch (err) {
+      console.error('Failed to remove skill:', err)
+      setEmployee(employee)
+    }
+  }
+
+  const handleContextMenu = (e: React.MouseEvent, skill: string) => {
+    e.preventDefault()
+    if (!isOwnProfile) return
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      skill,
+    })
+  }
+
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null)
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [contextMenu])
 
   if (loading) {
     return (
@@ -357,7 +397,8 @@ export function EmployeeProfile() {
                 {employee.skills.map((skill, i) => (
                   <span
                     key={skill}
-                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-transform hover:scale-105 cursor-default ${SKILL_COLORS[i % SKILL_COLORS.length]}`}
+                    onContextMenu={(e) => handleContextMenu(e, skill)}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-transform hover:scale-105 cursor-pointer ${SKILL_COLORS[i % SKILL_COLORS.length]}`}
                   >
                     {skill}
                   </span>
@@ -431,11 +472,39 @@ export function EmployeeProfile() {
         </Card>
       </div>
 
+      {/* Context Menu */}
+      {contextMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-50"
+            style={{ background: 'transparent' }}
+          />
+          <div
+            className="fixed z-50 min-w-[200px] rounded-lg border bg-popover shadow-md animate-in fade-in zoom-in-95"
+            style={{
+              left: `${Math.min(contextMenu.x, window.innerWidth - 220)}px`,
+              top: `${Math.min(contextMenu.y, window.innerHeight - 100)}px`,
+            }}
+          >
+            <div className="p-1">
+              <button
+                onClick={() => handleRemoveSkill(contextMenu.skill)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md"
+              >
+                <Trash className="h-4 w-4" />
+                Удалить навык
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Modals */}
       <AddSkillModal
         open={isAddSkillModalOpen}
         onClose={() => setIsAddSkillModalOpen(false)}
         onAdd={handleAddSkill}
+        userId={id}
       />
       <AddProjectModal
         open={isAddProjectModalOpen}
