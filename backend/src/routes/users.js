@@ -4,6 +4,19 @@ import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 
 const router = express.Router()
 
+// Get all unique skills
+router.get('/skills/all', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT id, name FROM skills_dictionary ORDER BY name'
+    )
+    res.json(result.rows)
+  } catch (error) {
+    console.error('Error fetching all skills:', error)
+    res.status(500).json({ error: 'Failed to fetch skills' })
+  }
+})
+
 // Get all users (for managers/hr)
 router.get('/', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   try {
@@ -108,7 +121,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     // Get skills
     const skillsResult = await query(
-      'SELECT name FROM skills WHERE user_id = $1 ORDER BY name',
+      'SELECT sd.name FROM skills_dictionary sd JOIN user_skills us ON sd.id = us.skill_id WHERE us.user_id = $1 ORDER BY sd.name',
       [id]
     )
     const skills = skillsResult.rows.map(row => row.name)
@@ -158,14 +171,32 @@ router.post('/:id/skills', authenticateToken, async (req, res) => {
 
     const skillName = skill.trim()
 
+    // Check if skill exists in dictionary, if not create it
+    const skillResult = await query(
+      'SELECT id FROM skills_dictionary WHERE name = $1',
+      [skillName]
+    )
+
+    let skillId
+    if (skillResult.rows.length === 0) {
+      const insertResult = await query(
+        'INSERT INTO skills_dictionary (name) VALUES ($1) RETURNING id',
+        [skillName]
+      )
+      skillId = insertResult.rows[0].id
+    } else {
+      skillId = skillResult.rows[0].id
+    }
+
+    // Link user to skill
     await query(
-      'INSERT INTO skills (user_id, name) VALUES ($1, $2) ON CONFLICT (user_id, name) DO NOTHING',
-      [id, skillName]
+      'INSERT INTO user_skills (user_id, skill_id) VALUES ($1, $2) ON CONFLICT (user_id, skill_id) DO NOTHING',
+      [id, skillId]
     )
 
     // Get updated skills list
     const skillsResult = await query(
-      'SELECT name FROM skills WHERE user_id = $1 ORDER BY name',
+      'SELECT sd.name FROM skills_dictionary sd JOIN user_skills us ON sd.id = us.skill_id WHERE us.user_id = $1 ORDER BY sd.name',
       [id]
     )
     const skills = skillsResult.rows.map(row => row.name)
@@ -193,14 +224,15 @@ router.delete('/:id/skills', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Skill name is required' })
     }
 
+    // Delete only the user-skill link, NOT the skill itself
     await query(
-      'DELETE FROM skills WHERE user_id = $1 AND name = $2',
+      'DELETE FROM user_skills WHERE user_id = $1 AND skill_id = (SELECT id FROM skills_dictionary WHERE name = $2)',
       [id, skill.trim()]
     )
 
     // Get updated skills list
     const skillsResult = await query(
-      'SELECT name FROM skills WHERE user_id = $1 ORDER BY name',
+      'SELECT sd.name FROM skills_dictionary sd JOIN user_skills us ON sd.id = us.skill_id WHERE us.user_id = $1 ORDER BY sd.name',
       [id]
     )
     const skills = skillsResult.rows.map(row => row.name)
