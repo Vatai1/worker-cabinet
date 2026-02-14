@@ -106,13 +106,187 @@ router.get('/:id', authenticateToken, async (req, res) => {
       subordinates = subordinatesResult.rows
     }
 
+    // Get skills
+    const skillsResult = await query(
+      'SELECT name FROM skills WHERE user_id = $1 ORDER BY name',
+      [id]
+    )
+    const skills = skillsResult.rows.map(row => row.name)
+
+    // Get projects
+    const projectsResult = await query(
+      'SELECT id, name, role, status, start_date, end_date, description FROM projects WHERE user_id = $1 ORDER BY created_at DESC',
+      [id]
+    )
+    const projects = projectsResult.rows.map(row => ({
+      id: row.id.toString(),
+      name: row.name,
+      role: row.role,
+      status: row.status,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      description: row.description,
+    }))
+
     res.json({
       ...user,
       subordinates,
+      skills,
+      projects,
     })
   } catch (error) {
     console.error('Error fetching user:', error)
     res.status(500).json({ error: 'Failed to fetch user' })
+  }
+})
+
+// Add skill to user
+router.post('/:id/skills', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { skill } = req.body
+    const currentUser = req.user
+
+    // Проверка прав: только владелец профиля или admin
+    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (!skill || typeof skill !== 'string' || skill.trim().length === 0) {
+      return res.status(400).json({ error: 'Skill name is required' })
+    }
+
+    const skillName = skill.trim()
+
+    await query(
+      'INSERT INTO skills (user_id, name) VALUES ($1, $2) ON CONFLICT (user_id, name) DO NOTHING',
+      [id, skillName]
+    )
+
+    // Get updated skills list
+    const skillsResult = await query(
+      'SELECT name FROM skills WHERE user_id = $1 ORDER BY name',
+      [id]
+    )
+    const skills = skillsResult.rows.map(row => row.name)
+
+    res.json({ skills })
+  } catch (error) {
+    console.error('Error adding skill:', error)
+    res.status(500).json({ error: 'Failed to add skill' })
+  }
+})
+
+// Remove skill from user
+router.delete('/:id/skills', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { skill } = req.body
+    const currentUser = req.user
+
+    // Проверка прав: только владелец профиля или admin
+    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (!skill || typeof skill !== 'string' || skill.trim().length === 0) {
+      return res.status(400).json({ error: 'Skill name is required' })
+    }
+
+    await query(
+      'DELETE FROM skills WHERE user_id = $1 AND name = $2',
+      [id, skill.trim()]
+    )
+
+    // Get updated skills list
+    const skillsResult = await query(
+      'SELECT name FROM skills WHERE user_id = $1 ORDER BY name',
+      [id]
+    )
+    const skills = skillsResult.rows.map(row => row.name)
+
+    res.json({ skills })
+  } catch (error) {
+    console.error('Error removing skill:', error)
+    res.status(500).json({ error: 'Failed to remove skill' })
+  }
+})
+
+// Add project to user
+router.post('/:id/projects', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, role, status, startDate, endDate, description } = req.body
+    const currentUser = req.user
+
+    // Проверка прав: только владелец профиля или admin
+    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return res.status(400).json({ error: 'Project name is required' })
+    }
+
+    if (!role || typeof role !== 'string' || role.trim().length === 0) {
+      return res.status(400).json({ error: 'Project role is required' })
+    }
+
+    const validStatuses = ['active', 'completed', 'paused']
+    const projectStatus = status && validStatuses.includes(status) ? status : 'active'
+
+    const result = await query(
+      `INSERT INTO projects (user_id, name, role, status, start_date, end_date, description)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, role, status, start_date, end_date, description`,
+      [
+        id,
+        name.trim(),
+        role.trim(),
+        projectStatus,
+        startDate || null,
+        endDate || null,
+        description ? description.trim() : null,
+      ]
+    )
+
+    const project = result.rows[0]
+
+    res.json({
+      id: project.id.toString(),
+      name: project.name,
+      role: project.role,
+      status: project.status,
+      startDate: project.start_date,
+      endDate: project.end_date,
+      description: project.description,
+    })
+  } catch (error) {
+    console.error('Error adding project:', error)
+    res.status(500).json({ error: 'Failed to add project' })
+  }
+})
+
+// Delete project
+router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) => {
+  try {
+    const { id, projectId } = req.params
+    const currentUser = req.user
+
+    // Проверка прав: только владелец профиля или admin
+    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    await query(
+      'DELETE FROM projects WHERE id = $1 AND user_id = $2',
+      [projectId, id]
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting project:', error)
+    res.status(500).json({ error: 'Failed to delete project' })
   }
 })
 

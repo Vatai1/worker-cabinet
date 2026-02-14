@@ -5,6 +5,7 @@ import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
 import { Profile } from '@/pages/Profile'
 import { ThemeProvider } from '@/components/ThemeProvider'
+import { NotificationLoader } from '@/components/NotificationLoader'
 
 import { Requests } from '@/pages/Requests'
 import { Documents } from '@/pages/Documents'
