@@ -21,19 +21,19 @@ import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 
-const employeeNavigation = [
+const getEmployeeNavigation = (userId?: string) => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
   { name: 'Сотрудники', href: '/employees', icon: Users },
-  { name: 'Профиль', href: '/profile', icon: User },
+  { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Заявления', href: '/requests', icon: FileText },
   { name: 'Документы', href: '/documents', icon: FolderOpen },
   { name: 'Уведомления', href: '/notifications', icon: Bell },
 ]
 
-const managerNavigation = [
+const getManagerNavigation = (userId?: string) => [
   { name: 'Дашборд', href: '/leader', icon: Users },
-  { name: 'Профиль', href: '/profile', icon: User },
+  { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
@@ -43,8 +43,10 @@ const managerNavigation = [
 
 export function Sidebar() {
   const { user, logout } = useAuthStore()
-  const { sidebarOpen, toggleSidebar, unreadCount, darkMode, toggleTheme } = useUIStore()
+  const { sidebarOpen, toggleSidebar, notifications, darkMode, toggleTheme } = useUIStore()
   const navigate = useNavigate()
+
+  const userUnreadCount = notifications.filter((n) => n.userId === user?.id && !n.read).length
 
   const handleLogout = () => {
     logout()
@@ -56,7 +58,7 @@ export function Sidebar() {
     return `${user.firstName[0]}${user.lastName[0]}`
   }
 
-  const navigation = user?.role === 'manager' ? managerNavigation : employeeNavigation
+  const navigation = user?.role === 'manager' ? getManagerNavigation(user?.id) : getEmployeeNavigation(user?.id)
 
   return (
     <>
@@ -116,7 +118,7 @@ export function Sidebar() {
         <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-6">
           {navigation.map((item) => {
             const Icon = item.icon
-            const hasBadge = item.href === '/notifications' && unreadCount > 0
+            const hasBadge = item.href === '/notifications' && userUnreadCount > 0
 
             return (
               <NavLink
@@ -149,7 +151,7 @@ export function Sidebar() {
                     <span className="flex-1">{item.name}</span>
                     {hasBadge && (
                       <Badge variant="destructive" className="ml-auto text-[10px] px-2">
-                        {unreadCount}
+                        {userUnreadCount}
                       </Badge>
                     )}
                     {isActive && (
