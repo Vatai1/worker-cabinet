@@ -15,6 +15,9 @@ import { LeaderDashboard } from '@/pages/LeaderDashboard'
 import { Vacation } from '@/pages/Vacation'
 import { Employees } from '@/pages/Employees'
 import { EmployeeProfile } from '@/pages/EmployeeProfile'
+import { Projects } from '@/pages/Projects'
+import { ProjectDetail } from '@/pages/ProjectDetail'
+import { ProjectDocuments } from '@/pages/ProjectDocuments'
 import { Settings } from '@/pages/Settings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -68,6 +71,9 @@ function App() {
           <Route path="documents" element={<Documents />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="employees/:id" element={<EmployeeProfile />} />
+          <Route path="projects" element={<Projects />} />
+          <Route path="projects/:id" element={<ProjectDetail />} />
+          <Route path="projects/:id/documents" element={<ProjectDocuments />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

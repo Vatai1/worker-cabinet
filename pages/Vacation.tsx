@@ -76,8 +76,17 @@ export function Vacation() {
   }
 
   const handleReject = async (requestId: string) => {
-    if (!user || !rejectionReason.trim()) return
+    console.log('[handleReject] Called with:', { requestId, hasUser: !!user, rejectionReason, rejectionLength: rejectionReason?.length })
+    if (!user) {
+      console.log('[handleReject] Returning early - missing user')
+      return
+    }
+    if (!rejectionReason || !rejectionReason.trim()) {
+      console.log('[handleReject] Returning early - missing reason:', { rejectionReason, trimmed: rejectionReason?.trim() })
+      return
+    }
     try {
+      console.log('[handleReject] Calling rejectRequest API with:', { requestId, managerId: user.id, reason: rejectionReason })
       await rejectRequest(requestId, user.id, rejectionReason)
       setRejectingRequestId(null)
       setRejectionReason('')
@@ -575,6 +584,7 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
                                   variant="outline"
                                   onClick={(e) => {
                                     e.stopPropagation()
+                                    console.log('[Reject button] Clicked for request:', request.id)
                                     setRejectingRequestId(request.id)
                                   }}
                                   disabled={loading}
@@ -600,15 +610,18 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
                                   Комментарий
                                 </Button>
                               </div>
-                              {rejectingRequestId === request.id && (
-                                <div className="pt-3">
-                                  <textarea
-                                    className="w-full rounded-xl border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    placeholder="Причина отклонения..."
-                                    value={rejectionReason}
-                                    onChange={(e) => setRejectionReason(e.target.value)}
-                                  />
-                                  <div className="flex gap-2 mt-2">
+                               {rejectingRequestId === request.id && (
+                                 <div className="pt-3">
+                                   <textarea
+                                     className="w-full rounded-xl border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                     placeholder="Причина отклонения..."
+                                     value={rejectionReason}
+                                     onChange={(e) => {
+                                       console.log('[Reject textarea] Value changed:', e.target.value)
+                                       setRejectionReason(e.target.value)
+                                     }}
+                                   />
+                                   <div className="flex gap-2 mt-2">
                                     <Button
                                       size="sm"
                                       onClick={(e) => {

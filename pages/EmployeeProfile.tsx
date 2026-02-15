@@ -9,7 +9,7 @@ import { AddProjectModal } from '@/components/modals/AddProjectModal'
 import { useAuthStore } from '@/store/authStore'
 import {
   Mail, Phone, Calendar, Building2, Briefcase, ArrowLeft, Loader2,
-  FolderKanban, Wrench, User, CheckCircle2, Clock, CircleDot, Plus, Trash, Target,
+  FolderKanban, Wrench, User, CheckCircle2, Clock, CircleDot, Plus, Trash, Target, Crown,
 } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
@@ -54,11 +54,12 @@ interface EmployeeData {
 interface Project {
   id: string
   name: string
-  role: string
+  role: 'lead' | 'member'
   status: 'active' | 'completed' | 'paused'
   startDate?: string
   endDate?: string
   description?: string
+  joined_at?: string
 }
 
 const statusConfig = {
@@ -71,6 +72,11 @@ const projectStatusConfig = {
   active:    { label: 'Активный',   icon: CircleDot,     color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
   completed: { label: 'Завершён',   icon: CheckCircle2,  color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
   paused:    { label: 'На паузе',   icon: Clock,         color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-950/30' },
+}
+
+const projectRoleConfig = {
+  lead:   { label: 'Руководитель', icon: Crown,    color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30' },
+  member: { label: 'Участник',    icon: User,      color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
 }
 
 const SKILL_COLORS = [
@@ -530,8 +536,14 @@ export function EmployeeProfile() {
                 {employee.projects.map((project) => {
                   const pStatus = projectStatusConfig[project.status] ?? projectStatusConfig.active
                   const StatusIcon = pStatus.icon
+                  const pRole = projectRoleConfig[project.role] ?? projectRoleConfig.member
+                  const RoleIcon = pRole.icon
                   return (
-                    <div key={project.id} className="p-4 rounded-lg border border-border/50 hover:border-primary/30 transition-colors">
+                    <Link
+                      key={project.id}
+                      to={`/projects/${project.id}`}
+                      className="block p-4 rounded-lg border border-border/50 hover:border-primary/30 transition-colors"
+                    >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -541,7 +553,17 @@ export function EmployeeProfile() {
                               {pStatus.label}
                             </span>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-0.5">{project.role}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${pRole.bg} ${pRole.color}`}>
+                              <RoleIcon className="h-3 w-3" />
+                              {pRole.label}
+                            </span>
+                            {project.joined_at && (
+                              <span className="text-xs text-muted-foreground">
+                                С {formatDate(project.joined_at)}
+                              </span>
+                            )}
+                          </div>
                           {project.description && (
                             <p className="text-sm text-muted-foreground mt-2">{project.description}</p>
                           )}
@@ -553,7 +575,7 @@ export function EmployeeProfile() {
                           </div>
                         )}
                       </div>
-                    </div>
+                    </Link>
                   )
                 })}
               </div>

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { SidebarToggle } from './Sidebar'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
@@ -7,7 +8,9 @@ import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
 
 export function Header() {
   const { user } = useAuthStore()
-  const { unreadCount } = useUIStore()
+  const { notifications } = useUIStore()
+
+  const userUnreadCount = notifications.filter((n) => n.userId === user?.id && !n.read).length
 
   const getUserInitials = () => {
     if (!user) return '??'
@@ -21,14 +24,16 @@ export function Header() {
       <div className="flex-1" />
 
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" className="relative h-10 w-10 hover:bg-primary/10 rounded-xl transition-all hover:scale-110">
-          <Bell className="h-5 w-5" />
-          {unreadCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-red-600 text-[10px] font-bold text-white shadow-lg animate-pulse">
-              {unreadCount}
-            </span>
-          )}
-        </Button>
+        <Link to="/notifications">
+          <Button variant="ghost" size="icon" className="relative h-10 w-10 hover:bg-primary/10 rounded-xl transition-all hover:scale-110">
+            <Bell className="h-5 w-5" />
+            {userUnreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-red-600 text-[10px] font-bold text-white shadow-lg animate-pulse">
+                {userUnreadCount}
+              </span>
+            )}
+          </Button>
+        </Link>
 
         <div className="hidden md:flex items-center gap-3 pl-3 border-l border-border/50">
           <div className="text-right">

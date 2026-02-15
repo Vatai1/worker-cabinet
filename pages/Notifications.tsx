@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useUIStore } from '@/store/uiStore'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
+import { useAuthStore } from '@/store/authStore'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatDateTime } from '@/lib/utils'
@@ -9,10 +10,14 @@ import { Bell, Check, CheckCheck, Trash2, Filter } from 'lucide-react'
 type NotificationType = 'all' | 'unread' | 'info' | 'success' | 'warning' | 'error'
 
 export function Notifications() {
-  const { notifications, markAsRead, markAllAsRead, removeNotification, unreadCount } = useUIStore()
+  const { notifications, markAsRead, markAllAsRead, removeNotification } = useUIStore()
+  const { user } = useAuthStore()
   const [filterType, setFilterType] = useState<NotificationType>('all')
 
-  const filteredNotifications = notifications.filter((notification) => {
+  const userNotifications = notifications.filter((n) => n.userId === user?.id)
+  const userUnreadCount = userNotifications.filter((n) => !n.read).length
+
+  const filteredNotifications = userNotifications.filter((notification) => {
     if (filterType === 'all') return true
     if (filterType === 'unread') return !notification.read
     return notification.type === filterType
@@ -49,7 +54,7 @@ export function Notifications() {
             Ваши уведомления и обновления
           </p>
         </div>
-        {unreadCount > 0 && (
+        {userUnreadCount > 0 && (
           <Button variant="outline" onClick={markAllAsRead}>
             <CheckCheck className="mr-2 h-4 w-4" />
             Отметить все как прочитанные
@@ -70,9 +75,9 @@ export function Notifications() {
                 onClick={() => setFilterType(filter)}
               >
                 {getFilterLabel(filter)}
-                {filter === 'unread' && unreadCount > 0 && (
+                {filter === 'unread' && userUnreadCount > 0 && (
                   <Badge className="ml-2" variant="secondary">
-                    {unreadCount}
+                    {userUnreadCount}
                   </Badge>
                 )}
               </Button>
@@ -163,7 +168,7 @@ export function Notifications() {
             <CardTitle className="text-sm font-medium">Всего</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{notifications.length}</div>
+            <div className="text-2xl font-bold">{userNotifications.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -171,7 +176,7 @@ export function Notifications() {
             <CardTitle className="text-sm font-medium">Непрочитанные</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{unreadCount}</div>
+            <div className="text-2xl font-bold">{userUnreadCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -180,7 +185,7 @@ export function Notifications() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {notifications.filter((n) => n.read).length}
+              {userNotifications.filter((n) => n.read).length}
             </div>
           </CardContent>
         </Card>
@@ -190,7 +195,7 @@ export function Notifications() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {notifications.filter((n) => {
+              {userNotifications.filter((n) => {
                 const today = new Date().toDateString()
                 return new Date(n.createdAt).toDateString() === today
               }).length}
