@@ -3,6 +3,8 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
 import { uploadToS3, deleteFromS3, getFromS3, getS3FileUrl } from '../config/s3.js'
+import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 
 const router = express.Router()
 
@@ -751,6 +753,96 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error deleting project:', error)
     res.status(500).json({ error: 'Failed to delete project' })
+  }
+})
+
+// Generate temporary token for document preview
+function generatePreviewToken(documentId, projectId, userId) {
+  const payload = {
+    documentId,
+    projectId,
+    userId,
+    type: 'document_preview',
+    exp: Math.floor(Date.now() / 1000) + (60 * 30), // 30 minutes
+  }
+  const secret = process.env.JWT_SECRET || 'your-secret-key'
+  return jwt.sign(payload, secret)
+}
+
+// Get public API URL (accessible from Docker containers)
+function getPublicApiUrl() {
+  return process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || 'http://host.docker.internal:5001/api'
+}
+
+// Verify preview token
+function verifyPreviewToken(token) {
+  try {
+    const secret = process.env.JWT_SECRET || 'your-secret-key'
+    return jwt.verify(token, secret)
+  } catch (error) {
+    return null
+  }
+}
+
+// GET /api/projects/:id/documents/:documentId/preview-token — Get temporary preview token
+router.get('/:id/documents/:documentId/preview-token', authenticateToken, async (req, res) => {
+  try {
+    const { id, documentId } = req.params
+    const userId = req.user.id
+
+    // Check if document exists and user has access
+    const docCheck = await query(
+      `SELECT 1 FROM project_documents WHERE id = $1 AND project_id = $2`,
+      [documentId, id]
+    )
+
+    if (docCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' })
+    }
+
+    const token = generatePreviewToken(documentId, id, String(userId))
+    const publicUrl = `${getPublicApiUrl()}/projects/${id}/documents/${documentId}/public/${token}`
+    res.json({ token, publicUrl })
+  } catch (error) {
+    console.error('Error generating preview token:', error)
+    res.status(500).json({ error: 'Failed to generate preview token' })
+  }
+})
+
+// GET /api/projects/:id/documents/:documentId/public/:token — Public preview URL
+router.get('/:id/documents/:documentId/public/:token', async (req, res) => {
+  try {
+    const { id, documentId, token } = req.params
+
+    const decoded = verifyPreviewToken(token)
+    if (!decoded) {
+      return res.status(401).json({ error: 'Invalid or expired token' })
+    }
+
+    if (String(decoded.documentId) !== String(documentId) || String(decoded.projectId) !== String(id)) {
+      return res.status(403).json({ error: 'Token does not match document' })
+    }
+
+    const docResult = await query(
+      `SELECT file_path, name, mime_type, file_size FROM project_documents WHERE id = $1 AND project_id = $2`,
+      [documentId, id]
+    )
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' })
+    }
+
+    const doc = docResult.rows[0]
+    const { Body, ContentType } = await getFromS3(doc.file_path)
+
+    res.setHeader('Content-Type', ContentType || doc.mime_type)
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.name)}"`)
+    res.setHeader('Cache-Control', 'public, max-age=300') // 5 minutes
+
+    Body.pipe(res)
+  } catch (error) {
+    console.error('Error serving public document:', error)
+    res.status(500).json({ error: 'Failed to load document' })
   }
 })
 

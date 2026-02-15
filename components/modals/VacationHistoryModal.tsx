@@ -208,17 +208,24 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
                           <div className="font-medium mb-1">История изменений:</div>
                           <div className="space-y-1">
                             {request.statusHistory.map((history: any, index: number) => (
-                              <div key={index} className="flex justify-between">
-                                <span>
-                                  {getVacationRequestStatusBadge(history.status).label}
-                                  {history.comment && ` (${history.comment})`}
-                                </span>
-                                <span>
-                                  {history.changedAt 
-                                    ? `${new Date(history.changedAt).toLocaleDateString('ru-RU')} ${new Date(history.changedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
-                                    : 'Дата не указана'
-                                  }
-                                </span>
+                              <div key={index} className="flex flex-col">
+                                <div className="flex justify-between">
+                                  <span>
+                                    {getVacationRequestStatusBadge(history.status).label}
+                                    {history.comment && ` (${history.comment})`}
+                                  </span>
+                                  <span>
+                                    {history.changedAt 
+                                      ? `${new Date(history.changedAt).toLocaleDateString('ru-RU')} ${new Date(history.changedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                                      : 'Дата не указана'
+                                    }
+                                  </span>
+                                </div>
+                                {history.changedByName && (
+                                  <div className="text-gray-400 text-xs mt-0.5">
+                                    {history.changedByName}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

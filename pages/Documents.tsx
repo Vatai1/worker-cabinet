@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { formatFileSize } from '@/data/mockData'
 import type { Document } from '@/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -7,16 +7,74 @@ import { Badge } from '@/components/ui/Badge'
 import { DocumentPreviewModal } from '@/components/modals/DocumentPreviewModal'
 import { isPreviewable } from '@/lib/documentUtils'
 import { formatDate } from '@/lib/utils'
-import { FileText, Download, Search, Upload, Eye } from 'lucide-react'
+import { FileText, Download, Search, Upload, Eye, Folder } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
+
+const getAuthHeaders = () => {
+  const authStorage = localStorage.getItem('auth-storage')
+  const headers: Record<string, string> = {}
+  if (authStorage) {
+    try {
+      const { state } = JSON.parse(authStorage)
+      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
+    } catch {}
+  }
+  return headers
+}
+
+interface ApiDocument {
+  id: string
+  name: string
+  url: string
+  size: number
+  mimeType: string
+  projectId: string
+  projectName: string
+  uploader: string
+  uploadedAt: string
+  description?: string
+  tags?: string[]
+}
 
 type DocumentType = 'all' | 'contract' | 'nda' | 'policy' | 'certificate' | 'other'
 
 export function Documents() {
   const [filterType, setFilterType] = useState<DocumentType>('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [documents] = useState<Document[]>([])
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [apiDocuments, setApiDocuments] = useState<ApiDocument[]>([])
+  const [loading, setLoading] = useState(true)
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null)
+
+  const fetchDocuments = async () => {
+    try {
+      setLoading(true)
+      const res = await fetch(`${API_BASE_URL}/documents`, { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error('Не удалось загрузить документы')
+      const data = await res.json()
+      setApiDocuments(data)
+      const docs = data.map((doc: ApiDocument) => ({
+        id: doc.id,
+        name: doc.name,
+        url: doc.url,
+        size: doc.size,
+        mimeType: doc.mimeType,
+        type: 'other' as Document['type'],
+        uploadDate: doc.uploadedAt,
+      }))
+      setDocuments(docs)
+    } catch (err: any) {
+      console.error('Error fetching documents:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchDocuments()
+  }, [])
 
   const filteredDocuments = documents.filter((doc) => {
     const matchesType = filterType === 'all' || doc.type === filterType
@@ -110,7 +168,16 @@ export function Documents() {
       </Card>
 
       {/* Documents grid */}
-      {filteredDocuments.length === 0 ? (
+      {loading ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="text-center">
+              <FileText className="mx-auto h-12 w-12 text-muted-foreground animate-pulse" />
+              <p className="mt-4 text-lg font-medium">Загрузка документов...</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : filteredDocuments.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
@@ -128,6 +195,7 @@ export function Documents() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredDocuments.map((doc) => {
             const typeBadge = getDocumentTypeBadge(doc.type)
+            const apiDoc = apiDocuments.find((d) => d.id === doc.id)
             
             return (
               <Card key={doc.id} className="hover:shadow-md transition-shadow">
@@ -148,6 +216,12 @@ export function Documents() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
+                    {apiDoc?.projectName && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Folder className="h-3 w-3" />
+                        {apiDoc.projectName}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <Badge className={typeBadge.className} variant="secondary">
                         {typeBadge.label}
@@ -163,10 +237,15 @@ export function Documents() {
                           Просмотр
                         </Button>
                       )}
-                      <Button className="flex-1" variant="outline" size="sm">
-                        <Download className="mr-2 h-4 w-4" />
-                        Скачать
-                      </Button>
+                      <a
+                        href={`${API_BASE_URL}/projects/${apiDoc?.projectId}/documents/${doc.id}/download`}
+                        className="flex-1"
+                      >
+                        <Button className="w-full" variant="outline" size="sm">
+                          <Download className="mr-2 h-4 w-4" />
+                          Скачать
+                        </Button>
+                      </a>
                     </div>
                   </div>
                 </CardContent>
@@ -225,8 +304,56 @@ export function Documents() {
             id: previewDoc.id,
             name: previewDoc.name,
             mimeType: previewDoc.mimeType || getMimeType(previewDoc.type),
-            url: previewDoc.url,
+            url: async () => {
+              const apiDoc = apiDocuments.find((d) => d.id === previewDoc.id)
+              
+              if (!apiDoc) {
+                throw new Error('Document not found')
+              }
+              
+              // For DOCX files, get preview token and use public URL for OnlyOffice
+              if (apiDoc.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                  apiDoc.mimeType === 'application/msword' ||
+                  previewDoc.name.toLowerCase().endsWith('.docx')) {
+                console.log('📄 Detected DOCX file, getting preview token...')
+                const tokenRes = await fetch(
+                  `${API_BASE_URL}/projects/${apiDoc.projectId}/documents/${previewDoc.id}/preview-token`,
+                  { headers: getAuthHeaders() }
+                )
+
+                console.log('Token response status:', tokenRes.status)
+
+                if (!tokenRes.ok) {
+                  const errorData = await tokenRes.text()
+                  console.error('❌ Failed to get token:', errorData)
+                  throw new Error('Не удалось получить токен')
+                }
+
+                const data = await tokenRes.json()
+                const publicUrl = data.publicUrl || `${API_BASE_URL}/projects/${apiDoc.projectId}/documents/${previewDoc.id}/public/${data.token}`
+                console.log('✅ Got public URL:', publicUrl.substring(0, 80) + '...')
+
+                return publicUrl
+              }
+
+              const res = await fetch(
+                `${API_BASE_URL}/projects/${apiDoc.projectId}/documents/${previewDoc.id}/preview`,
+                { headers: getAuthHeaders() }
+              )
+              if (!res.ok) throw new Error('Не удалось загрузить файл')
+              
+              const contentType = res.headers.get('content-type') || ''
+              
+              if (contentType.includes('text/plain') || contentType.includes('text/html')) {
+                const text = await res.text()
+                return text
+              }
+              
+              const blob = await res.blob()
+              return window.URL.createObjectURL(blob)
+            },
             size: previewDoc.size,
+            projectId: apiDocuments.find((d) => d.id === previewDoc.id)?.projectId,
           }}
         />
       )}

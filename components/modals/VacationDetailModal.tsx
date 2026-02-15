@@ -79,6 +79,49 @@ export function VacationDetailModal({ isOpen, request, onClose }: VacationDetail
             </div>
           )}
 
+          {request.statusHistory && request.statusHistory.length > 0 && (
+            <div>
+              <div className="text-sm text-gray-500 mb-1">История изменений</div>
+              <div className="space-y-2">
+                {request.statusHistory.map((history: any, index: number) => (
+                  <div key={index} className="text-sm bg-gray-50 rounded-lg p-3">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-medium">
+                        {history.status === 'on_approval'
+                          ? 'На согласовании'
+                          : history.status === 'approved'
+                          ? 'Согласовано'
+                          : history.status === 'rejected'
+                          ? 'Не согласовано'
+                          : history.status === 'cancelled_by_employee'
+                          ? 'Отменено сотрудником'
+                          : history.status === 'cancelled_by_manager'
+                          ? 'Отменено руководителем'
+                          : history.status}
+                      </span>
+                      <span className="text-gray-500 text-xs">
+                        {history.changedAt 
+                          ? `${format(new Date(history.changedAt), 'dd MMM yyyy HH:mm', { locale: ru })}`
+                          : 'Дата не указана'
+                        }
+                      </span>
+                    </div>
+                    {history.changedByName && (
+                      <div className="text-gray-600 text-xs">
+                        {history.changedByName}
+                      </div>
+                    )}
+                    {history.comment && (
+                      <div className="text-gray-600 text-xs mt-1">
+                        {history.comment}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="pt-4 border-t flex gap-3">
             <Button
               variant="secondary"

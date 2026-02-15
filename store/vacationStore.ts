@@ -10,6 +10,7 @@ import type {
 } from '@/types'
 import { VacationRequestStatus, VacationType } from '@/types'
 import { vacationApi } from '@/services/vacationApi'
+import { useUIStore } from './uiStore'
 import {
   calculateVacationDuration,
   checkDateOverlap,
@@ -59,7 +60,7 @@ interface VacationStore {
   
   deleteRestriction: (restrictionId: string) => Promise<void>
   
-  getCalendarItems: (departmentId: string, year: number) => VacationCalendarItem[]
+  getCalendarItems: (year: number) => VacationCalendarItem[]
   
   clearError: () => void
 }
@@ -241,13 +242,21 @@ export const useVacationStore = create<VacationStore>()(
             loading: false,
           }))
 
+          useUIStore.getState().addNotification({
+            userId,
+            type: 'info',
+            title: 'Заявка на отпуск создана',
+            message: `Ваша заявка на отпуск с ${new Date(data.startDate).toLocaleDateString('ru-RU')} по ${new Date(data.endDate).toLocaleDateString('ru-RU')} отправлена на согласование`,
+            read: false,
+          })
+
           return newRequest
         } catch (error: any) {
           set({ error: error.message || 'Ошибка при создании заявки', loading: false })
           return null
         }
       },
-      
+
       updateRequest: async (requestId: string, data: Partial<VacationFormData>) => {
         set({ loading: true, error: null })
         try {
@@ -270,7 +279,7 @@ export const useVacationStore = create<VacationStore>()(
           throw error
         }
       },
-      
+
       cancelRequest: async (requestId: string) => {
         set({ loading: true, error: null })
         try {
@@ -288,6 +297,17 @@ export const useVacationStore = create<VacationStore>()(
             ),
             loading: false,
           }))
+
+          const request = get().requests.find((r) => r.id === requestId)
+          if (request) {
+            useUIStore.getState().addNotification({
+              userId: request.userId,
+              type: 'warning',
+              title: 'Заявка на отпуск отменена',
+              message: `Ваша заявка на отпуск с ${new Date(request.startDate).toLocaleDateString('ru-RU')} по ${new Date(request.endDate).toLocaleDateString('ru-RU')} отменена`,
+              read: false,
+            })
+          }
         } catch (error: any) {
           set({ error: error.message || 'Ошибка при отмене заявки', loading: false })
           throw error
@@ -298,7 +318,7 @@ export const useVacationStore = create<VacationStore>()(
         set({ loading: true, error: null })
         try {
           const updatedRequest = await vacationApi.approveRequest(requestId, managerId)
-          
+
           set((state) => ({
             requests: state.requests.map((r) =>
               r.id === requestId ? updatedRequest : r
@@ -311,17 +331,28 @@ export const useVacationStore = create<VacationStore>()(
             ),
             loading: false,
           }))
+
+          const request = get().requests.find((r) => r.id === requestId)
+          if (request) {
+            useUIStore.getState().addNotification({
+              userId: request.userId,
+              type: 'success',
+              title: 'Отпуск одобрен',
+              message: `Ваша заявка на отпуск с ${new Date(request.startDate).toLocaleDateString('ru-RU')} по ${new Date(request.endDate).toLocaleDateString('ru-RU')} одобрена`,
+              read: false,
+            })
+          }
         } catch (error: any) {
           set({ error: error.message || 'Ошибка при согласовании заявки', loading: false })
           throw error
         }
       },
-      
+
       rejectRequest: async (requestId: string, managerId: string, reason: string) => {
         set({ loading: true, error: null })
         try {
           const updatedRequest = await vacationApi.rejectRequest(requestId, managerId, reason)
-          
+
           set((state) => ({
             requests: state.requests.map((r) =>
               r.id === requestId ? updatedRequest : r
@@ -334,6 +365,17 @@ export const useVacationStore = create<VacationStore>()(
             ),
             loading: false,
           }))
+
+          const request = get().requests.find((r) => r.id === requestId)
+          if (request) {
+            useUIStore.getState().addNotification({
+              userId: request.userId,
+              type: 'error',
+              title: 'Отпуск отклонен',
+              message: `Ваша заявка на отпуск с ${new Date(request.startDate).toLocaleDateString('ru-RU')} по ${new Date(request.endDate).toLocaleDateString('ru-RU')} отклонена. Причина: ${reason}`,
+              read: false,
+            })
+          }
         } catch (error: any) {
           set({ error: error.message || 'Ошибка при отклонении заявки', loading: false })
           throw error
@@ -391,6 +433,14 @@ export const useVacationStore = create<VacationStore>()(
             ),
             loading: false,
           }))
+
+          useUIStore.getState().addNotification({
+            userId: request.userId,
+            type: 'warning',
+            title: 'Заявка на отпуск отменена руководителем',
+            message: `Ваша заявка на отпуск с ${new Date(request.startDate).toLocaleDateString('ru-RU')} по ${new Date(request.endDate).toLocaleDateString('ru-RU')} была отменена руководителем. Причина: ${reason}`,
+            read: false,
+          })
         } catch (error) {
           set({ error: 'Ошибка при отмене заявки руководителем', loading: false })
         }
@@ -452,7 +502,7 @@ export const useVacationStore = create<VacationStore>()(
         }
       },
       
-      getCalendarItems: (departmentId: string, year: number) => {
+      getCalendarItems: (year: number) => {
         const requests = get().requests.filter((r) => {
           const startDate = new Date(r.startDate)
           return startDate.getFullYear() === year && r.status === VacationRequestStatus.APPROVED

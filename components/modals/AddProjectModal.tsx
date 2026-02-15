@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
+import { Switch } from '@/components/ui/Switch'
 import { X, Plus } from 'lucide-react'
 
 interface Project {
@@ -21,6 +22,7 @@ interface AddProjectModalProps {
 }
 
 export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) {
+  const [isOngoing, setIsOngoing] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     role: '',
@@ -30,8 +32,16 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
     description: '',
   })
 
+  const handleIsOngoingChange = (checked: boolean) => {
+    setIsOngoing(checked)
+    if (checked) {
+      setFormData({ ...formData, endDate: '' })
+    }
+  }
+
   useEffect(() => {
     if (!open) {
+      setIsOngoing(false)
       setFormData({
         name: '',
         role: '',
@@ -51,7 +61,7 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
         role: formData.role.trim(),
         status: formData.status,
         startDate: formData.startDate || undefined,
-        endDate: formData.endDate || undefined,
+        endDate: isOngoing ? undefined : (formData.endDate || undefined),
         description: formData.description.trim() || undefined,
       })
       onClose()
@@ -140,13 +150,21 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="endDate">Дата окончания</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="endDate">Дата окончания</Label>
+                    <Switch
+                      checked={isOngoing}
+                      onCheckedChange={handleIsOngoingChange}
+                    />
+                    <span className="text-sm text-muted-foreground">По настоящее время</span>
+                  </div>
                   <Input
                     id="endDate"
                     type="date"
                     value={formData.endDate}
                     onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                     min={formData.startDate}
+                    disabled={isOngoing}
                   />
                 </div>
               </div>

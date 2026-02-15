@@ -8,6 +8,37 @@ if (!token) {
 
 const bot = token ? new TelegramBot(token, { polling: false }) : null
 
+const VACATION_TYPE_LABELS = {
+  annual_paid: '🏖 Ежегодный оплачиваемый',
+  unpaid: '📋 Без сохранения зарплаты',
+  educational: '🎓 Учебный',
+  maternity: '🤱 Декретный',
+  child_care: '👶 По уходу за ребёнком',
+  additional: '➕ Дополнительный',
+  veteran: '⭐ Ветеранский',
+}
+
+function getVacationTypeLabel(type) {
+  return VACATION_TYPE_LABELS[type] || '📋 Отпуск'
+}
+
+function formatDate(dateStr) {
+  return new Date(dateStr).toLocaleDateString('ru-RU', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function pluralizeDays(n) {
+  const abs = Math.abs(n)
+  if (abs % 10 === 1 && abs % 100 !== 11) return `${n} день`
+  if (abs % 10 >= 2 && abs % 10 <= 4 && (abs % 100 < 10 || abs % 100 >= 20)) return `${n} дня`
+  return `${n} дней`
+}
+
+const LINE = '━━━━━━━━━━━━━━━━━━━━'
+
 export class TelegramService {
   static isAvailable() {
     return bot !== null
@@ -30,132 +61,121 @@ export class TelegramService {
     }
   }
 
-  static formatNotificationMessage(data) {
-    const { type, title, message, user } = data
-
-    let emoji = '🔔'
-    if (type === 'vacation_request') emoji = '🏖️'
-    if (type === 'vacation_approved') emoji = '✅'
-    if (type === 'vacation_rejected') emoji = '❌'
-    if (type === 'vacation_cancelled') emoji = '🚫'
-
-    return `
-${emoji} *${title}*
-
-${message}
-
-_Сотрудник: ${user.firstName} ${user.lastName}_
-    `.trim()
-  }
-
-  static async sendVacationRequestNotification(user, request) {
-    console.log('Telegram: sendVacationRequestNotification called for user:', user.id, user.first_name, user.last_name)
-    console.log('Telegram: User telegram_chat_id:', user.telegram_chat_id)
-    console.log('Telegram: User telegram_notifications_enabled:', user.telegram_notifications_enabled)
-
-    if (!user.telegram_chat_id || !user.telegram_notifications_enabled) {
-      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
-      return null
-    }
-
-    const dates = `${new Date(request.startDate).toLocaleDateString('ru-RU')} - ${new Date(request.endDate).toLocaleDateString('ru-RU')}`
-    const message = this.formatNotificationMessage({
-      type: 'vacation_request',
-      title: 'Новая заявка на отпуск',
-      message: `Сотрудник хочет пойти в отпуск\n\n📅 Даты: ${dates}\n📝 Комментарий: ${request.comment || 'Без комментария'}`,
-      user
-    })
-
-    return this.sendMessage(user.telegram_chat_id, message, { parse_mode: 'Markdown' })
-  }
-
   static async sendVacationApprovedNotification(user, request) {
-    console.log('Telegram: sendVacationApprovedNotification called for user:', user.id, user.first_name, user.last_name)
-    console.log('Telegram: User telegram_chat_id:', user.telegram_chat_id)
-    console.log('Telegram: User telegram_notifications_enabled:', user.telegram_notifications_enabled)
+    if (!user.telegram_chat_id || !user.telegram_notifications_enabled) return null
 
-    if (!user.telegram_chat_id || !user.telegram_notifications_enabled) {
-      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
-      return null
-    }
+    const startDate = formatDate(request.start_date)
+    const endDate = formatDate(request.end_date)
+    const duration = pluralizeDays(request.duration)
+    const vacationType = getVacationTypeLabel(request.vacation_type)
 
-    const dates = `${new Date(request.startDate).toLocaleDateString('ru-RU')} - ${new Date(request.endDate).toLocaleDateString('ru-RU')}`
-    const message = this.formatNotificationMessage({
-      type: 'vacation_approved',
-      title: 'Отпуск одобрен',
-      message: `Ваша заявка на отпуск одобрена\n\n📅 Даты: ${dates}`,
-      user
-    })
+    const message = [
+      LINE,
+      `✅  <b>ОТПУСК ОДОБРЕН</b>`,
+      LINE,
+      ``,
+      `Ваша заявка на отпуск одобрена!`,
+      ``,
+      `${vacationType}`,
+      `📅  ${startDate} — ${endDate}`,
+      `⏱  ${duration}`,
+      request.has_travel ? `🚂  Включая дни проезда` : null,
+      ``,
+      LINE,
+      `🎉 Приятного отдыха!`,
+    ].filter(line => line !== null).join('\n')
 
-    return this.sendMessage(user.telegram_chat_id, message, { parse_mode: 'Markdown' })
+    return this.sendMessage(user.telegram_chat_id, message, { parse_mode: 'HTML' })
   }
 
   static async sendVacationRejectedNotification(user, request) {
-    console.log('Telegram: sendVacationRejectedNotification called for user:', user.id, user.first_name, user.last_name)
-    console.log('Telegram: User telegram_chat_id:', user.telegram_chat_id)
-    console.log('Telegram: User telegram_notifications_enabled:', user.telegram_notifications_enabled)
+    if (!user.telegram_chat_id || !user.telegram_notifications_enabled) return null
 
-    if (!user.telegram_chat_id || !user.telegram_notifications_enabled) {
-      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
-      return null
-    }
+    const startDate = formatDate(request.start_date)
+    const endDate = formatDate(request.end_date)
+    const duration = pluralizeDays(request.duration)
+    const reason = request.rejection_reason || 'Причина не указана'
 
-    const dates = `${new Date(request.startDate).toLocaleDateString('ru-RU')} - ${new Date(request.endDate).toLocaleDateString('ru-RU')}`
-    const message = this.formatNotificationMessage({
-      type: 'vacation_rejected',
-      title: 'Отпуск отклонен',
-      message: `Ваша заявка на отпуск отклонена\n\n📅 Даты: ${dates}\n📝 Причина: ${request.rejectionReason || 'Без причины'}`,
-      user
-    })
+    const message = [
+      LINE,
+      `❌  <b>ОТПУСК ОТКЛОНЁН</b>`,
+      LINE,
+      ``,
+      `Ваша заявка на отпуск отклонена.`,
+      ``,
+      `📅  ${startDate} — ${endDate}`,
+      `⏱  ${duration}`,
+      ``,
+      `💬  <b>Причина:</b>`,
+      `<i>${reason}</i>`,
+      ``,
+      LINE,
+    ].join('\n')
 
-    return this.sendMessage(user.telegram_chat_id, message, { parse_mode: 'Markdown' })
+    return this.sendMessage(user.telegram_chat_id, message, { parse_mode: 'HTML' })
   }
 
   static async sendVacationCancelledNotification(user, request) {
-    console.log('Telegram: sendVacationCancelledNotification called for user:', user.id, user.first_name, user.last_name)
-    console.log('Telegram: User telegram_chat_id:', user.telegram_chat_id)
-    console.log('Telegram: User telegram_notifications_enabled:', user.telegram_notifications_enabled)
+    if (!user.telegram_chat_id || !user.telegram_notifications_enabled) return null
 
-    if (!user.telegram_chat_id || !user.telegram_notifications_enabled) {
-      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
-      return null
-    }
+    const startDate = formatDate(request.start_date)
+    const endDate = formatDate(request.end_date)
+    const duration = pluralizeDays(request.duration)
+    const isByManager = request.status === 'cancelled_by_manager'
+    const reason = request.cancellation_reason
 
-    const dates = `${new Date(request.startDate).toLocaleDateString('ru-RU')} - ${new Date(request.endDate).toLocaleDateString('ru-RU')}`
-    const message = this.formatNotificationMessage({
-      type: 'vacation_cancelled',
-      title: 'Заявка отменена',
-      message: `Заявка на отпуск отменена\n\n📅 Даты: ${dates}`,
-      user
-    })
+    const message = [
+      LINE,
+      `🚫  <b>ЗАЯВКА ОТМЕНЕНА</b>`,
+      LINE,
+      ``,
+      isByManager
+        ? `Ваша заявка на отпуск отменена руководителем.`
+        : `Заявка на отпуск отменена.`,
+      ``,
+      `📅  ${startDate} — ${endDate}`,
+      `⏱  ${duration}`,
+      reason ? `` : null,
+      reason ? `💬  <b>Причина:</b>` : null,
+      reason ? `<i>${reason}</i>` : null,
+      ``,
+      LINE,
+    ].filter(line => line !== null).join('\n')
 
-    return this.sendMessage(user.telegram_chat_id, message, { parse_mode: 'Markdown' })
+    return this.sendMessage(user.telegram_chat_id, message, { parse_mode: 'HTML' })
   }
 
   static async sendNewRequestNotification(manager, request, employee) {
-    console.log('Telegram: sendNewRequestNotification called for manager:', manager.id, manager.first_name, manager.last_name)
-    console.log('Telegram: Manager telegram_chat_id:', manager.telegram_chat_id)
-    console.log('Telegram: Manager telegram_notifications_enabled:', manager.telegram_notifications_enabled)
+    if (!manager.telegram_chat_id || !manager.telegram_notifications_enabled) return null
 
-    if (!manager.telegram_chat_id || !manager.telegram_notifications_enabled) {
-      console.log('Telegram: Skipping notification - chat_id or notifications disabled')
-      return null
-    }
+    const startDate = formatDate(request.start_date)
+    const endDate = formatDate(request.end_date)
+    const duration = pluralizeDays(request.duration)
+    const vacationType = getVacationTypeLabel(request.vacation_type)
+    const empName = `${employee.last_name} ${employee.first_name}`
+    const comment = request.comment
 
-    const dates = `${new Date(request.startDate).toLocaleDateString('ru-RU')} - ${new Date(request.endDate).toLocaleDateString('ru-RU')}`
-    const message = `
-🆕 *Новая заявка на рассмотрении*
+    const message = [
+      LINE,
+      `🆕  <b>НОВАЯ ЗАЯВКА НА ОТПУСК</b>`,
+      LINE,
+      ``,
+      `👤  <b>${empName}</b>`,
+      `💼  ${employee.position}`,
+      ``,
+      `${vacationType}`,
+      `📅  ${startDate} — ${endDate}`,
+      `⏱  ${duration}`,
+      request.has_travel ? `🚂  Включая дни проезда` : null,
+      comment ? `` : null,
+      comment ? `💬  <b>Комментарий:</b>` : null,
+      comment ? `<i>${comment}</i>` : null,
+      ``,
+      LINE,
+      `⏳ Ожидает вашего решения`,
+    ].filter(line => line !== null).join('\n')
 
-Сотрудник: ${employee.firstName} ${employee.lastName}
-Должность: ${employee.position}
-
-📅 Даты: ${dates}
-📝 Комментарий: ${request.comment || 'Без комментария'}
-
-Необходимо рассмотреть заявку в системе.
-`.trim()
-
-    return this.sendMessage(manager.telegram_chat_id, message, { parse_mode: 'Markdown' })
+    return this.sendMessage(manager.telegram_chat_id, message, { parse_mode: 'HTML' })
   }
 }
 

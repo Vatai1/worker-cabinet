@@ -17,6 +17,55 @@ router.get('/skills/all', authenticateToken, async (req, res) => {
   }
 })
 
+// Search users (for adding members to projects - no role restriction)
+router.get('/search', authenticateToken, async (req, res) => {
+  try {
+    const { departmentId, q } = req.query
+    
+    let sql = `
+      SELECT 
+        u.id,
+        u.email,
+        u.first_name,
+        u.last_name,
+        u.middle_name,
+        u.position,
+        u.department_id,
+        d.name as department_name,
+        u.phone,
+        u.hire_date,
+        u.status,
+        u.role,
+        u.manager_id,
+        m.first_name || '' || m.last_name as manager_name
+      FROM users u
+      LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN users m ON u.manager_id = m.id
+      WHERE 1=1
+    `
+    
+    const params = []
+    
+    if (departmentId) {
+      sql += ' AND u.department_id = $' + (params.length + 1)
+      params.push(departmentId)
+    }
+    
+    if (q) {
+      sql += ` AND (u.first_name ILIKE $${params.length + 1} OR u.last_name ILIKE $${params.length + 1} OR u.position ILIKE $${params.length + 1})`
+      params.push(`%${q}%`)
+    }
+    
+    sql += ' ORDER BY u.last_name, u.first_name'
+    
+    const result = await query(sql, params)
+    res.json(result.rows)
+  } catch (error) {
+    console.error('Error searching users:', error)
+    res.status(500).json({ error: 'Failed to search users' })
+  }
+})
+
 // Get all users (for managers/hr)
 router.get('/', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   try {
@@ -127,9 +176,22 @@ router.get('/:id', authenticateToken, async (req, res) => {
     )
     const skills = skillsResult.rows.map(row => row.name)
 
-    // Get projects
+    // Get projects from company_projects
     const projectsResult = await query(
-      'SELECT id, name, role, status, start_date, end_date, description FROM projects WHERE user_id = $1 ORDER BY created_at DESC',
+      `SELECT
+         p.id,
+         p.name,
+         p.full_name,
+         p.status,
+         p.start_date,
+         p.end_date,
+         m.role,
+         m.description,
+         m.joined_at
+       FROM company_project_members m
+       JOIN company_projects p ON m.project_id = p.id
+       WHERE m.user_id = $1
+       ORDER BY p.created_at DESC`,
       [id]
     )
     const projects = projectsResult.rows.map(row => ({
@@ -140,6 +202,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       startDate: row.start_date,
       endDate: row.end_date,
       description: row.description,
+      joined_at: row.joined_at,
     }))
 
     res.json({
