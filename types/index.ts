@@ -61,6 +61,7 @@ export interface Document {
   url: string
   uploadDate: string
   size: number
+  mimeType?: string
 }
 
 export interface Notification {

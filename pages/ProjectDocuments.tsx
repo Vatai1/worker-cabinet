@@ -3,10 +3,12 @@ import { useParams, Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { DocumentPreviewModal } from '@/components/modals/DocumentPreviewModal'
+import { isPreviewable } from '@/lib/documentUtils'
 import {
   ArrowLeft, Loader2, Upload, FolderPlus, Folder, FolderOpen,
   File, FileText, FileImage, FileCode, FileArchive, Download,
-  Trash2, ChevronRight, Home, MoreVertical, X, Edit3,
+  Trash2, ChevronRight, Home, MoreVertical, X, Edit3, Info, Eye,
 } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
@@ -28,6 +30,7 @@ interface FolderItem {
   name: string
   path: string
   parent_path: string
+  created_by: string
   created_at: string
 }
 
@@ -201,6 +204,198 @@ function RenameFolderModal({
   )
 }
 
+// ── Rename document modal ─────────────────────────────────────────────────────
+
+function RenameDocModal({
+  doc, onRenamed, onClose,
+}: { doc: DocItem; onRenamed: (newName: string) => void; onClose: () => void }) {
+  const [name, setName] = useState(doc.name)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const handleRename = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
+    setSaving(true); setErr('')
+    try {
+      onRenamed(name.trim())
+      onClose()
+    } catch (e: any) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  const FileIcon = getFileIcon(doc.mime_type)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
+            <FileIcon className="h-4 w-4 text-primary" />
+          </div>
+          <h2 className="text-lg font-semibold">Переименовать файл</h2>
+        </div>
+        {err && <p className="text-sm text-destructive mb-3">{err}</p>}
+        <form onSubmit={handleRename} className="space-y-4">
+          <Input
+            placeholder="Название файла"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-3 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}><X className="h-4 w-4 mr-1" />Отмена</Button>
+            <Button type="submit" disabled={!name.trim() || saving}>
+              {saving ? 'Переименование…' : 'Переименовать'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Folder info modal ───────────────────────────────────────────────────────
+
+function FolderInfoModal({
+  folder, onClose,
+}: { folder: FolderItem; onClose: () => void }) {
+  const getCreatorName = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${folder.created_by}`, { headers: getAuthHeaders() })
+      if (res.ok) {
+        const data = await res.json()
+        return `${data.first_name} ${data.last_name}`
+      }
+    } catch {}
+    return ''
+  }
+
+  const [creatorName, setCreatorName] = useState('')
+
+  useEffect(() => {
+    getCreatorName().then(setCreatorName)
+  }, [folder.created_by])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10">
+            <Folder className="h-6 w-6 text-amber-500" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold">{folder.name}</h2>
+            <p className="text-sm text-muted-foreground">Папка</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Путь</p>
+              <p className="text-sm font-medium truncate">{folder.path}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Создана</p>
+              <p className="text-sm font-medium">{formatDate(folder.created_at)}</p>
+            </div>
+          </div>
+
+          {creatorName && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Создал</p>
+              <p className="text-sm font-medium">{creatorName}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <Button onClick={onClose}>Закрыть</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Document info modal ──────────────────────────────────────────────────────
+
+function DocInfoModal({
+  doc, onClose,
+}: { doc: DocItem; onClose: () => void }) {
+  const FileIcon = getFileIcon(doc.mime_type)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10">
+            <FileIcon className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold">{doc.name}</h2>
+            <p className="text-sm text-muted-foreground">Файл</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Размер</p>
+              <p className="text-sm font-medium">{formatSize(Number(doc.file_size))}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Тип</p>
+              <p className="text-sm font-medium truncate">{doc.mime_type}</p>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Путь</p>
+            <p className="text-sm font-medium truncate">{doc.folder_path}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Загружил</p>
+              <p className="text-sm font-medium">{doc.uploader_first_name} {doc.uploader_last_name}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Дата</p>
+              <p className="text-sm font-medium">{formatDate(doc.created_at)}</p>
+            </div>
+          </div>
+
+          {doc.description && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Описание</p>
+              <p className="text-sm font-medium">{doc.description}</p>
+            </div>
+          )}
+
+          {doc.tags && doc.tags.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Теги</p>
+              <div className="flex flex-wrap gap-2">
+                {doc.tags.map((tag, i) => (
+                  <span key={i} className="px-2 py-1 bg-muted rounded text-xs">{tag}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <Button onClick={onClose}>Закрыть</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Upload modal ──────────────────────────────────────────────────────────
 
 function UploadModal({
@@ -318,6 +513,13 @@ export function ProjectDocuments() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renameFolderOpen, setRenameFolderOpen] = useState(false)
   const [folderToRename, setFolderToRename] = useState<FolderItem | null>(null)
+  const [renameDocOpen, setRenameDocOpen] = useState(false)
+  const [docToRename, setDocToRename] = useState<DocItem | null>(null)
+  const [folderInfoOpen, setFolderInfoOpen] = useState(false)
+  const [folderToInfo, setFolderToInfo] = useState<FolderItem | null>(null)
+  const [docInfoOpen, setDocInfoOpen] = useState(false)
+  const [docToInfo, setDocToInfo] = useState<DocItem | null>(null)
+  const [previewDoc, setPreviewDoc] = useState<DocItem | null>(null)
 
   // Drag and drop
   const [dragCounter, setDragCounter] = useState(0)
@@ -426,6 +628,19 @@ export function ProjectDocuments() {
       if (!res.ok) throw new Error()
       setFolders((prev) => prev.map((f) => f.id === folder.id ? { ...f, name: newName.trim() } : f))
     } catch { alert('Не удалось переименовать папку') }
+  }
+
+  const handleRenameDoc = async (doc: DocItem, newName: string) => {
+    if (!newName.trim()) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/projects/${id}/documents/${doc.id}`, {
+        method: 'PUT',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() }),
+      })
+      if (!res.ok) throw new Error()
+      setDocs((prev) => prev.map((d) => d.id === doc.id ? { ...d, name: newName.trim() } : d))
+    } catch { alert('Не удалось переименовать файл') }
   }
 
   // ── Drag and Drop ───────────────────────────────────────────────────────
@@ -681,6 +896,15 @@ export function ProjectDocuments() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1 shrink-0">
+                  {isPreviewable(doc.mime_type, doc.name) && (
+                    <button
+                      className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                      title="Просмотр"
+                      onClick={() => setPreviewDoc(doc)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  )}
                   <button
                     className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
                     title="Скачать"
@@ -739,6 +963,13 @@ export function ProjectDocuments() {
                 <FolderOpen className="h-4 w-4 text-amber-500" />
                 Открыть
               </button>
+              <button
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 flex items-center gap-2"
+                onClick={() => { setFolderToInfo(contextMenu.folder!); setFolderInfoOpen(true); setContextMenu(null) }}
+              >
+                <Info className="h-4 w-4" />
+                Информация
+              </button>
               {canManage && (
                 <>
                   <button
@@ -762,6 +993,15 @@ export function ProjectDocuments() {
           )}
           {contextMenu.type === 'doc' && contextMenu.doc && (
             <>
+              {isPreviewable(contextMenu.doc.mime_type, contextMenu.doc.name) && (
+                <button
+                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 flex items-center gap-2"
+                  onClick={() => { setPreviewDoc(contextMenu.doc!); setContextMenu(null) }}
+                >
+                  <Eye className="h-4 w-4" />
+                  Просмотр
+                </button>
+              )}
               <button
                 className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 flex items-center gap-2"
                 onClick={() => { handleDownload(contextMenu.doc!); setContextMenu(null) }}
@@ -769,8 +1009,22 @@ export function ProjectDocuments() {
                 <Download className="h-4 w-4" />
                 Скачать
               </button>
+              <button
+                className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 flex items-center gap-2"
+                onClick={() => { setDocToInfo(contextMenu.doc!); setDocInfoOpen(true); setContextMenu(null) }}
+              >
+                <Info className="h-4 w-4" />
+                Информация
+              </button>
               {(canManage || String(contextMenu.doc.uploaded_by) === String(user?.id)) && (
                 <>
+                  <button
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 flex items-center gap-2"
+                    onClick={() => { setDocToRename(contextMenu.doc!); setRenameDocOpen(true); setContextMenu(null) }}
+                  >
+                    <Edit3 className="h-4 w-4" />
+                    Переименовать
+                  </button>
                   <div className="border-t border-border/40 my-1" />
                   <button
                     className="w-full text-left px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 flex items-center gap-2"
@@ -808,6 +1062,55 @@ export function ProjectDocuments() {
           folder={folderToRename}
           onRenamed={(newName) => handleRenameFolder(folderToRename, newName)}
           onClose={() => { setRenameFolderOpen(false); setFolderToRename(null) }}
+        />
+      )}
+      {renameDocOpen && docToRename && (
+        <RenameDocModal
+          doc={docToRename}
+          onRenamed={(newName) => handleRenameDoc(docToRename, newName)}
+          onClose={() => { setRenameDocOpen(false); setDocToRename(null) }}
+        />
+      )}
+      {folderInfoOpen && folderToInfo && (
+        <FolderInfoModal
+          folder={folderToInfo}
+          onClose={() => { setFolderInfoOpen(false); setFolderToInfo(null) }}
+        />
+      )}
+      {docInfoOpen && docToInfo && (
+        <DocInfoModal
+          doc={docToInfo}
+          onClose={() => { setDocInfoOpen(false); setDocToInfo(null) }}
+        />
+      )}
+      {previewDoc && (
+        <DocumentPreviewModal
+          open={!!previewDoc}
+          onClose={() => setPreviewDoc(null)}
+          document={{
+            id: previewDoc.id,
+            name: previewDoc.name,
+            mimeType: previewDoc.mime_type,
+            url: async () => {
+              const res = await fetch(
+                `${API_BASE_URL}/projects/${id}/documents/${previewDoc.id}/preview`,
+                { headers: getAuthHeaders() }
+              )
+              if (!res.ok) throw new Error('Не удалось загрузить файл')
+              
+              const contentType = res.headers.get('content-type') || ''
+              
+              if (contentType.includes('text/plain') || contentType.includes('text/html')) {
+                const text = await res.text()
+                return text
+              }
+              
+              const blob = await res.blob()
+              return window.URL.createObjectURL(blob)
+            },
+            size: previewDoc.file_size,
+            projectId: id,
+          }}
         />
       )}
     </div>

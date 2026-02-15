@@ -146,4 +146,241 @@
   .shadow-glow-lg {
     box-shadow: 0 0 40px rgba(162, 89, 255, 0.2);
   }
+
+  .pdf-document {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .pdf-document canvas {
+    max-width: 100%;
+    height: auto !important;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  .dark .pdf-document canvas {
+    filter: invert(1) hue-rotate(180deg);
+  }
+
+  .docx-content {
+    width: 100%;
+    height: 100%;
+  }
+
+  .docx-preview-wrapper {
+    width: 100%;
+    height: 100%;
+  }
+
+  .docx-preview {
+    width: 100%;
+    height: 100%;
+    font-family: 'Times New Roman', Times, 'Calibri', 'Arial', sans-serif !important;
+  }
+
+  .docx-content del {
+    color: hsl(var(--destructive));
+    text-decoration: line-through;
+    text-decoration-color: hsl(var(--destructive));
+    text-decoration-thickness: 2px;
+    background-color: hsl(0 100% 50% / 0.25);
+    padding: 0.1em 0.2em;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+  }
+
+  .docx-content del:hover {
+    background-color: hsl(0 100% 50% / 0.35);
+    cursor: pointer;
+  }
+
+  .docx-content ins {
+    color: hsl(var(--success));
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--success));
+    text-decoration-thickness: 2px;
+    background-color: hsl(142 76% 36% / 0.25);
+    padding: 0.1em 0.2em;
+    border-radius: 2px;
+    text-underline-offset: 2px;
+    transition: all 0.2s ease;
+  }
+
+  .docx-content ins:hover {
+    background-color: hsl(142 76% 36% / 0.35);
+    cursor: pointer;
+  }
+
+  .docx-content .docx-comment {
+    position: relative;
+    margin: 0.5em 0;
+    padding-left: 0;
+    border-left: none;
+    box-shadow: none;
+  }
+
+  .docx-content .docx-comment::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: hsl(38 92% 50%);
+    border-radius: 2px 0 0 2px;
+  }
+
+  .docx-content .docx-comment-marker {
+    position: absolute;
+    left: -24px;
+    top: 0;
+    background: hsl(38 92% 50%);
+    color: white;
+    font-weight: bold;
+    cursor: help;
+    padding: 0.15em 0.4em;
+    border-radius: 4px 2px 2px 4px;
+    font-size: 0.75em;
+    vertical-align: top;
+    line-height: 1;
+    min-width: 16px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .docx-content .docx-comment-text {
+    background-color: hsl(38 92% 50% / 0.1);
+    border: 1px solid hsl(38 92% 50% / 0.3);
+    border-radius: 4px;
+    padding: 0.75em 1em;
+    margin-left: 0;
+    display: block;
+    margin-top: 0.25em;
+  }
+
+  .docx-content .docx-comment-text strong {
+    display: block;
+    font-size: 0.85em;
+    color: hsl(38 92% 50%);
+    margin-bottom: 0.25em;
+  }
+
+  .docx-content .docx-comment-text p {
+    margin: 0;
+    font-size: 0.9em;
+    line-height: 1.4;
+  }
+
+  .docx-content .docx-comment-meta {
+    font-size: 0.75em;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.5em;
+    padding-top: 0.5em;
+    border-top: 1px solid hsl(38 92% 50% / 0.2);
+  }
+
+  .docx-content .docx-comment:hover .docx-comment-text {
+    background-color: hsl(38 92% 50% / 0.2);
+    border-color: hsl(38 92% 50% / 0.4);
+  }
+
+  .dark .docx-content .docx-comment-text {
+    background-color: hsl(38 92% 50% / 0.15);
+    border-color: hsl(38 92% 50% / 0.3);
+  }
+
+  .dark .docx-content .docx-comment:hover .docx-comment-text {
+    background-color: hsl(38 92% 50% / 0.25);
+    border-color: hsl(38 92% 50% / 0.4);
+  }
+
+  .docx-content .docx-comment:hover {
+    background-color: hsl(38 92% 50% / 0.4);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+  }
+
+  .docx-content .docx-comment-marker {
+    background-color: hsl(38 92% 50%);
+    color: white;
+    font-weight: bold;
+    cursor: help;
+    padding: 0.1em 0.4em;
+    border-radius: 50%;
+    font-size: 0.8em;
+    margin-left: 0.25em;
+    vertical-align: super;
+    display: inline-block;
+  }
+
+  .dark .docx-content del {
+    background-color: hsl(0 100% 50% / 0.35);
+  }
+
+  .dark .docx-content ins {
+    background-color: hsl(142 76% 36% / 0.35);
+  }
+
+  .dark .docx-content .docx-comment {
+    background-color: hsl(38 92% 50% / 0.35);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .dark .docx-content .docx-comment:hover {
+    background-color: hsl(38 92% 50% / 0.45);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Разные цвета для разных авторов */
+  .docx-content del[data-author="1"] {
+    background-color: hsl(0 100% 50% / 0.25);
+  }
+
+  .docx-content del[data-author="2"] {
+    background-color: hsl(210 100% 50% / 0.25);
+  }
+
+  .docx-content del[data-author="3"] {
+    background-color: hsl(30 100% 50% / 0.25);
+  }
+
+  .docx-content del[data-author="4"] {
+    background-color: hsl(280 100% 50% / 0.25);
+  }
+
+  .docx-content ins[data-author="1"] {
+    background-color: hsl(142 76% 36% / 0.25);
+  }
+
+  .docx-content ins[data-author="2"] {
+    background-color: hsl(200 100% 50% / 0.25);
+  }
+
+  .docx-content ins[data-author="3"] {
+    background-color: hsl(45 100% 50% / 0.25);
+  }
+
+  .docx-content ins[data-author="4"] {
+    background-color: hsl(270 100% 50% / 0.25);
+  }
+
+  /* Скрытые изменения для фильтрации */
+  .docx-content del.hidden-change,
+  .docx-content ins.hidden-change {
+    opacity: 0.1;
+    text-decoration: none;
+    background-color: transparent;
+  }
+
+  .docx-content .docx-comment.hidden-comment {
+    opacity: 0.1;
+    border-left-color: transparent;
+  }
+
+  .dark .docx-content .docx-comment {
+    background-color: hsl(var(--primary) / 0.15);
+  }
 }
+
