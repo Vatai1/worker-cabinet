@@ -574,6 +574,124 @@ router.get('/:id/documents/:documentId/download', authenticateToken, async (req,
   }
 })
 
+// GET /api/projects/:id/documents/:documentId/preview — preview document
+router.get('/:id/documents/:documentId/preview', authenticateToken, async (req, res) => {
+  try {
+    const { id, documentId } = req.params
+    const userId = req.user.id
+    
+    const docResult = await query(
+      `SELECT file_path, name, mime_type, file_size FROM project_documents WHERE id = $1 AND project_id = $2`,
+      [documentId, id]
+    )
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' })
+    }
+    
+    const doc = docResult.rows[0]
+    
+    // For docx files, return binary file for client-side rendering
+    if (doc.mime_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        doc.mime_type === 'application/msword' ||
+        doc.name.toLowerCase().endsWith('.docx')) {
+      const { Body, ContentType } = await getFromS3(doc.file_path)
+      
+      res.setHeader('Content-Type', ContentType || doc.mime_type)
+      res.setHeader('Content-Disposition', 'inline')
+      res.setHeader('Cache-Control', 'public, max-age=3600')
+      
+      Body.pipe(res)
+      return
+    }
+    
+    // For text files, read content directly
+    if (doc.mime_type.startsWith('text/') || 
+        ['application/json', 'application/javascript', 'application/xml', 'application/yaml', 'application/x-yaml'].includes(doc.mime_type)) {
+      const { Body } = await getFromS3(doc.file_path)
+      const content = await Body.transformToString()
+      
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      return res.send(content)
+    }
+    
+    // For binary files, stream them with inline disposition for preview
+    const { Body, ContentType } = await getFromS3(doc.file_path)
+    
+    res.setHeader('Content-Type', ContentType || doc.mime_type)
+    res.setHeader('Content-Disposition', 'inline')
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    
+    Body.pipe(res)
+  } catch (error) {
+    console.error('Error previewing document:', error)
+    res.status(500).json({ error: 'Failed to preview document' })
+  }
+})
+
+// PUT /api/projects/:id/documents/:documentId — update document (rename)
+router.put('/:id/documents/:documentId', authenticateToken, async (req, res) => {
+  try {
+    const { id, documentId } = req.params
+    const { name, description } = req.body
+    const userId = req.user.id
+
+    // Check access
+    const accessCheck = await query(
+      `SELECT uploaded_by FROM project_documents WHERE id = $1 AND project_id = $2`,
+      [documentId, id]
+    )
+    if (accessCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' })
+    }
+
+    const doc = accessCheck.rows[0]
+    const canEdit = String(doc.uploaded_by) === String(userId)
+
+    const isAdminOrLead = await query(
+      `SELECT 1 FROM company_project_members WHERE project_id = $1 AND user_id = $2 AND role = 'lead'
+       UNION
+       SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`,
+      [id, userId]
+    )
+
+    if (!canEdit && isAdminOrLead.rows.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const updateFields = []
+    const values = []
+    let paramCount = 1
+
+    if (name?.trim()) {
+      updateFields.push(`name = $${paramCount}`)
+      values.push(name.trim())
+      paramCount++
+    }
+
+    if (description !== undefined) {
+      updateFields.push(`description = $${paramCount}`)
+      values.push(description || null)
+      paramCount++
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' })
+    }
+
+    values.push(documentId)
+
+    const result = await query(
+      `UPDATE project_documents SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+      values
+    )
+
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Error updating document:', error)
+    res.status(500).json({ error: 'Failed to update document' })
+  }
+})
+
 // DELETE /api/projects/:id/documents/:documentId — delete document
 router.delete('/:id/documents/:documentId', authenticateToken, async (req, res) => {
   try {

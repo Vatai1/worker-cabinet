@@ -4,8 +4,10 @@ import type { Document } from '@/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { DocumentPreviewModal } from '@/components/modals/DocumentPreviewModal'
+import { isPreviewable } from '@/lib/documentUtils'
 import { formatDate } from '@/lib/utils'
-import { FileText, Download, Search, Upload } from 'lucide-react'
+import { FileText, Download, Search, Upload, Eye } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
 
 type DocumentType = 'all' | 'contract' | 'nda' | 'policy' | 'certificate' | 'other'
@@ -14,6 +16,7 @@ export function Documents() {
   const [filterType, setFilterType] = useState<DocumentType>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [documents] = useState<Document[]>([])
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null)
 
   const filteredDocuments = documents.filter((doc) => {
     const matchesType = filterType === 'all' || doc.type === filterType
@@ -31,6 +34,17 @@ export function Documents() {
       other: { label: 'Другое', className: 'bg-gray-100 text-gray-800' },
     }
     return badges[type]
+  }
+
+  const getMimeType = (type: Document['type']) => {
+    const mimeTypes = {
+      contract: 'application/pdf',
+      nda: 'application/pdf',
+      policy: 'application/pdf',
+      certificate: 'application/pdf',
+      other: 'application/octet-stream',
+    }
+    return mimeTypes[type]
   }
 
   return (
@@ -142,10 +156,18 @@ export function Documents() {
                         {formatDate(doc.uploadDate)}
                       </span>
                     </div>
-                    <Button className="w-full" variant="outline" size="sm">
-                      <Download className="mr-2 h-4 w-4" />
-                      Скачать
-                    </Button>
+                    <div className="flex gap-2">
+                      {isPreviewable(doc.mimeType || getMimeType(doc.type), doc.name) && (
+                        <Button className="flex-1" variant="outline" size="sm" onClick={() => setPreviewDoc(doc)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          Просмотр
+                        </Button>
+                      )}
+                      <Button className="flex-1" variant="outline" size="sm">
+                        <Download className="mr-2 h-4 w-4" />
+                        Скачать
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -195,6 +217,19 @@ export function Documents() {
           </CardContent>
         </Card>
       </div>
+      {previewDoc && (
+        <DocumentPreviewModal
+          open={!!previewDoc}
+          onClose={() => setPreviewDoc(null)}
+          document={{
+            id: previewDoc.id,
+            name: previewDoc.name,
+            mimeType: previewDoc.mimeType || getMimeType(previewDoc.type),
+            url: previewDoc.url,
+            size: previewDoc.size,
+          }}
+        />
+      )}
     </div>
   )
 }
