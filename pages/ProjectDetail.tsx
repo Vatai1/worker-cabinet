@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -8,12 +8,12 @@ import { Badge } from '@/components/ui/Badge'
 import {
   ArrowLeft, Loader2, FolderKanban, Calendar, Users, Crown,
   CircleDot, CheckCircle2, Clock, Pencil, Trash2, UserPlus, FileText,
+  Map, CalendarDays, LayoutGrid, Info, X, Flag, Diamond,
 } from 'lucide-react'
 import { EditProjectModal } from '@/components/modals/EditProjectModal'
 import { AddMemberModal } from '@/components/modals/AddMemberModal'
 import { MemberProjectInfoModal } from '@/components/modals/MemberProjectInfoModal'
 import { ContextMenu } from '@/components/ui/ContextMenu'
-import { DocumentsSection } from '@/components/sections/DocumentsSection'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
 
@@ -57,6 +57,7 @@ interface ProjectDetail {
   members: Member[]
 }
 
+
 const statusConfig = {
   active:    { label: 'Активный', icon: CircleDot,    color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30', variant: 'success'   as const },
   completed: { label: 'Завершён', icon: CheckCircle2, color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30',       variant: 'default'   as const },
@@ -78,7 +79,17 @@ function avatarColor(id: string) {
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
+  // Parse date string considering local timezone
+  const date = new Date(dateStr)
+  // If the date string is in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS),
+  // we need to ensure we display the correct local date
+  if (dateStr.includes('T')) {
+    return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
+  }
+  // For YYYY-MM-DD format, parse as local date to avoid timezone shift
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const localDate = new Date(year, month - 1, day)
+  return localDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
 function MemberCard({ member, canRemove, onRemove, onContextMenu }: {
@@ -339,6 +350,14 @@ export function ProjectDetail() {
         </div>
       )}
 
+      {/* Roadmap */}
+      <RoadmapSection
+        projectId={project.id}
+        canManage={canManage}
+        projectStartDate={project.start_date}
+        projectEndDate={project.end_date}
+      />
+
       {/* Members */}
       <div className="grid gap-4 md:grid-cols-2">
         {/* Leads */}
@@ -410,13 +429,6 @@ export function ProjectDetail() {
         </Card>
       </div>
 
-      {/* Documents */}
-      <DocumentsSection
-        projectId={project.id}
-        canManage={canManage}
-        isMember={project.members.some((m) => String(m.id) === String(user?.id))}
-      />
-
       {/* Modals */}
       {editOpen && (
         <EditProjectModal
@@ -474,5 +486,527 @@ function InfoChip({ icon, label, value }: { icon: React.ReactNode; label: string
         <div className="font-medium text-sm">{value}</div>
       </div>
     </div>
+  )
+}
+
+// ── Task Context Menu Popup ─────────────────────────────────────────────────
+
+function TaskCtxMenuPopup({
+  x, y, onClose, onDetails,
+}: { x: number; y: number; onClose: () => void; onDetails: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', onMouseDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-50 min-w-[180px] bg-background rounded-lg shadow-2xl border border-border/50 py-1 animate-in fade-in zoom-in duration-100"
+      style={{ left: x, top: y }}
+    >
+      <button
+        onClick={() => { onDetails(); onClose() }}
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+      >
+        <Info className="h-4 w-4" />
+        Подробнее о задаче
+      </button>
+    </div>
+  )
+}
+
+// ── Task Detail Modal ────────────────────────────────────────────────────────
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'В ожидании',
+  in_progress: 'В процессе',
+  completed: 'Завершена',
+}
+const STATUS_COLORS: Record<string, string> = {
+  pending: 'text-muted-foreground',
+  in_progress: 'text-blue-500',
+  completed: 'text-emerald-500',
+}
+const PRIORITY_LABELS: Record<string, string> = {
+  low: 'Низкий',
+  medium: 'Средний',
+  high: 'Высокий',
+}
+const PRIORITY_COLORS: Record<string, string> = {
+  low: 'text-emerald-500',
+  medium: 'text-amber-500',
+  high: 'text-red-500',
+}
+
+function fmtMonth(mk: string) {
+  const [y, m] = mk.split('-')
+  const d = new Date(Number(y), Number(m) - 1, 1)
+  return d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
+}
+
+function TaskDetailModal({
+  task,
+  row,
+  onClose,
+}: {
+  task: RoadmapTask
+  row: RoadmapRow | null
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-background rounded-2xl border border-border shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        {/* Header */}
+        <div
+          className="h-1.5 w-full"
+          style={{ backgroundColor: task.color || row?.color || '#6366f1' }}
+        />
+        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {task.is_milestone && (
+              <Diamond className="h-4 w-4 shrink-0 text-amber-500" />
+            )}
+            <h2 className="font-semibold text-base leading-snug">{task.title}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 p-1 rounded-lg hover:bg-muted transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 pb-5 space-y-3">
+          {/* Row */}
+          {row && (
+            <div className="flex items-center gap-2 text-sm">
+              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
+              <span className="text-muted-foreground">Группа:</span>
+              <span className="font-medium">{row.title}</span>
+            </div>
+          )}
+
+          {/* Period */}
+          <div className="flex items-center gap-2 text-sm">
+            <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-muted-foreground">Период:</span>
+            <span className="font-medium">
+              {fmtMonth(task.start_month)}
+              {task.end_month !== task.start_month && ` — ${fmtMonth(task.end_month)}`}
+            </span>
+          </div>
+
+          {/* Status */}
+          <div className="flex items-center gap-2 text-sm">
+            <CircleDot className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-muted-foreground">Статус:</span>
+            <span className={`font-medium ${STATUS_COLORS[task.status] ?? ''}`}>
+              {STATUS_LABELS[task.status] ?? task.status}
+            </span>
+          </div>
+
+          {/* Priority */}
+          {task.priority && (
+            <div className="flex items-center gap-2 text-sm">
+              <Flag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Приоритет:</span>
+              <span className={`font-medium ${PRIORITY_COLORS[task.priority] ?? ''}`}>
+                {PRIORITY_LABELS[task.priority] ?? task.priority}
+              </span>
+            </div>
+          )}
+
+          {/* Milestone badge */}
+          {task.is_milestone && (
+            <div className="flex items-center gap-2 text-sm">
+              <Diamond className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <span className="text-amber-600 font-medium">Веха (milestone)</span>
+            </div>
+          )}
+
+          {/* Description */}
+          {task.description && (
+            <div className="mt-3 p-3 rounded-xl bg-muted/50 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+              {task.description}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Roadmap Section (read-only Gantt preview) ──────────────────────────────
+
+const ROW_H_PREVIEW    = 40
+const MIN_CELL_W       = 44   // minimum column width (px)
+const MIN_LABEL_W_PRV  = 100
+const MAX_LABEL_W_PRV  = 280
+const CHAR_W_PRV       = 7
+
+interface RoadmapRow  { id: string; title: string; color: string; order_index: number }
+interface RoadmapTask {
+  id: string; row_id: string; title: string; description?: string
+  start_month: string; end_month: string
+  status: 'pending' | 'in_progress' | 'completed'; color?: string
+  priority?: 'low' | 'medium' | 'high'
+  is_milestone?: boolean
+}
+
+function monthKeyP(year: number, month: number) {
+  return `${year}-${String(month).padStart(2, '0')}`
+}
+function parseMK(key: string) { const [y, m] = key.split('-'); return { year: +y, month: +m } }
+function monthPartsP(key: string) {
+  const { year, month } = parseMK(key)
+  const d = new Date(year, month - 1, 1)
+  return {
+    mon: d.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', ''),
+    yr: `${year}`,
+  }
+}
+function genMonths(start: string, end: string) {
+  const months: string[] = []
+  let { year, month } = parseMK(start)
+  const e = parseMK(end)
+  while (year < e.year || (year === e.year && month <= e.month)) {
+    months.push(monthKeyP(year, month))
+    if (++month > 12) { month = 1; year++ }
+  }
+  return months
+}
+
+function qkP(y: number, q: number) { return `${y}-Q${q}` }
+function monthToQP(mk: string) { const { year, month } = parseMK(mk); return qkP(year, Math.ceil(month / 3)) }
+
+function genQuartersP(start: string, end: string) {
+  const qs: string[] = []
+  const { year: sy, month: sm } = parseMK(start)
+  const { year: ey, month: em } = parseMK(end)
+  let year = sy, q = Math.ceil(sm / 3)
+  const endQ = Math.ceil(em / 3)
+  while (year < ey || (year === ey && q <= endQ)) {
+    qs.push(qkP(year, q))
+    if (++q > 4) { q = 1; year++ }
+  }
+  return qs
+}
+
+function RoadmapSection({
+  projectId,
+  canManage,
+  projectStartDate,
+  projectEndDate,
+}: {
+  projectId: string
+  canManage: boolean
+  projectStartDate?: string
+  projectEndDate?: string
+}) {
+  const navigate = useNavigate()
+  const [rows, setRows]         = useState<RoadmapRow[]>([])
+  const [tasks, setTasks]       = useState<RoadmapTask[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [allMonths, setAllMonths] = useState<string[]>([])
+  const [viewMode, setViewMode] = useState<'months' | 'quarters'>('months')
+  const [containerW, setContainerW] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [taskCtxMenu, setTaskCtxMenu] = useState<{ x: number; y: number; task: RoadmapTask } | null>(null)
+  const [taskDetail, setTaskDetail] = useState<RoadmapTask | null>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const ro = new ResizeObserver(([e]) => setContainerW(e.contentRect.width))
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const now = new Date()
+    const start = projectStartDate?.slice(0, 7) || monthKeyP(now.getFullYear(), 1)
+    const end   = projectEndDate?.slice(0, 7)   || monthKeyP(now.getFullYear(), 12)
+    setAllMonths(genMonths(start, end))
+  }, [projectStartDate, projectEndDate])
+
+  const cols = useMemo(() => {
+    if (allMonths.length === 0) return []
+    return viewMode === 'months'
+      ? allMonths
+      : genQuartersP(allMonths[0], allMonths[allMonths.length - 1])
+  }, [allMonths, viewMode])
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const [rRes, tRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/projects/${projectId}/roadmap/rows`, { headers: getAuthHeaders() }),
+          fetch(`${API_BASE_URL}/projects/${projectId}/roadmap/tasks`, { headers: getAuthHeaders() }),
+        ])
+        if (rRes.ok) setRows(await rRes.json())
+        if (tRes.ok) setTasks(await tRes.json())
+      } catch {}
+      setLoading(false)
+    }
+    load()
+  }, [projectId])
+
+  const totalTasks     = tasks.length
+  const completedTasks = tasks.filter((t) => t.status === 'completed').length
+  const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+
+  // Dynamic column widths
+  const labelW = useMemo(() => {
+    const maxLen = rows.reduce((m, r) => Math.max(m, r.title.length), 6)
+    return Math.min(MAX_LABEL_W_PRV, Math.max(MIN_LABEL_W_PRV, maxLen * CHAR_W_PRV + 40))
+  }, [rows])
+
+  const cellW = useMemo(() => {
+    if (containerW <= 0 || cols.length === 0) return MIN_CELL_W
+    return Math.max(MIN_CELL_W, (containerW - labelW) / cols.length)
+  }, [containerW, labelW, cols])
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Map className="h-4 w-4 text-primary" />
+            Дорожная карта
+            {totalTasks > 0 && (
+              <Badge variant="outline" className="ml-1 text-xs">{completedTasks}/{totalTasks}</Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              <button
+                onClick={() => setViewMode('months')}
+                className={`flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors ${viewMode === 'months' ? 'bg-primary text-white' : 'hover:bg-muted'}`}
+                title="По месяцам"
+              >
+                <CalendarDays className="h-3 w-3" />
+                <span className="hidden sm:inline">Мес</span>
+              </button>
+              <button
+                onClick={() => setViewMode('quarters')}
+                className={`flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors border-l border-border ${viewMode === 'quarters' ? 'bg-primary text-white' : 'hover:bg-muted'}`}
+                title="По кварталам"
+              >
+                <LayoutGrid className="h-3 w-3" />
+                <span className="hidden sm:inline">Кв</span>
+              </button>
+            </div>
+            {canManage && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => navigate(`/projects/${projectId}/roadmap`)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Редактировать
+              </Button>
+            )}
+          </div>
+        </div>
+        {totalTasks > 0 && (
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+              <span>Прогресс</span>
+              <span>{progress}%</span>
+            </div>
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
+      </CardHeader>
+      <CardContent className="p-0 pb-3">
+        {/* containerRef always in DOM so ResizeObserver fires on mount */}
+        <div ref={containerRef} className="w-full">
+        {loading ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="text-center py-8 px-4">
+            <Map className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Дорожная карта пуста</p>
+            {canManage && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={() => navigate(`/projects/${projectId}/roadmap`)}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Открыть редактор
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="w-full overflow-x-auto">
+            <div style={{ minWidth: labelW + cols.length * MIN_CELL_W }}>
+              {/* Column header */}
+              <div className="flex border-b border-border sticky top-0 bg-card z-10">
+                <div
+                  className="shrink-0 px-3 flex items-center text-xs font-semibold text-muted-foreground border-r border-border"
+                  style={{ width: labelW, minWidth: labelW, height: 40 }}
+                >
+                  Задача
+                </div>
+                {cols.map((c) => {
+                  const isCur = viewMode === 'months'
+                    ? c === monthKeyP(new Date().getFullYear(), new Date().getMonth() + 1)
+                    : c === monthToQP(monthKeyP(new Date().getFullYear(), new Date().getMonth() + 1))
+                  let label: string, sub: string
+                  if (viewMode === 'months') {
+                    const { mon, yr } = monthPartsP(c)
+                    label = mon; sub = yr
+                  } else {
+                    const [y, q] = c.split('-Q')
+                    label = `Q${q}`; sub = y
+                  }
+                  return (
+                    <div
+                      key={c}
+                      className={`shrink-0 flex flex-col items-center justify-center border-r border-border/40 ${isCur ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
+                      style={{ width: cellW, minWidth: MIN_CELL_W, height: 40, flexShrink: 0 }}
+                    >
+                      <span className="text-xs leading-tight font-medium truncate px-0.5">{label}</span>
+                      <span className="text-[10px] leading-tight opacity-60">{sub}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Rows */}
+              {rows.map((row) => {
+                const rowTasks = tasks.filter((t) => t.row_id === row.id)
+                return (
+                  <div key={row.id} className="flex border-b border-border/40" style={{ minHeight: ROW_H_PREVIEW }}>
+                    <div
+                      className="shrink-0 flex items-center gap-2 px-3 border-r border-border"
+                      style={{ width: labelW, minWidth: labelW }}
+                    >
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
+                      <span className="text-xs font-medium truncate">{row.title}</span>
+                    </div>
+                    <div className="relative flex-1 flex" style={{ height: ROW_H_PREVIEW }}>
+                      {cols.map((c) => {
+                        const isCur = viewMode === 'months'
+                          ? c === monthKeyP(new Date().getFullYear(), new Date().getMonth() + 1)
+                          : c === monthToQP(monthKeyP(new Date().getFullYear(), new Date().getMonth() + 1))
+                        return (
+                          <div
+                            key={c}
+                            className={`border-r border-border/30 ${isCur ? 'bg-primary/5' : ''}`}
+                            style={{ width: cellW, minWidth: MIN_CELL_W, height: ROW_H_PREVIEW, flexShrink: 0 }}
+                          />
+                        )
+                      })}
+                      {rowTasks.map((task) => {
+                        let s: number, e: number
+                        if (viewMode === 'months') {
+                          const si = cols.indexOf(task.start_month)
+                          const ei = cols.indexOf(task.end_month)
+                          if (si === -1 && ei === -1) return null
+                          s = si === -1 ? 0 : si
+                          e = ei === -1 ? cols.length - 1 : ei
+                        } else {
+                          const sq = monthToQP(task.start_month)
+                          const eq = monthToQP(task.end_month)
+                          const si = cols.indexOf(sq)
+                          const ei = cols.indexOf(eq)
+                          if (si === -1 && ei === -1) return null
+                          s = si === -1 ? 0 : si
+                          e = ei === -1 ? cols.length - 1 : ei
+                        }
+                        const isMilestone = task.is_milestone
+                        return isMilestone ? (
+                          <div
+                            key={task.id}
+                            className="absolute cursor-context-menu"
+                            style={{
+                              left: s * cellW + cellW / 2 - 7,
+                              top: 8,
+                              width: 14, height: 14,
+                              transform: 'rotate(45deg)',
+                              borderRadius: 2,
+                              backgroundColor: task.color || row.color,
+                              opacity: task.status === 'completed' ? 0.6 : 1,
+                            }}
+                            title={task.title}
+                            onContextMenu={(ev) => {
+                              ev.preventDefault()
+                              ev.stopPropagation()
+                              setTaskCtxMenu({ x: ev.clientX, y: ev.clientY, task })
+                            }}
+                          />
+                        ) : (
+                          <div
+                            key={task.id}
+                            className="absolute flex items-center rounded text-white text-xs font-medium px-1.5 overflow-hidden cursor-context-menu"
+                            style={{
+                              left: s * cellW + 2,
+                              width: (e - s + 1) * cellW - 4,
+                              top: 6,
+                              height: ROW_H_PREVIEW - 12,
+                              backgroundColor: task.color || row.color,
+                              borderLeft: `3px solid ${task.priority === 'high' ? '#ef4444' : task.priority === 'low' ? '#22c55e' : '#f59e0b'}`,
+                              opacity: task.status === 'completed' ? 0.6 : 1,
+                            }}
+                            title={task.title}
+                            onContextMenu={(ev) => {
+                              ev.preventDefault()
+                              ev.stopPropagation()
+                              setTaskCtxMenu({ x: ev.clientX, y: ev.clientY, task })
+                            }}
+                          >
+                            <span className="truncate">{task.title}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        </div>{/* /containerRef */}
+      </CardContent>
+      {taskCtxMenu && (
+        <TaskCtxMenuPopup
+          x={taskCtxMenu.x}
+          y={taskCtxMenu.y}
+          onClose={() => setTaskCtxMenu(null)}
+          onDetails={() => { setTaskDetail(taskCtxMenu.task); setTaskCtxMenu(null) }}
+        />
+      )}
+      {taskDetail && (
+        <TaskDetailModal
+          task={taskDetail}
+          row={rows.find((r) => r.id === taskDetail.row_id) ?? null}
+          onClose={() => setTaskDetail(null)}
+        />
+      )}
+    </Card>
   )
 }

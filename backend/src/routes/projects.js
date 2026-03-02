@@ -522,7 +522,7 @@ router.post('/:id/documents', authenticateToken, upload.single('file'), async (r
     const timestamp = Date.now()
     const extension = req.file.originalname.split('.').pop()
     const safeFilename = `doc-${timestamp}.${extension}`
-    const fileKey = `project-${id}/${safeFilename}`
+    const fileKey = `projects/${id}/${safeFilename}`
     await uploadToS3(req.file, fileKey)
 
     const result = await query(
@@ -694,6 +694,111 @@ router.put('/:id/documents/:documentId', authenticateToken, async (req, res) => 
   }
 })
 
+// PUT /api/projects/:id/documents/:documentId/move — move document to another folder
+router.put('/:id/documents/:documentId/move', authenticateToken, async (req, res) => {
+  try {
+    const { id, documentId } = req.params
+    const { folderPath } = req.body
+    const userId = req.user.id
+
+    // Check access
+    const accessCheck = await query(
+      `SELECT uploaded_by FROM project_documents WHERE id = $1 AND project_id = $2`,
+      [documentId, id]
+    )
+    if (accessCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' })
+    }
+
+    const doc = accessCheck.rows[0]
+    const canEdit = String(doc.uploaded_by) === String(userId)
+
+    const isAdminOrLead = await query(
+      `SELECT 1 FROM company_project_members WHERE project_id = $1 AND user_id = $2 AND role = 'lead'
+       UNION
+       SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`,
+      [id, userId]
+    )
+
+    if (!canEdit && isAdminOrLead.rows.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const targetPath = folderPath || '/'
+    
+    const result = await query(
+      `UPDATE project_documents SET folder_path = $1 WHERE id = $2 AND project_id = $3 RETURNING *`,
+      [targetPath, documentId, id]
+    )
+
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Error moving document:', error)
+    res.status(500).json({ error: 'Failed to move document' })
+  }
+})
+
+// PUT /api/projects/:id/folders/:folderId/move — move folder to another parent
+router.put('/:id/folders/:folderId/move', authenticateToken, async (req, res) => {
+  try {
+    const { id, folderId } = req.params
+    const { parentPath } = req.body
+    const userId = req.user.id
+
+    const accessCheck = await query(
+      `SELECT 1 FROM company_project_members WHERE project_id = $1 AND user_id = $2 AND role = 'lead'
+       UNION SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`,
+      [id, userId]
+    )
+    if (accessCheck.rows.length === 0) return res.status(403).json({ error: 'Forbidden' })
+
+    const folderResult = await query(
+      `SELECT * FROM project_folders WHERE id = $1 AND project_id = $2`,
+      [folderId, id]
+    )
+    if (folderResult.rows.length === 0) return res.status(404).json({ error: 'Folder not found' })
+
+    const folder = folderResult.rows[0]
+    const newParentPath = parentPath || '/'
+    const newPath = `${newParentPath}${folder.name}/`
+
+    // Check if folder with same name exists in target
+    const existingCheck = await query(
+      `SELECT 1 FROM project_folders WHERE project_id = $1 AND path = $2 AND id != $3`,
+      [id, newPath, folderId]
+    )
+    if (existingCheck.rows.length > 0) {
+      return res.status(400).json({ error: 'Папка с таким именем уже существует в целевой директории' })
+    }
+
+    // Prevent moving folder into itself or its subfolders
+    if (newPath.startsWith(folder.path)) {
+      return res.status(400).json({ error: 'Нельзя переместить папку в саму себя' })
+    }
+
+    const result = await query(
+      `UPDATE project_folders SET parent_path = $1, path = $2 WHERE id = $3 AND project_id = $4 RETURNING *`,
+      [newParentPath, newPath, folderId, id]
+    )
+
+    // Update paths of all subfolders and documents
+    const oldPath = folder.path
+    await query(
+      `UPDATE project_folders SET path = $1 || substring(path FROM $2) WHERE project_id = $3 AND path LIKE $4 AND id != $5`,
+      [newPath, oldPath.length + 1, id, `${oldPath}%`, folderId]
+    )
+    await query(
+      `UPDATE project_documents SET folder_path = $1 || substring(folder_path FROM $2) WHERE project_id = $3 AND folder_path LIKE $4`,
+      [newPath.slice(0, -1), oldPath.length, id, `${oldPath.slice(0, -1)}%`]
+    )
+
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Error moving folder:', error)
+    res.status(500).json({ error: 'Failed to move folder' })
+  }
+})
+
 // DELETE /api/projects/:id/documents/:documentId — delete document
 router.delete('/:id/documents/:documentId', authenticateToken, async (req, res) => {
   try {
@@ -843,6 +948,407 @@ router.get('/:id/documents/:documentId/public/:token', async (req, res) => {
   } catch (error) {
     console.error('Error serving public document:', error)
     res.status(500).json({ error: 'Failed to load document' })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROADMAP ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/projects/:id/roadmap — get roadmap items
+router.get('/:id/roadmap', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const result = await query(
+      `SELECT * FROM project_roadmap WHERE project_id = $1 ORDER BY order_index ASC, created_at ASC`,
+      [id]
+    )
+
+    res.json(result.rows)
+  } catch (error) {
+    console.error('Error fetching roadmap:', error)
+    res.status(500).json({ error: 'Failed to fetch roadmap' })
+  }
+})
+
+// POST /api/projects/:id/roadmap — create roadmap item
+router.post('/:id/roadmap', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { title, description, due_date } = req.body
+    const userId = req.user.id
+
+    // Check access
+    const accessCheck = await query(
+      `SELECT 1 FROM company_project_members WHERE project_id = $1 AND user_id = $2 AND role = 'lead'
+       UNION SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`,
+      [id, userId]
+    )
+    if (accessCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (!title?.trim()) {
+      return res.status(400).json({ error: 'Title is required' })
+    }
+
+    // Get max order_index
+    const maxOrderResult = await query(
+      `SELECT COALESCE(MAX(order_index), -1) as max_order FROM project_roadmap WHERE project_id = $1`,
+      [id]
+    )
+    const orderIndex = maxOrderResult.rows[0].max_order + 1
+
+    const result = await query(
+      `INSERT INTO project_roadmap (project_id, title, description, due_date, order_index, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [id, title.trim(), description || null, due_date || null, orderIndex, userId]
+    )
+
+    res.status(201).json(result.rows[0])
+  } catch (error) {
+    console.error('Error creating roadmap item:', error)
+    res.status(500).json({ error: 'Failed to create roadmap item' })
+  }
+})
+
+// PUT /api/projects/:id/roadmap/:itemId — update roadmap item
+router.put('/:id/roadmap/:itemId', authenticateToken, async (req, res) => {
+  try {
+    const { id, itemId } = req.params
+    const { title, description, due_date, status } = req.body
+    const userId = req.user.id
+
+    // Check access
+    const accessCheck = await query(
+      `SELECT 1 FROM company_project_members WHERE project_id = $1 AND user_id = $2 AND role = 'lead'
+       UNION SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`,
+      [id, userId]
+    )
+    if (accessCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const updateFields = []
+    const values = []
+    let paramCount = 1
+
+    if (title !== undefined) {
+      updateFields.push(`title = $${paramCount}`)
+      values.push(title.trim())
+      paramCount++
+    }
+    if (description !== undefined) {
+      updateFields.push(`description = $${paramCount}`)
+      values.push(description || null)
+      paramCount++
+    }
+    if (due_date !== undefined) {
+      updateFields.push(`due_date = $${paramCount}`)
+      values.push(due_date || null)
+      paramCount++
+    }
+    if (status !== undefined) {
+      updateFields.push(`status = $${paramCount}`)
+      values.push(status)
+      paramCount++
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' })
+    }
+
+    values.push(itemId, id)
+
+    const result = await query(
+      `UPDATE project_roadmap SET ${updateFields.join(', ')} WHERE id = $${paramCount} AND project_id = $${paramCount + 1} RETURNING *`,
+      values
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Roadmap item not found' })
+    }
+
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Error updating roadmap item:', error)
+    res.status(500).json({ error: 'Failed to update roadmap item' })
+  }
+})
+
+// PUT /api/projects/:id/roadmap/reorder — reorder roadmap items
+router.put('/:id/roadmap/reorder', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { order } = req.body
+    const userId = req.user.id
+
+    // Check access
+    const accessCheck = await query(
+      `SELECT 1 FROM company_project_members WHERE project_id = $1 AND user_id = $2 AND role = 'lead'
+       UNION SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`,
+      [id, userId]
+    )
+    if (accessCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (!Array.isArray(order)) {
+      return res.status(400).json({ error: 'Order must be an array' })
+    }
+
+    // Update order_index for each item
+    for (let i = 0; i < order.length; i++) {
+      await query(
+        `UPDATE project_roadmap SET order_index = $1 WHERE id = $2 AND project_id = $3`,
+        [i, order[i], id]
+      )
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error reordering roadmap:', error)
+    res.status(500).json({ error: 'Failed to reorder roadmap' })
+  }
+})
+
+// DELETE /api/projects/:id/roadmap/:itemId — delete roadmap item
+router.delete('/:id/roadmap/:itemId', authenticateToken, async (req, res) => {
+  try {
+    const { id, itemId } = req.params
+    const userId = req.user.id
+
+    // Check access
+    const accessCheck = await query(
+      `SELECT 1 FROM company_project_members WHERE project_id = $1 AND user_id = $2 AND role = 'lead'
+       UNION SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`,
+      [id, userId]
+    )
+    if (accessCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    await query(`DELETE FROM project_roadmap WHERE id = $1 AND project_id = $2`, [itemId, id])
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting roadmap item:', error)
+    res.status(500).json({ error: 'Failed to delete roadmap item' })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROADMAP V2 — ROWS
+// ═══════════════════════════════════════════════════════════════════════════
+
+const checkRoadmapAccess = async (projectId, userId) => {
+  const result = await query(
+    `SELECT 1 FROM company_project_members WHERE project_id = $1 AND user_id = $2 AND role = 'lead'
+     UNION SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`,
+    [projectId, userId]
+  )
+  return result.rows.length > 0
+}
+
+// GET /api/projects/:id/roadmap/rows
+router.get('/:id/roadmap/rows', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const result = await query(
+      `SELECT * FROM roadmap_rows WHERE project_id = $1 ORDER BY order_index ASC, id ASC`,
+      [id]
+    )
+    res.json(result.rows)
+  } catch (error) {
+    console.error('Error fetching roadmap rows:', error)
+    res.status(500).json({ error: 'Failed to fetch roadmap rows' })
+  }
+})
+
+// POST /api/projects/:id/roadmap/rows
+router.post('/:id/roadmap/rows', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { title, color } = req.body
+    const userId = req.user.id
+
+    if (!await checkRoadmapAccess(id, userId)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    if (!title?.trim()) {
+      return res.status(400).json({ error: 'Title is required' })
+    }
+
+    const maxOrder = await query(
+      `SELECT COALESCE(MAX(order_index), -1) AS m FROM roadmap_rows WHERE project_id = $1`,
+      [id]
+    )
+    const orderIndex = maxOrder.rows[0].m + 1
+
+    const result = await query(
+      `INSERT INTO roadmap_rows (project_id, title, color, order_index, created_by)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [id, title.trim(), color || '#6366f1', orderIndex, userId]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (error) {
+    console.error('Error creating roadmap row:', error)
+    res.status(500).json({ error: 'Failed to create roadmap row' })
+  }
+})
+
+// PUT /api/projects/:id/roadmap/rows/:rowId
+router.put('/:id/roadmap/rows/:rowId', authenticateToken, async (req, res) => {
+  try {
+    const { id, rowId } = req.params
+    const { title, color, order_index } = req.body
+    const userId = req.user.id
+
+    if (!await checkRoadmapAccess(id, userId)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const fields = []
+    const values = []
+    let n = 1
+    if (title !== undefined) { fields.push(`title = $${n++}`); values.push(title.trim()) }
+    if (color !== undefined) { fields.push(`color = $${n++}`); values.push(color) }
+    if (order_index !== undefined) { fields.push(`order_index = $${n++}`); values.push(order_index) }
+
+    if (fields.length === 0) return res.status(400).json({ error: 'Nothing to update' })
+
+    values.push(rowId, id)
+    const result = await query(
+      `UPDATE roadmap_rows SET ${fields.join(', ')} WHERE id = $${n} AND project_id = $${n + 1} RETURNING *`,
+      values
+    )
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Row not found' })
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Error updating roadmap row:', error)
+    res.status(500).json({ error: 'Failed to update roadmap row' })
+  }
+})
+
+// DELETE /api/projects/:id/roadmap/rows/:rowId
+router.delete('/:id/roadmap/rows/:rowId', authenticateToken, async (req, res) => {
+  try {
+    const { id, rowId } = req.params
+    const userId = req.user.id
+
+    if (!await checkRoadmapAccess(id, userId)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    await query(`DELETE FROM roadmap_rows WHERE id = $1 AND project_id = $2`, [rowId, id])
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting roadmap row:', error)
+    res.status(500).json({ error: 'Failed to delete roadmap row' })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROADMAP V2 — TASKS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/projects/:id/roadmap/tasks
+router.get('/:id/roadmap/tasks', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const result = await query(
+      `SELECT * FROM roadmap_tasks WHERE project_id = $1 ORDER BY row_id ASC, start_month ASC`,
+      [id]
+    )
+    res.json(result.rows)
+  } catch (error) {
+    console.error('Error fetching roadmap tasks:', error)
+    res.status(500).json({ error: 'Failed to fetch roadmap tasks' })
+  }
+})
+
+// POST /api/projects/:id/roadmap/tasks
+router.post('/:id/roadmap/tasks', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { row_id, title, description, start_month, end_month, status, color, priority, is_milestone } = req.body
+    const userId = req.user.id
+
+    if (!await checkRoadmapAccess(id, userId)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    if (!title?.trim()) return res.status(400).json({ error: 'Title is required' })
+    if (!row_id) return res.status(400).json({ error: 'row_id is required' })
+    if (!start_month || !end_month) return res.status(400).json({ error: 'start_month and end_month are required' })
+
+    const result = await query(
+      `INSERT INTO roadmap_tasks (project_id, row_id, title, description, start_month, end_month, status, color, priority, is_milestone, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [id, row_id, title.trim(), description || null, start_month, end_month, status || 'pending', color || null, priority || 'medium', is_milestone || false, userId]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (error) {
+    console.error('Error creating roadmap task:', error)
+    res.status(500).json({ error: 'Failed to create roadmap task' })
+  }
+})
+
+// PUT /api/projects/:id/roadmap/tasks/:taskId
+router.put('/:id/roadmap/tasks/:taskId', authenticateToken, async (req, res) => {
+  try {
+    const { id, taskId } = req.params
+    const { title, description, start_month, end_month, status, color, row_id, priority, is_milestone } = req.body
+    const userId = req.user.id
+
+    if (!await checkRoadmapAccess(id, userId)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const fields = []
+    const values = []
+    let n = 1
+    if (title !== undefined) { fields.push(`title = $${n++}`); values.push(title.trim()) }
+    if (description !== undefined) { fields.push(`description = $${n++}`); values.push(description || null) }
+    if (start_month !== undefined) { fields.push(`start_month = $${n++}`); values.push(start_month) }
+    if (end_month !== undefined) { fields.push(`end_month = $${n++}`); values.push(end_month) }
+    if (status !== undefined) { fields.push(`status = $${n++}`); values.push(status) }
+    if (color !== undefined) { fields.push(`color = $${n++}`); values.push(color) }
+    if (row_id !== undefined) { fields.push(`row_id = $${n++}`); values.push(row_id) }
+    if (priority !== undefined) { fields.push(`priority = $${n++}`); values.push(priority) }
+    if (is_milestone !== undefined) { fields.push(`is_milestone = $${n++}`); values.push(is_milestone) }
+
+    if (fields.length === 0) return res.status(400).json({ error: 'Nothing to update' })
+
+    values.push(taskId, id)
+    const result = await query(
+      `UPDATE roadmap_tasks SET ${fields.join(', ')} WHERE id = $${n} AND project_id = $${n + 1} RETURNING *`,
+      values
+    )
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Task not found' })
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Error updating roadmap task:', error)
+    res.status(500).json({ error: 'Failed to update roadmap task' })
+  }
+})
+
+// DELETE /api/projects/:id/roadmap/tasks/:taskId
+router.delete('/:id/roadmap/tasks/:taskId', authenticateToken, async (req, res) => {
+  try {
+    const { id, taskId } = req.params
+    const userId = req.user.id
+
+    if (!await checkRoadmapAccess(id, userId)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    await query(`DELETE FROM roadmap_tasks WHERE id = $1 AND project_id = $2`, [taskId, id])
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting roadmap task:', error)
+    res.status(500).json({ error: 'Failed to delete roadmap task' })
   }
 })
 

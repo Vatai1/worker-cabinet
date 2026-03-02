@@ -7,6 +7,16 @@ import { Pencil, X, Check } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
 
+// Helper to extract date part from ISO string considering local timezone
+function toDateInputValue(isoString?: string): string {
+  if (!isoString) return ''
+  const date = new Date(isoString)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const getAuthHeaders = () => {
   const authStorage = localStorage.getItem('auth-storage')
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -49,8 +59,8 @@ export function EditProjectModal({ project, open, onClose, onUpdated }: Props) {
     fullName:    project.full_name ?? '',
     description: project.description ?? '',
     status:      project.status,
-    startDate:   project.start_date?.split('T')[0] ?? '',
-    endDate:     project.end_date?.split('T')[0]   ?? '',
+    startDate:   toDateInputValue(project.start_date),
+    endDate:     toDateInputValue(project.end_date),
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

@@ -8,6 +8,7 @@ import telegramRoutes from './routes/telegram.js'
 import notificationsRoutes from './routes/notifications.js'
 import projectsRoutes from './routes/projects.js'
 import documentsRoutes from './routes/documents.js'
+import userDocumentsRoutes from './routes/userDocuments.js'
 
 dotenv.config()
 
@@ -49,6 +50,7 @@ app.use('/api/telegram', telegramRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/projects', projectsRoutes)
 app.use('/api/documents', documentsRoutes)
+app.use('/api/user-documents', userDocumentsRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {

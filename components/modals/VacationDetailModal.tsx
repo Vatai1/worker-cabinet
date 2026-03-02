@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { VacationRequest } from '@/types'
 import { VACATION_TYPES } from '@/types'
 import { Button } from '@/components/ui/Button'
@@ -9,14 +10,38 @@ interface VacationDetailModalProps {
   isOpen: boolean
   request: VacationRequest | null
   onClose: () => void
+  onApprove?: (requestId: string) => Promise<void>
+  onReject?: (requestId: string, reason: string) => Promise<void>
+  loading?: boolean
+  intersectionWarnings?: {message: string; employeeName: string; dates: string}[]
 }
 
-export function VacationDetailModal({ isOpen, request, onClose }: VacationDetailModalProps) {
+export function VacationDetailModal({ isOpen, request, onClose, onApprove, onReject, loading, intersectionWarnings = [] }: VacationDetailModalProps) {
+  const [showRejectInput, setShowRejectInput] = useState(false)
+  const [rejectionReason, setRejectionReason] = useState('')
+
   if (!isOpen || !request) {
     return null
   }
 
   const vacationTypeInfo = VACATION_TYPES[request.vacationType]
+  const canManage = !!onApprove && !!onReject
+
+  const handleApprove = async () => {
+    if (onApprove) {
+      await onApprove(request.id)
+      onClose()
+    }
+  }
+
+  const handleReject = async () => {
+    if (onReject && rejectionReason.trim()) {
+      await onReject(request.id, rejectionReason)
+      setShowRejectInput(false)
+      setRejectionReason('')
+      onClose()
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -60,6 +85,23 @@ export function VacationDetailModal({ isOpen, request, onClose }: VacationDetail
             <div className="flex items-center gap-2 text-blue-600">
               <span className="text-lg">✈️</span>
               <span className="font-semibold">С проездом к месту проведения отпуска</span>
+            </div>
+          )}
+
+          {intersectionWarnings.length > 0 && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <div className="text-sm">
+                <div className="font-medium mb-2 flex items-center gap-2 text-amber-800">
+                  <span>⚠️</span>
+                  Пересечение с другими отпусками
+                </div>
+                {intersectionWarnings.map((warning, index) => (
+                  <div key={index} className="text-amber-700 mb-2 last:mb-0">
+                    <div className="font-medium">{warning.employeeName}</div>
+                    <div className="text-xs text-amber-600">{warning.dates}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -123,13 +165,74 @@ export function VacationDetailModal({ isOpen, request, onClose }: VacationDetail
           )}
 
           <div className="pt-4 border-t flex gap-3">
-            <Button
-              variant="secondary"
-              onClick={onClose}
-              className="flex-1"
-            >
-              Закрыть
-            </Button>
+            {canManage && !showRejectInput && (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={onClose}
+                  className="flex-1"
+                  disabled={loading}
+                >
+                  Закрыть
+                </Button>
+                <Button
+                  onClick={handleApprove}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={loading}
+                >
+                  Согласовать
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowRejectInput(true)}
+                  className="flex-1"
+                  disabled={loading}
+                >
+                  Отклонить
+                </Button>
+              </>
+            )}
+            {canManage && showRejectInput && (
+              <div className="w-full space-y-3">
+                <textarea
+                  className="w-full rounded-xl border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  placeholder="Причина отклонения..."
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  rows={3}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowRejectInput(false)
+                      setRejectionReason('')
+                    }}
+                    className="flex-1"
+                    disabled={loading}
+                  >
+                    Отмена
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleReject}
+                    className="flex-1"
+                    disabled={loading || !rejectionReason.trim()}
+                  >
+                    Подтвердить
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!canManage && (
+              <Button
+                variant="secondary"
+                onClick={onClose}
+                className="flex-1"
+              >
+                Закрыть
+              </Button>
+            )}
           </div>
         </div>
       </div>
