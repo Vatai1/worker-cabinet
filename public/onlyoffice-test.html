@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OnlyOffice Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    #editor {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #ccc;
+      margin-top: 20px;
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .success {
+      background: #d4edda;
+      color: #155724;
+    }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .info {
+      background: #d1ecf1;
+      color: #0c5460;
+    }
+  </style>
+</head>
+<body>
+  <h1>OnlyOffice Test</h1>
+  
+  <div id="status"></div>
+  
+  <div>
+    <label for="documentUrl">Document URL:</label><br>
+    <input type="text" id="documentUrl" style="width: 100%; margin: 10px 0;" value="http://localhost:5001/api/projects/2/documents/14/public/test">
+    <button onclick="loadDocument()">Load Document</button>
+  </div>
+  
+  <div id="editor"></div>
+  
+  <script src="http://localhost:8080/web-apps/apps/api/documents/api.js"></script>
+  
+  <script>
+    function showStatus(message, type = 'info') {
+      const statusDiv = document.getElementById('status');
+      statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+      console.log(`[${type.toUpperCase()}] ${message}`);
+    }
+    
+    function generateToken(payload) {
+      const secret = 'your-secret-key-change-this';
+      const header = {
+        alg: 'HS256',
+        typ: 'JWT'
+      };
+
+      const now = Math.floor(Date.now() / 1000);
+      const tokenPayload = {
+        ...payload,
+        exp: now + 3600
+      };
+
+      const headerBase64 = btoa(JSON.stringify(header)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const payloadBase64 = btoa(JSON.stringify(tokenPayload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      
+      const data = `${headerBase64}.${payloadBase64}`;
+      const signature = btoa(data + secret).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+      return `${headerBase64}.${payloadBase64}.${signature}`;
+    }
+    
+    function loadDocument() {
+      showStatus('Loading document...', 'info');
+      
+      const documentUrl = document.getElementById('documentUrl').value;
+      const key = `test-${Date.now()}`;
+      
+      showStatus(`Using URL: ${documentUrl}`, 'info');
+      
+      try {
+        const config = {
+          document: {
+            fileType: 'docx',
+            key: key,
+            title: 'Test.docx',
+            url: documentUrl,
+            permissions: {
+              edit: false,
+              download: true,
+              print: true,
+            },
+          },
+          editorConfig: {
+            lang: 'ru',
+            mode: 'view',
+            user: {
+              id: 'test-user',
+              name: 'Test User',
+            },
+          },
+          height: '100%',
+          width: '100%',
+          type: 'desktop',
+        };
+        
+        showStatus('Initializing OnlyOffice editor...', 'info');
+        
+        const editor = new DocsAPI.DocEditor('editor', config);
+        
+        showStatus('OnlyOffice editor initialized successfully!', 'success');
+        
+      } catch (error) {
+        showStatus(`Error: ${error.message}`, 'error');
+        console.error('Error:', error);
+      }
+    }
+    
+    window.addEventListener('DOMContentLoaded', function() {
+      showStatus('Page loaded', 'success');
+      
+      if (typeof DocsAPI !== 'undefined') {
+        showStatus('OnlyOffice API loaded', 'success');
+      } else {
+        showStatus('OnlyOffice API not loaded', 'error');
+      }
+    });
+    
+    window.addEventListener('error', function(event) {
+      showStatus(`Error: ${event.message}`, 'error');
+      console.error('Window error:', event.error);
+    });
+  </script>
+</body>
+</html>

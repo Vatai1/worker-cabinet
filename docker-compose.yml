@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: worker-cabinet-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: worker_cabinet
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worker-cabinet-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: worker-cabinet-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_BROWSER: "off"
+      MINIO_SERVER_URL: "http://localhost:9000"
+      MINIO_REGION_NAME: "us-east-1"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - worker-cabinet-network
+
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: worker-cabinet-onlyoffice
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "4433:443"
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+      - onlyoffice_logs:/var/log/onlyoffice
+      - onlyoffice_lib:/var/lib/onlyoffice
+      - onlyoffice_db:/var/lib/postgresql
+    environment:
+      - JWT_ENABLED=false
+      - JWT_HEADER=Authorization
+      - JWT_BODY=false
+      - WOPI_ENABLED=true
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+      - ALLOW_META_IP_ADDRESS=true
+      - USE_UNAUTHORIZED_STORAGE=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - worker-cabinet-network
+    depends_on:
+      - onlyoffice-db
+      - onlyoffice-redis
+
+  onlyoffice-db:
+    image: postgres:15-alpine
+    container_name: worker-cabinet-onlyoffice-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=onlyoffice
+      - POSTGRES_USER=onlyoffice
+      - POSTGRES_PASSWORD=onlyoffice
+    volumes:
+      - onlyoffice_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onlyoffice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worker-cabinet-network
+
+  onlyoffice-redis:
+    image: redis:7-alpine
+    container_name: worker-cabinet-onlyoffice-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worker-cabinet-network
+
+volumes:
+  postgres_data:
+  minio_data:
+  onlyoffice_data:
+  onlyoffice_logs:
+  onlyoffice_lib:
+  onlyoffice_db:
+  onlyoffice_postgres_data:
+
+networks:
+  worker-cabinet-network:
+    driver: bridge

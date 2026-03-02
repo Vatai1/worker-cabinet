@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OnlyOffice Debug</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+    .success { background: #d4edda; }
+    .error { background: #f8d7da; }
+    .info { background: #d1ecf1; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>OnlyOffice Debug</h1>
+  
+  <div id="results"></div>
+  
+  <div class="test">
+    <h3>Test 1: Load API</h3>
+    <div id="test1"></div>
+  </div>
+  
+  <div class="test">
+    <h3>Test 2: Fetch Document</h3>
+    <div id="test2"></div>
+  </div>
+  
+  <div class="test">
+    <h3>Test 3: Initialize OnlyOffice</h3>
+    <div id="editor"></div>
+  </div>
+  
+  <script>
+    const results = document.getElementById('results');
+    
+    function log(message, type = 'info') {
+      const div = document.createElement('div');
+      div.className = `test ${type}`;
+      div.innerHTML = `<pre>${message}</pre>`;
+      results.appendChild(div);
+      console.log(message);
+    }
+    
+    async function test1() {
+      try {
+        const response = await fetch('http://localhost:8080/web-apps/apps/api/documents/api.js');
+        const text = await response.text();
+        log(`✅ API loaded (${text.length} chars)`, 'success');
+        return true;
+      } catch (error) {
+        log(`❌ API load failed: ${error.message}`, 'error');
+        return false;
+      }
+    }
+    
+    async function test2() {
+      try {
+        const tokenResponse = await fetch('http://localhost:5001/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'docs-test@example.com',
+            password: 'TestPassword123!'
+          })
+        });
+        
+        const { token } = await tokenResponse.json();
+        
+        const docsResponse = await fetch('http://localhost:5001/api/documents', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        const documents = await docsResponse.json();
+        const doc = documents.find(d => d.name.endsWith('.docx'));
+        
+        if (!doc) {
+          log('❌ No DOCX document found', 'error');
+          return false;
+        }
+        
+        log(`Found document: ${doc.name}`, 'info');
+        log(`MIME type: ${doc.mimeType}`, 'info');
+        log(`URL: ${doc.url}`, 'info');
+        
+        const projectId = doc.url.split('/')[4];
+        const docId = doc.url.split('/')[6];
+        
+        const tokenResponse2 = await fetch(
+          `http://localhost:5001/api/projects/${projectId}/documents/${docId}/preview-token`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        
+        const { token: previewToken } = await tokenResponse2.json();
+        const publicUrl = `http://localhost:5001/api/projects/${projectId}/documents/${docId}/public/${previewToken}`;
+        
+        log(`Public URL: ${publicUrl}`, 'info');
+        
+        const docResponse = await fetch(publicUrl);
+        log(`Document status: ${docResponse.status}`, 'info');
+        log(`Content-Type: ${docResponse.headers.get('content-type')}`, 'info');
+        
+        if (docResponse.ok) {
+          log(`✅ Document is accessible`, 'success');
+          return { url: publicUrl, name: doc.name, mimeType: doc.mimeType };
+        } else {
+          log(`❌ Document is not accessible`, 'error');
+          return null;
+        }
+      } catch (error) {
+        log(`❌ Test 2 failed: ${error.message}`, 'error');
+        return null;
+      }
+    }
+    
+    async function test3(docInfo) {
+      try {
+        if (!docInfo) {
+          log('⚠️ Skipping Test 3 - no document info', 'info');
+          return;
+        }
+        
+        log(`📄 Document info: ${JSON.stringify(docInfo, null, 2)}`, 'info');
+        
+        const config = {
+          document: {
+            fileType: 'docx',
+            key: `test-${Date.now()}`,
+            title: docInfo.name,
+            url: docInfo.url,
+            permissions: {
+              edit: false,
+              download: true,
+              print: true,
+            },
+          },
+          editorConfig: {
+            lang: 'ru',
+            mode: 'view',
+            user: {
+              id: 'test-user',
+              name: 'Test User',
+            },
+          },
+          height: '600px',
+          width: '100%',
+          type: 'desktop',
+        };
+        
+        log(`OnlyOffice config: ${JSON.stringify(config, null, 2)}`, 'info');
+        
+        const editor = new DocsAPI.DocEditor('editor', config);
+        log('✅ OnlyOffice initialized', 'success');
+        
+        editor.on('documentReady', function() {
+          log('📄 Document loaded successfully', 'success');
+        });
+        
+        editor.on('error', function(event) {
+          log(`❌ OnlyOffice error: ${event.data}`, 'error');
+        });
+        
+      } catch (error) {
+        log(`❌ Test 3 failed: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+    
+    async function runTests() {
+      log('Starting tests...', 'info');
+      
+      const test1Result = await test1();
+      if (!test1Result) {
+        log('❌ Cannot continue - API not loaded', 'error');
+        return;
+      }
+      
+      await new Promise(resolve => {
+        const script = document.createElement('script');
+        script.src = 'http://localhost:8080/web-apps/apps/api/documents/api.js';
+        script.onload = resolve;
+        script.onerror = () => {
+          log('❌ Failed to load OnlyOffice API', 'error');
+          resolve();
+        };
+        document.head.appendChild(script);
+      });
+      
+      const test2Result = await test2();
+      await test3(test2Result);
+    }
+    
+    runTests();
+  </script>
+</body>
+</html>
