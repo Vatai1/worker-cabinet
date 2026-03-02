@@ -31,8 +31,6 @@ export function Vacation() {
 
   const [balance, setBalance] = useState<any>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [rejectionReason, setRejectionReason] = useState('')
-  const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null)
   const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null)
   const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null)
   const [showCreateFromCalendar, setShowCreateFromCalendar] = useState(false)
@@ -48,6 +46,7 @@ export function Vacation() {
   const [showRestrictionModal, setShowRestrictionModal] = useState(false)
   const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<any[]>([])
+  const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
 
   useEffect(() => {
     if (user) {
@@ -75,21 +74,11 @@ export function Vacation() {
     }
   }
 
-  const handleReject = async (requestId: string) => {
-    console.log('[handleReject] Called with:', { requestId, hasUser: !!user, rejectionReason, rejectionLength: rejectionReason?.length })
-    if (!user) {
-      console.log('[handleReject] Returning early - missing user')
-      return
-    }
-    if (!rejectionReason || !rejectionReason.trim()) {
-      console.log('[handleReject] Returning early - missing reason:', { rejectionReason, trimmed: rejectionReason?.trim() })
-      return
-    }
+  const handleReject = async (requestId: string, reason: string) => {
+    if (!user) return
+    if (!reason || !reason.trim()) return
     try {
-      console.log('[handleReject] Calling rejectRequest API with:', { requestId, managerId: user.id, reason: rejectionReason })
-      await rejectRequest(requestId, user.id, rejectionReason)
-      setRejectingRequestId(null)
-      setRejectionReason('')
+      await rejectRequest(requestId, user.id, reason)
       fetchUserRequests(user.id)
       fetchDepartmentRequests(user.departmentId || '1')
       fetchBalance(user.id).then(setBalance)
@@ -122,6 +111,42 @@ export function Vacation() {
     setCancellingRequestId(null)
   }
 
+  const findIntersections = (request: any) => {
+    const warnings: {message: string; employeeName: string; dates: string}[] = []
+    const requestStart = new Date(request.startDate)
+    const requestEnd = new Date(request.endDate)
+
+    departmentRequests.forEach((otherRequest) => {
+      if (otherRequest.id === request.id) return
+      if (otherRequest.status !== VacationRequestStatus.APPROVED && 
+          otherRequest.status !== VacationRequestStatus.ON_APPROVAL) return
+
+      const otherStart = new Date(otherRequest.startDate)
+      const otherEnd = new Date(otherRequest.endDate)
+
+      const hasOverlap = requestStart <= otherEnd && requestEnd >= otherStart
+
+      if (hasOverlap) {
+        const employeeName = `${otherRequest.userLastName} ${otherRequest.userFirstName}`
+        const dates = `${new Date(otherRequest.startDate).toLocaleDateString('ru-RU')} - ${new Date(otherRequest.endDate).toLocaleDateString('ru-RU')}`
+        warnings.push({
+          message: `Пересечение с отпуском сотрудника`,
+          employeeName,
+          dates
+        })
+      }
+    })
+
+    return warnings
+  }
+
+  const handleOpenDetailModal = (request: any) => {
+    setDetailRequest(request)
+    const intersections = findIntersections(request)
+    setIntersectionWarnings(intersections)
+    setShowDetailModal(true)
+  }
+
   const handleDateRangeSelect = (startDate: string | null, endDate: string | null) => {
     console.log('handleDateRangeSelect called', { startDate, endDate })
 
@@ -130,8 +155,7 @@ export function Vacation() {
       const request = departmentRequests.find(r => r.id === requestId)
       console.log('Found request:', request)
       if (request) {
-        setDetailRequest(request)
-        setShowDetailModal(true)
+        handleOpenDetailModal(request)
       }
       return
     }
@@ -488,169 +512,54 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
               <div className="space-y-3">
                 {departmentRequests
                   .filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
-                  .map((request) => {
-                    const isExpanded = expandedRequestId === `manager-${request.id}`
-                    return (
-                      <div key={request.id} className="border-2 border-amber-500/20 rounded-2xl overflow-hidden bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/40 transition-all duration-300">
-                        <div
-                          className="p-4 cursor-pointer flex items-center justify-between gap-4"
-                          onClick={() => setExpandedRequestId(isExpanded ? null : `manager-${request.id}`)}
-                        >
-                          <div className="flex items-center gap-4 flex-1">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-lg shrink-0">
-                              {request.userFirstName[0]}{request.userLastName[0]}
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-bold text-sm">
-                                {request.userLastName} {request.userFirstName}
-                              </div>
-                              <div className="text-xs text-muted-foreground">{request.userPosition}</div>
-                              <div className="text-xs mt-1 text-foreground/70">
-                                {request.vacationType === 'annual_paid'
-                                  ? 'Ежегодный оплачиваемый отпуск'
-                                  : request.vacationType === 'unpaid'
-                                  ? 'Отпуск без сохранения заработной платы'
-                                  : request.vacationType === 'educational'
-                                  ? 'Учебный отпуск'
-                                  : request.vacationType === 'maternity'
-                                  ? 'Отпуск по беременности и родам'
-                                  : request.vacationType === 'child_care'
-                                  ? 'Отпуск по уходу за ребёнком'
-                                  : request.vacationType === 'additional'
-                                  ? 'Дополнительный отпуск'
-                                  : request.vacationType === 'veteran'
-                                  ? 'Ветеранский отпуск'
-                                  : 'Отпуск'}
-                              </div>
-                              <div className="text-xs text-muted-foreground mt-1">
-                                {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
-                                {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
-                              </div>
-                            </div>
-                            <svg
-                              className={`w-5 h-5 text-muted-foreground transition-transform duration-200 shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
+                  .map((request) => (
+                    <div
+                      key={request.id}
+                      className="border-2 border-amber-500/20 rounded-2xl p-4 bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/40 transition-all duration-300 cursor-pointer"
+                      onClick={() => handleOpenDetailModal(request)}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-lg shrink-0">
+                          {request.userFirstName[0]}{request.userLastName[0]}
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-bold text-sm">
+                            {request.userLastName} {request.userFirstName}
+                          </div>
+                          <div className="text-xs text-muted-foreground">{request.userPosition}</div>
+                          <div className="text-xs mt-1 text-foreground/70">
+                            {request.vacationType === 'annual_paid'
+                              ? 'Ежегодный оплачиваемый отпуск'
+                              : request.vacationType === 'unpaid'
+                              ? 'Отпуск без сохранения заработной платы'
+                              : request.vacationType === 'educational'
+                              ? 'Учебный отпуск'
+                              : request.vacationType === 'maternity'
+                              ? 'Отпуск по беременности и родам'
+                              : request.vacationType === 'child_care'
+                              ? 'Отпуск по уходу за ребёнком'
+                              : request.vacationType === 'additional'
+                              ? 'Дополнительный отпуск'
+                              : request.vacationType === 'veteran'
+                              ? 'Ветеранский отпуск'
+                              : 'Отпуск'}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
+                            {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
                           </div>
                         </div>
-                        <div
-                          className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
+                        <svg
+                          className="w-5 h-5 text-muted-foreground shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <div className="p-4 pt-0 border-t border-border/50 mt-2">
-                            <div className="space-y-3 mt-4">
-                              {request.comment && (
-                                <div className="flex items-start gap-2">
-                                  <svg className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                                  </svg>
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">Комментарий</div>
-                                    <div className="text-sm">{request.comment}</div>
-                                  </div>
-                                </div>
-                              )}
-                              {request.hasTravel && (
-                                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-blue-500/15 to-sky-500/15 border border-blue-500/20">
-                                  <svg className="w-5 h-5 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12l4-4m-4 4l4 4m10-4l-4-4m4 4l-4 4" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v4m0 10v4" />
-                                  </svg>
-                                  <div className="text-sm font-medium text-blue-700 dark:text-blue-400">
-                                    ✈️ Проезд{request.travelDestination && ` → ${request.travelDestination}`}
-                                  </div>
-                                </div>
-                              )}
-                              <div className="pt-2 flex gap-3">
-                                <Button
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleApprove(request.id)
-                                  }}
-                                  disabled={loading}
-                                  className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-lg shadow-emerald-500/30"
-                                >
-                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  Согласовать
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    console.log('[Reject button] Clicked for request:', request.id)
-                                    setRejectingRequestId(request.id)
-                                  }}
-                                  disabled={loading}
-                                  className="border-destructive/30 text-destructive hover:bg-destructive/10"
-                                >
-                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                  Отклонить
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleAddCommentClick(`manager-${request.id}`)
-                                  }}
-                                  disabled={loading}
-                                >
-                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                  </svg>
-                                  Комментарий
-                                </Button>
-                              </div>
-                               {rejectingRequestId === request.id && (
-                                 <div className="pt-3">
-                                   <textarea
-                                     className="w-full rounded-xl border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                     placeholder="Причина отклонения..."
-                                     value={rejectionReason}
-                                     onChange={(e) => {
-                                       console.log('[Reject textarea] Value changed:', e.target.value)
-                                       setRejectionReason(e.target.value)
-                                     }}
-                                   />
-                                   <div className="flex gap-2 mt-2">
-                                    <Button
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleReject(request.id)
-                                      }}
-                                    >
-                                      Подтвердить
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setRejectingRequestId(null)
-                                        setRejectionReason('')
-                                      }}
-                                    >
-                                      Отмена
-                                    </Button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
                       </div>
-                    )
-                  })}
+                    </div>
+                  ))}
                 {departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
                   .length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">Нет заявок на согласовании</div>
@@ -884,6 +793,10 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
           isOpen={showDetailModal}
           request={detailRequest}
           onClose={handleCloseDetailModal}
+          onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isManager ? handleApprove : undefined}
+          onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isManager ? handleReject : undefined}
+          loading={loading}
+          intersectionWarnings={intersectionWarnings}
         />
       )}
 

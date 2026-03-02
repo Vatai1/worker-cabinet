@@ -3,7 +3,11 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-const { Pool } = pg
+const { Pool, types } = pg
+
+// Return DATE columns as plain 'YYYY-MM-DD' strings instead of JS Date objects
+// to avoid UTC timezone shift when serializing to JSON
+types.setTypeParser(1082, (val) => val)
 
 export const pool = new Pool({
   host: process.env.DB_HOST,

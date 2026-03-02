@@ -241,12 +241,12 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                     onMouseLeave={() => setHoverDate(null)}
                     className={`
                       relative p-1 text-center cursor-pointer rounded transition-all
-                      ${isWeekend && !isSelected && !hasVacation ? 'bg-gray-200 text-gray-600 font-medium' : ''}
+                      ${isWeekend && !isSelected ? 'bg-gray-200 text-gray-600 font-medium' : ''}
                       ${!isWeekend && !isSelected && !hasVacation ? 'hover:bg-gray-100' : ''}
                       ${isSelected ? 'bg-blue-500 text-white hover:bg-blue-600' : ''}
                       ${isHovered ? 'bg-blue-200' : ''}
-                      ${hasVacation && !isSelected ? 'font-semibold' : ''}
-                      ${hasVacation && !isSelected ? 'bg-white' : ''}
+                      ${hasVacation && !isSelected && !isWeekend ? 'font-semibold' : ''}
+                      ${hasVacation && !isSelected && !isWeekend ? 'bg-white' : ''}
                     `}
                     style={(hasVacation && !isSelected && visibleVacations.some(v => v.status === 'on_approval')) ? {
                       backgroundImage: visibleVacations

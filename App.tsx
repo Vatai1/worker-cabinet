@@ -9,6 +9,7 @@ import { NotificationLoader } from '@/components/NotificationLoader'
 
 import { Requests } from '@/pages/Requests'
 import { Documents } from '@/pages/Documents'
+import { DocumentTemplates } from '@/pages/DocumentTemplates'
 import { Notifications } from '@/pages/Notifications'
 import { ManagerDashboard } from '@/pages/ManagerDashboard'
 import { LeaderDashboard } from '@/pages/LeaderDashboard'
@@ -18,6 +19,7 @@ import { EmployeeProfile } from '@/pages/EmployeeProfile'
 import { Projects } from '@/pages/Projects'
 import { ProjectDetail } from '@/pages/ProjectDetail'
 import { ProjectDocuments } from '@/pages/ProjectDocuments'
+import { ProjectRoadmap } from '@/pages/ProjectRoadmap'
 import { Settings } from '@/pages/Settings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -69,11 +71,13 @@ function App() {
 
           <Route path="requests" element={<Requests />} />
           <Route path="documents" element={<Documents />} />
+          <Route path="document-templates" element={<DocumentTemplates />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="employees/:id" element={<EmployeeProfile />} />
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="projects/:id/documents" element={<ProjectDocuments />} />
+          <Route path="projects/:id/roadmap" element={<ProjectRoadmap />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

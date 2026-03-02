@@ -1,13 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { formatFileSize } from '@/data/mockData'
-import type { Document } from '@/types'
+import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { DocumentPreviewModal } from '@/components/modals/DocumentPreviewModal'
-import { isPreviewable } from '@/lib/documentUtils'
 import { formatDate } from '@/lib/utils'
-import { FileText, Download, Search, Upload, Eye, Folder } from 'lucide-react'
+import { FileText, Download, Search, Upload, Eye, X, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
@@ -24,49 +22,45 @@ const getAuthHeaders = () => {
   return headers
 }
 
-interface ApiDocument {
+interface UserDocument {
   id: string
   name: string
   url: string
   size: number
   mimeType: string
-  projectId: string
-  projectName: string
-  uploader: string
+  category: string
   uploadedAt: string
   description?: string
-  tags?: string[]
 }
 
-type DocumentType = 'all' | 'contract' | 'nda' | 'policy' | 'certificate' | 'other'
+type DocumentType = 'all' | 'contract' | 'certificate' | 'policy' | 'other'
 
 export function Documents() {
+  const { user } = useAuthStore()
   const [filterType, setFilterType] = useState<DocumentType>('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [documents, setDocuments] = useState<Document[]>([])
-  const [apiDocuments, setApiDocuments] = useState<ApiDocument[]>([])
+  const [documents, setDocuments] = useState<UserDocument[]>([])
   const [loading, setLoading] = useState(true)
-  const [previewDoc, setPreviewDoc] = useState<Document | null>(null)
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadCategory, setUploadCategory] = useState<string>('other')
+  const [uploadDescription, setUploadDescription] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchDocuments = async () => {
     try {
       setLoading(true)
-      const res = await fetch(`${API_BASE_URL}/documents`, { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Не удалось загрузить документы')
-      const data = await res.json()
-      setApiDocuments(data)
-      const docs = data.map((doc: ApiDocument) => ({
-        id: doc.id,
-        name: doc.name,
-        url: doc.url,
-        size: doc.size,
-        mimeType: doc.mimeType,
-        type: 'other' as Document['type'],
-        uploadDate: doc.uploadedAt,
-      }))
-      setDocuments(docs)
+      const res = await fetch(`${API_BASE_URL}/user-documents`, { headers: getAuthHeaders() })
+      if (res.ok) {
+        const data = await res.json()
+        setDocuments(data)
+      } else {
+        setDocuments([])
+      }
     } catch (err: any) {
       console.error('Error fetching documents:', err)
+      setDocuments([])
     } finally {
       setLoading(false)
     }
@@ -77,50 +71,133 @@ export function Documents() {
   }, [])
 
   const filteredDocuments = documents.filter((doc) => {
-    const matchesType = filterType === 'all' || doc.type === filterType
+    const matchesType = filterType === 'all' || doc.category === filterType
     const matchesSearch = searchQuery === '' ||
-      doc.name.toLowerCase().includes(searchQuery.toLowerCase())
+      doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      doc.description?.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesType && matchesSearch
   })
 
-  const getDocumentTypeBadge = (type: Document['type']) => {
-    const badges = {
+  const getCategoryBadge = (category: string) => {
+    const badges: Record<string, { label: string; className: string }> = {
       contract: { label: 'Договор', className: 'bg-blue-100 text-blue-800' },
-      nda: { label: 'NDA', className: 'bg-purple-100 text-purple-800' },
-      policy: { label: 'Политика', className: 'bg-green-100 text-green-800' },
       certificate: { label: 'Сертификат', className: 'bg-yellow-100 text-yellow-800' },
+      policy: { label: 'Политика', className: 'bg-green-100 text-green-800' },
       other: { label: 'Другое', className: 'bg-gray-100 text-gray-800' },
     }
-    return badges[type]
+    return badges[category] || badges.other
   }
 
-  const getMimeType = (type: Document['type']) => {
-    const mimeTypes = {
-      contract: 'application/pdf',
-      nda: 'application/pdf',
-      policy: 'application/pdf',
-      certificate: 'application/pdf',
-      other: 'application/octet-stream',
+  const handleDownload = async (doc: UserDocument) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/user-documents/${doc.id}/download`, {
+        headers: getAuthHeaders(),
+      })
+      if (!res.ok) throw new Error('Ошибка скачивания')
+      
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = doc.name
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      a.remove()
+    } catch (error) {
+      alert('Не удалось скачать файл')
     }
-    return mimeTypes[type]
+  }
+
+  const handlePreview = async (doc: UserDocument) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/user-documents/${doc.id}/preview`, {
+        headers: getAuthHeaders(),
+      })
+      if (!res.ok) throw new Error('Ошибка предпросмотра')
+      
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      window.open(url, '_blank')
+    } catch (error) {
+      alert('Не удалось открыть файл для просмотра')
+    }
+  }
+
+  const handleDelete = async (doc: UserDocument) => {
+    if (!confirm(`Удалить документ "${doc.name}"?`)) return
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/user-documents/${doc.id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      })
+      if (!res.ok) throw new Error('Ошибка удаления')
+      
+      setDocuments(prev => prev.filter(d => d.id !== doc.id))
+    } catch (error) {
+      alert('Не удалось удалить документ')
+    }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setSelectedFile(file)
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!selectedFile) return
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('category', uploadCategory)
+      formData.append('description', uploadDescription)
+
+      const res = await fetch(`${API_BASE_URL}/user-documents`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData,
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Ошибка загрузки')
+      }
+
+      const newDoc = await res.json()
+      setDocuments(prev => [newDoc, ...prev])
+      setUploadModalOpen(false)
+      setSelectedFile(null)
+      setUploadCategory('other')
+      setUploadDescription('')
+    } catch (error: any) {
+      alert(error.message || 'Не удалось загрузить документ')
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Документы</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Ваши документы</h1>
           <p className="text-muted-foreground">
-            Доступ к вашим трудовым и личным документам
+            Личные документы: договоры, сертификаты и другие файлы
           </p>
         </div>
-        <Button>
-          <Upload className="mr-2 h-4 w-4" />
-          Загрузить документ
-        </Button>
+        {user?.role === 'manager' && (
+          <Button onClick={() => setUploadModalOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Загрузить документ
+          </Button>
+        )}
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -156,18 +233,17 @@ export function Documents() {
                 Сертификаты
               </Button>
               <Button
-                variant={filterType === 'policy' ? 'default' : 'outline'}
+                variant={filterType === 'other' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setFilterType('policy')}
+                onClick={() => setFilterType('other')}
               >
-                Политики
+                Другое
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Documents grid */}
       {loading ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -186,7 +262,7 @@ export function Documents() {
               <p className="text-sm text-muted-foreground">
                 {searchQuery || filterType !== 'all'
                   ? 'Попробуйте изменить параметры поиска или фильтры'
-                  : 'У вас пока нет документов'}
+                  : 'У вас пока нет загруженных документов'}
               </p>
             </div>
           </CardContent>
@@ -194,8 +270,7 @@ export function Documents() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredDocuments.map((doc) => {
-            const typeBadge = getDocumentTypeBadge(doc.type)
-            const apiDoc = apiDocuments.find((d) => d.id === doc.id)
+            const categoryBadge = getCategoryBadge(doc.category)
             
             return (
               <Card key={doc.id} className="hover:shadow-md transition-shadow">
@@ -216,37 +291,50 @@ export function Documents() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {apiDoc?.projectName && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Folder className="h-3 w-3" />
-                        {apiDoc.projectName}
-                      </div>
+                    {doc.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {doc.description}
+                      </p>
                     )}
                     <div className="flex items-center justify-between">
-                      <Badge className={typeBadge.className} variant="secondary">
-                        {typeBadge.label}
+                      <Badge className={categoryBadge.className} variant="secondary">
+                        {categoryBadge.label}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {formatDate(doc.uploadDate)}
+                        {formatDate(doc.uploadedAt)}
                       </span>
                     </div>
                     <div className="flex gap-2">
-                      {isPreviewable(doc.mimeType || getMimeType(doc.type), doc.name) && (
-                        <Button className="flex-1" variant="outline" size="sm" onClick={() => setPreviewDoc(doc)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          Просмотр
-                        </Button>
-                      )}
-                      <a
-                        href={`${API_BASE_URL}/projects/${apiDoc?.projectId}/documents/${doc.id}/download`}
-                        className="flex-1"
+                      <Button 
+                        className="flex-1" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handlePreview(doc)}
                       >
-                        <Button className="w-full" variant="outline" size="sm">
-                          <Download className="mr-2 h-4 w-4" />
-                          Скачать
-                        </Button>
-                      </a>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Просмотр
+                      </Button>
+                      <Button 
+                        className="flex-1" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleDownload(doc)}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Скачать
+                      </Button>
                     </div>
+                    {user?.role === 'manager' && (
+                      <Button 
+                        className="w-full" 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleDelete(doc)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Удалить
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -255,7 +343,6 @@ export function Documents() {
         </div>
       )}
 
-      {/* Statistics */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-3">
@@ -271,7 +358,7 @@ export function Documents() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {documents.filter((d) => d.type === 'contract').length}
+              {documents.filter((d) => d.category === 'contract').length}
             </div>
           </CardContent>
         </Card>
@@ -281,7 +368,7 @@ export function Documents() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {documents.filter((d) => d.type === 'certificate').length}
+              {documents.filter((d) => d.category === 'certificate').length}
             </div>
           </CardContent>
         </Card>
@@ -296,66 +383,77 @@ export function Documents() {
           </CardContent>
         </Card>
       </div>
-      {previewDoc && (
-        <DocumentPreviewModal
-          open={!!previewDoc}
-          onClose={() => setPreviewDoc(null)}
-          document={{
-            id: previewDoc.id,
-            name: previewDoc.name,
-            mimeType: previewDoc.mimeType || getMimeType(previewDoc.type),
-            url: async () => {
-              const apiDoc = apiDocuments.find((d) => d.id === previewDoc.id)
-              
-              if (!apiDoc) {
-                throw new Error('Document not found')
-              }
-              
-              // For DOCX files, get preview token and use public URL for OnlyOffice
-              if (apiDoc.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                  apiDoc.mimeType === 'application/msword' ||
-                  previewDoc.name.toLowerCase().endsWith('.docx')) {
-                console.log('📄 Detected DOCX file, getting preview token...')
-                const tokenRes = await fetch(
-                  `${API_BASE_URL}/projects/${apiDoc.projectId}/documents/${previewDoc.id}/preview-token`,
-                  { headers: getAuthHeaders() }
-                )
 
-                console.log('Token response status:', tokenRes.status)
-
-                if (!tokenRes.ok) {
-                  const errorData = await tokenRes.text()
-                  console.error('❌ Failed to get token:', errorData)
-                  throw new Error('Не удалось получить токен')
-                }
-
-                const data = await tokenRes.json()
-                const publicUrl = data.publicUrl || `${API_BASE_URL}/projects/${apiDoc.projectId}/documents/${previewDoc.id}/public/${data.token}`
-                console.log('✅ Got public URL:', publicUrl.substring(0, 80) + '...')
-
-                return publicUrl
-              }
-
-              const res = await fetch(
-                `${API_BASE_URL}/projects/${apiDoc.projectId}/documents/${previewDoc.id}/preview`,
-                { headers: getAuthHeaders() }
-              )
-              if (!res.ok) throw new Error('Не удалось загрузить файл')
+      {uploadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Загрузить документ</CardTitle>
+                <Button variant="ghost" size="icon" onClick={() => setUploadModalOpen(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Файл</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileSelect}
+                  className="mt-1 block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+                {selectedFile && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                  </p>
+                )}
+              </div>
               
-              const contentType = res.headers.get('content-type') || ''
+              <div>
+                <label className="text-sm font-medium">Категория</label>
+                <select
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="contract">Договор</option>
+                  <option value="certificate">Сертификат</option>
+                  <option value="policy">Политика</option>
+                  <option value="other">Другое</option>
+                </select>
+              </div>
               
-              if (contentType.includes('text/plain') || contentType.includes('text/html')) {
-                const text = await res.text()
-                return text
-              }
+              <div>
+                <label className="text-sm font-medium">Описание</label>
+                <Input
+                  value={uploadDescription}
+                  onChange={(e) => setUploadDescription(e.target.value)}
+                  placeholder="Описание документа"
+                  className="mt-1"
+                />
+              </div>
               
-              const blob = await res.blob()
-              return window.URL.createObjectURL(blob)
-            },
-            size: previewDoc.size,
-            projectId: apiDocuments.find((d) => d.id === previewDoc.id)?.projectId,
-          }}
-        />
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setUploadModalOpen(false)}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleUpload}
+                  disabled={!selectedFile || uploading}
+                >
+                  {uploading ? 'Загрузка...' : 'Загрузить'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   )

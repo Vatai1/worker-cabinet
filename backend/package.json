@@ -11,6 +11,7 @@
     "migrate": "node src/db/migrate.js",
     "seed": "node src/db/seed.js",
     "init:s3": "node src/db/init-s3-bucket.js",
+    "init:templates": "node src/db/init-template-folder.js",
     "test:syntax": "node src/tests/syntax-check.js",
     "test:telegram": "node src/tests/telegram-syntax-check.js",
     "test:auth": "node --test src/tests/auth.test.js",

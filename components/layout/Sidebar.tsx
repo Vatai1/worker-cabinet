@@ -1,4 +1,5 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { cn } from '@/lib/utils'
@@ -17,30 +18,53 @@ import {
   Settings,
   Sun,
   Moon,
+  ChevronDown,
+  FileStack,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 
-const getEmployeeNavigation = (userId?: string) => [
+interface NavItem {
+  name: string
+  href?: string
+  icon: React.ComponentType<{ className?: string }>
+  children?: { name: string; href: string }[]
+}
+
+const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Заявления', href: '/requests', icon: FileText },
-  { name: 'Документы', href: '/documents', icon: FolderOpen },
+  {
+    name: 'Документы',
+    icon: FolderOpen,
+    children: [
+      { name: 'Ваши документы', href: '/documents' },
+      { name: 'Шаблоны документов', href: '/document-templates' },
+    ],
+  },
   { name: 'Уведомления', href: '/notifications', icon: Bell },
 ]
 
-const getManagerNavigation = (userId?: string) => [
+const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/leader', icon: Users },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
-  { name: 'Документы', href: '/documents', icon: FolderOpen },
+  {
+    name: 'Документы',
+    icon: FolderOpen,
+    children: [
+      { name: 'Ваши документы', href: '/documents' },
+      { name: 'Шаблоны документов', href: '/document-templates' },
+    ],
+  },
   { name: 'Уведомления', href: '/notifications', icon: Bell },
 ]
 
@@ -48,8 +72,29 @@ export function Sidebar() {
   const { user, logout } = useAuthStore()
   const { sidebarOpen, toggleSidebar, notifications, darkMode, toggleTheme } = useUIStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [expandedItems, setExpandedItems] = useState<string[]>([])
 
   const userUnreadCount = notifications.filter((n) => n.userId === user?.id && !n.read).length
+
+  const navigation = user?.role === 'manager' ? getManagerNavigation(user?.id) : getEmployeeNavigation(user?.id)
+
+  useEffect(() => {
+    navigation.forEach((item) => {
+      if (item.children) {
+        const hasActiveChild = item.children.some((child) => location.pathname === child.href)
+        if (hasActiveChild && !expandedItems.includes(item.name)) {
+          setExpandedItems((prev) => [...prev, item.name])
+        }
+      }
+    })
+  }, [location.pathname, navigation, expandedItems])
+
+  const toggleAccordion = (name: string) => {
+    setExpandedItems((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    )
+  }
 
   const handleLogout = () => {
     logout()
@@ -60,8 +105,6 @@ export function Sidebar() {
     if (!user) return '??'
     return `${user.firstName[0]}${user.lastName[0]}`
   }
-
-  const navigation = user?.role === 'manager' ? getManagerNavigation(user?.id) : getEmployeeNavigation(user?.id)
 
   return (
     <>
@@ -121,7 +164,72 @@ export function Sidebar() {
         <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-6">
           {navigation.map((item) => {
             const Icon = item.icon
+            const hasChildren = !!item.children
+            const isExpanded = expandedItems.includes(item.name)
+            const hasActiveChild = item.children?.some((child) => location.pathname === child.href)
             const hasBadge = item.href === '/notifications' && userUnreadCount > 0
+
+            if (hasChildren && item.children) {
+              return (
+                <div key={item.name}>
+                  <button
+                    onClick={() => toggleAccordion(item.name)}
+                    className={cn(
+                      'group flex w-full items-center gap-4 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
+                      hasActiveChild
+                        ? 'bg-gradient-to-r from-primary/15 to-primary/5 text-primary shadow-sm border border-primary/20'
+                        : 'text-foreground/70 hover:bg-muted/50 hover:text-foreground hover:scale-[1.02]'
+                    )}
+                  >
+                    <div className={cn(
+                      "p-2 rounded-lg transition-colors",
+                      hasActiveChild
+                        ? "bg-primary text-white shadow-sm"
+                        : "bg-muted/50 text-muted-foreground group-hover:bg-muted"
+                    )}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <span className="flex-1 text-left">{item.name}</span>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 transition-transform duration-200",
+                        isExpanded && "rotate-180"
+                      )}
+                    />
+                  </button>
+                  {isExpanded && (
+                    <div className="mt-1 ml-4 pl-4 border-l-2 border-primary/20 space-y-1">
+                      {item.children.map((child) => (
+                        <NavLink
+                          key={child.href}
+                          to={child.href}
+                          onClick={() => {
+                            if (window.innerWidth < 1024) {
+                              toggleSidebar()
+                            }
+                          }}
+                          className={({ isActive }) =>
+                            cn(
+                              'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200',
+                              isActive
+                                ? 'bg-primary/10 text-primary font-medium'
+                                : 'text-foreground/60 hover:text-foreground hover:bg-muted/30'
+                            )
+                          }
+                        >
+                          <FileStack className="h-4 w-4" />
+                          <span>{child.name}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            if (!item.href) return null
+
+            const isExactActive = location.pathname === item.href
 
             return (
               <NavLink
@@ -132,20 +240,20 @@ export function Sidebar() {
                     toggleSidebar()
                   }
                 }}
-                className={({ isActive }) =>
+                className={() =>
                   cn(
                     'group flex items-center gap-4 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
-                    isActive
+                    isExactActive
                       ? 'bg-gradient-to-r from-primary/15 to-primary/5 text-primary shadow-sm border border-primary/20'
                       : 'text-foreground/70 hover:bg-muted/50 hover:text-foreground hover:scale-[1.02]'
                   )
                 }
               >
-                {({ isActive }) => (
+                {() => (
                   <>
                     <div className={cn(
                       "p-2 rounded-lg transition-colors",
-                      isActive
+                      isExactActive
                         ? "bg-primary text-white shadow-sm"
                         : "bg-muted/50 text-muted-foreground group-hover:bg-muted"
                     )}>
@@ -157,7 +265,7 @@ export function Sidebar() {
                         {userUnreadCount}
                       </Badge>
                     )}
-                    {isActive && (
+                    {isExactActive && (
                       <div className="w-1 h-1 rounded-full bg-primary animate-pulse"></div>
                     )}
                   </>
@@ -186,7 +294,14 @@ export function Sidebar() {
           </div>
           <NavLink
             to="/settings"
-            className="mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-muted-foreground transition-all hover:bg-muted/50 hover:text-foreground"
+            className={() =>
+              cn(
+                'mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all',
+                location.pathname === '/settings'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              )
+            }
           >
             <div className="p-1.5 rounded-lg bg-muted">
               <Settings className="h-4 w-4" />

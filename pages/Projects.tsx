@@ -75,6 +75,12 @@ const STATUS_FILTERS = [
 
 function formatDateShort(dateStr?: string) {
   if (!dateStr) return null
+  // For YYYY-MM-DD format, parse as local date to avoid timezone shift
+  if (!dateStr.includes('T')) {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const localDate = new Date(year, month - 1, day)
+    return localDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
   return new Date(dateStr).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
