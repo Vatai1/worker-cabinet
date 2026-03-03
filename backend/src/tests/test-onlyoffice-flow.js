@@ -3,7 +3,7 @@
 import jwt from 'jsonwebtoken'
 import fetch from 'node-fetch'
 
-const API_BASE = 'http://localhost:5001/api'
+const API_BASE = 'http://localhost:5000/api'
 
 async function testOnlyOfficeFlow() {
   console.log('🧪 Testing OnlyOffice flow with host.docker.internal')

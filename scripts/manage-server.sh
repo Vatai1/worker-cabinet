@@ -57,7 +57,7 @@ start_server() {
         echo "   - Общий:    $LOG_DIR/server.log"
         echo "🌐 Доступ:"
         echo "   - Frontend: http://localhost:3000/"
-        echo "   - Backend:  http://localhost:5001/"
+        echo "   - Backend:  http://localhost:5000/"
         echo "📝 PID: $server_pid"
     else
         echo "❌ Ошибка запуска сервера. Проверьте логи:"
@@ -129,10 +129,10 @@ status_server() {
             echo "   ❌ Frontend (3000): неактивен"
         fi
         
-        if lsof -ti:5001 > /dev/null 2>&1; then
-            echo "   ✅ Backend (5001): активен"
+if lsof -ti:5000 > /dev/null 2>&1; then
+            echo "   ✅ Backend (5000): активен"
         else
-            echo "   ❌ Backend (5001): неактивен"
+            echo "   ❌ Backend (5000): неактивен"
         fi
         
         echo ""

@@ -73,7 +73,7 @@ cd /Users/vatai/worker-cabinet && ./scripts/manage-server.sh restart
 ## Адреса серверов
 
 - **Frontend**: http://localhost:3000/
-- **Backend**: http://localhost:5001/
+- **Backend**: http://localhost:5000/
 
 ## Устранение проблем
 
@@ -101,7 +101,7 @@ cd /Users/vatai/worker-cabinet && ./scripts/manage-server.sh restart
 ```bash
 # Очистка портов вручную
 lsof -ti:3000 | xargs kill -9 2>/dev/null
-lsof -ti:5001 | xargs kill -9 2>/dev/null
+lsof -ti:5000 | xargs kill -9 2>/dev/null
 ```
 
 ### Процесс завис
