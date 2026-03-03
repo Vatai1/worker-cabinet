@@ -56,27 +56,30 @@ npm run dev
 
 ### Dev окружение (локально + Docker для сервисов)
 
+**Linux/Mac:**
 ```bash
-# Полный запуск (сервисы + миграции + dev сервер)
 ./deploy/dev.sh start
+```
 
-# Только сервисы (БД, MinIO, OnlyOffice)
-./deploy/dev.sh services
-
-# Статус, логи, остановка
-./deploy/dev.sh status
-./deploy/dev.sh logs
-./deploy/dev.sh stop
+**Windows (PowerShell):**
+```powershell
+.\deploy\dev.ps1 start
 ```
 
 ### Production (полностью в Docker)
 
+**Linux/Mac:**
 ```bash
 cd deploy
 cp .env.example .env
-# Отредактируйте .env (обязательно DB_PASSWORD и JWT_SECRET)
-
 ./prod.sh deploy
+```
+
+**Windows (PowerShell):**
+```powershell
+cd deploy
+Copy-Item .env.example .env
+.\prod.ps1 deploy
 ```
 
 Подробнее в [deploy/README.md](./deploy/README.md)
