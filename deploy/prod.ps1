@@ -1,3 +1,8 @@
+<#
+.SYNOPSIS
+    Production deployment script for Worker Cabinet
+#>
+
 param(
     [Parameter(Position=0)]
     [string]$Command = "help"
@@ -6,62 +11,62 @@ param(
 $ErrorActionPreference = "Stop"
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-function Log-Info { Write-Host "ℹ $args" -ForegroundColor Blue }
-function Log-Success { Write-Host "✓ $args" -ForegroundColor Green }
-function Log-Warning { Write-Host "⚠ $args" -ForegroundColor Yellow }
-function Log-Error { Write-Host "✗ $args" -ForegroundColor Red }
+function Log-Info { Write-Host "[INFO] $args" -ForegroundColor Blue }
+function Log-Success { Write-Host "[OK] $args" -ForegroundColor Green }
+function Log-Warning { Write-Host "[WARN] $args" -ForegroundColor Yellow }
+function Log-Error { Write-Host "[ERROR] $args" -ForegroundColor Red }
 
 function Check-Requirements {
-    Log-Info "Проверка зависимостей..."
+    Log-Info "Checking dependencies..."
     
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        Log-Error "Docker не установлен"
+        Log-Error "Docker is not installed"
         exit 1
     }
     
     if (-not (Get-Command docker-compose -ErrorAction SilentlyContinue)) {
-        Log-Error "docker-compose не установлен"
+        Log-Error "docker-compose is not installed"
         exit 1
     }
     
-    Log-Success "Все зависимости установлены"
+    Log-Success "All dependencies are installed"
 }
 
 function Check-EnvFile {
     if (-not (Test-Path "$SCRIPT_DIR\.env")) {
-        Log-Error "Файл .env не найден в директории deploy\"
-        Log-Info "Создайте файл deploy\.env на основе deploy\.env.example"
+        Log-Error ".env file not found in deploy\ directory"
+        Log-Info "Create deploy\.env based on deploy\.env.example"
         exit 1
     }
 }
 
 function Build-Images {
-    Log-Info "Сборка Docker образов..."
+    Log-Info "Building Docker images..."
     Push-Location $SCRIPT_DIR
     docker-compose -f docker-compose.prod.yml build
     Pop-Location
-    Log-Success "Образы собраны"
+    Log-Success "Images built"
 }
 
 function Start-Services {
-    Log-Info "Запуск сервисов..."
+    Log-Info "Starting services..."
     Push-Location $SCRIPT_DIR
     docker-compose -f docker-compose.prod.yml up -d
     Pop-Location
-    Log-Success "Сервисы запущены"
-    Log-Info "Приложение доступно на http://localhost"
+    Log-Success "Services started"
+    Log-Info "Application available at http://localhost"
 }
 
 function Stop-Services {
-    Log-Info "Остановка сервисов..."
+    Log-Info "Stopping services..."
     Push-Location $SCRIPT_DIR
     docker-compose -f docker-compose.prod.yml down
     Pop-Location
-    Log-Success "Сервисы остановлены"
+    Log-Success "Services stopped"
 }
 
 function Restart-Services {
-    Log-Info "Перезапуск сервисов..."
+    Log-Info "Restarting services..."
     Stop-Services
     Start-Services
 }
@@ -73,69 +78,69 @@ function Show-Logs {
 }
 
 function Show-Status {
-    Log-Info "Статус сервисов:"
+    Log-Info "Services status:"
     Push-Location $SCRIPT_DIR
     docker-compose -f docker-compose.prod.yml ps
     Pop-Location
 }
 
 function Run-Migrations {
-    Log-Info "Запуск миграций..."
+    Log-Info "Running migrations..."
     Push-Location $SCRIPT_DIR
     docker-compose -f docker-compose.prod.yml exec backend npm run migrate
     Pop-Location
-    Log-Success "Миграции выполнены"
+    Log-Success "Migrations completed"
 }
 
 function Cleanup {
-    Log-Warning "Это удалит все данные (БД, файлы, логи)!"
-    $response = Read-Host "Продолжить? (yes/no)"
+    Log-Warning "This will delete all data (DB, files, logs)!"
+    $response = Read-Host "Continue? (yes/no)"
     if ($response -eq 'yes') {
-        Log-Info "Очистка..."
+        Log-Info "Cleaning up..."
         Push-Location $SCRIPT_DIR
         docker-compose -f docker-compose.prod.yml down -v --remove-orphans
         docker system prune -f
         Pop-Location
-        Log-Success "Очистка завершена"
+        Log-Success "Cleanup completed"
     } else {
-        Log-Info "Отменено"
+        Log-Info "Cancelled"
     }
 }
 
 function Deploy-Full {
-    Log-Info "🚀 Полный деплой..."
+    Log-Info "Starting full deployment..."
     Check-Requirements
     Check-EnvFile
     Build-Images
     Start-Services
     Start-Sleep -Seconds 10
     Run-Migrations
-    Log-Success "✅ Деплой завершен! Приложение доступно на http://localhost"
+    Log-Success "Deployment complete! Application available at http://localhost"
 }
 
 function Show-Help {
     Write-Host ""
-    Write-Host "Скрипт продакшн деплоя" -ForegroundColor Blue
+    Write-Host "Production deployment script" -ForegroundColor Blue
     Write-Host ""
-    Write-Host "Использование: .\prod.ps1 [COMMAND]"
+    Write-Host "Usage: .\prod.ps1 [COMMAND]"
     Write-Host ""
-    Write-Host "Команды:"
-    Write-Host "  deploy      Полный деплой (проверка, сборка, запуск, миграции)"
-    Write-Host "  build       Сборка Docker образов"
-    Write-Host "  start       Запуск сервисов"
-    Write-Host "  stop        Остановка сервисов"
-    Write-Host "  restart     Перезапуск сервисов"
-    Write-Host "  logs        Просмотр логов"
-    Write-Host "  status      Статус сервисов"
-    Write-Host "  migrate     Запуск миграций"
-    Write-Host "  cleanup     Полная очистка (удаление volumes)"
-    Write-Host "  help        Показать эту справку"
+    Write-Host "Commands:"
+    Write-Host "  deploy      Full deployment (check, build, start, migrate)"
+    Write-Host "  build       Build Docker images"
+    Write-Host "  start       Start services"
+    Write-Host "  stop        Stop services"
+    Write-Host "  restart     Restart services"
+    Write-Host "  logs        View logs"
+    Write-Host "  status      Services status"
+    Write-Host "  migrate     Run migrations"
+    Write-Host "  cleanup     Full cleanup (delete volumes)"
+    Write-Host "  help        Show this help"
     Write-Host ""
-    Write-Host "Примеры:"
-    Write-Host "  .\prod.ps1 deploy          Полный деплой"
-    Write-Host "  .\prod.ps1 build           Только сборка образов"
-    Write-Host "  .\prod.ps1 logs            Просмотр логов"
-    Write-Host "  .\prod.ps1 restart         Перезапуск"
+    Write-Host "Examples:"
+    Write-Host "  .\prod.ps1 deploy          Full deployment"
+    Write-Host "  .\prod.ps1 build           Build images only"
+    Write-Host "  .\prod.ps1 logs            View logs"
+    Write-Host "  .\prod.ps1 restart         Restart"
     Write-Host ""
 }
 
@@ -175,7 +180,7 @@ switch ($Command) {
         Show-Help
     }
     default {
-        Log-Error "Неизвестная команда: $Command"
+        Log-Error "Unknown command: $Command"
         Show-Help
         exit 1
     }
