@@ -14,8 +14,8 @@
     "backend:install": "cd backend && npm install",
     "backend:migrate": "cd backend && npm run migrate",
     "backend:seed": "cd backend && npm run seed",
-    "deploy:dev": "./deploy/dev.sh",
-    "deploy:prod": "./deploy/prod.sh"
+    "deploy:dev": "powershell -ExecutionPolicy Bypass -File ./deploy/dev.ps1 start",
+    "deploy:prod": "cd deploy && powershell -ExecutionPolicy Bypass -File ./prod.ps1 deploy"
   },
   "dependencies": {
     "clsx": "^2.0.0",

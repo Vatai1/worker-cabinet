@@ -4,24 +4,24 @@
 
 Локальный запуск с сервисами в Docker:
 
+### Linux/Mac:
 ```bash
-# Полный запуск (проверка зависимостей, запуск сервисов, миграции, dev сервер)
 ./deploy/dev.sh start
+```
 
-# Только запуск Docker сервисов (БД, MinIO, OnlyOffice)
-./deploy/dev.sh services
+### Windows (PowerShell):
+```powershell
+.\deploy\dev.ps1 start
+```
 
-# Только dev сервер
-./deploy/dev.sh dev
-
-# Остановка сервисов
-./deploy/dev.sh stop
-
-# Статус
-./deploy/dev.sh status
-
-# Логи
-./deploy/dev.sh logs
+### Команды:
+```bash
+start       # Полный запуск (проверка, сервисы, миграции, dev сервер)
+services    # Только Docker сервисы (БД, MinIO, OnlyOffice)
+dev         # Только dev сервер
+stop        # Остановка сервисов
+status      # Статус
+logs        # Логи
 ```
 
 ### Порты dev окружения:
@@ -35,24 +35,33 @@
 
 Полная сборка в Docker:
 
+### Linux/Mac:
 ```bash
-# 1. Скопировать .env.example в .env и заполнить переменные
 cd deploy
 cp .env.example .env
 nano .env
-
-# 2. Полный деплой
 ./prod.sh deploy
+```
 
-# Другие команды:
-./prod.sh build     # Сборка образов
-./prod.sh start     # Запуск
-./prod.sh stop      # Остановка
-./prod.sh restart   # Перезапуск
-./prod.sh logs      # Логи
-./prod.sh status    # Статус
-./prod.sh migrate   # Миграции
-./prod.sh cleanup   # Полная очистка с удалением данных
+### Windows (PowerShell):
+```powershell
+cd deploy
+Copy-Item .env.example .env
+notepad .env
+.\prod.ps1 deploy
+```
+
+### Команды:
+```
+deploy      # Полный деплой
+build       # Сборка образов
+start       # Запуск
+stop        # Остановка
+restart     # Перезапуск
+logs        # Логи
+status      # Статус
+migrate     # Миграции
+cleanup     # Полная очистка с удалением данных
 ```
 
 ### Порты production:
@@ -63,8 +72,10 @@ nano .env
 
 ```
 deploy/
-├── dev.sh                  # Скрипт для dev окружения
-├── prod.sh                 # Скрипт для production
+├── dev.sh                  # Скрипт для dev окружения (Linux/Mac)
+├── dev.ps1                 # Скрипт для dev окружения (Windows)
+├── prod.sh                 # Скрипт для production (Linux/Mac)
+├── prod.ps1                # Скрипт для production (Windows)
 ├── docker-compose.prod.yml # Docker Compose для production
 ├── nginx.conf              # Конфигурация nginx для frontend
 ├── .env.example            # Пример env файла
