@@ -168,6 +168,9 @@ switch ($Command) {
         Run-Migrations
     }
     "dev" {
+        if (-not (Test-Path "$PROJECT_DIR\node_modules") -or -not (Test-Path "$PROJECT_DIR\backend\node_modules")) {
+            Install-Dependencies
+        }
         Start-Dev
     }
     "stop" {
