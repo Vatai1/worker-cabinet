@@ -52,6 +52,35 @@ npm run dev
 
 Подробнее см. [SERVER_MANAGEMENT.md](./SERVER_MANAGEMENT.md)
 
+## 🐳 Деплой
+
+### Dev окружение (локально + Docker для сервисов)
+
+```bash
+# Полный запуск (сервисы + миграции + dev сервер)
+./deploy/dev.sh start
+
+# Только сервисы (БД, MinIO, OnlyOffice)
+./deploy/dev.sh services
+
+# Статус, логи, остановка
+./deploy/dev.sh status
+./deploy/dev.sh logs
+./deploy/dev.sh stop
+```
+
+### Production (полностью в Docker)
+
+```bash
+cd deploy
+cp .env.example .env
+# Отредактируйте .env (обязательно DB_PASSWORD и JWT_SECRET)
+
+./prod.sh deploy
+```
+
+Подробнее в [deploy/README.md](./deploy/README.md)
+
 ## 📝 Документация
 
 Полная инструкция по установке и настройке в [SETUP.md](./SETUP.md)
