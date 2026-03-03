@@ -11,9 +11,12 @@
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
+    "install:all": "npm install && cd backend && npm install",
     "backend:install": "cd backend && npm install",
     "backend:migrate": "cd backend && npm run migrate",
-    "backend:seed": "cd backend && npm run seed"
+    "backend:seed": "cd backend && npm run seed",
+    "deploy:dev": "powershell -ExecutionPolicy Bypass -File ./deploy/dev.ps1 start",
+    "deploy:prod": "cd deploy && powershell -ExecutionPolicy Bypass -File ./prod.ps1 deploy"
   },
   "dependencies": {
     "clsx": "^2.0.0",

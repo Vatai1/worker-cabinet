@@ -52,6 +52,38 @@ npm run dev
 
 Подробнее см. [SERVER_MANAGEMENT.md](./SERVER_MANAGEMENT.md)
 
+## 🐳 Деплой
+
+### Dev окружение (локально + Docker для сервисов)
+
+**Linux/Mac:**
+```bash
+./deploy/dev.sh start
+```
+
+**Windows (PowerShell):**
+```powershell
+.\deploy\dev.ps1 start
+```
+
+### Production (полностью в Docker)
+
+**Linux/Mac:**
+```bash
+cd deploy
+cp .env.example .env
+./prod.sh deploy
+```
+
+**Windows (PowerShell):**
+```powershell
+cd deploy
+Copy-Item .env.example .env
+.\prod.ps1 deploy
+```
+
+Подробнее в [deploy/README.md](./deploy/README.md)
+
 ## 📝 Документация
 
 Полная инструкция по установке и настройке в [SETUP.md](./SETUP.md)

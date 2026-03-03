@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ..
+      dockerfile: Dockerfile.frontend
+    container_name: worker-cabinet-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - worker-cabinet-network
+
+  backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile.backend
+    container_name: worker-cabinet-backend
+    restart: unless-stopped
+    environment:
+      - PORT=5001
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-worker_cabinet}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin123}
+      - S3_BUCKET=${S3_BUCKET:-worker-cabinet}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
+      - TELEGRAM_ADMIN_CHAT_ID=${TELEGRAM_ADMIN_CHAT_ID:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - worker-cabinet-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: worker-cabinet-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:-worker_cabinet}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worker-cabinet-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: worker-cabinet-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin123}
+      MINIO_BROWSER: "off"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - worker-cabinet-network
+
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: worker-cabinet-onlyoffice
+    restart: unless-stopped
+    environment:
+      - JWT_ENABLED=false
+      - WOPI_ENABLED=true
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+      - ALLOW_META_IP_ADDRESS=true
+      - USE_UNAUTHORIZED_STORAGE=true
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+      - onlyoffice_logs:/var/log/onlyoffice
+      - onlyoffice_lib:/var/lib/onlyoffice
+      - onlyoffice_db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - worker-cabinet-network
+    depends_on:
+      - onlyoffice-db
+      - onlyoffice-redis
+
+  onlyoffice-db:
+    image: postgres:15-alpine
+    container_name: worker-cabinet-onlyoffice-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=onlyoffice
+      - POSTGRES_USER=onlyoffice
+      - POSTGRES_PASSWORD=onlyoffice
+    volumes:
+      - onlyoffice_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onlyoffice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worker-cabinet-network
+
+  onlyoffice-redis:
+    image: redis:7-alpine
+    container_name: worker-cabinet-onlyoffice-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - worker-cabinet-network
+
+volumes:
+  postgres_data:
+  minio_data:
+  onlyoffice_data:
+  onlyoffice_logs:
+  onlyoffice_lib:
+  onlyoffice_db:
+  onlyoffice_postgres_data:
+
+networks:
+  worker-cabinet-network:
+    driver: bridge
