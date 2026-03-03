@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "backend:install": "cd backend && npm install",
     "backend:migrate": "cd backend && npm run migrate",
-    "backend:seed": "cd backend && npm run seed"
+    "backend:seed": "cd backend && npm run seed",
+    "deploy:dev": "./deploy/dev.sh",
+    "deploy:prod": "./deploy/prod.sh"
   },
   "dependencies": {
     "clsx": "^2.0.0",
