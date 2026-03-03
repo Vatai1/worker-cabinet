@@ -6,7 +6,7 @@ import { isPreviewable } from '@/lib/documentUtils'
 import { FileText, Upload, Trash2, Download, File, FileImage, FileCode, FileArchive, Eye } from 'lucide-react'
 import { UploadDocumentModal } from '@/components/modals/UploadDocumentModal'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
 const getAuthHeaders = () => {
   const authStorage = localStorage.getItem('auth-storage')

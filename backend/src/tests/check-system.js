@@ -2,7 +2,7 @@
 
 import fetch from 'node-fetch'
 
-const API_BASE = 'http://localhost:5001/api'
+const API_BASE = 'http://localhost:5000/api'
 const FRONTEND_URL = 'http://localhost:3000'
 
 async function checkBackend() {

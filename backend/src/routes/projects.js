@@ -876,7 +876,7 @@ function generatePreviewToken(documentId, projectId, userId) {
 
 // Get public API URL (accessible from Docker containers)
 function getPublicApiUrl() {
-  return process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || 'http://host.docker.internal:5001/api'
+  return process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || 'http://host.docker.internal:5000/api'
 }
 
 // Verify preview token
