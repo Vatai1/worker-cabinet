@@ -92,16 +92,17 @@ function formatDate(dateStr?: string) {
   return localDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
-function MemberCard({ member, canRemove, onRemove, onContextMenu }: {
+function MemberCard({ member, canRemove, onRemove, onContextMenu, isRemoving }: {
   member: Member
   canRemove: boolean
   onRemove: (id: string) => void
   onContextMenu: (e: React.MouseEvent, member: Member) => void
+  isRemoving: boolean
 }) {
   const color = avatarColor(member.id)
   return (
     <div
-      className="flex items-center gap-3 p-3 rounded-xl border border-border/50 hover:border-primary/20 transition-colors group cursor-pointer"
+      className={`flex items-center gap-3 p-3 rounded-xl border border-border/50 hover:border-primary/20 transition-colors group cursor-pointer ${isRemoving ? 'opacity-50' : ''}`}
       onContextMenu={(e) => onContextMenu(e, member)}
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -123,10 +124,11 @@ function MemberCard({ member, canRemove, onRemove, onContextMenu }: {
       {canRemove && (
         <button
           onClick={(e) => { e.stopPropagation(); onRemove(member.id) }}
-          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-all shrink-0"
+          disabled={isRemoving}
+          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-all shrink-0 disabled:opacity-50"
           title="Удалить из проекта"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          {isRemoving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
         </button>
       )}
     </div>
@@ -147,6 +149,7 @@ export function ProjectDetail() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null)
   const [memberInfoOpen, setMemberInfoOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; member: Member } | null>(null)
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
 
   const fetchProject = async () => {
     try {
@@ -174,6 +177,7 @@ export function ProjectDetail() {
 
   const handleRemoveMember = async (memberId: string) => {
     if (!id) return
+    setRemovingMemberId(memberId)
     try {
       await fetch(`${API_BASE_URL}/projects/${id}/members/${memberId}`, {
         method: 'DELETE',
@@ -182,6 +186,8 @@ export function ProjectDetail() {
       fetchProject()
     } catch (err) {
       console.error('Error removing member:', err)
+    } finally {
+      setRemovingMemberId(null)
     }
   }
 
@@ -386,6 +392,7 @@ export function ProjectDetail() {
                   canRemove={canManage && project.leads.length > 1}
                   onRemove={handleRemoveMember}
                   onContextMenu={handleContextMenu}
+                  isRemoving={removingMemberId === m.id}
                 />
               ))
             ) : (
@@ -420,6 +427,7 @@ export function ProjectDetail() {
                   canRemove={canManage}
                   onRemove={handleRemoveMember}
                   onContextMenu={handleContextMenu}
+                  isRemoving={removingMemberId === m.id}
                 />
               ))
             ) : (

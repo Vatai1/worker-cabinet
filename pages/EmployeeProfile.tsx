@@ -121,6 +121,8 @@ export function EmployeeProfile() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; skill: string } | null>(null)
   const [editingResponsibility, setEditingResponsibility] = useState(false)
   const [responsibilityText, setResponsibilityText] = useState('')
+  const [addingSkill, setAddingSkill] = useState(false)
+  const [removingSkill, setRemovingSkill] = useState<string | null>(null)
 
   const isOwnProfile = currentUser?.id === id
 
@@ -158,6 +160,7 @@ export function EmployeeProfile() {
   const handleAddSkill = async (skill: string) => {
     if (!employee) return
 
+    setAddingSkill(true)
     const newSkills = [...(employee.skills || []), skill]
     const updatedEmployee = { ...employee, skills: newSkills }
     setEmployee(updatedEmployee)
@@ -171,6 +174,8 @@ export function EmployeeProfile() {
     } catch (err) {
       console.error('Failed to add skill:', err)
       setEmployee(employee)
+    } finally {
+      setAddingSkill(false)
     }
   }
 
@@ -200,10 +205,11 @@ export function EmployeeProfile() {
   const handleRemoveSkill = async (skill: string) => {
     if (!employee) return
 
+    setRemovingSkill(skill)
+    setContextMenu(null)
     const newSkills = employee.skills?.filter(s => s !== skill) || []
     const updatedEmployee = { ...employee, skills: newSkills }
     setEmployee(updatedEmployee)
-    setContextMenu(null)
 
     try {
       await fetch(`${API_BASE_URL}/users/${id}/skills`, {
@@ -214,6 +220,8 @@ export function EmployeeProfile() {
     } catch (err) {
       console.error('Failed to remove skill:', err)
       setEmployee(employee)
+    } finally {
+      setRemovingSkill(null)
     }
   }
 
@@ -485,8 +493,8 @@ export function EmployeeProfile() {
                 Навыки и компетенции
               </CardTitle>
               {isOwnProfile && (
-                <Button size="sm" onClick={() => setIsAddSkillModalOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
+                <Button size="sm" onClick={() => setIsAddSkillModalOpen(true)} disabled={addingSkill}>
+                  {addingSkill ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
                   Добавить
                 </Button>
               )}
@@ -499,8 +507,9 @@ export function EmployeeProfile() {
                   <span
                     key={skill}
                     onContextMenu={(e) => handleContextMenu(e, skill)}
-                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-transform hover:scale-105 cursor-pointer ${SKILL_COLORS[i % SKILL_COLORS.length]}`}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-transform hover:scale-105 cursor-pointer ${removingSkill === skill ? 'opacity-50' : ''} ${SKILL_COLORS[i % SKILL_COLORS.length]}`}
                   >
+                    {removingSkill === skill && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
                     {skill}
                   </span>
                 ))}
@@ -509,80 +518,6 @@ export function EmployeeProfile() {
               <EmptySection
                 icon={<Wrench className="h-8 w-8 text-muted-foreground/40" />}
                 text="Навыки не указаны"
-              />
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Проекты */}
-        <Card className="md:col-span-2">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FolderKanban className="h-4 w-4 text-primary" />
-                Проекты
-              </CardTitle>
-              {isOwnProfile && (
-                <Button size="sm" onClick={() => setIsAddProjectModalOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Добавить проект
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {employee.projects && employee.projects.length > 0 ? (
-              <div className="space-y-3">
-                {employee.projects.map((project) => {
-                  const pStatus = projectStatusConfig[project.status] ?? projectStatusConfig.active
-                  const StatusIcon = pStatus.icon
-                  const pRole = projectRoleConfig[project.role] ?? projectRoleConfig.member
-                  const RoleIcon = pRole.icon
-                  return (
-                    <Link
-                      key={project.id}
-                      to={`/projects/${project.id}`}
-                      className="block p-4 rounded-lg border border-border/50 hover:border-primary/30 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold">{project.name}</h3>
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${pStatus.bg} ${pStatus.color}`}>
-                              <StatusIcon className="h-3 w-3" />
-                              {pStatus.label}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${pRole.bg} ${pRole.color}`}>
-                              <RoleIcon className="h-3 w-3" />
-                              {pRole.label}
-                            </span>
-                            {project.joined_at && (
-                              <span className="text-xs text-muted-foreground">
-                                С {formatDate(project.joined_at)}
-                              </span>
-                            )}
-                          </div>
-                          {project.description && (
-                            <p className="text-sm text-muted-foreground mt-2">{project.description}</p>
-                          )}
-                        </div>
-                        {(project.startDate || project.endDate) && (
-                          <div className="text-right text-xs text-muted-foreground shrink-0">
-                            {project.startDate && <div>{formatDate(project.startDate)}</div>}
-                            {project.endDate && <div>— {formatDate(project.endDate)}</div>}
-                          </div>
-                        )}
-                      </div>
-                    </Link>
-                  )
-                })}
-              </div>
-            ) : (
-              <EmptySection
-                icon={<FolderKanban className="h-8 w-8 text-muted-foreground/40" />}
-                text="Проекты не добавлены"
               />
             )}
           </CardContent>
@@ -606,9 +541,10 @@ export function EmployeeProfile() {
             <div className="p-1">
               <button
                 onClick={() => handleRemoveSkill(contextMenu.skill)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md"
+                disabled={removingSkill !== null}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md disabled:opacity-50"
               >
-                <Trash className="h-4 w-4" />
+                {removingSkill ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash className="h-4 w-4" />}
                 Удалить навык
               </button>
             </div>
