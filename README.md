@@ -22,7 +22,7 @@ npm run dev
 
 Приложение будет доступно по адресам:
 - **Frontend**: http://localhost:3000
-- **Backend**: http://localhost:5001
+- **Backend**: http://localhost:5000
 
 ### Управление сервером
 

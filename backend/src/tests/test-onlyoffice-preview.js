@@ -2,7 +2,7 @@
 
 import fetch from 'node-fetch'
 
-const API_BASE = 'http://localhost:5001/api'
+const API_BASE = 'http://localhost:5000/api'
 
 async function login() {
   console.log('🔐 Logging in...')

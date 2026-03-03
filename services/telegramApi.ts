@@ -1,4 +1,4 @@
-const TELEGRAM_API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
+const TELEGRAM_API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
 function getAuthHeaders(): HeadersInit {
   const authStorage = localStorage.getItem('auth-storage')
