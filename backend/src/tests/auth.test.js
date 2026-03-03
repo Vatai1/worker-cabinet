@@ -245,7 +245,7 @@ describe('Authentication System', () => {
 
   describe('User Authentication Flow', () => {
     it('should login with correct credentials', async () => {
-      const response = await fetch('http://localhost:5001/api/auth/login', {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -263,7 +263,7 @@ describe('Authentication System', () => {
     })
 
     it('should reject login with wrong password', async () => {
-      const response = await fetch('http://localhost:5001/api/auth/login', {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -279,7 +279,7 @@ describe('Authentication System', () => {
     })
 
     it('should reject login with non-existent email', async () => {
-      const response = await fetch('http://localhost:5001/api/auth/login', {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -299,7 +299,7 @@ describe('Authentication System', () => {
     let authToken
 
     beforeEach(async () => {
-      const loginResponse = await fetch('http://localhost:5001/api/auth/login', {
+      const loginResponse = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -312,7 +312,7 @@ describe('Authentication System', () => {
     })
 
     it('should access protected route with valid token', async () => {
-      const response = await fetch(`http://localhost:5001/api/users/${testUserId}`, {
+      const response = await fetch(`http://localhost:5000/api/users/${testUserId}`, {
         headers: { 'Authorization': `Bearer ${authToken}` }
       })
       
@@ -323,7 +323,7 @@ describe('Authentication System', () => {
     })
 
     it('should reject protected route without token', async () => {
-      const response = await fetch(`http://localhost:5001/api/users/${testUserId}`)
+      const response = await fetch(`http://localhost:5000/api/users/${testUserId}`)
       
       const data = await response.json()
       
@@ -332,7 +332,7 @@ describe('Authentication System', () => {
     })
 
     it('should reject protected route with invalid token', async () => {
-      const response = await fetch(`http://localhost:5001/api/users/${testUserId}`, {
+      const response = await fetch(`http://localhost:5000/api/users/${testUserId}`, {
         headers: { 'Authorization': 'Bearer invalid.token' }
       })
       
@@ -359,7 +359,7 @@ describe('Authentication System', () => {
       )
       managerUserId = result.rows[0].id
       
-      const managerLogin = await fetch('http://localhost:5001/api/auth/login', {
+      const managerLogin = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -370,7 +370,7 @@ describe('Authentication System', () => {
       const managerData = await managerLogin.json()
       managerToken = managerData.token
       
-      const employeeLogin = await fetch('http://localhost:5001/api/auth/login', {
+      const employeeLogin = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -390,7 +390,7 @@ describe('Authentication System', () => {
     })
 
     it('should allow manager to access all users', async () => {
-      const response = await fetch('http://localhost:5001/api/users', {
+      const response = await fetch('http://localhost:5000/api/users', {
         headers: { 'Authorization': `Bearer ${managerToken}` }
       })
       
@@ -401,7 +401,7 @@ describe('Authentication System', () => {
     })
 
     it('should deny employee access to all users', async () => {
-      const response = await fetch('http://localhost:5001/api/users', {
+      const response = await fetch('http://localhost:5000/api/users', {
         headers: { 'Authorization': `Bearer ${employeeToken}` }
       })
       
@@ -409,7 +409,7 @@ describe('Authentication System', () => {
     })
 
     it('should allow employee to access own profile', async () => {
-      const response = await fetch(`http://localhost:5001/api/users/${testUserId}`, {
+      const response = await fetch(`http://localhost:5000/api/users/${testUserId}`, {
         headers: { 'Authorization': `Bearer ${employeeToken}` }
       })
       
@@ -420,7 +420,7 @@ describe('Authentication System', () => {
     })
 
     it('should deny employee access to other users profile', async () => {
-      const response = await fetch(`http://localhost:5001/api/users/${managerUserId}`, {
+      const response = await fetch(`http://localhost:5000/api/users/${managerUserId}`, {
         headers: { 'Authorization': `Bearer ${employeeToken}` }
       })
       

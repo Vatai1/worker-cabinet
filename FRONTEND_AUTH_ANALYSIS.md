@@ -42,7 +42,7 @@ The auth store uses Zustand with persist middleware to manage authentication sta
 
 4. **Hardcoded API URL**
    ```typescript
-   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'
+   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
    ```
    - **Recommendation:** This is actually good, uses env variable with fallback
 

@@ -3,7 +3,7 @@ import assert from 'node:assert'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 
-const API_BASE = 'http://localhost:5001/api'
+const API_BASE = 'http://localhost:5000/api'
 const JWT_SECRET = 'your-secret-key-change-in-production'
 
 let testUserId
