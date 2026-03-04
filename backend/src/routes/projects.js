@@ -537,7 +537,7 @@ router.post('/:id/documents', authenticateToken, upload.single('file'), async (r
         req.file.mimetype,
         userId,
         folderPath,
-        tags ? JSON.parse(tags) : [],
+        tags ? (() => { try { return JSON.parse(tags) } catch { return [] } })() : [],
         description || null,
       ]
     )
