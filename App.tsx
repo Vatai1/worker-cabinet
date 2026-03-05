@@ -21,6 +21,7 @@ import { ProjectDetail } from '@/pages/ProjectDetail'
 import { ProjectDocuments } from '@/pages/ProjectDocuments'
 import { ProjectRoadmap } from '@/pages/ProjectRoadmap'
 import { Settings } from '@/pages/Settings'
+import { HRAnalytics } from '@/pages/HRAnalytics'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -78,6 +79,7 @@ function App() {
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="projects/:id/documents" element={<ProjectDocuments />} />
           <Route path="projects/:id/roadmap" element={<ProjectRoadmap />} />
+          <Route path="hr-analytics" element={<HRAnalytics />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
