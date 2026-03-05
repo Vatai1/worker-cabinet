@@ -20,6 +20,7 @@ import {
   Moon,
   ChevronDown,
   FileStack,
+  BarChart2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -68,6 +69,25 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Уведомления', href: '/notifications', icon: Bell },
 ]
 
+const getHRNavigation = (userId?: string): NavItem[] => [
+  { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'HR Аналитика', href: '/hr-analytics', icon: BarChart2 },
+  { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Проекты', href: '/projects', icon: FolderKanban },
+  { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
+  { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Заявления', href: '/requests', icon: FileText },
+  {
+    name: 'Документы',
+    icon: FolderOpen,
+    children: [
+      { name: 'Ваши документы', href: '/documents' },
+      { name: 'Шаблоны документов', href: '/document-templates' },
+    ],
+  },
+  { name: 'Уведомления', href: '/notifications', icon: Bell },
+]
+
 export function Sidebar() {
   const { user, logout } = useAuthStore()
   const { sidebarOpen, toggleSidebar, notifications, darkMode, toggleTheme } = useUIStore()
@@ -77,7 +97,17 @@ export function Sidebar() {
 
   const userUnreadCount = notifications.filter((n) => n.userId === user?.id && !n.read).length
 
-  const navigation = user?.role === 'manager' ? getManagerNavigation(user?.id) : getEmployeeNavigation(user?.id)
+  const getNavigation = () => {
+    if (user?.role === 'hr' || user?.role === 'admin') {
+      return getHRNavigation(user?.id)
+    }
+    if (user?.role === 'manager') {
+      return getManagerNavigation(user?.id)
+    }
+    return getEmployeeNavigation(user?.id)
+  }
+
+  const navigation = getNavigation()
 
   useEffect(() => {
     navigation.forEach((item) => {
@@ -136,6 +166,16 @@ export function Sidebar() {
               {user?.role === 'manager' && (
                 <Badge variant="default" className="ml-2 text-[10px] px-2 py-0">
                   Manager
+                </Badge>
+              )}
+              {user?.role === 'hr' && (
+                <Badge variant="default" className="ml-2 text-[10px] px-2 py-0">
+                  HR
+                </Badge>
+              )}
+              {user?.role === 'admin' && (
+                <Badge variant="default" className="ml-2 text-[10px] px-2 py-0">
+                  Admin
                 </Badge>
               )}
             </div>
