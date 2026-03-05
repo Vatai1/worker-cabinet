@@ -22,6 +22,8 @@ import {
   parseISO,
 } from 'date-fns'
 import { ru } from 'date-fns/locale'
+import { jsPDF } from 'jspdf'
+import * as XLSX from 'xlsx'
 import { useAnalyticsStore } from '@/store/analyticsStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -37,6 +39,8 @@ import {
   Building2,
   CalendarDays,
   User,
+  FileText,
+  FileSpreadsheet,
 } from 'lucide-react'
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -100,6 +104,187 @@ export function HRAnalytics() {
     refreshTrends()
   }
 
+  // Export to PDF
+  const exportToPDF = () => {
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+
+    // Title
+    doc.setFontSize(18)
+    doc.text('HR Analytics Report', pageWidth / 2, 20, { align: 'center' })
+    doc.setFontSize(12)
+    doc.text(`Generated: ${format(new Date(), 'dd.MM.yyyy HH:mm')}`, pageWidth / 2, 30, { align: 'center' })
+
+    // Summary Statistics
+    doc.setFontSize(14)
+    doc.text('Summary Statistics', 14, 45)
+    doc.setFontSize(11)
+    doc.text(`Total Requests: ${totalRequests}`, 14, 55)
+    doc.text(`Total Vacation Days: ${totalDays}`, 14, 62)
+    doc.text(`Average Employees per Period: ${avgEmployees}`, 14, 69)
+
+    // Trends Data Table
+    if (trends?.data && trends.data.length > 0) {
+      doc.setFontSize(14)
+      doc.text('Vacation Trends', 14, 85)
+      doc.setFontSize(10)
+
+      let yPosition = 95
+      const colWidths = [50, 40, 40, 50]
+      const headers = ['Period', 'Requests', 'Days', 'Employees']
+
+      // Table header
+      doc.setFillColor(240, 240, 240)
+      doc.rect(14, yPosition - 5, pageWidth - 28, 8, 'F')
+      doc.setFont('helvetica', 'bold')
+      headers.forEach((header, i) => {
+        const xPos = 14 + colWidths.slice(0, i).reduce((a, b) => a + b, 0)
+        doc.text(header, xPos, yPosition)
+      })
+      yPosition += 10
+
+      // Table rows
+      doc.setFont('helvetica', 'normal')
+      trends.data.forEach((item) => {
+        if (yPosition > 270) {
+          doc.addPage()
+          yPosition = 20
+        }
+        const rowData = [item.label, String(item.requestCount), String(item.totalDays), String(item.uniqueEmployees)]
+        rowData.forEach((cell, i) => {
+          const xPos = 14 + colWidths.slice(0, i).reduce((a, b) => a + b, 0)
+          doc.text(cell, xPos, yPosition)
+        })
+        yPosition += 7
+      })
+    }
+
+    // Department Utilization
+    if (utilization?.data && utilization.data.length > 0) {
+      let yPosition = doc.getCurrentPageInfo().pageNumber > 1 ? 20 : 140
+      if (yPosition > 250) {
+        doc.addPage()
+        yPosition = 20
+      }
+
+      doc.setFontSize(14)
+      doc.text('Department Utilization', 14, yPosition)
+      yPosition += 10
+      doc.setFontSize(10)
+
+      utilization.data.forEach((item) => {
+        if (yPosition > 270) {
+          doc.addPage()
+          yPosition = 20
+        }
+        doc.text(`${item.departmentName}: ${Math.round(item.utilizationPercentage)}% (${item.totalDaysUsed}/${item.totalAvailableDays} days)`, 14, yPosition)
+        yPosition += 7
+      })
+    }
+
+    // Upcoming Absences
+    if (upcomingAbsences?.data && upcomingAbsences.data.length > 0) {
+      doc.addPage()
+      let yPosition = 20
+
+      doc.setFontSize(14)
+      doc.text('Upcoming Absences', 14, yPosition)
+      yPosition += 10
+      doc.setFontSize(10)
+
+      upcomingAbsences.data.slice(0, 20).forEach((absence) => {
+        if (yPosition > 270) {
+          doc.addPage()
+          yPosition = 20
+        }
+        const name = `${absence.employee.lastName} ${absence.employee.firstName}`
+        const dates = `${format(parseISO(absence.startDate), 'dd.MM.yyyy')} - ${format(parseISO(absence.endDate), 'dd.MM.yyyy')}`
+        doc.text(`${name}: ${dates} (${absence.duration} days)`, 14, yPosition)
+        yPosition += 7
+      })
+
+      if (upcomingAbsences.data.length > 20) {
+        doc.text(`... and ${upcomingAbsences.data.length - 20} more`, 14, yPosition)
+      }
+    }
+
+    // Save the PDF
+    doc.save(`hr-analytics-${format(new Date(), 'yyyy-MM-dd')}.pdf`)
+  }
+
+  // Export to Excel
+  const exportToExcel = () => {
+    const workbook = XLSX.utils.book_new()
+
+    // Summary Sheet
+    const summaryData = [
+      ['HR Analytics Report'],
+      [`Generated: ${format(new Date(), 'dd.MM.yyyy HH:mm')}`],
+      [],
+      ['Summary Statistics'],
+      ['Total Requests', totalRequests],
+      ['Total Vacation Days', totalDays],
+      ['Average Employees per Period', avgEmployees],
+    ]
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData)
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary')
+
+    // Trends Sheet
+    if (trends?.data && trends.data.length > 0) {
+      const trendsHeader = ['Period', 'Request Count', 'Total Days', 'Unique Employees']
+      const trendsData = [
+        trendsHeader,
+        ...trends.data.map((item) => [
+          item.label,
+          item.requestCount,
+          item.totalDays,
+          item.uniqueEmployees,
+        ]),
+      ]
+      const trendsSheet = XLSX.utils.aoa_to_sheet(trendsData)
+      XLSX.utils.book_append_sheet(workbook, trendsSheet, 'Vacation Trends')
+    }
+
+    // Department Utilization Sheet
+    if (utilization?.data && utilization.data.length > 0) {
+      const utilizationHeader = ['Department', 'Utilization %', 'Days Used', 'Days Available', 'Employee Count']
+      const utilizationData = [
+        utilizationHeader,
+        ...utilization.data.map((item) => [
+          item.departmentName,
+          Math.round(item.utilizationPercentage),
+          item.totalDaysUsed,
+          item.totalAvailableDays,
+          item.employeeCount,
+        ]),
+      ]
+      const utilizationSheet = XLSX.utils.aoa_to_sheet(utilizationData)
+      XLSX.utils.book_append_sheet(workbook, utilizationSheet, 'Department Utilization')
+    }
+
+    // Upcoming Absences Sheet
+    if (upcomingAbsences?.data && upcomingAbsences.data.length > 0) {
+      const absencesHeader = ['Employee', 'Position', 'Department', 'Start Date', 'End Date', 'Duration (Days)', 'Vacation Type']
+      const absencesData = [
+        absencesHeader,
+        ...upcomingAbsences.data.map((absence) => [
+          `${absence.employee.lastName} ${absence.employee.firstName}${absence.employee.middleName ? ' ' + absence.employee.middleName : ''}`,
+          absence.employee.position,
+          absence.employee.departmentName || '',
+          format(parseISO(absence.startDate), 'dd.MM.yyyy'),
+          format(parseISO(absence.endDate), 'dd.MM.yyyy'),
+          absence.duration,
+          absence.vacationTypeName,
+        ]),
+      ]
+      const absencesSheet = XLSX.utils.aoa_to_sheet(absencesData)
+      XLSX.utils.book_append_sheet(workbook, absencesSheet, 'Upcoming Absences')
+    }
+
+    // Save the Excel file
+    XLSX.writeFile(workbook, `hr-analytics-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+  }
+
   // Prepare chart data from trends response
   const chartData = trends?.data?.map((item) => ({
     name: item.label,
@@ -158,16 +343,38 @@ export function HRAnalytics() {
               Аналитическая панель по отпускам и отсутствиям
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={trendsLoading}
-            className="bg-white/10 border-white/30 text-white hover:bg-white/20"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${trendsLoading ? 'animate-spin' : ''}`} />
-            Обновить
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportToPDF}
+              disabled={trendsLoading || !trends?.data?.length}
+              className="bg-white/10 border-white/30 text-white hover:bg-white/20"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportToExcel}
+              disabled={trendsLoading || !trends?.data?.length}
+              className="bg-white/10 border-white/30 text-white hover:bg-white/20"
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={trendsLoading}
+              className="bg-white/10 border-white/30 text-white hover:bg-white/20"
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${trendsLoading ? 'animate-spin' : ''}`} />
+              Обновить
+            </Button>
+          </div>
         </div>
       </div>
 
