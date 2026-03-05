@@ -87,4 +87,5 @@ export interface AppState {
 }
 
 export * from './vacation'
+export * from './analytics'
 
