@@ -261,6 +261,59 @@ router.get('/upcoming-absences', authenticateToken, async (req, res) => {
   }
 })
 
+// Get balance summary with aggregate statistics by department
+// Access: HR and admin only
+router.get('/balance-summary', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    // Get aggregate balance statistics by department
+    const sql = `
+      SELECT
+        d.id as department_id,
+        d.name as department_name,
+        COUNT(DISTINCT u.id) as employee_count,
+        COALESCE(SUM(vb.total_days), 0) as total_days_allocated,
+        COALESCE(SUM(vb.used_days), 0) as total_days_used,
+        COALESCE(SUM(vb.reserved_days), 0) as total_days_reserved,
+        COALESCE(SUM(vb.total_days), 0) - COALESCE(SUM(vb.used_days), 0) - COALESCE(SUM(vb.reserved_days), 0) as total_days_remaining
+      FROM departments d
+      LEFT JOIN users u ON u.department_id = d.id
+      LEFT JOIN vacation_balances vb ON vb.user_id = u.id
+      GROUP BY d.id, d.name
+      ORDER BY d.name
+    `
+
+    const result = await query(sql)
+
+    // Calculate overall totals
+    const summary = result.rows.map((row) => ({
+      departmentId: row.department_id,
+      departmentName: row.department_name,
+      employeeCount: parseInt(row.employee_count),
+      totalDaysAllocated: parseInt(row.total_days_allocated) || 0,
+      totalDaysUsed: parseInt(row.total_days_used) || 0,
+      totalDaysReserved: parseInt(row.total_days_reserved) || 0,
+      totalDaysRemaining: parseInt(row.total_days_remaining) || 0
+    }))
+
+    // Calculate company-wide totals
+    const companyTotals = {
+      totalEmployees: summary.reduce((sum, dept) => sum + dept.employeeCount, 0),
+      totalDaysAllocated: summary.reduce((sum, dept) => sum + dept.totalDaysAllocated, 0),
+      totalDaysUsed: summary.reduce((sum, dept) => sum + dept.totalDaysUsed, 0),
+      totalDaysReserved: summary.reduce((sum, dept) => sum + dept.totalDaysReserved, 0),
+      totalDaysRemaining: summary.reduce((sum, dept) => sum + dept.totalDaysRemaining, 0)
+    }
+
+    res.json({
+      companyTotals,
+      departments: summary
+    })
+  } catch (error) {
+    console.error('Error fetching balance summary:', error)
+    res.status(500).json({ error: 'Failed to fetch balance summary' })
+  }
+})
+
 // Get year-over-year vacation comparison
 // Access: HR and admin only
 router.get('/yoy-comparison', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
