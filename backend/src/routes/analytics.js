@@ -173,4 +173,92 @@ router.get('/utilization', authenticateToken, authorizeRoles('hr', 'admin'), asy
   }
 })
 
+// Get upcoming absences with date range filtering
+// Access: All authenticated users (filtered by role)
+router.get('/upcoming-absences', authenticateToken, async (req, res) => {
+  try {
+    const { days = 30 } = req.query
+    const user = req.user
+    const approvedStatusId = await getStatusIdByCode('approved')
+
+    // Calculate date range
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const endDate = new Date(today)
+    endDate.setDate(endDate.getDate() + parseInt(days))
+
+    let whereClause = 'WHERE vr.status_id = $1 AND vr.start_date >= $2 AND vr.start_date <= $3'
+    const params = [approvedStatusId, today, endDate]
+
+    // Filter by role permissions
+    if (user.role === 'employee') {
+      // Employee sees only their own approved requests
+      whereClause += ' AND vr.user_id = $' + (params.length + 1)
+      params.push(user.id)
+    } else if (user.role === 'manager') {
+      // Manager sees their own + subordinates' requests
+      whereClause += ' AND (vr.user_id = $' + (params.length + 1) + ' OR u.manager_id = $' + (params.length + 1) + ')'
+      params.push(user.id)
+    }
+    // HR and admin see all (no additional filter)
+
+    const sql = `
+      SELECT
+        vr.id,
+        vr.user_id,
+        vr.start_date,
+        vr.end_date,
+        vr.duration,
+        vr.comment,
+        vt.code as vacation_type_code,
+        vt.name as vacation_type_name,
+        u.first_name,
+        u.last_name,
+        u.middle_name,
+        u.position,
+        d.id as department_id,
+        d.name as department_name
+      FROM vacation_requests vr
+      JOIN users u ON vr.user_id = u.id
+      LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+      ${whereClause}
+      ORDER BY vr.start_date ASC, u.last_name ASC
+    `
+
+    const result = await query(sql, params)
+
+    // Format the response
+    const absences = result.rows.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      duration: row.duration,
+      comment: row.comment,
+      vacationType: row.vacation_type_code,
+      vacationTypeName: row.vacation_type_name,
+      employee: {
+        firstName: row.first_name,
+        lastName: row.last_name,
+        middleName: row.middle_name,
+        position: row.position,
+        departmentId: row.department_id,
+        departmentName: row.department_name
+      }
+    }))
+
+    res.json({
+      days: parseInt(days),
+      startDate: today.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+      count: absences.length,
+      data: absences
+    })
+  } catch (error) {
+    console.error('Error fetching upcoming absences:', error)
+    res.status(500).json({ error: 'Failed to fetch upcoming absences' })
+  }
+})
+
 export default router
