@@ -261,4 +261,108 @@ router.get('/upcoming-absences', authenticateToken, async (req, res) => {
   }
 })
 
+// Get year-over-year vacation comparison
+// Access: HR and admin only
+router.get('/yoy-comparison', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const { year1, year2 } = req.query
+
+    // Validate required parameters
+    if (!year1 || !year2) {
+      return res.status(400).json({ error: 'Both year1 and year2 parameters are required' })
+    }
+
+    const year1Int = parseInt(year1)
+    const year2Int = parseInt(year2)
+
+    if (isNaN(year1Int) || isNaN(year2Int)) {
+      return res.status(400).json({ error: 'year1 and year2 must be valid years' })
+    }
+
+    const approvedStatusId = await getStatusIdByCode('approved')
+
+    // Get statistics for both years
+    const sql = `
+      SELECT
+        EXTRACT(YEAR FROM vr.start_date) as year,
+        COUNT(vr.id) as request_count,
+        COALESCE(SUM(vr.duration), 0) as total_days,
+        COUNT(DISTINCT vr.user_id) as unique_employees,
+        AVG(vr.duration) as avg_duration
+      FROM vacation_requests vr
+      WHERE vr.status_id = $1
+      AND EXTRACT(YEAR FROM vr.start_date) IN ($2, $3)
+      GROUP BY EXTRACT(YEAR FROM vr.start_date)
+      ORDER BY year
+    `
+
+    const result = await query(sql, [approvedStatusId, year1Int, year2Int])
+
+    // Create a map of year -> data
+    const yearData = {}
+    result.rows.forEach((row) => {
+      yearData[parseInt(row.year)] = {
+        year: parseInt(row.year),
+        requestCount: parseInt(row.request_count),
+        totalDays: parseInt(row.total_days) || 0,
+        uniqueEmployees: parseInt(row.unique_employees),
+        avgDuration: parseFloat(row.avg_duration) || 0
+      }
+    })
+
+    // Ensure both years have data (even if empty)
+    const data1 = yearData[year1Int] || {
+      year: year1Int,
+      requestCount: 0,
+      totalDays: 0,
+      uniqueEmployees: 0,
+      avgDuration: 0
+    }
+
+    const data2 = yearData[year2Int] || {
+      year: year2Int,
+      requestCount: 0,
+      totalDays: 0,
+      uniqueEmployees: 0,
+      avgDuration: 0
+    }
+
+    // Calculate percentage changes
+    const calculateChange = (oldValue, newValue) => {
+      if (oldValue === 0) {
+        return newValue > 0 ? 100 : 0
+      }
+      return Math.round(((newValue - oldValue) / oldValue) * 100 * 10) / 10
+    }
+
+    const comparison = {
+      year1: data1,
+      year2: data2,
+      changes: {
+        totalDays: {
+          absolute: data2.totalDays - data1.totalDays,
+          percentage: calculateChange(data1.totalDays, data2.totalDays)
+        },
+        requestCount: {
+          absolute: data2.requestCount - data1.requestCount,
+          percentage: calculateChange(data1.requestCount, data2.requestCount)
+        },
+        uniqueEmployees: {
+          absolute: data2.uniqueEmployees - data1.uniqueEmployees,
+          percentage: calculateChange(data1.uniqueEmployees, data2.uniqueEmployees)
+        },
+        avgDuration: {
+          absolute: Math.round((data2.avgDuration - data1.avgDuration) * 10) / 10,
+          percentage: calculateChange(data1.avgDuration, data2.avgDuration)
+        }
+      }
+    }
+
+    res.json(comparison)
+  } catch (error) {
+    console.error('Error fetching year-over-year comparison:', error)
+    res.status(500).json({ error: 'Failed to fetch year-over-year comparison' })
+  }
+})
+
 export default router
