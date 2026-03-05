@@ -23,6 +23,7 @@ import {
   BarChart3,
   RefreshCw,
   LineChart as LineChartIcon,
+  Building2,
 } from 'lucide-react'
 
 export function HRAnalytics() {
@@ -32,15 +33,25 @@ export function HRAnalytics() {
     trendsError,
     fetchTrends,
     refreshTrends,
+    utilization,
+    utilizationLoading,
+    utilizationError,
+    fetchUtilization,
+    refreshUtilization,
   } = useAnalyticsStore()
 
   const [period, setPeriod] = useState<TrendPeriod>('monthly')
   const [year] = useState(new Date().getFullYear())
   const [chartType, setChartType] = useState<'bar' | 'line'>('bar')
+  const [utilizationYear] = useState(new Date().getFullYear())
 
   useEffect(() => {
     fetchTrends(period, year)
   }, [period, year, fetchTrends])
+
+  useEffect(() => {
+    fetchUtilization(utilizationYear)
+  }, [utilizationYear, fetchUtilization])
 
   const handleRefresh = () => {
     refreshTrends()
@@ -336,6 +347,126 @@ export function HRAnalytics() {
               </Badge>
               <Badge variant="secondary">
                 Точек данных: {trends.data.length}
+              </Badge>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Department Utilization Chart */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Утилизация по отделам
+              </CardTitle>
+              <CardDescription>
+                Процент использования доступных дней отпуска по отделам
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Error state */}
+          {utilizationError && (
+            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4 mb-4">
+              <p className="text-sm text-destructive">{utilizationError}</p>
+              <Button variant="outline" size="sm" onClick={() => refreshUtilization()} className="mt-2">
+                Попробовать снова
+              </Button>
+            </div>
+          )}
+
+          {/* Loading state */}
+          {utilizationLoading && (
+            <div className="flex items-center justify-center h-80">
+              <div className="flex flex-col items-center gap-4">
+                <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Загрузка данных...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!utilizationLoading && !utilizationError && (!utilization?.data || utilization.data.length === 0) && (
+            <div className="flex items-center justify-center h-80">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <Building2 className="h-12 w-12 text-muted-foreground/50" />
+                <div>
+                  <p className="text-lg font-medium">Нет данных</p>
+                  <p className="text-sm text-muted-foreground">
+                    Данные об утилизации отпусков по отделам отсутствуют
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Chart */}
+          {!utilizationLoading && !utilizationError && utilization?.data && utilization.data.length > 0 && (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={utilization.data.map((item) => ({
+                    name: item.departmentName,
+                    'Утилизация %': Math.round(item.utilizationPercentage),
+                    'Использовано дней': item.totalDaysUsed,
+                    'Доступно дней': item.totalAvailableDays,
+                  }))}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  layout="vertical"
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis
+                    type="number"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    axisLine={{ stroke: 'hsl(var(--border))' }}
+                    domain={[0, 100]}
+                    tickFormatter={(value) => `${value}%`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    axisLine={{ stroke: 'hsl(var(--border))' }}
+                    width={120}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                    }}
+                    labelStyle={{ color: 'hsl(var(--foreground))' }}
+                    formatter={(value, name) => {
+                      if (name === 'Утилизация %') return [`${value}%`, name]
+                      return [value, name]
+                    }}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey="Утилизация %"
+                    fill="hsl(var(--primary))"
+                    radius={[0, 4, 4, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Utilization info badges */}
+          {!utilizationLoading && !utilizationError && utilization && (
+            <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border/50">
+              <Badge variant="secondary">
+                Год: {utilization.year}
+              </Badge>
+              <Badge variant="secondary">
+                Отделов: {utilization.data.length}
+              </Badge>
+              <Badge variant="secondary">
+                Норма дней: {utilization.standardDaysPerYear}
               </Badge>
             </div>
           )}
