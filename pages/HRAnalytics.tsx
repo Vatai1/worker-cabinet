@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   BarChart,
   Bar,
@@ -11,11 +11,22 @@ import {
   Line,
   Legend,
 } from 'recharts'
+import {
+  format,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  isSameDay,
+  isWithinInterval,
+  isToday,
+  parseISO,
+} from 'date-fns'
+import { ru } from 'date-fns/locale'
 import { useAnalyticsStore } from '@/store/analyticsStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import type { TrendPeriod } from '@/types'
+import type { TrendPeriod, UpcomingAbsence } from '@/types'
 import {
   TrendingUp,
   Calendar,
@@ -24,7 +35,30 @@ import {
   RefreshCw,
   LineChart as LineChartIcon,
   Building2,
+  CalendarDays,
+  User,
 } from 'lucide-react'
+
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+
+const COLORS = [
+  'bg-blue-500',
+  'bg-green-500',
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-orange-500',
+  'bg-teal-500',
+  'bg-indigo-500',
+  'bg-red-500',
+]
+
+function getUserColor(userId: string): string {
+  let hash = 0
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return COLORS[Math.abs(hash) % COLORS.length]
+}
 
 export function HRAnalytics() {
   const {
@@ -38,12 +72,17 @@ export function HRAnalytics() {
     utilizationError,
     fetchUtilization,
     refreshUtilization,
+    upcomingAbsences,
+    upcomingAbsencesLoading,
+    upcomingAbsencesError,
+    fetchUpcomingAbsences,
   } = useAnalyticsStore()
 
   const [period, setPeriod] = useState<TrendPeriod>('monthly')
   const [year] = useState(new Date().getFullYear())
   const [chartType, setChartType] = useState<'bar' | 'line'>('bar')
   const [utilizationYear] = useState(new Date().getFullYear())
+  const [upcomingDays] = useState(30)
 
   useEffect(() => {
     fetchTrends(period, year)
@@ -52,6 +91,10 @@ export function HRAnalytics() {
   useEffect(() => {
     fetchUtilization(utilizationYear)
   }, [utilizationYear, fetchUtilization])
+
+  useEffect(() => {
+    fetchUpcomingAbsences(upcomingDays)
+  }, [upcomingDays, fetchUpcomingAbsences])
 
   const handleRefresh = () => {
     refreshTrends()
@@ -472,6 +515,337 @@ export function HRAnalytics() {
           )}
         </CardContent>
       </Card>
+
+      {/* Upcoming Absences Calendar View */}
+      <UpcomingAbsencesCalendar
+        absences={upcomingAbsences?.data || []}
+        loading={upcomingAbsencesLoading}
+        error={upcomingAbsencesError}
+        startDate={upcomingAbsences?.startDate}
+        endDate={upcomingAbsences?.endDate}
+        daysCount={upcomingAbsences?.days || upcomingDays}
+        onRefresh={() => fetchUpcomingAbsences(upcomingDays)}
+      />
     </div>
+  )
+}
+
+// Upcoming Absences Calendar Component
+interface UpcomingAbsencesCalendarProps {
+  absences: UpcomingAbsence[]
+  loading: boolean
+  error: string | null
+  startDate?: string
+  endDate?: string
+  daysCount: number
+  onRefresh: () => void
+}
+
+function UpcomingAbsencesCalendar({
+  absences,
+  loading,
+  error,
+  startDate,
+  endDate,
+  daysCount,
+  onRefresh,
+}: UpcomingAbsencesCalendarProps) {
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar')
+
+  // Generate weeks for the next 30 days
+  const weeks = useMemo(() => {
+    if (!startDate || !endDate) return []
+
+    const start = parseISO(startDate)
+    const end = parseISO(endDate)
+    const days = eachDayOfInterval({ start, end })
+
+    // Group days by week
+    const weeksMap = new Map<string, Date[]>()
+
+    days.forEach(day => {
+      const weekStart = startOfWeek(day, { weekStartsOn: 1 })
+      const weekKey = format(weekStart, 'yyyy-MM-dd')
+
+      if (!weeksMap.has(weekKey)) {
+        weeksMap.set(weekKey, [])
+      }
+      weeksMap.get(weekKey)!.push(day)
+    })
+
+    return Array.from(weeksMap.entries()).map(([weekStartStr]) => {
+      const weekStart = parseISO(weekStartStr)
+      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
+
+      // Pad days to include full week
+      const allWeekDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
+
+      return {
+        weekStart,
+        weekEnd,
+        label: `${format(weekStart, 'd MMM', { locale: ru })} - ${format(weekEnd, 'd MMM yyyy', { locale: ru })}`,
+        days: allWeekDays,
+      }
+    })
+  }, [startDate, endDate])
+
+  const getAbsencesForDay = (date: Date): UpcomingAbsence[] => {
+    return absences.filter(absence => {
+      const absenceStart = parseISO(absence.startDate)
+      const absenceEnd = parseISO(absence.endDate)
+      return isWithinInterval(date, { start: absenceStart, end: absenceEnd }) ||
+             isSameDay(date, absenceStart) ||
+             isSameDay(date, absenceEnd)
+    })
+  }
+
+  // Group absences by employee for list view
+  const absencesByEmployee = useMemo(() => {
+    const grouped = new Map<string, { absence: UpcomingAbsence; dates: Date[] }>()
+
+    absences.forEach(absence => {
+      const key = absence.userId
+      const start = parseISO(absence.startDate)
+      const end = parseISO(absence.endDate)
+      const dates = eachDayOfInterval({ start, end })
+
+      if (!grouped.has(key)) {
+        grouped.set(key, { absence, dates: [] })
+      }
+      grouped.get(key)!.dates.push(...dates)
+    })
+
+    return Array.from(grouped.values()).sort((a, b) =>
+      parseISO(a.absence.startDate).getTime() - parseISO(b.absence.startDate).getTime()
+    )
+  }, [absences])
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="h-5 w-5" />
+              Предстоящие отсутствия
+            </CardTitle>
+            <CardDescription>
+              Сотрудники в отпуске в ближайшие {daysCount} дней
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="flex rounded-lg border border-border p-1">
+              <Button
+                variant={viewMode === 'calendar' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('calendar')}
+                className="text-xs"
+              >
+                <Calendar className="h-4 w-4 mr-1" />
+                Календарь
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+                className="text-xs"
+              >
+                <User className="h-4 w-4 mr-1" />
+                Список
+              </Button>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Error state */}
+        {error && (
+          <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4 mb-4">
+            <p className="text-sm text-destructive">{error}</p>
+            <Button variant="outline" size="sm" onClick={onRefresh} className="mt-2">
+              Попробовать снова
+            </Button>
+          </div>
+        )}
+
+        {/* Loading state */}
+        {loading && (
+          <div className="flex items-center justify-center h-60">
+            <div className="flex flex-col items-center gap-4">
+              <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Загрузка данных...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loading && !error && absences.length === 0 && (
+          <div className="flex items-center justify-center h-60">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <CalendarDays className="h-12 w-12 text-muted-foreground/50" />
+              <div>
+                <p className="text-lg font-medium">Нет предстоящих отсутствий</p>
+                <p className="text-sm text-muted-foreground">
+                  Нет сотрудников в отпуске в ближайшие {daysCount} дней
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Calendar View */}
+        {!loading && !error && absences.length > 0 && viewMode === 'calendar' && (
+          <div className="space-y-6">
+            {/* Legend */}
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="text-muted-foreground">Легенда:</span>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-primary/20 border border-primary" />
+                <span>Сегодня</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-blue-500" />
+                <span>Отпуск</span>
+              </div>
+            </div>
+
+            {/* Weeks */}
+            <div className="space-y-4">
+              {weeks.map(week => (
+                <div key={week.weekStart.toISOString()} className="border rounded-lg p-4 bg-card">
+                  <div className="text-sm font-medium text-muted-foreground mb-3">
+                    {week.label}
+                  </div>
+
+                  {/* Weekday headers */}
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {WEEKDAYS.map(day => (
+                      <div key={day} className="text-center text-xs text-muted-foreground font-medium p-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Days */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {week.days.map(day => {
+                      const dayAbsences = getAbsencesForDay(day)
+                      const hasAbsences = dayAbsences.length > 0
+                      const today = isToday(day)
+                      const isWeekend = day.getDay() === 0 || day.getDay() === 6
+
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          className={`
+                            relative p-2 min-h-[60px] text-center rounded-md transition-all
+                            ${today ? 'bg-primary/10 border-2 border-primary' : ''}
+                            ${isWeekend && !hasAbsences ? 'bg-muted/30' : ''}
+                            ${!today && !isWeekend && !hasAbsences ? 'hover:bg-muted/50' : ''}
+                          `}
+                          title={dayAbsences.map(a => `${a.employee.lastName} ${a.employee.firstName}`).join(', ')}
+                        >
+                          <div className="text-xs text-muted-foreground mb-1">
+                            {format(day, 'd')}
+                          </div>
+
+                          {hasAbsences && (
+                            <div className="flex flex-wrap justify-center gap-0.5">
+                              {dayAbsences.slice(0, 3).map(absence => (
+                                <div
+                                  key={absence.id}
+                                  className={`w-2 h-2 rounded-full ${getUserColor(absence.userId)}`}
+                                  title={`${absence.employee.lastName} ${absence.employee.firstName}`}
+                                />
+                              ))}
+                              {dayAbsences.length > 3 && (
+                                <div className="text-xs text-muted-foreground">
+                                  +{dayAbsences.length - 3}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Employee Legend */}
+            <div className="border rounded-lg p-4 bg-card">
+              <h4 className="font-medium text-sm mb-3">Сотрудники в отпуске</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {Array.from(new Set(absences.map(a => a.userId))).map(userId => {
+                  const absence = absences.find(a => a.userId === userId)!
+                  return (
+                    <div key={userId} className="flex items-center gap-2 text-sm">
+                      <div className={`w-3 h-3 rounded ${getUserColor(userId)}`} />
+                      <span className="truncate">
+                        {absence.employee.lastName} {absence.employee.firstName[0]}.
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        ({format(parseISO(absence.startDate), 'd.MM')} - {format(parseISO(absence.endDate), 'd.MM')})
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* List View */}
+        {!loading && !error && absences.length > 0 && viewMode === 'list' && (
+          <div className="space-y-3">
+            {absencesByEmployee.map(({ absence }) => (
+              <div
+                key={absence.id}
+                className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded ${getUserColor(absence.userId)}`} />
+                  <div>
+                    <div className="font-medium">
+                      {absence.employee.lastName} {absence.employee.firstName}
+                      {absence.employee.middleName && ` ${absence.employee.middleName}`}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {absence.employee.position}
+                      {absence.employee.departmentName && ` • ${absence.employee.departmentName}`}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-medium">
+                    {format(parseISO(absence.startDate), 'd MMM', { locale: ru })} - {format(parseISO(absence.endDate), 'd MMM yyyy', { locale: ru })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {absence.duration} {absence.duration === 1 ? 'день' : absence.duration < 5 ? 'дня' : 'дней'} • {absence.vacationTypeName}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Info badges */}
+        {!loading && !error && absences.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border/50">
+            <Badge variant="secondary">
+              Период: {daysCount} дней
+            </Badge>
+            <Badge variant="secondary">
+              Отсутствий: {absences.length}
+            </Badge>
+            <Badge variant="secondary">
+              Сотрудников: {new Set(absences.map(a => a.userId)).size}
+            </Badge>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
