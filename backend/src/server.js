@@ -9,6 +9,7 @@ import notificationsRoutes from './routes/notifications.js'
 import projectsRoutes from './routes/projects.js'
 import documentsRoutes from './routes/documents.js'
 import userDocumentsRoutes from './routes/userDocuments.js'
+import analyticsRoutes from './routes/analytics.js'
 
 dotenv.config()
 
@@ -51,6 +52,7 @@ app.use('/api/notifications', notificationsRoutes)
 app.use('/api/projects', projectsRoutes)
 app.use('/api/documents', documentsRoutes)
 app.use('/api/user-documents', userDocumentsRoutes)
+app.use('/api/analytics', analyticsRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {
