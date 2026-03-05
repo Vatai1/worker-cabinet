@@ -115,4 +115,62 @@ router.get('/trends', authenticateToken, authorizeRoles('hr', 'admin'), async (r
   }
 })
 
+// Get department utilization statistics
+// Access: HR and admin only
+router.get('/utilization', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const { year = new Date().getFullYear() } = req.query
+    const approvedStatusId = await getStatusIdByCode('approved')
+
+    // Standard vacation days per employee per year
+    const standardDaysPerYear = 28
+
+    // Get employee count and vacation days used per department
+    const sql = `
+      SELECT
+        d.id as department_id,
+        d.name as department_name,
+        COUNT(DISTINCT u.id) as employee_count,
+        COALESCE(SUM(vr.duration), 0) as total_days_used
+      FROM departments d
+      LEFT JOIN users u ON u.department_id = d.id
+      LEFT JOIN vacation_requests vr ON vr.user_id = u.id
+        AND vr.status_id = $1
+        AND EXTRACT(YEAR FROM vr.start_date) = $2
+      GROUP BY d.id, d.name
+      ORDER BY d.name
+    `
+
+    const result = await query(sql, [approvedStatusId, year])
+
+    // Calculate utilization percentage for each department
+    const utilization = result.rows.map((row) => {
+      const employeeCount = parseInt(row.employee_count)
+      const totalDaysUsed = parseInt(row.total_days_used) || 0
+      const totalAvailableDays = employeeCount * standardDaysPerYear
+      const utilizationPercentage = totalAvailableDays > 0
+        ? Math.round((totalDaysUsed / totalAvailableDays) * 100 * 10) / 10
+        : 0
+
+      return {
+        departmentId: row.department_id,
+        departmentName: row.department_name,
+        employeeCount,
+        totalDaysUsed,
+        totalAvailableDays,
+        utilizationPercentage
+      }
+    })
+
+    res.json({
+      year: parseInt(year),
+      standardDaysPerYear,
+      data: utilization
+    })
+  } catch (error) {
+    console.error('Error fetching department utilization:', error)
+    res.status(500).json({ error: 'Failed to fetch department utilization' })
+  }
+})
+
 export default router
