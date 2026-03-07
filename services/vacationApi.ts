@@ -185,6 +185,7 @@ export const vacationApi = {
         vacationType: data.vacationType,
         comment: data.comment,
         hasTravel: data.hasTravel,
+        travelDestination: data.travelDestination,
         referenceDocument: data.referenceDocument,
       }),
     })

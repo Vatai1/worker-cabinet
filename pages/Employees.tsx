@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate } from '@/lib/utils'
-import { Search, UserPlus, Mail, Phone, Calendar, MoreVertical } from 'lucide-react'
+import { Search, Mail, Phone, Calendar, MoreVertical } from 'lucide-react'
 
 interface Employee {
   id: string
@@ -86,10 +86,7 @@ export function Employees() {
             Управление командой и просмотр информации о сотрудниках
           </p>
         </div>
-        <Button>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Добавить сотрудника
-        </Button>
+
       </div>
 
       <Card>

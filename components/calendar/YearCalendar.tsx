@@ -240,33 +240,40 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                     onMouseEnter={() => setHoverDate(dateStr)}
                     onMouseLeave={() => setHoverDate(null)}
                     className={`
-                      relative p-1 text-center cursor-pointer rounded transition-all
-                      ${isWeekend && !isSelected && !hasVacation ? 'bg-gray-200 text-gray-600 font-medium' : ''}
-                      ${!isWeekend && !isSelected && !hasVacation ? 'hover:bg-gray-100' : ''}
-                      ${isSelected ? 'bg-blue-500 text-white hover:bg-blue-600' : ''}
-                      ${isHovered ? 'bg-blue-200' : ''}
-                      ${hasVacation && !isSelected ? 'font-semibold' : ''}
-                      ${hasVacation && !isSelected ? 'bg-white' : ''}
-                    `}
-                    style={(hasVacation && !isSelected && visibleVacations.some(v => v.status === 'on_approval')) ? {
-                      backgroundImage: visibleVacations
-                        .filter(v => v.status === 'on_approval')
-                        .map(v => {
-                          const colorClass = getUserColor(v.userId)
-                          const colorMap: Record<string, string> = {
-                            'bg-blue-500': '#3b82f6',
-                            'bg-green-500': '#22c55e',
-                            'bg-purple-500': '#a855f7',
-                            'bg-pink-500': '#ec4899',
-                            'bg-orange-500': '#f97316',
-                            'bg-teal-500': '#14b8a6',
-                            'bg-indigo-500': '#6366f1',
-                            'bg-red-500': '#ef4444',
-                          }
-                          const color = colorMap[colorClass] || '#3b82f6'
-                          return `repeating-linear-gradient(45deg, ${color}40 0px, ${color}40 2px, transparent 2px, transparent 4px)`
-                        }).join(', ')
-                    } : undefined}
+                       relative p-1 text-center cursor-pointer rounded transition-all
+                       ${isWeekend && !isSelected && !hasVacation ? 'bg-gray-200 text-gray-600 font-medium' : ''}
+                       ${!isWeekend && !isSelected && !hasVacation ? 'hover:bg-gray-100' : ''}
+                       ${isSelected ? 'bg-blue-500 text-white hover:bg-blue-600' : ''}
+                       ${isHovered ? 'bg-blue-200' : ''}
+                       ${hasVacation && !isSelected ? 'font-semibold' : ''}
+                     `}
+                      style={(() => {
+                        if (isSelected || !hasVacation) return undefined
+                        
+                        const bgColor = isWeekend ? '#e5e7eb' : '#ffffff'
+                        
+                        const pendingVacations = visibleVacations.filter(v => v.status === 'on_approval')
+                        if (pendingVacations.length > 0) {
+                          const gradients = pendingVacations.map(v => {
+                            const colorClass = getUserColor(v.userId)
+                            const colorMap: Record<string, string> = {
+                              'bg-blue-500': '#3b82f6',
+                              'bg-green-500': '#22c55e',
+                              'bg-purple-500': '#a855f7',
+                              'bg-pink-500': '#ec4899',
+                              'bg-orange-500': '#f97316',
+                              'bg-teal-500': '#14b8a6',
+                              'bg-indigo-500': '#6366f1',
+                              'bg-red-500': '#ef4444',
+                            }
+                            const color = colorMap[colorClass] || '#3b82f6'
+                            return `repeating-linear-gradient(45deg, ${color}40 0px, ${color}40 2px, transparent 2px, transparent 4px)`
+                          })
+                          return { backgroundColor: bgColor, backgroundImage: gradients.join(', ') }
+                        }
+                        
+                        return { backgroundColor: bgColor }
+                      })()}
                     title={vacations.map(v => {
                       const statusText = v.status === 'approved' ? '(одобрено)' : v.status === 'on_approval' ? '(на согласовании)' : `(${v.status})`
                       return `${v.userLastName} ${v.userFirstName} ${statusText}`

@@ -8,6 +8,12 @@ async function seed() {
   try {
     console.log('Starting seed...')
 
+    const existingUsers = await query('SELECT COUNT(*) FROM users')
+    if (parseInt(existingUsers.rows[0].count) > 0) {
+      console.log('⏭️  Database already seeded, skipping...')
+      process.exit(0)
+    }
+
     // Создание подразделения
     const deptResult = await query(
       `INSERT INTO departments (name, manager_id)

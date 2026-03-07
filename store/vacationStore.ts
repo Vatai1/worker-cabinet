@@ -238,6 +238,7 @@ export const useVacationStore = create<VacationStore>()(
           set((state) => ({
             requests: [...state.requests, newRequest],
             currentUserRequests: [...state.currentUserRequests, newRequest],
+            departmentRequests: [...state.departmentRequests, newRequest],
             loading: false,
           }))
 

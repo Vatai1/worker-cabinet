@@ -190,7 +190,7 @@ async function runMigrations() {
 
     console.log('✅ Tables created')
 
-    // Step 2.5: Add new columns to existing tables
+// Step 2.5: Add new columns to existing tables
     console.log('Adding new columns...')
     
     try {
@@ -204,6 +204,20 @@ async function runMigrations() {
         console.log('  ✓ reference_document (already exists)')
       } else {
         console.log('  - reference_document:', e.message)
+      }
+    }
+
+    try {
+      await db.query(`
+        ALTER TABLE vacation_requests 
+        ADD COLUMN IF NOT EXISTS travel_destination VARCHAR(255)
+      `)
+      console.log('  ✓ travel_destination column added to vacation_requests')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ travel_destination (already exists)')
+      } else {
+        console.log('  - travel_destination:', e.message)
       }
     }
 
