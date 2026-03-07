@@ -1,14 +1,19 @@
 import express from 'express'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import log from '../utils/logger.js'
 
 const router = express.Router()
 
 // Get all vacation requests (with filters)
 router.get('/requests', authenticateToken, async (req, res) => {
+  log.api.start(req, 'VACATION', 'GET /requests')
+  
   try {
     const { userId, status, departmentId, year } = req.query
     const user = req.user
+
+    log.debug('VACATION', 'Query params', { userId, status, departmentId, year })
 
     let whereClause = 'WHERE 1=1'
     const params = []
@@ -35,9 +40,9 @@ router.get('/requests', authenticateToken, async (req, res) => {
     } else if (departmentId) {
       // Фильтр по отделу (для календаря, списка отдела)
       if (user.role === 'employee') {
-        // Сотрудник видит только одобренные заявки отдела
-        whereClause += ' AND u.department_id = $1 AND vr.status = $2'
-        params.push(departmentId, 'approved')
+        // Сотрудник видит свои заявки (любого статуса) + одобренные заявки коллег
+        whereClause += ' AND u.department_id = $1 AND (vr.user_id = $2 OR vr.status = $3)'
+        params.push(departmentId, user.id, 'approved')
       } else {
         // Менеджеры/HR/админы видят все заявки отдела
         whereClause += ' AND u.department_id = $' + (params.length + 1)
@@ -102,27 +107,33 @@ router.get('/requests', authenticateToken, async (req, res) => {
     `
 
     const result = await query(sql, params)
+    log.db('VACATION', 'Fetched requests', sql, params, req)
 
     const requests = result.rows.map((request) => ({
       ...request,
       statusHistory: request.status_history,
     }))
 
+    log.api.success(req, 'VACATION', 'GET /requests', 200, { count: requests.length })
     res.json(requests)
   } catch (error) {
-    console.error('Error fetching vacation requests:', error)
+    log.api.error(req, 'VACATION', 'GET /requests', error)
     res.status(500).json({ error: 'Failed to fetch vacation requests' })
   }
 })
 
 // Get vacation balance for user
 router.get('/balance/:userId', authenticateToken, async (req, res) => {
+  log.api.start(req, 'VACATION', 'GET /balance/:userId')
+  
   try {
     const { userId } = req.params
     const currentUser = req.user
 
-    // Проверка прав доступа
+    log.debug('VACATION', 'Balance request', { requestedUserId: userId, currentUserId: currentUser.id, currentRole: currentUser.role })
+
     if (currentUser.role === 'employee' && currentUser.id !== parseInt(userId)) {
+      log.warn('VACATION', 'Access denied', { currentUserId: currentUser.id, requestedUserId: userId })
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -130,34 +141,58 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
       'SELECT * FROM vacation_balances WHERE user_id = $1',
       [userId]
     )
+    log.db('VACATION', 'Fetched balance', 'SELECT * FROM vacation_balances WHERE user_id = $1', [userId], req)
 
     if (result.rows.length === 0) {
-      // Создать баланс если не существует
+      log.info('VACATION', 'Creating new balance for user', { userId })
       const newBalance = await query(
         `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days)
          VALUES ($1, 28, 0, 0)
          RETURNING *`,
         [userId]
       )
+      log.api.success(req, 'VACATION', 'GET /balance/:userId', 200, newBalance.rows[0])
       return res.json(newBalance.rows[0])
     }
 
+    log.api.success(req, 'VACATION', 'GET /balance/:userId', 200, result.rows[0])
     res.json(result.rows[0])
   } catch (error) {
-    console.error('Error fetching vacation balance:', error)
+    log.api.error(req, 'VACATION', 'GET /balance/:userId', error)
     res.status(500).json({ error: 'Failed to fetch vacation balance' })
   }
 })
 
 // Create vacation request
 router.post('/requests', authenticateToken, async (req, res) => {
-  const client = await getClient()
+  log.api.start(req, 'VACATION', 'POST /requests (create)')
+  
+  let client
+  try {
+    client = await getClient()
+    log.transaction('VACATION', 'Acquired DB client', { hasClient: !!client }, req)
+  } catch (e) {
+    log.api.error(req, 'VACATION', 'POST /requests - DB connection failed', e, 500)
+    return res.status(500).json({ error: 'Database connection failed' })
+  }
   
   try {
     const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, referenceDocument } = req.body
     const userId = req.user.id
 
+    log.info('VACATION', 'Creating vacation request', {
+      userId,
+      userEmail: req.user.email,
+      startDate,
+      endDate,
+      vacationType,
+      hasTravel,
+      travelDestination,
+      hasReferenceDocument: !!referenceDocument,
+    })
+
     await client.query('BEGIN')
+    log.transaction('VACATION', 'BEGIN', {}, req)
 
     // Валидация
     // Парсим дату как локальное время (не UTC)
@@ -181,35 +216,41 @@ router.post('/requests', authenticateToken, async (req, res) => {
     today.setHours(0, 0, 0, 0)
 
     if (start < today) {
+      log.warn('VACATION', 'Validation failed: start date in past', { start, today })
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Нельзя создавать заявку на прошедшую дату' })
     }
 
     if (end < start) {
+      log.warn('VACATION', 'Validation failed: end before start', { start, end })
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Дата окончания не может быть раньше даты начала' })
     }
 
-    // Проверка справки для учебного отпуска
     if (vacationType === 'educational' && !referenceDocument) {
+      log.warn('VACATION', 'Validation failed: missing reference document for educational vacation')
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Для учебного отпуска необходимо приложить справку' })
     }
 
-    // Расчёт длительности в днях (включая обе границы)
     const duration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
-
-    // Добавляем 2 дня при включении проезда
     const finalDuration = hasTravel ? duration + 2 : duration
 
-    // Проверка баланса
+    log.debug('VACATION', 'Calculated duration', { duration, finalDuration, hasTravel })
+
     const balanceResult = await client.query(
       'SELECT * FROM vacation_balances WHERE user_id = $1',
       [userId]
     )
 
     const balance = balanceResult.rows[0]
+    log.debug('VACATION', 'Current balance', { balance })
+
     if (!balance || balance.available_days < finalDuration) {
+      log.warn('VACATION', 'Insufficient balance', { 
+        available: balance?.available_days || 0, 
+        required: finalDuration 
+      })
       await client.query('ROLLBACK')
       return res.status(400).json({ 
         error: 'Недостаточно дней на балансе',
@@ -218,7 +259,6 @@ router.post('/requests', authenticateToken, async (req, res) => {
       })
     }
 
-    // Проверка пересечений (используем отформатированные локальные даты)
     const overlapResult = await client.query(
       `SELECT id FROM vacation_requests 
         WHERE user_id = $1 
@@ -232,11 +272,13 @@ router.post('/requests', authenticateToken, async (req, res) => {
     )
 
     if (overlapResult.rows.length > 0) {
+      log.warn('VACATION', 'Date overlap detected', { 
+        overlappingRequestIds: overlapResult.rows.map(r => r.id) 
+      })
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Пересечение с существующей заявкой' })
     }
 
-    // Создание заявки
     const result = await client.query(
       `INSERT INTO vacation_requests 
         (user_id, start_date, end_date, duration, vacation_type, comment, has_travel, travel_destination, reference_document, status)
@@ -256,16 +298,16 @@ router.post('/requests', authenticateToken, async (req, res) => {
     )
 
     const request = result.rows[0]
+    log.info('VACATION', 'Created vacation request', { requestId: request.id, userId, duration: finalDuration })
 
-    // Резервируем дни (заявка на согласовании)
     await client.query(
       `UPDATE vacation_balances 
        SET reserved_days = reserved_days + $1
        WHERE user_id = $2`,
       [finalDuration, userId]
     )
+    log.debug('VACATION', 'Reserved days updated', { reservedDays: finalDuration, userId })
 
-    // Запись в историю
     await client.query(
       `INSERT INTO vacation_request_status_history 
        (request_id, status, changed_by) 
@@ -274,12 +316,15 @@ router.post('/requests', authenticateToken, async (req, res) => {
     )
 
     await client.query('COMMIT')
+    log.transaction('VACATION', 'COMMIT', { requestId: request.id }, req)
 
+    log.api.success(req, 'VACATION', 'POST /requests', 201, { requestId: request.id, status: 'on_approval' })
     res.status(201).json(request)
   } catch (error) {
     await client.query('ROLLBACK')
-    console.error('Error creating vacation request:', error)
-    res.status(500).json({ error: 'Failed to create vacation request' })
+    log.transaction('VACATION', 'ROLLBACK', {}, req)
+    log.api.error(req, 'VACATION', 'POST /requests', error)
+    res.status(500).json({ error: 'Failed to create vacation request', details: error.message })
   } finally {
     client.release()
   }
@@ -287,6 +332,8 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
 // Update vacation request
 router.put('/requests/:id', authenticateToken, async (req, res) => {
+  log.api.start(req, 'VACATION', 'PUT /requests/:id (update)')
+  
   const client = await getClient()
   
   try {
@@ -294,15 +341,18 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     const { startDate, endDate, vacationType, comment, hasTravel, referenceDocument } = req.body
     const userId = req.user.id
 
-    await client.query('BEGIN')
+    log.info('VACATION', 'Updating vacation request', { requestId: id, userId, updates: { startDate, endDate, vacationType, hasTravel } })
 
-    // Проверка прав
+    await client.query('BEGIN')
+    log.transaction('VACATION', 'BEGIN', { requestId: id }, req)
+
     const requestResult = await client.query(
       'SELECT * FROM vacation_requests WHERE id = $1',
       [id]
     )
 
     if (requestResult.rows.length === 0) {
+      log.warn('VACATION', 'Request not found', { requestId: id })
       await client.query('ROLLBACK')
       return res.status(404).json({ error: 'Request not found' })
     }
@@ -310,21 +360,23 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     const request = requestResult.rows[0]
 
     if (request.user_id !== userId && req.user.role === 'employee') {
+      log.warn('VACATION', 'Access denied for update', { requestId: id, userId, requestUserId: request.user_id })
       await client.query('ROLLBACK')
       return res.status(403).json({ error: 'Forbidden' })
     }
 
     if (request.status !== 'on_approval') {
+      log.warn('VACATION', 'Cannot edit request - wrong status', { requestId: id, status: request.status })
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Можно редактировать только заявки на согласовании' })
     }
 
-    // Расчёт новой длительности
     const start = new Date(startDate)
     const end = new Date(endDate)
     const newDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
 
-    // Обновление баланса в зависимости от статуса
+    log.debug('VACATION', 'Recalculated duration', { oldDuration: request.duration, newDuration })
+
     if (request.status === 'on_approval') {
       await client.query(
         `UPDATE vacation_balances 
@@ -332,6 +384,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
          WHERE user_id = $3`,
         [request.duration, newDuration, request.user_id]
       )
+      log.debug('VACATION', 'Updated reserved days', { oldDays: request.duration, newDays: newDuration })
     } else if (request.status === 'approved') {
       await client.query(
         `UPDATE vacation_balances 
@@ -339,9 +392,9 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
          WHERE user_id = $3`,
         [request.duration, newDuration, request.user_id]
       )
+      log.debug('VACATION', 'Updated used days', { oldDays: request.duration, newDays: newDuration })
     }
 
-    // Обновление заявки
     const result = await client.query(
       `UPDATE vacation_requests 
        SET start_date = $1, end_date = $2, duration = $3, vacation_type = $4, comment = $5, has_travel = $6, reference_document = $7
@@ -351,11 +404,14 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     )
 
     await client.query('COMMIT')
+    log.transaction('VACATION', 'COMMIT', { requestId: id }, req)
 
+    log.api.success(req, 'VACATION', 'PUT /requests/:id', 200, { requestId: id })
     res.json(result.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
-    console.error('Error updating vacation request:', error)
+    log.transaction('VACATION', 'ROLLBACK', {}, req)
+    log.api.error(req, 'VACATION', 'PUT /requests/:id', error)
     res.status(500).json({ error: 'Failed to update vacation request' })
   } finally {
     client.release()
@@ -364,15 +420,24 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 
 // Approve vacation request
 router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  log.api.start(req, 'VACATION', 'POST /requests/:id/approve')
+  
   const client = await getClient()
 
   try {
     const { id } = req.params
     const managerId = req.user.id
 
-    await client.query('BEGIN')
+    log.info('VACATION', 'Approving request', { 
+      requestId: id, 
+      managerId, 
+      managerEmail: req.user.email,
+      managerRole: req.user.role 
+    })
 
-    // Переносим дни из зарезервированных в использованные и обновляем заявку одним запросом
+    await client.query('BEGIN')
+    log.transaction('VACATION', 'BEGIN', { requestId: id, action: 'approve' }, req)
+
     const result = await client.query(
       `UPDATE vacation_requests vr
        SET status = 'approved', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
@@ -387,11 +452,17 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
     )
 
     if (result.rows.length === 0) {
+      log.warn('VACATION', 'Request not found or already processed', { requestId: id })
       await client.query('ROLLBACK')
       return res.status(404).json({ error: 'Request not found or not pending approval' })
     }
 
     const request = result.rows[0]
+    log.debug('VACATION', 'Request approved, updating balance', { 
+      requestId: id, 
+      duration: request.duration,
+      userId: request.balance_user_id 
+    })
 
     await client.query(
       `UPDATE vacation_balances 
@@ -401,7 +472,6 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
       [request.duration, request.balance_user_id]
     )
 
-    // Запись в историю
     await client.query(
       `INSERT INTO vacation_request_status_history 
        (request_id, status, changed_by, comment) 
@@ -410,11 +480,14 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
     )
 
     await client.query('COMMIT')
+    log.transaction('VACATION', 'COMMIT', { requestId: id, status: 'approved' }, req)
 
+    log.api.success(req, 'VACATION', 'POST /requests/:id/approve', 200, { requestId: id, status: 'approved' })
     res.json(result.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
-    console.error('Error approving vacation request:', error)
+    log.transaction('VACATION', 'ROLLBACK', {}, req)
+    log.api.error(req, 'VACATION', 'POST /requests/:id/approve', error)
     res.status(500).json({ error: 'Failed to approve vacation request' })
   } finally {
     client.release()
@@ -423,6 +496,8 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
 
 // Reject vacation request
 router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  log.api.start(req, 'VACATION', 'POST /requests/:id/reject')
+  
   const client = await getClient()
 
   try {
@@ -430,11 +505,20 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     const { reason } = req.body
     const managerId = req.user.id
 
+    log.info('VACATION', 'Rejecting request', { 
+      requestId: id, 
+      managerId, 
+      managerEmail: req.user.email,
+      reason: reason?.substring(0, 100) 
+    })
+
     if (!reason || !reason.trim()) {
+      log.warn('VACATION', 'Rejection reason missing', { requestId: id })
       return res.status(400).json({ error: 'Reason is required' })
     }
 
     await client.query('BEGIN')
+    log.transaction('VACATION', 'BEGIN', { requestId: id, action: 'reject' }, req)
 
     const result = await client.query(
       `UPDATE vacation_requests vr
@@ -445,11 +529,17 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     )
 
     if (result.rows.length === 0) {
+      log.warn('VACATION', 'Request not found or already processed', { requestId: id })
       await client.query('ROLLBACK')
       return res.status(404).json({ error: 'Request not found or not pending approval' })
     }
 
     const request = result.rows[0]
+    log.debug('VACATION', 'Request rejected, returning reserved days', { 
+      requestId: id, 
+      duration: request.duration,
+      userId: request.user_id 
+    })
 
     await client.query(
       `UPDATE vacation_balances 
@@ -466,11 +556,14 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     )
 
     await client.query('COMMIT')
+    log.transaction('VACATION', 'COMMIT', { requestId: id, status: 'rejected' }, req)
 
+    log.api.success(req, 'VACATION', 'POST /requests/:id/reject', 200, { requestId: id, status: 'rejected' })
     res.json(result.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
-    console.error('Error rejecting vacation request:', error)
+    log.transaction('VACATION', 'ROLLBACK', {}, req)
+    log.api.error(req, 'VACATION', 'POST /requests/:id/reject', error)
     res.status(500).json({ error: 'Failed to reject vacation request' })
   } finally {
     client.release()
@@ -479,13 +572,22 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
 
 // Cancel vacation request (by employee)
 router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
+  log.api.start(req, 'VACATION', 'POST /requests/:id/cancel (by employee)')
+  
   const client = await getClient()
   
   try {
     const { id } = req.params
     const userId = req.user.id
 
+    log.info('VACATION', 'Cancelling request by employee', { 
+      requestId: id, 
+      userId,
+      userEmail: req.user.email
+    })
+
     await client.query('BEGIN')
+    log.transaction('VACATION', 'BEGIN', { requestId: id, action: 'cancel' }, req)
 
     const requestResult = await client.query(
       'SELECT * FROM vacation_requests WHERE id = $1',
@@ -493,6 +595,7 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     )
 
     if (requestResult.rows.length === 0) {
+      log.warn('VACATION', 'Request not found', { requestId: id })
       await client.query('ROLLBACK')
       return res.status(404).json({ error: 'Request not found' })
     }
@@ -500,16 +603,23 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     const request = requestResult.rows[0]
 
     if (request.user_id !== userId) {
+      log.warn('VACATION', 'Access denied - not owner', { requestId: id, userId, requestUserId: request.user_id })
       await client.query('ROLLBACK')
       return res.status(403).json({ error: 'Forbidden' })
     }
 
     if (request.status !== 'on_approval' && request.status !== 'approved') {
+      log.warn('VACATION', 'Cannot cancel - wrong status', { requestId: id, status: request.status })
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Можно отменять только заявки на согласовании или согласованные заявки' })
     }
 
-    // Возврат дней в зависимости от статуса
+    log.debug('VACATION', 'Returning days to balance', { 
+      requestId: id, 
+      status: request.status, 
+      duration: request.duration 
+    })
+
     if (request.status === 'on_approval') {
       await client.query(
         `UPDATE vacation_balances 
@@ -526,7 +636,6 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
       )
     }
 
-    // Обновление статуса заявки
     const result = await client.query(
       `UPDATE vacation_requests 
        SET status = 'cancelled_by_employee'
@@ -535,7 +644,6 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
       [id]
     )
 
-    // Запись в историю
     await client.query(
       `INSERT INTO vacation_request_status_history 
        (request_id, status, changed_by) 
@@ -544,11 +652,14 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     )
 
     await client.query('COMMIT')
+    log.transaction('VACATION', 'COMMIT', { requestId: id, status: 'cancelled_by_employee' }, req)
 
+    log.api.success(req, 'VACATION', 'POST /requests/:id/cancel', 200, { requestId: id, status: 'cancelled_by_employee' })
     res.json(result.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
-    console.error('Error cancelling vacation request:', error)
+    log.transaction('VACATION', 'ROLLBACK', {}, req)
+    log.api.error(req, 'VACATION', 'POST /requests/:id/cancel', error)
     res.status(500).json({ error: 'Failed to cancel vacation request' })
   } finally {
     client.release()
@@ -557,6 +668,8 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
 
 // Cancel vacation request (by manager)
 router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  log.api.start(req, 'VACATION', 'POST /requests/:id/cancel-by-manager')
+  
   const client = await getClient()
 
   try {
@@ -564,11 +677,21 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
     const { reason } = req.body
     const managerId = req.user.id
 
+    log.info('VACATION', 'Cancelling request by manager', { 
+      requestId: id, 
+      managerId, 
+      managerEmail: req.user.email,
+      managerRole: req.user.role,
+      reason: reason?.substring(0, 100)
+    })
+
     if (!reason || !reason.trim()) {
+      log.warn('VACATION', 'Cancellation reason missing', { requestId: id })
       return res.status(400).json({ error: 'Reason is required' })
     }
 
     await client.query('BEGIN')
+    log.transaction('VACATION', 'BEGIN', { requestId: id, action: 'cancel-by-manager' }, req)
 
     const result = await client.query(
       `UPDATE vacation_requests vr
@@ -579,11 +702,17 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
     )
 
     if (result.rows.length === 0) {
+      log.warn('VACATION', 'Request not found or not approved', { requestId: id })
       await client.query('ROLLBACK')
       return res.status(404).json({ error: 'Request not found or not approved' })
     }
 
     const request = result.rows[0]
+    log.debug('VACATION', 'Returning used days to balance', { 
+      requestId: id, 
+      duration: request.duration,
+      userId: request.user_id 
+    })
 
     await client.query(
       `UPDATE vacation_balances 
@@ -600,11 +729,14 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
     )
 
     await client.query('COMMIT')
+    log.transaction('VACATION', 'COMMIT', { requestId: id, status: 'cancelled_by_manager' }, req)
 
+    log.api.success(req, 'VACATION', 'POST /requests/:id/cancel-by-manager', 200, { requestId: id, status: 'cancelled_by_manager' })
     res.json(result.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
-    console.error('Error cancelling vacation request by manager:', error)
+    log.transaction('VACATION', 'ROLLBACK', {}, req)
+    log.api.error(req, 'VACATION', 'POST /requests/:id/cancel-by-manager', error)
     res.status(500).json({ error: 'Failed to cancel vacation request' })
   } finally {
     client.release()
@@ -613,10 +745,15 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
 
 // Get department calendar
 router.get('/calendar', authenticateToken, async (req, res) => {
+  log.api.start(req, 'VACATION', 'GET /calendar')
+  
   try {
     const { departmentId, year } = req.query
 
+    log.debug('VACATION', 'Calendar request params', { departmentId, year })
+
     if (!year) {
+      log.warn('VACATION', 'Missing year parameter')
       return res.status(400).json({ error: 'Year parameter is required' })
     }
 
@@ -647,24 +784,33 @@ router.get('/calendar', authenticateToken, async (req, res) => {
     sql += ' ORDER BY vr.start_date'
 
     const result = await query(sql, params)
+    log.db('VACATION', 'Fetched calendar items', sql, params, req)
+
+    log.api.success(req, 'VACATION', 'GET /calendar', 200, { count: result.rows.length, year, departmentId })
     res.json(result.rows)
   } catch (error) {
-    console.error('Error fetching vacation calendar:', error)
+    log.api.error(req, 'VACATION', 'GET /calendar', error)
     res.status(500).json({ error: 'Failed to fetch vacation calendar' })
   }
 })
 
 // Get vacation restrictions for department
 router.get('/restrictions', authenticateToken, async (req, res) => {
+  log.api.start(req, 'VACATION', 'GET /restrictions')
+  
   try {
     const { departmentId } = req.query
     const user = req.user
 
+    log.debug('VACATION', 'Restrictions request', { departmentId, userRole: user.role })
+
     if (!departmentId) {
+      log.warn('VACATION', 'Missing departmentId parameter')
       return res.status(400).json({ error: 'departmentId parameter is required' })
     }
 
     if (user.role === 'employee') {
+      log.warn('VACATION', 'Access denied for employee', { userId: user.id, departmentId })
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -674,7 +820,9 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
        ORDER BY created_at DESC`,
       [departmentId]
     )
+    log.db('VACATION', 'Fetched restrictions', 'SELECT * FROM vacation_restrictions WHERE department_id = $1', [departmentId], req)
 
+    log.api.success(req, 'VACATION', 'GET /restrictions', 200, { count: result.rows.length, departmentId })
     res.json(result.rows.map(r => ({
       ...r,
       id: r.id.toString(),
@@ -686,30 +834,44 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
       createdBy: r.created_by?.toString(),
     })))
   } catch (error) {
-    console.error('Error fetching vacation restrictions:', error)
+    log.api.error(req, 'VACATION', 'GET /restrictions', error)
     res.status(500).json({ error: 'Failed to fetch vacation restrictions' })
   }
 })
 
 // Create vacation restriction
 router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  log.api.start(req, 'VACATION', 'POST /restrictions (create)')
+  
   try {
     const { departmentId, type, employeeIds, maxConcurrent, description } = req.body
     const userId = req.user.id
 
+    log.info('VACATION', 'Creating restriction', { 
+      departmentId, 
+      type, 
+      employeeCount: employeeIds?.length, 
+      maxConcurrent,
+      createdBy: userId 
+    })
+
     if (!departmentId || !type || !employeeIds || employeeIds.length === 0) {
+      log.warn('VACATION', 'Missing required fields', { departmentId, type, employeeIds })
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
     if (type === 'pair' && employeeIds.length !== 2) {
+      log.warn('VACATION', 'Invalid pair restriction', { employeeCount: employeeIds.length })
       return res.status(400).json({ error: 'Pair restrictions must have exactly 2 employees' })
     }
 
     if (type === 'group' && employeeIds.length < 2) {
+      log.warn('VACATION', 'Invalid group restriction', { employeeCount: employeeIds.length })
       return res.status(400).json({ error: 'Group restrictions must have at least 2 employees' })
     }
 
     if (type === 'group' && !maxConcurrent) {
+      log.warn('VACATION', 'Missing maxConcurrent for group restriction')
       return res.status(400).json({ error: 'Max concurrent is required for group restrictions' })
     }
 
@@ -722,7 +884,9 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
     )
 
     const restriction = result.rows[0]
+    log.info('VACATION', 'Restriction created', { restrictionId: restriction.id, type, departmentId })
 
+    log.api.success(req, 'VACATION', 'POST /restrictions', 201, { restrictionId: restriction.id })
     res.status(201).json({
       id: restriction.id.toString(),
       departmentId: restriction.department_id.toString(),
@@ -734,42 +898,52 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
       createdBy: restriction.created_by?.toString(),
     })
   } catch (error) {
-    console.error('Error creating vacation restriction:', error)
+    log.api.error(req, 'VACATION', 'POST /restrictions', error)
     res.status(500).json({ error: 'Failed to create vacation restriction' })
   }
 })
 
-// Delete vacation restriction
 router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  log.api.start(req, 'VACATION', 'DELETE /restrictions/:id')
+  
   try {
     const { id } = req.params
 
-    await query('DELETE FROM vacation_restrictions WHERE id = $1', [id])
+    log.info('VACATION', 'Deleting restriction', { restrictionId: id, deletedBy: req.user.id })
 
+    await query('DELETE FROM vacation_restrictions WHERE id = $1', [id])
+    log.db('VACATION', 'Deleted restriction', 'DELETE FROM vacation_restrictions WHERE id = $1', [id], req)
+
+    log.api.success(req, 'VACATION', 'DELETE /restrictions/:id', 200, { restrictionId: id })
     res.json({ success: true })
   } catch (error) {
-    console.error('Error deleting vacation restriction:', error)
+    log.api.error(req, 'VACATION', 'DELETE /restrictions/:id', error)
     res.status(500).json({ error: 'Failed to delete vacation restriction' })
   }
 })
 
-// Check restrictions for dates
 router.post('/check-restrictions', authenticateToken, async (req, res) => {
+  log.api.start(req, 'VACATION', 'POST /check-restrictions')
+  
   try {
     const { userId, startDate, endDate } = req.body
-    console.log('[Backend check-restrictions] Called with:', { userId, startDate, endDate })
+
+    log.info('VACATION', 'Checking restrictions', { userId, startDate, endDate })
 
     if (!userId || !startDate || !endDate) {
+      log.warn('VACATION', 'Missing required fields for restriction check')
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
     const userResult = await query('SELECT department_id FROM users WHERE id = $1', [userId])
 
     if (userResult.rows.length === 0) {
+      log.warn('VACATION', 'User not found for restriction check', { userId })
       return res.status(404).json({ error: 'User not found' })
     }
 
     const departmentId = userResult.rows[0].department_id
+    log.debug('VACATION', 'User department', { userId, departmentId })
 
     const restrictionsResult = await query(
       `SELECT * FROM vacation_restrictions
@@ -778,7 +952,7 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
       [departmentId, userId]
     )
 
-    console.log('[Backend check-restrictions] Found restrictions:', restrictionsResult.rows.length)
+    log.debug('VACATION', 'Found restrictions for user', { count: restrictionsResult.rows.length })
 
     const warnings = []
 
@@ -803,8 +977,19 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
       const overlappingRequests = overlappingRequestsResult.rows
 
       if (overlappingRequests.length > 0) {
+        log.debug('VACATION', 'Found overlapping requests', { 
+          restrictionId: restriction.id, 
+          restrictionType: restriction.restriction_type,
+          overlappingCount: overlappingRequests.length 
+        })
+        
         if (restriction.restriction_type === 'pair') {
           const conflictingEmployee = overlappingRequests[0]
+          log.info('VACATION', 'Pair restriction violation', { 
+            restrictionId: restriction.id,
+            conflictingEmployee: `${conflictingEmployee.last_name} ${conflictingEmployee.first_name}`,
+            dates: `${conflictingEmployee.start_date} - ${conflictingEmployee.end_date}`
+          })
           warnings.push({
             field: 'restriction',
             message: `Пересечение с отпуском сотрудника: ${conflictingEmployee.last_name} ${conflictingEmployee.first_name}`,
@@ -822,6 +1007,12 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
           const concurrentVacations = overlappingRequests.length + 1
           if (concurrentVacations > restriction.max_concurrent) {
             const conflictingEmployees = overlappingRequests.map(r => `${r.last_name} ${r.first_name}`).join(', ')
+            log.info('VACATION', 'Group restriction violation', { 
+              restrictionId: restriction.id,
+              maxConcurrent: restriction.max_concurrent,
+              concurrentVacations,
+              conflictingEmployees
+            })
             warnings.push({
               field: 'restriction',
               message: `Превышен лимит одновременно находящихся в отпуске сотрудников (${concurrentVacations} из ${restriction.max_concurrent})`,
@@ -838,9 +1029,10 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
       }
     }
 
+    log.api.success(req, 'VACATION', 'POST /check-restrictions', 200, { warningsCount: warnings.length })
     res.json(warnings)
   } catch (error) {
-    console.error('Error checking vacation restrictions:', error)
+    log.api.error(req, 'VACATION', 'POST /check-restrictions', error)
     res.status(500).json({ error: 'Failed to check vacation restrictions' })
   }
 })

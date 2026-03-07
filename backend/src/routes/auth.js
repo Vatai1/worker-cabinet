@@ -2,28 +2,30 @@ import express from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { query } from '../config/database.js'
+import log from '../utils/logger.js'
 
 const router = express.Router()
 
-// Register
 router.post('/register', async (req, res) => {
+  log.api.start(req, 'AUTH', 'POST /register')
+  
   try {
     const { email, password, firstName, lastName, middleName, position, departmentId, phone, birthDate, hireDate, role } = req.body
 
-    // Check if user exists
+    log.info('AUTH', 'Registration attempt', { email, firstName, lastName, role })
+
     const existingUser = await query(
       'SELECT id FROM users WHERE email = $1',
       [email]
     )
 
     if (existingUser.rows.length > 0) {
+      log.warn('AUTH', 'Registration failed - email exists', { email })
       return res.status(400).json({ error: 'Email already registered' })
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10)
 
-    // Create user
     const result = await query(
       `INSERT INTO users 
        (email, password_hash, first_name, last_name, middle_name, position, department_id, phone, birth_date, hire_date, role)
@@ -33,20 +35,20 @@ router.post('/register', async (req, res) => {
     )
 
     const user = result.rows[0]
+    log.info('AUTH', 'User created', { userId: user.id, email: user.email, role: user.role })
 
-    // Create vacation balance
     await query(
       'INSERT INTO vacation_balances (user_id, total_days) VALUES ($1, 28)',
       [user.id]
     )
 
-    // Generate token
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     )
 
+    log.api.success(req, 'AUTH', 'POST /register', 201, { userId: user.id, email: user.email })
     res.status(201).json({
       token,
       user: {
@@ -61,17 +63,19 @@ router.post('/register', async (req, res) => {
       },
     })
   } catch (error) {
-    console.error('Error registering user:', error)
+    log.api.error(req, 'AUTH', 'POST /register', error)
     res.status(500).json({ error: 'Failed to register user' })
   }
 })
 
-// Login
 router.post('/login', async (req, res) => {
+  log.api.start(req, 'AUTH', 'POST /login')
+  
   try {
     const { email, password } = req.body
 
-    // Find user
+    log.info('AUTH', 'Login attempt', { email })
+
     const result = await query(
       `SELECT u.*, d.name as department_name, d.manager_id as department_manager_id
        FROM users u
@@ -81,26 +85,25 @@ router.post('/login', async (req, res) => {
     )
 
     if (result.rows.length === 0) {
+      log.warn('AUTH', 'Login failed - user not found', { email })
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
     const user = result.rows[0]
 
-    // Verify password
     const validPassword = await bcrypt.compare(password, user.password_hash)
 
     if (!validPassword) {
+      log.warn('AUTH', 'Login failed - invalid password', { email, userId: user.id })
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
-    // Generate token
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     )
 
-    // Get subordinates if manager
     let subordinates = []
     if (user.role === 'manager' || user.role === 'hr' || user.role === 'admin') {
       const subordinatesResult = await query(
@@ -110,6 +113,15 @@ router.post('/login', async (req, res) => {
       subordinates = subordinatesResult.rows.map(row => row.id)
     }
 
+    log.info('AUTH', 'Login successful', { 
+      userId: user.id, 
+      email: user.email, 
+      role: user.role,
+      departmentId: user.department_id,
+      subordinatesCount: subordinates.length 
+    })
+
+    log.api.success(req, 'AUTH', 'POST /login', 200, { userId: user.id, role: user.role })
     res.json({
       token,
       user: {
@@ -131,17 +143,19 @@ router.post('/login', async (req, res) => {
       },
     })
   } catch (error) {
-    console.error('Error logging in:', error)
+    log.api.error(req, 'AUTH', 'POST /login', error)
     res.status(500).json({ error: 'Failed to login' })
   }
 })
 
-// Get current user
 router.get('/me', async (req, res) => {
+  log.api.start(req, 'AUTH', 'GET /me')
+  
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]
 
   if (!token) {
+    log.warn('AUTH', 'GET /me - no token provided')
     return res.status(401).json({ error: 'Access token required' })
   }
 
@@ -157,11 +171,13 @@ router.get('/me', async (req, res) => {
     )
 
     if (result.rows.length === 0) {
+      log.warn('AUTH', 'GET /me - user not found', { decodedId: decoded.id })
       return res.status(404).json({ error: 'User not found' })
     }
 
     const user = result.rows[0]
 
+    log.api.success(req, 'AUTH', 'GET /me', 200, { userId: user.id, email: user.email })
     res.json({
       id: user.id,
       email: user.email,
@@ -179,7 +195,7 @@ router.get('/me', async (req, res) => {
       managerId: user.manager_id,
     })
   } catch (error) {
-    console.error('Error getting current user:', error)
+    log.api.error(req, 'AUTH', 'GET /me', error, 403)
     res.status(403).json({ error: 'Invalid or expired token' })
   }
 })
