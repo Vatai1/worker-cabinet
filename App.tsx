@@ -5,8 +5,6 @@ import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
 import { Profile } from '@/pages/Profile'
 import { ThemeProvider } from '@/components/ThemeProvider'
-import { NotificationLoader } from '@/components/NotificationLoader'
-
 import { Requests } from '@/pages/Requests'
 import { Documents } from '@/pages/Documents'
 import { DocumentTemplates } from '@/pages/DocumentTemplates'
@@ -24,10 +22,9 @@ import { Settings } from '@/pages/Settings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  console.log('[App] ProtectedRoute - isAuthenticated:', isAuthenticated)
+  const token = useAuthStore((state) => state.token)
 
-  if (!isAuthenticated) {
-    console.log('[App] Redirecting to login')
+  if (!isAuthenticated || !token) {
     return <Navigate to="/login" replace />
   }
 
@@ -36,8 +33,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   const user = useAuthStore((state) => state.user)
-
-  console.log('[App] User:', user ? `${user.firstName} ${user.lastName} (${user.role})` : 'null')
 
   return (
     <BrowserRouter>
