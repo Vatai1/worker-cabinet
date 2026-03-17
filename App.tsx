@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthStore } from '@/store/authStore'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { Login } from '@/pages/Login'
 import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
@@ -20,19 +20,47 @@ import { ProjectDocuments } from '@/pages/ProjectDocuments'
 import { ProjectRoadmap } from '@/pages/ProjectRoadmap'
 import { Settings } from '@/pages/Settings'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  const token = useAuthStore((state) => state.token)
-
-  if (!isAuthenticated || !token) {
-    return <Navigate to="/login" replace />
+function isAuthenticated(): boolean {
+  const authStorage = localStorage.getItem('auth-storage')
+  if (!authStorage) return false
+  try {
+    const { state } = JSON.parse(authStorage)
+    return !!(state?.isAuthenticated && state?.token)
+  } catch {
+    return false
   }
+}
 
+function getUserRole(): string | null {
+  const authStorage = localStorage.getItem('auth-storage')
+  if (!authStorage) return null
+  try {
+    const { state } = JSON.parse(authStorage)
+    return state?.user?.role || null
+  } catch {
+    return null
+  }
+}
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [checked, setChecked] = useState(false)
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      navigate('/login', { replace: true })
+    } else {
+      setChecked(true)
+    }
+  }, [navigate, location.pathname])
+
+  if (!checked) return null
   return <>{children}</>
 }
 
 function App() {
-  const user = useAuthStore((state) => state.user)
+  const role = getUserRole()
 
   return (
     <BrowserRouter>
@@ -51,7 +79,7 @@ function App() {
             index
             element={
               <Navigate
-                to={user?.role === 'manager' ? '/leader' : '/dashboard'}
+                to={role === 'manager' ? '/leader' : '/dashboard'}
                 replace
               />
             }
