@@ -161,9 +161,45 @@ async function seed() {
 
       await query(
         `INSERT INTO vacation_restrictions
-         (department_id, restriction_type, employee_ids, max_concurrent, description, created_by)
-         VALUES ($1, 'group', ARRAY[$2::int, $3::int], 1, 'Групповое ограничение: не более 1 из Ивановой и Петровой', $4::int)`,
+          (department_id, restriction_type, employee_ids, max_concurrent, description, created_by)
+          VALUES ($1, 'group', ARRAY[$2::int, $3::int], 1, 'Групповое ограничение: не более 1 из Ивановой и Петровой', $4::int)`,
         [departmentId, ivanova.id, petrova.id, petrov.id]
+      )
+    }
+
+    const existingProjects = await query('SELECT 1 FROM company_projects LIMIT 1')
+    if (existingProjects.rows.length === 0) {
+      const projectResult = await query(
+        `INSERT INTO company_projects (name, full_name, description, status, start_date, created_by)
+         VALUES ('CRM', 'Customer Relationship Management', 'Система управления взаимоотношениями с клиентами', 'active', '2025-01-15', $1)
+         RETURNING id`,
+        [petrov.id]
+      )
+      const projectId = projectResult.rows[0].id
+
+      await query(
+        `INSERT INTO company_project_members (project_id, user_id, role, description) VALUES
+          ($1, $2, 'lead', 'Руководитель проекта'),
+          ($1, $3, 'member', 'Frontend разработчик'),
+          ($1, $4, 'member', 'Backend разработчик'),
+          ($1, $5, 'member', 'UI/UX дизайнер'),
+          ($1, $6, 'member', 'QA инженер')`,
+        [projectId, petrov.id, ivanov.id, sidorov.id, ivanova.id, petrova.id]
+      )
+
+      const project2Result = await query(
+        `INSERT INTO company_projects (name, full_name, description, status, start_date, created_by)
+         VALUES ('HR Portal', 'Human Resources Portal', 'Портал управления персоналом', 'active', '2025-06-01', $1)
+         RETURNING id`,
+        [petrov.id]
+      )
+      const project2Id = project2Result.rows[0].id
+
+      await query(
+        `INSERT INTO company_project_members (project_id, user_id, role, description) VALUES
+          ($1, $2, 'lead', 'Руководитель проекта'),
+          ($1, $3, 'member', 'Frontend разработчик')`,
+        [project2Id, petrov.id, ivanov.id]
       )
     }
 

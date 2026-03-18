@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
-import { Modal } from '@/components/ui/Modal'
 import { User, X, Calendar, Shield, Save } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
@@ -81,9 +81,13 @@ export function MemberProjectInfoModal({ member, projectId, open, onClose, onUpd
     }
   }
 
+  if (!open) return null
+
   return (
-    <Modal isOpen={open} onClose={onClose} className="max-w-lg bg-background rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div className="p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex items-center justify-center w-12 h-12 rounded-xl gradient-primary">
               <User className="h-6 w-6 text-white" />
@@ -187,6 +191,7 @@ export function MemberProjectInfoModal({ member, projectId, open, onClose, onUpd
             </Button>
           </div>
         </div>
-    </Modal>
+      </div>
+    </div>
   )
 }

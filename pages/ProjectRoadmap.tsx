@@ -2,7 +2,6 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
 import {
   ArrowLeft, Plus, Trash2, Pencil, Check, X, Loader2,
   ChevronLeft, ChevronRight, ChevronDown, ChevronRight as CollapseRight,
@@ -155,8 +154,9 @@ function TaskModal({ rows, cols, mode, task, defaultRowId, defaultStartCol, onSa
   }
 
   return (
-    <Modal isOpen={true} onClose={onClose} className="max-w-lg bg-card rounded-2xl shadow-2xl border border-border">
-      {/* Header */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-card rounded-2xl shadow-2xl border border-border w-full max-w-lg" onClick={e=>e.stopPropagation()}>
+        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background:`${color}22`}}>
@@ -282,7 +282,8 @@ function TaskModal({ rows, cols, mode, task, defaultRowId, defaultStartCol, onSa
             </Button>
           </div>
         </form>
-    </Modal>
+      </div>
+    </div>
   )
 }
 

@@ -75,6 +75,28 @@ async function runMigration() {
     `)
     console.log('  ✓ updated_at trigger created')
 
+    try {
+      await db.query(`ALTER TABLE company_project_members ADD COLUMN IF NOT EXISTS description TEXT`)
+      console.log('  ✓ description column added to company_project_members')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ description column (already exists)')
+      } else {
+        console.log('  - description:', e.message)
+      }
+    }
+
+    try {
+      await db.query(`ALTER TABLE company_projects ADD COLUMN IF NOT EXISTS full_name VARCHAR(500)`)
+      console.log('  ✓ full_name column added to company_projects')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ full_name column (already exists)')
+      } else {
+        console.log('  - full_name:', e.message)
+      }
+    }
+
     console.log('✅ company_projects migration completed successfully')
   } catch (error) {
     console.error('❌ Migration error:', error)
