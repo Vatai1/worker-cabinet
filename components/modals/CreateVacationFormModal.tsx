@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
+import { format } from 'date-fns'
 import { VacationType, VACATION_TYPES } from '@/types'
 import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
 import { X, FileText, Upload, AlertTriangle } from 'lucide-react'
+import { ru } from 'date-fns/locale'
 
 interface CreateVacationFormModalProps {
   isOpen: boolean
@@ -48,8 +49,11 @@ export function CreateVacationFormModal({
   const [comment, setComment] = useState('')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [hasCheckedRestrictions, setHasCheckedRestrictions] = useState(false)
   const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null)
+
+  if (!isOpen) return null
 
   useEffect(() => {
     if (isOpen) {
@@ -63,6 +67,7 @@ export function CreateVacationFormModal({
     }
 
     if (userId && startDate && endDate && onCheckRestrictions) {
+      const dateKey = `${startDate}-${endDate}`
       if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
         console.log('[CreateVacationFormModal] Already checked these dates, skipping')
         return
@@ -163,18 +168,19 @@ export function CreateVacationFormModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="max-w-lg max-h-[90vh] overflow-y-auto">
-      <div className="p-6 border-b flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Создать заявку на отпуск</h2>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b flex justify-between items-center">
+          <h2 className="text-xl font-semibold">Создать заявку на отпуск</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-      <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Период отпуска */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -436,6 +442,7 @@ export function CreateVacationFormModal({
             </Button>
           </div>
         </form>
-    </Modal>
+      </div>
+    </div>
   )
 }

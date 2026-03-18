@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Modal } from '@/components/ui/Modal'
 import { DocumentPreviewModal } from '@/components/modals/DocumentPreviewModal'
 import { isPreviewable } from '@/lib/documentUtils'
 import {
@@ -164,8 +163,8 @@ function parseBreadcrumbs(path: string) {
 // ── Create folder modal ───────────────────────────────────────────────────
 
 function NewFolderModal({
-  isOpen, projectId, currentPath, onCreated, onClose,
-}: { isOpen: boolean; projectId: string; currentPath: string; onCreated: (f: FolderItem) => void; onClose: () => void }) {
+  projectId, currentPath, onCreated, onClose,
+}: { projectId: string; currentPath: string; onCreated: (f: FolderItem) => void; onClose: () => void }) {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -188,37 +187,40 @@ function NewFolderModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="max-w-sm bg-background rounded-2xl shadow-2xl p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
-          <FolderPlus className="h-4 w-4 text-primary" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
+            <FolderPlus className="h-4 w-4 text-primary" />
+          </div>
+          <h2 className="text-lg font-semibold">Новая папка</h2>
         </div>
-        <h2 className="text-lg font-semibold">Новая папка</h2>
+        {err && <p className="text-sm text-destructive mb-3">{err}</p>}
+        <form onSubmit={handleCreate} className="space-y-4">
+          <Input
+            placeholder="Название папки"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-3 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}><X className="h-4 w-4 mr-1" />Отмена</Button>
+            <Button type="submit" disabled={!name.trim() || saving}>
+              {saving ? 'Создание…' : 'Создать'}
+            </Button>
+          </div>
+        </form>
       </div>
-      {err && <p className="text-sm text-destructive mb-3">{err}</p>}
-      <form onSubmit={handleCreate} className="space-y-4">
-        <Input
-          placeholder="Название папки"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoFocus
-        />
-        <div className="flex gap-3 justify-end">
-          <Button type="button" variant="outline" onClick={onClose}><X className="h-4 w-4 mr-1" />Отмена</Button>
-          <Button type="submit" disabled={!name.trim() || saving}>
-            {saving ? 'Создание…' : 'Создать'}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    </div>
   )
 }
 
 // ── Rename folder modal ─────────────────────────────────────────────────────
 
 function RenameFolderModal({
-  isOpen, folder, onRenamed, onClose,
-}: { isOpen: boolean; folder: FolderItem; onRenamed: (newName: string) => void; onClose: () => void }) {
+  folder, onRenamed, onClose,
+}: { folder: FolderItem; onRenamed: (newName: string) => void; onClose: () => void }) {
   const [name, setName] = useState(folder.name)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -235,37 +237,40 @@ function RenameFolderModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="max-w-sm bg-background rounded-2xl shadow-2xl p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
-          <Folder className="h-4 w-4 text-primary" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
+            <Folder className="h-4 w-4 text-primary" />
+          </div>
+          <h2 className="text-lg font-semibold">Переименовать папку</h2>
         </div>
-        <h2 className="text-lg font-semibold">Переименовать папку</h2>
+        {err && <p className="text-sm text-destructive mb-3">{err}</p>}
+        <form onSubmit={handleRename} className="space-y-4">
+          <Input
+            placeholder="Название папки"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-3 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}><X className="h-4 w-4 mr-1" />Отмена</Button>
+            <Button type="submit" disabled={!name.trim() || saving}>
+              {saving ? 'Переименование…' : 'Переименовать'}
+            </Button>
+          </div>
+        </form>
       </div>
-      {err && <p className="text-sm text-destructive mb-3">{err}</p>}
-      <form onSubmit={handleRename} className="space-y-4">
-        <Input
-          placeholder="Название папки"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoFocus
-        />
-        <div className="flex gap-3 justify-end">
-          <Button type="button" variant="outline" onClick={onClose}><X className="h-4 w-4 mr-1" />Отмена</Button>
-          <Button type="submit" disabled={!name.trim() || saving}>
-            {saving ? 'Переименование…' : 'Переименовать'}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    </div>
   )
 }
 
 // ── Rename document modal ─────────────────────────────────────────────────────
 
 function RenameDocModal({
-  isOpen, doc, onRenamed, onClose,
-}: { isOpen: boolean; doc: DocItem; onRenamed: (newName: string) => void; onClose: () => void }) {
+  doc, onRenamed, onClose,
+}: { doc: DocItem; onRenamed: (newName: string) => void; onClose: () => void }) {
   const [name, setName] = useState(doc.name)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -284,37 +289,40 @@ function RenameDocModal({
   const FileIcon = getFileIcon(doc.mime_type)
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="max-w-sm bg-background rounded-2xl shadow-2xl p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
-          <FileIcon className="h-4 w-4 text-primary" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
+            <FileIcon className="h-4 w-4 text-primary" />
+          </div>
+          <h2 className="text-lg font-semibold">Переименовать файл</h2>
         </div>
-        <h2 className="text-lg font-semibold">Переименовать файл</h2>
+        {err && <p className="text-sm text-destructive mb-3">{err}</p>}
+        <form onSubmit={handleRename} className="space-y-4">
+          <Input
+            placeholder="Название файла"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-3 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}><X className="h-4 w-4 mr-1" />Отмена</Button>
+            <Button type="submit" disabled={!name.trim() || saving}>
+              {saving ? 'Переименование…' : 'Переименовать'}
+            </Button>
+          </div>
+        </form>
       </div>
-      {err && <p className="text-sm text-destructive mb-3">{err}</p>}
-      <form onSubmit={handleRename} className="space-y-4">
-        <Input
-          placeholder="Название файла"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoFocus
-        />
-        <div className="flex gap-3 justify-end">
-          <Button type="button" variant="outline" onClick={onClose}><X className="h-4 w-4 mr-1" />Отмена</Button>
-          <Button type="submit" disabled={!name.trim() || saving}>
-            {saving ? 'Переименование…' : 'Переименовать'}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    </div>
   )
 }
 
 // ── Folder info modal ───────────────────────────────────────────────────────
 
 function FolderInfoModal({
-  isOpen, folder, onClose,
-}: { isOpen: boolean; folder: FolderItem; onClose: () => void }) {
+  folder, onClose,
+}: { folder: FolderItem; onClose: () => void }) {
   const getCreatorName = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/users/${folder.created_by}`, { headers: getAuthHeaders() })
@@ -333,122 +341,128 @@ function FolderInfoModal({
   }, [folder.created_by])
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="max-w-md bg-background rounded-2xl shadow-2xl p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10">
-          <Folder className="h-6 w-6 text-amber-500" />
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold">{folder.name}</h2>
-          <p className="text-sm text-muted-foreground">Папка</p>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Путь</p>
-            <p className="text-sm font-medium truncate">{folder.path}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10">
+            <Folder className="h-6 w-6 text-amber-500" />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Создана</p>
-            <p className="text-sm font-medium">{formatDate(folder.created_at)}</p>
+            <h2 className="text-xl font-semibold">{folder.name}</h2>
+            <p className="text-sm text-muted-foreground">Папка</p>
           </div>
         </div>
 
-        {creatorName && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Создал</p>
-            <p className="text-sm font-medium">{creatorName}</p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Путь</p>
+              <p className="text-sm font-medium truncate">{folder.path}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Создана</p>
+              <p className="text-sm font-medium">{formatDate(folder.created_at)}</p>
+            </div>
           </div>
-        )}
-      </div>
 
-      <div className="mt-6 flex justify-end">
-        <Button onClick={onClose}>Закрыть</Button>
+          {creatorName && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Создал</p>
+              <p className="text-sm font-medium">{creatorName}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <Button onClick={onClose}>Закрыть</Button>
+        </div>
       </div>
-    </Modal>
+    </div>
   )
 }
 
 // ── Document info modal ──────────────────────────────────────────────────────
 
 function DocInfoModal({
-  isOpen, doc, onClose,
-}: { isOpen: boolean; doc: DocItem; onClose: () => void }) {
+  doc, onClose,
+}: { doc: DocItem; onClose: () => void }) {
   const FileIcon = getFileIcon(doc.mime_type)
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="max-w-md bg-background rounded-2xl shadow-2xl p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10">
-          <FileIcon className="h-6 w-6 text-primary" />
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold">{doc.name}</h2>
-          <p className="text-sm text-muted-foreground">Файл</p>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Тип</p>
-            <p className="text-sm font-medium">{getFileTypeLabel(doc.mime_type, doc.name)}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10">
+            <FileIcon className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Размер</p>
-            <p className="text-sm font-medium">{formatSize(Number(doc.file_size))}</p>
+            <h2 className="text-xl font-semibold">{doc.name}</h2>
+            <p className="text-sm text-muted-foreground">Файл</p>
           </div>
         </div>
 
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Путь</p>
-          <p className="text-sm font-medium truncate">{doc.folder_path}</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Загружил</p>
-            <p className="text-sm font-medium">{doc.uploader_first_name} {doc.uploader_last_name}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Дата загрузки</p>
-            <p className="text-sm font-medium">{formatDateTime(doc.created_at)}</p>
-          </div>
-        </div>
-
-        {doc.description && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Описание</p>
-            <p className="text-sm font-medium">{doc.description}</p>
-          </div>
-        )}
-
-        {doc.tags && doc.tags.length > 0 && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Теги</p>
-            <div className="flex flex-wrap gap-2">
-              {doc.tags.map((tag, i) => (
-                <span key={i} className="px-2 py-1 bg-muted rounded text-xs">{tag}</span>
-              ))}
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Тип</p>
+              <p className="text-sm font-medium">{getFileTypeLabel(doc.mime_type, doc.name)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Размер</p>
+              <p className="text-sm font-medium">{formatSize(Number(doc.file_size))}</p>
             </div>
           </div>
-        )}
-      </div>
 
-      <div className="mt-6 flex justify-end">
-        <Button onClick={onClose}>Закрыть</Button>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Путь</p>
+            <p className="text-sm font-medium truncate">{doc.folder_path}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Загружил</p>
+              <p className="text-sm font-medium">{doc.uploader_first_name} {doc.uploader_last_name}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Дата загрузки</p>
+              <p className="text-sm font-medium">{formatDateTime(doc.created_at)}</p>
+            </div>
+          </div>
+
+          {doc.description && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Описание</p>
+              <p className="text-sm font-medium">{doc.description}</p>
+            </div>
+          )}
+
+          {doc.tags && doc.tags.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Теги</p>
+              <div className="flex flex-wrap gap-2">
+                {doc.tags.map((tag, i) => (
+                  <span key={i} className="px-2 py-1 bg-muted rounded text-xs">{tag}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <Button onClick={onClose}>Закрыть</Button>
+        </div>
       </div>
-    </Modal>
+    </div>
   )
 }
 
 // ── Upload modal ──────────────────────────────────────────────────────────
 
 function UploadModal({
-  isOpen, projectId, currentPath, onUploaded, onClose,
-}: { isOpen: boolean; projectId: string; currentPath: string; onUploaded: () => void; onClose: () => void }) {
+  projectId, currentPath, onUploaded, onClose,
+}: { projectId: string; currentPath: string; onUploaded: () => void; onClose: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -480,63 +494,67 @@ function UploadModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="max-w-md bg-background rounded-2xl shadow-2xl p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
-          <Upload className="h-4 w-4 text-primary" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
+            <Upload className="h-4 w-4 text-primary" />
+          </div>
+          <h2 className="text-lg font-semibold">Загрузить файл</h2>
         </div>
-        <h2 className="text-lg font-semibold">Загрузить файл</h2>
+        {err && <p className="text-sm text-destructive mb-3">{err}</p>}
+        <form onSubmit={handleUpload} className="space-y-4">
+          {/* Drop zone */}
+          <div
+            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+              file ? 'border-primary/50 bg-primary/5' : 'border-border hover:border-primary/30'
+            }`}
+            onClick={() => inputRef.current?.click()}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null
+                setFile(f)
+                if (f && !name) setName(f.name)
+              }}
+            />
+            {file ? (
+              <div className="flex items-center justify-center gap-2 text-sm">
+                <FileText className="h-5 w-5 text-primary" />
+                <span className="font-medium">{file.name}</span>
+                <span className="text-muted-foreground">({formatSize(file.size)})</span>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+                Нажмите для выбора файла
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Имя файла</label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название файла" />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Описание</label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Необязательно" />
+          </div>
+
+          <div className="flex gap-3 justify-end">
+            <Button type="button" variant="outline" onClick={onClose}><X className="h-4 w-4 mr-1" />Отмена</Button>
+            <Button type="submit" disabled={!file || uploading}>
+              {uploading ? 'Загрузка…' : <><Upload className="h-4 w-4 mr-2" />Загрузить</>}
+            </Button>
+          </div>
+        </form>
       </div>
-      {err && <p className="text-sm text-destructive mb-3">{err}</p>}
-      <form onSubmit={handleUpload} className="space-y-4">
-        <div
-          className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
-            file ? 'border-primary/50 bg-primary/5' : 'border-border hover:border-primary/30'
-          }`}
-          onClick={() => inputRef.current?.click()}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0] ?? null
-              setFile(f)
-              if (f && !name) setName(f.name)
-            }}
-          />
-          {file ? (
-            <div className="flex items-center justify-center gap-2 text-sm">
-              <FileText className="h-5 w-5 text-primary" />
-              <span className="font-medium">{file.name}</span>
-              <span className="text-muted-foreground">({formatSize(file.size)})</span>
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">
-              <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-              Нажмите для выбора файла
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Имя файла</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название файла" />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-sm font-medium">Описание</label>
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Необязательно" />
-        </div>
-
-        <div className="flex gap-3 justify-end">
-          <Button type="button" variant="outline" onClick={onClose}><X className="h-4 w-4 mr-1" />Отмена</Button>
-          <Button type="submit" disabled={!file || uploading}>
-            {uploading ? 'Загрузка…' : <><Upload className="h-4 w-4 mr-2" />Загрузить</>}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    </div>
   )
 }
 
@@ -551,8 +569,8 @@ interface DeleteTarget {
 }
 
 function ConfirmDeleteModal({
-  isOpen, target, onConfirm, onClose, loading,
-}: { isOpen: boolean; target: DeleteTarget; onConfirm: () => void; onClose: () => void; loading: boolean }) {
+  target, onConfirm, onClose, loading,
+}: { target: DeleteTarget; onConfirm: () => void; onClose: () => void; loading: boolean }) {
   const getTitle = () => {
     if (target.type === 'single-doc') return 'Удалить файл?'
     if (target.type === 'single-folder') return 'Удалить папку?'
@@ -577,23 +595,26 @@ function ConfirmDeleteModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="max-w-sm bg-background rounded-2xl shadow-2xl p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-destructive/10">
-          <AlertTriangle className="h-4 w-4 text-destructive" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-destructive/10">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          </div>
+          <h2 className="text-lg font-semibold">{getTitle()}</h2>
         </div>
-        <h2 className="text-lg font-semibold">{getTitle()}</h2>
+        <p className="text-sm text-muted-foreground mb-6">{getDescription()}</p>
+        <div className="flex gap-3 justify-end">
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+            Отмена
+          </Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={loading}>
+            {loading ? 'Удаление…' : 'Удалить'}
+          </Button>
+        </div>
       </div>
-      <p className="text-sm text-muted-foreground mb-6">{getDescription()}</p>
-      <div className="flex gap-3 justify-end">
-        <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-          Отмена
-        </Button>
-        <Button variant="destructive" onClick={onConfirm} disabled={loading}>
-          {loading ? 'Удаление…' : 'Удалить'}
-        </Button>
-      </div>
-    </Modal>
+    </div>
   )
 }
 
@@ -1570,42 +1591,48 @@ export function ProjectDocuments() {
       )}
 
       {/* Modals */}
-      <NewFolderModal
-        isOpen={newFolderOpen}
-        projectId={id!}
-        currentPath={currentPath}
-        onCreated={(f) => setFolders((prev) => [...prev, f])}
-        onClose={() => setNewFolderOpen(false)}
-      />
-      <UploadModal
-        isOpen={uploadOpen}
-        projectId={id!}
-        currentPath={currentPath}
-        onUploaded={() => fetchContent(currentPath)}
-        onClose={() => setUploadOpen(false)}
-      />
-      <RenameFolderModal
-        isOpen={renameFolderOpen}
-        folder={folderToRename!}
-        onRenamed={(newName) => handleRenameFolder(folderToRename!, newName)}
-        onClose={() => { setRenameFolderOpen(false); setFolderToRename(null) }}
-      />
-      <RenameDocModal
-        isOpen={renameDocOpen}
-        doc={docToRename!}
-        onRenamed={(newName) => handleRenameDoc(docToRename!, newName)}
-        onClose={() => { setRenameDocOpen(false); setDocToRename(null) }}
-      />
-      <FolderInfoModal
-        isOpen={folderInfoOpen}
-        folder={folderToInfo!}
-        onClose={() => { setFolderInfoOpen(false); setFolderToInfo(null) }}
-      />
-      <DocInfoModal
-        isOpen={docInfoOpen}
-        doc={docToInfo!}
-        onClose={() => { setDocInfoOpen(false); setDocToInfo(null) }}
-      />
+      {newFolderOpen && (
+        <NewFolderModal
+          projectId={id!}
+          currentPath={currentPath}
+          onCreated={(f) => setFolders((prev) => [...prev, f])}
+          onClose={() => setNewFolderOpen(false)}
+        />
+      )}
+      {uploadOpen && (
+        <UploadModal
+          projectId={id!}
+          currentPath={currentPath}
+          onUploaded={() => fetchContent(currentPath)}
+          onClose={() => setUploadOpen(false)}
+        />
+      )}
+      {renameFolderOpen && folderToRename && (
+        <RenameFolderModal
+          folder={folderToRename}
+          onRenamed={(newName) => handleRenameFolder(folderToRename, newName)}
+          onClose={() => { setRenameFolderOpen(false); setFolderToRename(null) }}
+        />
+      )}
+      {renameDocOpen && docToRename && (
+        <RenameDocModal
+          doc={docToRename}
+          onRenamed={(newName) => handleRenameDoc(docToRename, newName)}
+          onClose={() => { setRenameDocOpen(false); setDocToRename(null) }}
+        />
+      )}
+      {folderInfoOpen && folderToInfo && (
+        <FolderInfoModal
+          folder={folderToInfo}
+          onClose={() => { setFolderInfoOpen(false); setFolderToInfo(null) }}
+        />
+      )}
+      {docInfoOpen && docToInfo && (
+        <DocInfoModal
+          doc={docToInfo}
+          onClose={() => { setDocInfoOpen(false); setDocToInfo(null) }}
+        />
+      )}
       {previewDoc && (
         <DocumentPreviewModal
           open={!!previewDoc}
@@ -1621,6 +1648,7 @@ export function ProjectDocuments() {
                 mimeType: previewDoc.mime_type,
               })
 
+              // For DOCX files, get preview token and use public URL for OnlyOffice
               if (previewDoc.mime_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
                   previewDoc.mime_type === 'application/msword' ||
                   previewDoc.name.toLowerCase().endsWith('.docx')) {
@@ -1645,6 +1673,7 @@ export function ProjectDocuments() {
                 return publicUrl
               }
 
+              // For other files, use regular preview endpoint
               const res = await fetch(
                 `${API_BASE_URL}/projects/${id}/documents/${previewDoc.id}/preview`,
                 { headers: getAuthHeaders() }
@@ -1666,13 +1695,14 @@ export function ProjectDocuments() {
           }}
         />
       )}
-      <ConfirmDeleteModal
-        isOpen={deleteModalOpen}
-        target={deleteTarget!}
-        onConfirm={handleConfirmDelete}
-        onClose={() => { setDeleteModalOpen(false); setDeleteTarget(null) }}
-        loading={bulkActionLoading}
-      />
+      {deleteModalOpen && deleteTarget && (
+        <ConfirmDeleteModal
+          target={deleteTarget}
+          onConfirm={handleConfirmDelete}
+          onClose={() => { setDeleteModalOpen(false); setDeleteTarget(null) }}
+          loading={bulkActionLoading}
+        />
+      )}
     </div>
   )
 }

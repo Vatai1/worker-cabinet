@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Switch } from '@/components/ui/Switch'
-import { Modal } from '@/components/ui/Modal'
 import { Pencil, X, Check } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
@@ -105,9 +104,13 @@ export function EditProjectModal({ project, open, onClose, onUpdated }: Props) {
     }
   }
 
+  if (!open) return null
+
   return (
-    <Modal isOpen={open} onClose={onClose} className="max-w-lg bg-background rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div className="p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
               <Pencil className="h-4 w-4 text-primary" />
@@ -211,6 +214,7 @@ export function EditProjectModal({ project, open, onClose, onUpdated }: Props) {
             </div>
           </form>
         </div>
-    </Modal>
+      </div>
+    </div>
   )
 }

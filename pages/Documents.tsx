@@ -4,7 +4,6 @@ import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { Modal } from '@/components/ui/Modal'
 import { formatDate } from '@/lib/utils'
 import { FileText, Download, Search, Upload, Eye, X, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
@@ -385,8 +384,9 @@ export function Documents() {
         </Card>
       </div>
 
-      <Modal isOpen={uploadModalOpen} onClose={() => setUploadModalOpen(false)} className="max-w-md">
-          <Card>
+      {uploadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <Card className="w-full max-w-md mx-4">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Загрузить документ</CardTitle>
@@ -453,7 +453,8 @@ export function Documents() {
               </div>
             </CardContent>
           </Card>
-        </Modal>
+        </div>
+      )}
     </div>
   )
 }
