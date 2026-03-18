@@ -52,8 +52,8 @@ router.get('/requests', authenticateToken, async (req, res) => {
       params.push(userId)
     } else if (departmentId) {
       if (user.role === 'employee') {
-        whereClause += ' AND u.department_id = $' + (params.length + 1) + ' AND vr.status = $' + (params.length + 2)
-        params.push(departmentId, 'approved')
+        whereClause += ' AND u.department_id = $' + (params.length + 1) + ' AND (vr.status = $' + (params.length + 2) + ' OR vr.user_id = $' + (params.length + 3) + ')'
+        params.push(departmentId, 'approved', user.id)
       } else {
         whereClause += ' AND u.department_id = $' + (params.length + 1)
         params.push(departmentId)
