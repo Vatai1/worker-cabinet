@@ -19,6 +19,7 @@
     "deploy:prod": "cd deploy && powershell -ExecutionPolicy Bypass -File ./prod.ps1 deploy"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.21",
     "clsx": "^2.0.0",
     "date-fns": "^4.1.0",
     "docx-preview": "^0.3.7",
