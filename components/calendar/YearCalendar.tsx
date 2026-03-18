@@ -275,18 +275,18 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                     <div className="relative">
                       <div className="text-xs relative z-10">{format(day, 'd')}</div>
                       {hasVacation && !isSelected && (
-                        <div className="absolute -bottom-1 left-0 right-0 flex justify-center gap-0.5">
-                          {visibleVacations.filter(v => v.status === 'approved').map(v => {
-                            const colorClass = getUserColor(v.userId)
-                            return (
-                              <div
-                                key={v.id}
-                                className={`w-1.5 h-1.5 rounded-full ${colorClass}`}
-                              />
-                            )
-                          })}
-                        </div>
-                      )}
+                         <div className="absolute -bottom-1 left-0 right-0 flex justify-center gap-0.5">
+                           {visibleVacations.map(v => {
+                             const colorClass = getUserColor(v.userId)
+                             return (
+                               <div
+                                 key={v.id}
+                                 className={`w-1.5 h-1.5 rounded-full ${colorClass} ${v.status === 'on_approval' ? 'opacity-50' : ''}`}
+                               />
+                             )
+                           })}
+                         </div>
+                       )}
                       {remainingCount > 0 && (
                         <div className="absolute -bottom-1 -right-0.5 text-xs font-bold text-gray-500">
                           +{remainingCount}

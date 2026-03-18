@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useVacationStore } from '@/store/vacationStore'
 import { Card } from '@/components/ui/Card'
@@ -380,6 +380,16 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
     URL.revokeObjectURL(url)
   }
 
+  const calendarRequests = useMemo(() => {
+    const merged = [...departmentRequests]
+    currentUserRequests.forEach(r => {
+      if (!merged.some(m => m.id === r.id)) {
+        merged.push(r)
+      }
+    })
+    return merged
+  }, [departmentRequests, currentUserRequests])
+
   const currentYear = 2026
   const isManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin'
 
@@ -473,7 +483,7 @@ ${request.cancellationReason ? `Причина отмены: ${request.cancellat
         <div className="p-6">
           <YearCalendar
             year={currentYear}
-            requests={departmentRequests}
+            requests={calendarRequests}
             onDateRangeSelect={handleDateRangeSelect}
             selectedStartDate={selectedStartDate}
             selectedEndDate={selectedEndDate}
