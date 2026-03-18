@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { VacationType, VACATION_TYPES } from '@/types'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { Upload, FileText, X, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -58,7 +59,6 @@ export function CreateVacationModal({
   const checkRestrictions = () => {
     console.log('[CreateVacationModal] checkRestrictions called', { userId, startDate, endDate, hasOnCheck: !!onCheckRestrictions })
     if (userId && startDate && endDate && onCheckRestrictions) {
-      const dateKey = `${startDate}-${endDate}`
       if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
         console.log('[CreateVacationModal] Already checked these dates, skipping')
         return
@@ -76,13 +76,9 @@ export function CreateVacationModal({
     }
   }
 
-  if (!isOpen || !startDate || !endDate) {
-    return null
-  }
-
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  const duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  const start = startDate ? new Date(startDate) : null
+  const end = endDate ? new Date(endDate) : null
+  const duration = start && end ? Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1 : 0
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -104,22 +100,23 @@ export function CreateVacationModal({
   const hasEnoughDays = !countsInCounter || (balance?.availableDays || 0) >= requiredDays
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-semibold">Создать заявку на отпуск</h2>
-        </div>
+    <Modal isOpen={isOpen} onClose={onClose} className="max-w-md">
+      {!startDate || !endDate ? null : (
+        <>
+      <div className="p-6 border-b">
+        <h2 className="text-xl font-semibold">Создать заявку на отпуск</h2>
+      </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+      <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Даты отпуска */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Период отпуска
             </label>
             <div className="flex items-center gap-2 text-sm text-gray-900">
-              <span className="font-semibold">{format(start, 'dd.MM.yyyy', { locale: ru })}</span>
+              <span className="font-semibold">{format(start!, 'dd.MM.yyyy', { locale: ru })}</span>
               <span>—</span>
-              <span className="font-semibold">{format(end, 'dd.MM.yyyy', { locale: ru })}</span>
+              <span className="font-semibold">{format(end!, 'dd.MM.yyyy', { locale: ru })}</span>
               <span className="text-gray-600">({duration} {duration === 1 ? 'день' : duration >= 2 && duration <= 4 ? 'дня' : 'дней'})</span>
             </div>
           </div>
@@ -313,7 +310,8 @@ export function CreateVacationModal({
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+        </>
+      )}
+    </Modal>
   )
 }

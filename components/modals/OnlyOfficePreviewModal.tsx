@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Edit, Loader2 } from 'lucide-react'
 import { formatFileSize } from '@/lib/documentUtils'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 
 interface OnlyOfficePreviewModalProps {
   open: boolean
@@ -189,12 +190,8 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc }: OnlyOff
     return extMap[ext] || 'docx'
   }
 
-  if (!open) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-7xl mx-4 flex flex-col h-[95vh]">
+    <Modal isOpen={open} onClose={onClose} className="max-w-7xl bg-background rounded-2xl shadow-2xl flex flex-col h-[95vh]">
         <div className="flex items-center justify-between p-4 border-b border-border/60 shrink-0">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 shrink-0">
@@ -246,7 +243,6 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc }: OnlyOff
           <p className="text-sm text-muted-foreground">Powered by OnlyOffice</p>
           <Button variant="outline" onClick={onClose}>Закрыть</Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

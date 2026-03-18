@@ -3,6 +3,7 @@ import { X, Download, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Play, Volume2 
 import { Document, Page, pdfjs } from 'react-pdf'
 import { formatFileSize, getDocumentType } from '@/lib/documentUtils'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { OnlyOfficePreviewModal } from './OnlyOfficePreviewModal'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
@@ -112,9 +113,6 @@ export function DocumentPreviewModal({ open, onClose, document: doc }: DocumentP
 
   const docType = getDocumentType(doc.mimeType, doc.name)
 
-  if (!open) return null
-
-  // Для DOCX используем OnlyOffice
   if (docType === 'docx') {
     return (
       <OnlyOfficePreviewModal
@@ -126,9 +124,7 @@ export function DocumentPreviewModal({ open, onClose, document: doc }: DocumentP
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-7xl mx-4 flex flex-col h-[95vh] animate-in fade-in zoom-in duration-200">
+    <Modal isOpen={open} onClose={onClose} className="max-w-7xl bg-background rounded-2xl shadow-2xl flex flex-col h-[95vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border/60 shrink-0">
           <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -317,7 +313,6 @@ export function DocumentPreviewModal({ open, onClose, document: doc }: DocumentP
             Закрыть
           </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
