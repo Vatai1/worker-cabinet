@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Switch } from '@/components/ui/Switch'
+import { Modal } from '@/components/ui/Modal'
 import { FolderKanban, X, Plus } from 'lucide-react'
 import type { Project } from '@/pages/Projects'
 
@@ -93,13 +94,9 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     }
   }
 
-  if (!open) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
+    <Modal isOpen={open} onClose={handleClose} className="max-w-lg bg-background rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="p-6">
           <div className="flex items-center gap-3 mb-1">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl gradient-primary">
               <FolderKanban className="h-5 w-5 text-white" />
@@ -217,7 +214,6 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
             </div>
           </form>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

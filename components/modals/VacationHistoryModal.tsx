@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
-import { VacationRequestStatus } from '@/types'
 import { getVacationRequestStatusBadge } from '@/data/mockVacationData'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { X, Calendar, FileText, Filter, RotateCcw } from 'lucide-react'
 
 interface VacationHistoryModalProps {
@@ -49,28 +49,25 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
   const hasActiveFilters = selectedYear !== 'all' || 
                           selectedStatus !== 'all'
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col">
-        <div className="p-6 border-b flex justify-between items-center bg-white">
-          <div>
-            <h2 className="text-xl font-semibold">История отпусков</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              {hasActiveFilters 
-                ? `Найдено: ${filteredRequests.length} из ${requests.length}`
-                : `Всего заявок: ${requests.length}`
-              }
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <X className="h-5 w-5" />
-          </button>
+    <Modal isOpen={isOpen} onClose={onClose} className="max-w-5xl max-h-[90vh] flex flex-col">
+      <div className="p-6 border-b flex justify-between items-center bg-white">
+        <div>
+          <h2 className="text-xl font-semibold">История отпусков</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {hasActiveFilters 
+              ? `Найдено: ${filteredRequests.length} из ${requests.length}`
+              : `Всего заявок: ${requests.length}`
+            }
+          </p>
         </div>
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
         {/* Фильтры */}
         <div className="p-4 border-b bg-gray-50">
@@ -247,7 +244,6 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
             Закрыть
           </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

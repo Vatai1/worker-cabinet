@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Switch } from '@/components/ui/Switch'
+import { Modal } from '@/components/ui/Modal'
 import { X, Plus } from 'lucide-react'
 
 interface Project {
@@ -74,8 +75,6 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
     }
   }
 
-  if (!open) return null
-
   const statusOptions = [
     { value: 'active', label: 'Активный' },
     { value: 'completed', label: 'Завершён' },
@@ -83,13 +82,8 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
   ]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative bg-background rounded-xl shadow-2xl w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
+    <Modal isOpen={open} onClose={onClose} className="max-w-lg bg-background rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="p-6">
           <div className="flex items-center gap-2 mb-2">
             <Plus className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-semibold">Добавить проект</h2>
@@ -193,7 +187,6 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
             </div>
           </form>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

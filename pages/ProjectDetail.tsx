@@ -14,6 +14,7 @@ import { EditProjectModal } from '@/components/modals/EditProjectModal'
 import { AddMemberModal } from '@/components/modals/AddMemberModal'
 import { MemberProjectInfoModal } from '@/components/modals/MemberProjectInfoModal'
 import { ContextMenu } from '@/components/ui/ContextMenu'
+import { Modal } from '@/components/ui/Modal'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
@@ -573,89 +574,76 @@ function TaskDetailModal({
   onClose: () => void
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="bg-background rounded-2xl border border-border shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        {/* Header */}
-        <div
-          className="h-1.5 w-full"
-          style={{ backgroundColor: task.color || row?.color || '#6366f1' }}
-        />
-        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {task.is_milestone && (
-              <Diamond className="h-4 w-4 shrink-0 text-amber-500" />
-            )}
-            <h2 className="font-semibold text-base leading-snug">{task.title}</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 p-1 rounded-lg hover:bg-muted transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="px-5 pb-5 space-y-3">
-          {/* Row */}
-          {row && (
-            <div className="flex items-center gap-2 text-sm">
-              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
-              <span className="text-muted-foreground">Группа:</span>
-              <span className="font-medium">{row.title}</span>
-            </div>
-          )}
-
-          {/* Period */}
-          <div className="flex items-center gap-2 text-sm">
-            <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-muted-foreground">Период:</span>
-            <span className="font-medium">
-              {fmtMonth(task.start_month)}
-              {task.end_month !== task.start_month && ` — ${fmtMonth(task.end_month)}`}
-            </span>
-          </div>
-
-          {/* Status */}
-          <div className="flex items-center gap-2 text-sm">
-            <CircleDot className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-muted-foreground">Статус:</span>
-            <span className={`font-medium ${STATUS_COLORS[task.status] ?? ''}`}>
-              {STATUS_LABELS[task.status] ?? task.status}
-            </span>
-          </div>
-
-          {/* Priority */}
-          {task.priority && (
-            <div className="flex items-center gap-2 text-sm">
-              <Flag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Приоритет:</span>
-              <span className={`font-medium ${PRIORITY_COLORS[task.priority] ?? ''}`}>
-                {PRIORITY_LABELS[task.priority] ?? task.priority}
-              </span>
-            </div>
-          )}
-
-          {/* Milestone badge */}
+    <Modal isOpen={true} onClose={onClose} className="max-w-md p-0 overflow-hidden">
+      <div
+        className="h-1.5 w-full"
+        style={{ backgroundColor: task.color || row?.color || '#6366f1' }}
+      />
+      <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-2">
+        <div className="flex items-center gap-2 min-w-0">
           {task.is_milestone && (
-            <div className="flex items-center gap-2 text-sm">
-              <Diamond className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-              <span className="text-amber-600 font-medium">Веха (milestone)</span>
-            </div>
+            <Diamond className="h-4 w-4 shrink-0 text-amber-500" />
           )}
-
-          {/* Description */}
-          {task.description && (
-            <div className="mt-3 p-3 rounded-xl bg-muted/50 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
-              {task.description}
-            </div>
-          )}
+          <h2 className="font-semibold text-base leading-snug">{task.title}</h2>
         </div>
+        <button
+          onClick={onClose}
+          className="shrink-0 p-1 rounded-lg hover:bg-muted transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
-    </div>
+
+      <div className="px-5 pb-5 space-y-3">
+        {row && (
+          <div className="flex items-center gap-2 text-sm">
+            <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
+            <span className="text-muted-foreground">Группа:</span>
+            <span className="font-medium">{row.title}</span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 text-sm">
+          <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-muted-foreground">Период:</span>
+          <span className="font-medium">
+            {fmtMonth(task.start_month)}
+            {task.end_month !== task.start_month && ` — ${fmtMonth(task.end_month)}`}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 text-sm">
+          <CircleDot className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-muted-foreground">Статус:</span>
+          <span className={`font-medium ${STATUS_COLORS[task.status] ?? ''}`}>
+            {STATUS_LABELS[task.status] ?? task.status}
+          </span>
+        </div>
+
+        {task.priority && (
+          <div className="flex items-center gap-2 text-sm">
+            <Flag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-muted-foreground">Приоритет:</span>
+            <span className={`font-medium ${PRIORITY_COLORS[task.priority] ?? ''}`}>
+              {PRIORITY_LABELS[task.priority] ?? task.priority}
+            </span>
+          </div>
+        )}
+
+        {task.is_milestone && (
+          <div className="flex items-center gap-2 text-sm">
+            <Diamond className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <span className="text-amber-600 font-medium">Веха (milestone)</span>
+          </div>
+        )}
+
+        {task.description && (
+          <div className="mt-3 p-3 rounded-xl bg-muted/50 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+            {task.description}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 
