@@ -3,22 +3,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Plus, Search } from 'lucide-react'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch (e) {
-      console.error('[AddSkillModal] Error parsing auth storage:', e)
-    }
-  }
-  return headers
-}
 
 interface AddSkillModalProps {
   open: boolean
@@ -53,8 +40,8 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
     try {
       setLoading(true)
       const [allSkillsRes, userRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/users/skills/all`, { headers: getAuthHeaders() }),
-        fetch(`${API_BASE_URL}/users/${userId}`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/users/skills/all`, { headers: getAuthHeadersWithContentType() }),
+        fetch(`${API_BASE_URL}/users/${userId}`, { headers: getAuthHeadersWithContentType() }),
       ])
       
       if (allSkillsRes.ok) {

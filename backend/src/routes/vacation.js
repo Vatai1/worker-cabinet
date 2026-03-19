@@ -397,7 +397,16 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
 
-    res.json(result.rows[0])
+    const fullResult = await client.query(
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    res.json(fullResult.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Error updating vacation request:', error)
@@ -481,7 +490,16 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
       'success'
     ).catch(console.error)
 
-    res.json(result.rows[0])
+    const fullResult = await client.query(
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    res.json(fullResult.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Error approving vacation request:', error)
@@ -564,7 +582,16 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
       'error'
     ).catch(console.error)
 
-    res.json(result.rows[0])
+    const fullResult = await client.query(
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    res.json(fullResult.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Error rejecting vacation request:', error)
@@ -665,7 +692,16 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
       'warning'
     ).catch(console.error)
 
-    res.json(result.rows[0])
+    const fullResult = await client.query(
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    res.json(fullResult.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Error cancelling vacation request:', error)
@@ -747,7 +783,16 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
       'warning'
     ).catch(console.error)
 
-    res.json(result.rows[0])
+    const fullResult = await client.query(
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    res.json(fullResult.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Error cancelling vacation request by manager:', error)

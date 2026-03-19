@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type {
   VacationRequest,
   VacationBalance,
@@ -65,9 +64,7 @@ interface VacationStore {
   clearError: () => void
 }
 
-export const useVacationStore = create<VacationStore>()(
-  persist(
-    (set, get) => ({
+export const useVacationStore = create<VacationStore>()((set, get) => ({
       requests: [],
       balances: {},
       restrictions: [],
@@ -522,14 +519,5 @@ export const useVacationStore = create<VacationStore>()(
       },
       
       clearError: () => set({ error: null }),
-    }),
-    {
-      name: 'vacation-storage',
-      partialize: (state) => ({
-        requests: state.requests,
-        balances: state.balances,
-        restrictions: state.restrictions,
-      }),
-    }
-  )
+    })
 )

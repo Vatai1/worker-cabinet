@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
 import { formatDate } from '@/lib/utils'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { AddSkillModal } from '@/components/modals/AddSkillModal'
 import { AddProjectModal } from '@/components/modals/AddProjectModal'
 import { useAuthStore } from '@/store/authStore'
@@ -13,20 +14,6 @@ import {
 } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch (e) {
-      console.error('[EmployeeProfile] Error parsing auth storage:', e)
-    }
-  }
-  return headers
-}
 
 interface EmployeeData {
   id: string
@@ -131,7 +118,7 @@ export function EmployeeProfile() {
     const fetchEmployee = async () => {
       try {
         setLoading(true)
-        const response = await fetch(`${API_BASE_URL}/users/${id}`, { headers: getAuthHeaders() })
+        const response = await fetch(`${API_BASE_URL}/users/${id}`, { headers: getAuthHeadersWithContentType() })
         if (!response.ok) throw new Error('Не удалось загрузить данные сотрудника')
         const data = await response.json()
         setEmployee({
@@ -168,7 +155,7 @@ export function EmployeeProfile() {
     try {
       await fetch(`${API_BASE_URL}/users/${id}/skills`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ skill }),
       })
     } catch (err) {
@@ -193,7 +180,7 @@ export function EmployeeProfile() {
     try {
       await fetch(`${API_BASE_URL}/users/${id}/projects`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify(project),
       })
     } catch (err) {
@@ -214,7 +201,7 @@ export function EmployeeProfile() {
     try {
       await fetch(`${API_BASE_URL}/users/${id}/skills`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ skill }),
       })
     } catch (err) {
@@ -252,7 +239,7 @@ export function EmployeeProfile() {
     try {
       await fetch(`${API_BASE_URL}/users/${id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ responsibility_area: responsibilityText.trim() }),
       })
     } catch (err) {

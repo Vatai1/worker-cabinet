@@ -1,9 +1,14 @@
+import { getCookie } from '@/lib/cookies'
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
-const getAuthHeaders = () => {
-  const storage = JSON.parse(localStorage.getItem('auth-storage') || '{}')
-  const token = storage.state?.token
-  return token ? { Authorization: `Bearer ${token}` } : {}
+const getAuthHeaders = (): Record<string, string> => {
+  const token = getCookie('auth_token')
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
 }
 
 export const notificationApi = {

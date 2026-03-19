@@ -11,20 +11,9 @@ import {
   Calendar, Users, CircleDot, CheckCircle2, Clock, Crown,
 } from 'lucide-react'
 import { CreateProjectModal } from '@/components/modals/CreateProjectModal'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
-}
 
 export interface ProjectMember {
   id: string
@@ -245,7 +234,7 @@ export function Projects() {
       const params = new URLSearchParams()
       if (statusFilter) params.set('status', statusFilter)
       if (search)       params.set('search', search)
-      const res = await fetch(`${API_BASE_URL}/projects?${params}`, { headers: getAuthHeaders() })
+      const res = await fetch(`${API_BASE_URL}/projects?${params}`, { headers: getAuthHeadersWithContentType() })
       if (!res.ok) throw new Error('Не удалось загрузить проекты')
       setProjects(await res.json())
     } catch (err: any) {

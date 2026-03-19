@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import {
   ArrowLeft, Plus, Trash2, Pencil, Check, X, Loader2,
   ChevronLeft, ChevronRight, ChevronDown, ChevronRight as CollapseRight,
@@ -9,13 +10,6 @@ import {
 } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const s = localStorage.getItem('auth-storage')
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (s) { try { const { state } = JSON.parse(s); if (state?.token) h['Authorization'] = `Bearer ${state.token}` } catch {} }
-  return h
-}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -473,9 +467,9 @@ export function ProjectRoadmap() {
     if (!id) return; setLoading(true)
     try {
       const [pR,rR,tR] = await Promise.all([
-        fetch(`${API_BASE_URL}/projects/${id}`,              {headers:getAuthHeaders()}),
-        fetch(`${API_BASE_URL}/projects/${id}/roadmap/rows`, {headers:getAuthHeaders()}),
-        fetch(`${API_BASE_URL}/projects/${id}/roadmap/tasks`,{headers:getAuthHeaders()}),
+        fetch(`${API_BASE_URL}/projects/${id}`,              {headers:getAuthHeadersWithContentType()}),
+        fetch(`${API_BASE_URL}/projects/${id}/roadmap/rows`, {headers:getAuthHeadersWithContentType()}),
+        fetch(`${API_BASE_URL}/projects/${id}/roadmap/tasks`,{headers:getAuthHeadersWithContentType()}),
       ])
       const [p,r,t] = await Promise.all([pR.json(),rR.json(),tR.json()])
       setProject(p)
@@ -520,7 +514,7 @@ export function ProjectRoadmap() {
   const addRow = async () => {
     if (!newRowTitle.trim()||!id) return
     const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/rows`,{
-      method:'POST',headers:getAuthHeaders(),
+      method:'POST',headers:getAuthHeadersWithContentType(),
       body:JSON.stringify({title:newRowTitle.trim(),color:TASK_COLORS[rows.length%TASK_COLORS.length]}),
     })
     if (res.ok) { const row=await res.json(); setRows(p=>[...p,row]); setNewRowTitle(''); setAddingRow(false) }
@@ -529,14 +523,14 @@ export function ProjectRoadmap() {
   const renameRow = async (rowId:string,title:string) => {
     if (!id) return
     const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/rows/${rowId}`,{
-      method:'PUT',headers:getAuthHeaders(),body:JSON.stringify({title}),
+      method:'PUT',headers:getAuthHeadersWithContentType(),body:JSON.stringify({title}),
     })
     if (res.ok) { const u=await res.json(); setRows(p=>p.map(r=>r.id===rowId?u:r)) }
   }
 
   const deleteRow = async (rowId:string) => {
     if (!id||!confirm('Удалить строку и все её задачи?')) return
-    const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/rows/${rowId}`,{method:'DELETE',headers:getAuthHeaders()})
+    const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/rows/${rowId}`,{method:'DELETE',headers:getAuthHeadersWithContentType()})
     if (res.ok) { setRows(p=>p.filter(r=>r.id!==rowId)); setTasks(p=>p.filter(t=>t.row_id!==rowId)) }
   }
 
@@ -546,12 +540,12 @@ export function ProjectRoadmap() {
     if (!id) return
     if (modal?.task) {
       const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/tasks/${modal.task.id}`,{
-        method:'PUT',headers:getAuthHeaders(),body:JSON.stringify(data),
+        method:'PUT',headers:getAuthHeadersWithContentType(),body:JSON.stringify(data),
       })
       if (res.ok) { const u=await res.json(); setTasks(p=>p.map(t=>t.id===modal.task!.id?u:t)) }
     } else {
       const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/tasks`,{
-        method:'POST',headers:getAuthHeaders(),body:JSON.stringify(data),
+        method:'POST',headers:getAuthHeadersWithContentType(),body:JSON.stringify(data),
       })
       if (res.ok) { const task=await res.json(); setTasks(p=>[...p,task]) }
     }
@@ -560,7 +554,7 @@ export function ProjectRoadmap() {
 
   const deleteTask = async (taskId:string) => {
     if (!id||!confirm('Удалить задачу?')) return
-    const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/tasks/${taskId}`,{method:'DELETE',headers:getAuthHeaders()})
+    const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/tasks/${taskId}`,{method:'DELETE',headers:getAuthHeadersWithContentType()})
     if (res.ok) setTasks(p=>p.filter(t=>t.id!==taskId))
   }
 
@@ -568,7 +562,7 @@ export function ProjectRoadmap() {
     const next:{[k:string]:RoadmapTask['status']} = {pending:'in_progress',in_progress:'completed',completed:'pending'}
     const ns = next[task.status]
     const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/tasks/${task.id}`,{
-      method:'PUT',headers:getAuthHeaders(),body:JSON.stringify({status:ns}),
+      method:'PUT',headers:getAuthHeadersWithContentType(),body:JSON.stringify({status:ns}),
     })
     if (res.ok) { const u=await res.json(); setTasks(p=>p.map(t=>t.id===task.id?u:t)) }
   }

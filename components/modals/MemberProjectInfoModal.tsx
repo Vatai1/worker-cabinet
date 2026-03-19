@@ -3,20 +3,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { User, X, Calendar, Shield, Save } from 'lucide-react'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
-}
 
 interface Member {
   id: string
@@ -64,7 +53,7 @@ export function MemberProjectInfoModal({ member, projectId, open, onClose, onUpd
     try {
       const res = await fetch(`${API_BASE_URL}/projects/${projectId}/members/${member.id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ description: description.trim() || null }),
       })
       if (!res.ok) {

@@ -5,20 +5,9 @@ import { Label } from '@/components/ui/Label'
 import { Switch } from '@/components/ui/Switch'
 import { FolderKanban, X, Plus } from 'lucide-react'
 import type { Project } from '@/pages/Projects'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
-}
 
 interface Props {
   open: boolean
@@ -69,7 +58,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     try {
       const res = await fetch(`${API_BASE_URL}/projects`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({
           name:        form.name.trim(),
           fullName:    form.fullName.trim() || undefined,
