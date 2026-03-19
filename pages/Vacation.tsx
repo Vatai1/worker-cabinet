@@ -12,6 +12,7 @@ import { VacationHistoryModal } from '@/components/modals/VacationHistoryModal'
 import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { RestrictionModal } from '@/components/modals/RestrictionModal'
 import { VacationRequestStatus, VacationType } from '@/types'
+import { vacationApi } from '@/services/vacationApi'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -316,69 +317,20 @@ export function Vacation() {
     setRestrictionWarningsCalendar(warnings)
   }
 
-  const handleDownload = (request: any) => {
-    if (!user) return
-
-    const vacationTypeName = request.vacationType === 'annual_paid'
-      ? 'Ежегодный оплачиваемый отпуск'
-      : request.vacationType === 'unpaid'
-      ? 'Отпуск без сохранения заработной платы'
-      : request.vacationType === 'educational'
-      ? 'Учебный отпуск'
-      : request.vacationType === 'maternity'
-      ? 'Отпуск по беременности и родам'
-      : request.vacationType === 'child_care'
-      ? 'Отпуск по уходу за ребёнком'
-      : request.vacationType === 'additional'
-      ? 'Дополнительный отпуск'
-      : request.vacationType === 'veteran'
-      ? 'Ветеранский отпуск'
-      : 'Отпуск'
-
-    const statusName = request.status === 'on_approval'
-      ? 'На согласовании'
-      : request.status === 'approved'
-      ? 'Согласовано'
-      : request.status === 'rejected'
-      ? 'Отклонено'
-      : request.status === 'cancelled_by_employee'
-      ? 'Отменено сотрудником'
-      : request.status === 'cancelled_by_manager'
-      ? 'Отменено руководителем'
-      : request.status
-
-    const content = `
-ЗЯВЛЕНИЕ НА ОТПУСК
-
-Сотрудник: ${user.lastName} ${user.firstName} ${user.middleName || ''}
-Должность: ${user.position}
-Отдел: ${user.department}
-
-Тип отпуска: ${vacationTypeName}
-Дата начала: ${new Date(request.startDate).toLocaleDateString('ru-RU')}
-Дата окончания: ${new Date(request.endDate).toLocaleDateString('ru-RU')}
-Количество дней: ${request.duration}
-
-Комментарий: ${request.comment || 'Не указан'}
-
-${request.hasTravel ? 'Включая проезд' + (request.travelDestination ? ` до ${request.travelDestination}` : '') : ''}
-
-Статус: ${statusName}
-Дата создания: ${new Date(request.createdAt).toLocaleDateString('ru-RU')}
-${request.reviewedAt ? `Дата рассмотрения: ${new Date(request.reviewedAt).toLocaleDateString('ru-RU')}` : ''}
-${request.rejectionReason ? `Причина отклонения: ${request.rejectionReason}` : ''}
-${request.cancellationReason ? `Причина отмены: ${request.cancellationReason}` : ''}
-    `.trim()
-
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `заявление-отпуск-${request.id}.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+  const handleDownload = async (request: any) => {
+    try {
+      const blob = await vacationApi.generateStatement(request.id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `заявление-отпуск-${request.id}.docx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error: any) {
+      alert(error.message || 'Ошибка при генерации заявления')
+    }
   }
 
   const calendarRequests = useMemo(() => {

@@ -3,6 +3,7 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { TelegramService } from '../services/telegramService.js'
 import { createNotification } from '../services/notificationService.js'
+import { generateVacationStatement } from '../services/statementService.js'
 
 const router = express.Router()
 
@@ -1033,6 +1034,40 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error checking vacation restrictions:', error)
     res.status(500).json({ error: 'Failed to check vacation restrictions' })
+  }
+})
+
+router.post('/requests/:id/statement', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+
+    const requestResult = await query(
+      `SELECT vr.*, u.first_name, u.last_name FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Заявка не найдена' })
+    }
+
+    const request = requestResult.rows[0]
+
+    if (request.user_id !== userId && req.user.role === 'employee') {
+      return res.status(403).json({ error: 'Нет доступа к этой заявке' })
+    }
+
+    const buffer = await generateVacationStatement(id)
+
+    const fileName = `заявление-отпуск-${id}.docx`
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+    res.send(buffer)
+  } catch (error) {
+    console.error('Error generating vacation statement:', error)
+    res.status(500).json({ error: error.message || 'Ошибка при генерации заявления' })
   }
 })
 
