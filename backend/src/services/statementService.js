@@ -5,6 +5,76 @@ import { query } from '../config/database.js'
 import { S3Client, HeadBucketCommand, CreateBucketCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import 'dotenv/config'
 
+function sanitizeXmlForDocxtemplater(xmlContent) {
+  let result = xmlContent
+  
+  let previous
+  let iterations = 0
+  const maxIterations = 100
+  
+  do {
+    previous = result
+    iterations++
+    
+    // Pattern 1: Merge any text split by XML tags between {{ and }}
+    // This handles multiple splits like {{a</w:t>...<w:t>b</w:t>...<w:t>c}}
+    result = result.replace(
+      /\{\{([\s\S]*?)\}\}/g,
+      (match, inner) => {
+        // Remove all XML tags from the content between {{ and }}
+        const cleaned = inner.replace(/<[^>]+>/g, '')
+        return '{{' + cleaned + '}}'
+      }
+    )
+    
+    // Pattern 2: Split closing delimiter }}
+    result = result.replace(/\}<\/w:t>\s*<\/w:r>\s*<w:r[^>]*>\s*<w:t[^>]*>\}/g, '}}')
+    
+    // Pattern 3: Split opening delimiter {{
+    result = result.replace(/\{<\/w:t>\s*<\/w:r>\s*<w:r[^>]*>\s*<w:t[^>]*>\{/g, '{{')
+    
+    // Pattern 4: More flexible split closing
+    result = result.replace(/\}<\/w:t>(?:[^<]*<[^>]+>)*[^<]*<w:t[^>]*>\}/g, '}}')
+    
+    // Pattern 5: More flexible split opening
+    result = result.replace(/\{<\/w:t>(?:[^<]*<[^>]+>)*[^<]*<w:t[^>]*>\{/g, '{{')
+    
+    // Pattern 6: Fix triple braces
+    result = result.replace(/\}\}\}/g, '}}')
+    result = result.replace(/\{\{\{/g, '{{')
+  } while (result !== previous && iterations < maxIterations)
+  
+  return result
+}
+
+function fixTemplateTags(zip) {
+  const documentPath = 'word/document.xml'
+  const documentXml = zip.file(documentPath)
+  
+  if (!documentXml) return zip
+  
+  let content = documentXml.asText()
+  const originalContent = content
+  
+  // Debug: find all potential template tags
+  const tagMatches = content.match(/\{\{[^}]*\}\}?|\{\{[^}]*/g) || []
+  if (tagMatches.length > 0) {
+    console.log('[Template Debug] Found potential tags:', tagMatches.slice(0, 10).join(', '))
+  }
+  
+  content = sanitizeXmlForDocxtemplater(content)
+  
+  if (content !== originalContent) {
+    console.log('[Template Fix] Sanitization applied to word/document.xml')
+    const newTagMatches = content.match(/\{\{[^}]+\}\}/g) || []
+    console.log('[Template Debug] After sanitization:', newTagMatches.join(', '))
+  }
+  
+  zip.file(documentPath, content)
+  
+  return zip
+}
+
 const s3Client = new S3Client({
   region: 'us-east-1',
   endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
@@ -220,6 +290,8 @@ export async function generateVacationStatement(requestId) {
   const templateBuffer = await loadTemplate()
 
   const zip = new PizZip(templateBuffer)
+  fixTemplateTags(zip)
+  
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
