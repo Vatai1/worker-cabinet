@@ -63,12 +63,21 @@ async function runMigrations() {
         'employee',
         'manager',
         'hr',
-        'admin'
+        'admin',
+        'director'
       )`)
       console.log('  ✓ user_role_enum')
     } catch (e) {
       if (e.message.includes('already exists')) {
         console.log('  ✓ user_role_enum (already exists)')
+        try {
+          await db.query(`ALTER TYPE user_role_enum ADD VALUE IF NOT EXISTS 'director'`)
+          console.log('    ✓ director value added to enum')
+        } catch (addErr) {
+          if (!addErr.message.includes('already exists')) {
+            console.log('    - director value:', addErr.message)
+          }
+        }
       } else {
         throw e
       }
@@ -379,6 +388,27 @@ async function runMigrations() {
     `).catch(e => console.log('  - notifications:', e.message))
 
     await db.query('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)').catch(e => {})
+
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active_director BOOLEAN DEFAULT false`)
+      console.log('  ✓ active_director column added')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ active_director (already exists)')
+      } else {
+        console.log('  - active_director:', e.message)
+      }
+    }
+
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_active_director 
+      ON users ((1)) WHERE active_director = true
+    `).catch(e => {
+      if (!e.message.includes('already exists')) {
+        console.log('  - idx_users_active_director:', e.message)
+      }
+    })
+    console.log('  ✓ idx_users_active_director unique index created')
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
