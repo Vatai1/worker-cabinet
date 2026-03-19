@@ -4,10 +4,10 @@ import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Switch } from '@/components/ui/Switch'
 import { Pencil, X, Check } from 'lucide-react'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
-// Helper to extract date part from ISO string considering local timezone
 function toDateInputValue(isoString?: string): string {
   if (!isoString) return ''
   const date = new Date(isoString)
@@ -15,18 +15,6 @@ function toDateInputValue(isoString?: string): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
 }
 
 interface ProjectBase {
@@ -81,7 +69,7 @@ export function EditProjectModal({ project, open, onClose, onUpdated }: Props) {
     try {
       const res = await fetch(`${API_BASE_URL}/projects/${project.id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({
           name:        form.name.trim(),
           fullName:    form.fullName.trim() || null,

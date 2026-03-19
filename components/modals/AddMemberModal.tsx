@@ -3,20 +3,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
 import { UserPlus, X, Search, Check } from 'lucide-react'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
-}
 
 interface User {
   id: string
@@ -61,7 +50,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
         if (existingMemberIds.length > 0) {
           existingMemberIds.forEach(id => params.append('exclude[]', id))
         }
-        const res = await fetch(`${API_BASE_URL}/users/search?${params}`, { headers: getAuthHeaders() })
+        const res = await fetch(`${API_BASE_URL}/users/search?${params}`, { headers: getAuthHeadersWithContentType() })
         if (res.ok) setUsers(await res.json())
       } catch {}
     }
@@ -84,7 +73,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
     try {
       await fetch(`${API_BASE_URL}/projects/${projectId}/members`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ userId: selectedId, role }),
       })
       onAdded()

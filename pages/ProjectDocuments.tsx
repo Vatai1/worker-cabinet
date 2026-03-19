@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { DocumentPreviewModal } from '@/components/modals/DocumentPreviewModal'
 import { isPreviewable } from '@/lib/documentUtils'
+import { getAuthHeaders } from '@/lib/authHeaders'
 import {
   ArrowLeft, Loader2, Upload, FolderPlus, Folder, FolderOpen,
   File, FileText, FileImage, FileCode, FileArchive, Download,
@@ -14,18 +15,6 @@ import {
 } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = {}
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
-}
 
 interface FolderItem {
   id: string

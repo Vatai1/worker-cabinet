@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { Login } from '@/pages/Login'
 import { Layout } from '@/components/layout/Layout'
@@ -23,6 +24,15 @@ import { Settings } from '@/pages/Settings'
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const token = useAuthStore((state) => state.token)
+  const loading = useAuthStore((state) => state.loading)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground">Загрузка...</div>
+      </div>
+    )
+  }
 
   if (!isAuthenticated || !token) {
     return <Navigate to="/login" replace />
@@ -33,6 +43,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   const user = useAuthStore((state) => state.user)
+  const checkAuth = useAuthStore((state) => state.checkAuth)
+
+  useEffect(() => {
+    checkAuth()
+  }, [checkAuth])
 
   return (
     <BrowserRouter>

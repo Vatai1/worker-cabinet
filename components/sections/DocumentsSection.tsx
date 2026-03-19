@@ -5,20 +5,10 @@ import { DocumentPreviewModal } from '@/components/modals/DocumentPreviewModal'
 import { isPreviewable } from '@/lib/documentUtils'
 import { FileText, Upload, Trash2, Download, File, FileImage, FileCode, FileArchive, Eye } from 'lucide-react'
 import { UploadDocumentModal } from '@/components/modals/UploadDocumentModal'
+import { getAuthHeaders } from '@/lib/authHeaders'
+import { useAuthStore } from '@/store/authStore'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = {}
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
-}
 
 interface Document {
   id: string
@@ -77,6 +67,7 @@ export function DocumentsSection({ projectId, canManage, isMember }: Props) {
   const [loading, setLoading] = useState(true)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null)
+  const user = useAuthStore((state) => state.user)
 
   const fetchDocuments = async () => {
     try {
@@ -209,7 +200,7 @@ export function DocumentsSection({ projectId, canManage, isMember }: Props) {
                       >
                         <Download className="h-4 w-4" />
                       </button>
-                      {(canManage || String(doc.uploaded_by) === String(localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')!).state?.token?.id : '')) && (
+                      {(canManage || String(doc.uploaded_by) === String(user?.id)) && (
                         <button
                           onClick={() => handleDelete(doc.id)}
                           className="opacity-0 group-hover:opacity-100 p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"

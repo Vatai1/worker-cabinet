@@ -96,13 +96,14 @@ export function Vacation() {
     if (!user || !cancellingRequestId) return
     try {
       await useVacationStore.getState().cancelRequest(cancellingRequestId)
-      setShowCancelModal(false)
-      setCancellingRequestId(null)
-      fetchUserRequests(user.id)
-      fetchDepartmentRequests(user.departmentId || '1')
+      setExpandedRequestId(null)
       fetchBalance(user.id).then(setBalance)
     } catch (err) {
       console.error('Error canceling request:', err)
+      alert('Ошибка при отмене заявки')
+    } finally {
+      setShowCancelModal(false)
+      setCancellingRequestId(null)
     }
   }
 

@@ -344,6 +344,42 @@ async function runMigrations() {
 
     console.log('✅ Roadmap v2 tables created')
 
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(100)`)
+      console.log('  ✓ telegram_chat_id column added')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ telegram_chat_id (already exists)')
+      } else {
+        console.log('  - telegram_chat_id:', e.message)
+      }
+    }
+
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_notifications_enabled BOOLEAN DEFAULT false`)
+      console.log('  ✓ telegram_notifications_enabled column added')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ telegram_notifications_enabled (already exists)')
+      } else {
+        console.log('  - telegram_notifications_enabled:', e.message)
+      }
+    }
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id          SERIAL PRIMARY KEY,
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title       VARCHAR(255) NOT NULL,
+        message     TEXT NOT NULL,
+        type        VARCHAR(20) DEFAULT 'info',
+        read        BOOLEAN DEFAULT false,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - notifications:', e.message))
+
+    await db.query('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)').catch(e => {})
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     

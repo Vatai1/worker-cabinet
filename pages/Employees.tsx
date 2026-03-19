@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/authStore'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { Users, Loader2, Search, Mail, Phone, Building2, ChevronRight } from 'lucide-react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
@@ -19,20 +20,6 @@ interface Employee {
   email: string
   status: 'active' | 'inactive' | 'on_leave'
   role: string
-}
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch (e) {
-      console.error('[Employees] Error parsing auth storage:', e)
-    }
-  }
-  return headers
 }
 
 const statusConfig: Record<string, { label: string; variant: 'success' | 'destructive' | 'warning'; dot: string }> = {
@@ -68,7 +55,7 @@ export function Employees() {
       try {
         setLoading(true)
         const params = user?.departmentId ? `?departmentId=${user.departmentId}` : ''
-        const response = await fetch(`${API_BASE_URL}/users${params}`, { headers: getAuthHeaders() })
+        const response = await fetch(`${API_BASE_URL}/users${params}`, { headers: getAuthHeadersWithContentType() })
         if (!response.ok) throw new Error('Не удалось загрузить список сотрудников')
         setEmployees(await response.json())
       } catch (err: any) {

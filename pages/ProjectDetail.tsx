@@ -14,20 +14,9 @@ import { EditProjectModal } from '@/components/modals/EditProjectModal'
 import { AddMemberModal } from '@/components/modals/AddMemberModal'
 import { MemberProjectInfoModal } from '@/components/modals/MemberProjectInfoModal'
 import { ContextMenu } from '@/components/ui/ContextMenu'
+import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
-}
 
 interface Member {
   id: string
@@ -154,7 +143,7 @@ export function ProjectDetail() {
   const fetchProject = async () => {
     try {
       setLoading(true)
-      const res = await fetch(`${API_BASE_URL}/projects/${id}`, { headers: getAuthHeaders() })
+      const res = await fetch(`${API_BASE_URL}/projects/${id}`, { headers: getAuthHeadersWithContentType() })
       if (!res.ok) throw new Error('Проект не найден')
       const data = await res.json()
       setProject({
@@ -181,7 +170,7 @@ export function ProjectDetail() {
     try {
       await fetch(`${API_BASE_URL}/projects/${id}/members/${memberId}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersWithContentType(),
       })
       fetchProject()
     } catch (err) {
@@ -217,7 +206,7 @@ export function ProjectDetail() {
     if (!id || !confirm('Удалить проект?')) return
     setDeleting(true)
     try {
-      await fetch(`${API_BASE_URL}/projects/${id}`, { method: 'DELETE', headers: getAuthHeaders() })
+      await fetch(`${API_BASE_URL}/projects/${id}`, { method: 'DELETE', headers: getAuthHeadersWithContentType() })
       navigate('/projects')
     } catch (err) {
       console.error('Error deleting project:', err)
@@ -763,8 +752,8 @@ function RoadmapSection({
       setLoading(true)
       try {
         const [rRes, tRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/projects/${projectId}/roadmap/rows`, { headers: getAuthHeaders() }),
-          fetch(`${API_BASE_URL}/projects/${projectId}/roadmap/tasks`, { headers: getAuthHeaders() }),
+          fetch(`${API_BASE_URL}/projects/${projectId}/roadmap/rows`, { headers: getAuthHeadersWithContentType() }),
+          fetch(`${API_BASE_URL}/projects/${projectId}/roadmap/tasks`, { headers: getAuthHeadersWithContentType() }),
         ])
         if (rRes.ok) setRows(await rRes.json())
         if (tRes.ok) setTasks(await tRes.json())

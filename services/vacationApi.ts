@@ -5,13 +5,12 @@ import type {
   VacationCalendarItem,
   VacationFormData,
   VacationValidationError,
-  VacationApiError,
 } from '@/types'
-import { VacationRequestStatus, VacationType } from '@/types'
+import { getCookie } from '@/lib/cookies'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
-class VacationApiError extends Error implements VacationApiError {
+class VacationApiError extends Error {
   code: string
   details?: any
 
@@ -21,6 +20,24 @@ class VacationApiError extends Error implements VacationApiError {
     this.code = code
     this.details = details
   }
+}
+
+const getAuthHeaders = (): Record<string, string> => {
+  const token = getCookie('auth_token')
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
+}
+
+const getAuthHeadersWithContentType = (): Record<string, string> => {
+  const token = getCookie('auth_token')
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
 }
 
 const handleResponse = async (response: Response) => {
@@ -75,31 +92,10 @@ const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
   statusHistory: dbRequest.statusHistory || [],
 })
 
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  console.log('[vacationApi] Auth storage:', authStorage ? 'exists' : 'not found')
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      console.log('[vacationApi] State:', state)
-      console.log('[vacationApi] Token:', state?.token ? `${state.token.substring(0, 30)}...` : 'not found')
-      if (state?.token) {
-        return {
-          'Authorization': `Bearer ${state.token}`,
-        }
-      }
-    } catch (e) {
-      console.log('[vacationApi] Error parsing auth storage:', e)
-    }
-  }
-  console.log('[vacationApi] No auth headers')
-  return {}
-}
-
 export const vacationApi = {
   async getAllRequests(): Promise<VacationRequest[]> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests`, {
-      headers: getAuthHeaders(),
+      headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
     return data.map(mapDbRequestToApi)
@@ -107,7 +103,7 @@ export const vacationApi = {
 
   async getUserRequests(userId: string): Promise<VacationRequest[]> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests?userId=${userId}`, {
-      headers: getAuthHeaders(),
+      headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
     return data.map(mapDbRequestToApi)
@@ -115,7 +111,7 @@ export const vacationApi = {
 
   async getDepartmentRequests(departmentId: string): Promise<VacationRequest[]> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests?departmentId=${departmentId}`, {
-      headers: getAuthHeaders(),
+      headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
     return data.map(mapDbRequestToApi)
@@ -123,7 +119,7 @@ export const vacationApi = {
 
   async getBalance(userId: string): Promise<VacationBalance> {
     const response = await fetch(`${API_BASE_URL}/vacation/balance/${userId}`, {
-      headers: getAuthHeaders(),
+      headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
     return {
@@ -141,7 +137,7 @@ export const vacationApi = {
 
   async getRestrictions(departmentId: string): Promise<VacationRestriction[]> {
     const response = await fetch(`${API_BASE_URL}/vacation/restrictions?departmentId=${departmentId}`, {
-      headers: getAuthHeaders(),
+      headers: getAuthHeadersWithContentType(),
     })
     return handleResponse(response)
   },
@@ -153,10 +149,7 @@ export const vacationApi = {
     console.log('[vacationApi] checkRestrictions called', { userId, startDate: data.startDate, endDate: data.endDate })
     const response = await fetch(`${API_BASE_URL}/vacation/check-restrictions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ userId, startDate: data.startDate, endDate: data.endDate }),
     })
     const result = await handleResponse(response)
@@ -175,10 +168,7 @@ export const vacationApi = {
   async createRequest(userId: string, data: VacationFormData): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({
         startDate: data.startDate,
         endDate: data.endDate,
@@ -195,10 +185,7 @@ export const vacationApi = {
   async updateRequest(requestId: string, data: Partial<VacationFormData>): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
       body: JSON.stringify(data),
     })
     const dbRequest = await handleResponse(response)
@@ -208,10 +195,7 @@ export const vacationApi = {
   async cancelRequest(requestId: string): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/cancel`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
     })
     const dbRequest = await handleResponse(response)
     return mapDbRequestToApi(dbRequest)
@@ -220,10 +204,7 @@ export const vacationApi = {
   async approveRequest(requestId: string, managerId: string): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/approve`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
     })
     const dbRequest = await handleResponse(response)
     return mapDbRequestToApi(dbRequest)
@@ -236,10 +217,7 @@ export const vacationApi = {
   ): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/reject`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ reason }),
     })
     const dbRequest = await handleResponse(response)
@@ -253,10 +231,7 @@ export const vacationApi = {
   ): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/cancel-by-manager`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ managerId, reason }),
     })
     return handleResponse(response)
@@ -268,10 +243,7 @@ export const vacationApi = {
   ): Promise<VacationRestriction> {
     const response = await fetch(`${API_BASE_URL}/vacation/restrictions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ departmentId, ...data }),
     })
     return handleResponse(response)
@@ -280,7 +252,7 @@ export const vacationApi = {
   async deleteRestriction(restrictionId: string): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/vacation/restrictions/${restrictionId}`, {
       method: 'DELETE',
-      headers: getAuthHeaders(),
+      headers: getAuthHeadersWithContentType(),
     })
     return handleResponse(response)
   },
@@ -296,10 +268,7 @@ export const vacationApi = {
   async generateStatement(requestId: string): Promise<Blob> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/statement`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
     })
 
     if (!response.ok) {
@@ -316,10 +285,7 @@ export const vacationApi = {
   async addComment(requestId: string, comment: string): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/comment`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
+      headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ comment }),
     })
     return handleResponse(response)

@@ -5,22 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate } from '@/lib/utils'
+import { getAuthHeaders } from '@/lib/authHeaders'
 import { FileText, Download, Search, Upload, Eye, X, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = {}
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
-}
 
 interface UserDocument {
   id: string
