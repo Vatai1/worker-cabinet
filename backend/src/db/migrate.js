@@ -5,9 +5,36 @@ dotenv.config()
 
 const { Pool } = pg
 
+async function ensureDatabaseExists() {
+  const pool = new Pool({
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    database: 'postgres',
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+  })
+
+  const client = await pool.connect()
+  try {
+    const result = await client.query(
+      "SELECT 1 FROM pg_database WHERE datname = 'worker_cabinet'"
+    )
+    if (result.rows.length === 0) {
+      console.log('Creating database worker_cabinet...')
+      await client.query('CREATE DATABASE worker_cabinet')
+      console.log('✅ Database worker_cabinet created')
+    }
+  } finally {
+    client.release()
+    await pool.end()
+  }
+}
+
 async function runMigrations() {
   console.log('Starting migrations...')
-  
+
+  await ensureDatabaseExists()
+
   const pool = new Pool({
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
@@ -15,7 +42,7 @@ async function runMigrations() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
   })
-  
+
   const db = await pool.connect()
   
   try {
@@ -273,6 +300,70 @@ async function runMigrations() {
 
     console.log('✅ Triggers created')
 
+    // Step 4.5: Create company_projects tables (required for roadmap)
+    console.log('Creating company_projects tables...')
+
+    try {
+      await db.query(`CREATE TYPE project_status_enum AS ENUM ('active', 'completed', 'paused')`)
+      console.log('  ✓ project_status_enum created')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ project_status_enum (already exists)')
+      } else {
+        throw e
+      }
+    }
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS company_projects (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        status project_status_enum DEFAULT 'active',
+        start_date DATE,
+        end_date DATE,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    console.log('  ✓ company_projects table created')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS company_project_members (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES company_projects(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role VARCHAR(50) NOT NULL DEFAULT 'member',
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        description TEXT,
+        UNIQUE(project_id, user_id)
+      )
+    `)
+    console.log('  ✓ company_project_members table created')
+
+    await db.query('CREATE INDEX IF NOT EXISTS idx_cp_status ON company_projects(status)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_cpm_project ON company_project_members(project_id)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_cpm_user ON company_project_members(user_id)').catch(e => {})
+
+    await db.query('DROP TRIGGER IF EXISTS update_company_projects_updated_at ON company_projects')
+    await db.query(`
+      CREATE TRIGGER update_company_projects_updated_at
+      BEFORE UPDATE ON company_projects
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+    `)
+
+    try {
+      await db.query(`ALTER TABLE company_projects ADD COLUMN IF NOT EXISTS full_name VARCHAR(500)`)
+      console.log('  ✓ full_name column added to company_projects')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ full_name column (already exists)')
+      }
+    }
+
+    console.log('✅ company_projects tables created')
+
     // Step 5: Create project roadmap table
     console.log('Creating project roadmap table...')
     
@@ -375,6 +466,17 @@ async function runMigrations() {
       }
     }
 
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS responsibility_area TEXT`)
+      console.log('  ✓ responsibility_area column added')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ responsibility_area (already exists)')
+      } else {
+        console.log('  - responsibility_area:', e.message)
+      }
+    }
+
     await db.query(`
       CREATE TABLE IF NOT EXISTS notifications (
         id          SERIAL PRIMARY KEY,
@@ -409,6 +511,144 @@ async function runMigrations() {
       }
     })
     console.log('  ✓ idx_users_active_director unique index created')
+
+    try {
+      await db.query(`ALTER TABLE company_project_members ADD COLUMN IF NOT EXISTS description TEXT`)
+      console.log('  ✓ description column added to company_project_members')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ description column (already exists)')
+      } else {
+        console.log('  - description:', e.message)
+      }
+    }
+
+    // Add travel_destination to vacation_requests
+    try {
+      await db.query(`ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS travel_destination VARCHAR(255)`)
+      console.log('  ✓ travel_destination column added')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ travel_destination (already exists)')
+      } else {
+        console.log('  - travel_destination:', e.message)
+      }
+    }
+
+    // Add telegram_username to users
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username VARCHAR(255)`)
+      console.log('  ✓ telegram_username column added')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ telegram_username (already exists)')
+      } else {
+        console.log('  - telegram_username:', e.message)
+      }
+    }
+
+    // Create skills table
+    console.log('Creating skills and user projects tables...')
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS skills (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, name)
+      )
+    `).catch(e => console.log('  - skills:', e.message))
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        role VARCHAR(255) NOT NULL,
+        status project_status_enum DEFAULT 'active',
+        start_date DATE,
+        end_date DATE,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - projects:', e.message))
+
+    await db.query('CREATE INDEX IF NOT EXISTS idx_skills_user_id ON skills(user_id)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)').catch(e => {})
+
+    await db.query('DROP TRIGGER IF EXISTS update_projects_updated_at ON projects')
+    await db.query(`CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()`)
+    console.log('  ✓ skills and projects tables created')
+
+    // Create user_documents table
+    console.log('Creating user_documents table...')
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS user_documents (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        file_path VARCHAR(500) NOT NULL,
+        file_size BIGINT,
+        mime_type VARCHAR(100),
+        category VARCHAR(50) DEFAULT 'other',
+        description TEXT,
+        uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - user_documents:', e.message))
+    await db.query('CREATE INDEX IF NOT EXISTS idx_ud_user ON user_documents(user_id)').catch(e => {})
+    console.log('  ✓ user_documents table created')
+
+    // Create project_documents and project_folders tables
+    console.log('Creating project documents tables...')
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS project_documents (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES company_projects(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        file_path VARCHAR(1024) NOT NULL,
+        file_size BIGINT,
+        mime_type VARCHAR(255),
+        uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        folder_path VARCHAR(1024) NOT NULL DEFAULT '/',
+        tags JSONB DEFAULT '[]',
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - project_documents:', e.message))
+
+    try {
+      await db.query(`ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS folder_path VARCHAR(1024) NOT NULL DEFAULT '/'`)
+      await db.query(`ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'`)
+      await db.query(`ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS description TEXT`)
+    } catch (e) {}
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS project_folders (
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER NOT NULL REFERENCES company_projects(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        path VARCHAR(1024) NOT NULL,
+        parent_path VARCHAR(1024) NOT NULL DEFAULT '/',
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(project_id, path)
+      )
+    `).catch(e => console.log('  - project_folders:', e.message))
+
+    await db.query('CREATE INDEX IF NOT EXISTS idx_pd_project ON project_documents(project_id)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_pdoc_project_folder ON project_documents(project_id, folder_path)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_pfold_project_parent ON project_folders(project_id, parent_path)').catch(e => {})
+    console.log('  ✓ project documents tables created')
+
+    // Add priority and is_milestone to roadmap_tasks
+    try {
+      await db.query(`ALTER TABLE roadmap_tasks ADD COLUMN IF NOT EXISTS priority VARCHAR(20) DEFAULT 'medium'`)
+      await db.query(`ALTER TABLE roadmap_tasks ADD COLUMN IF NOT EXISTS is_milestone BOOLEAN DEFAULT false`)
+      console.log('  ✓ roadmap_tasks priority/is_milestone columns added')
+    } catch (e) {}
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
