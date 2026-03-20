@@ -50,3 +50,8 @@ coverage
 *.tsbuildinfo
 server.pid
 logs/
+*.save
+vite.config.d.ts
+
+# Uploads
+backend/uploads/
