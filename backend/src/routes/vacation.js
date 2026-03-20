@@ -53,7 +53,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       params.push(userId)
     } else if (departmentId) {
       if (user.role === 'employee') {
-        whereClause += ' AND u.department_id = $' + (params.length + 1) + ' AND vr.status = $' + (params.length + 2)
+        whereClause += ' AND u.department_id = $' + (params.length + 1) + ' AND rs.code = $' + (params.length + 2)
         params.push(departmentId, 'approved')
       } else {
         whereClause += ' AND u.department_id = $' + (params.length + 1)
@@ -70,7 +70,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
     }
 
     if (status) {
-      whereClause += ' AND vr.status = $' + (params.length + 1)
+      whereClause += ' AND rs.code = $' + (params.length + 1)
       params.push(status)
     }
 
@@ -82,6 +82,10 @@ router.get('/requests', authenticateToken, async (req, res) => {
     const sql = `
       SELECT
         vr.*,
+        rs.code as status,
+        rs.name as status_name,
+        vt.code as vacation_type,
+        vt.name as vacation_type_name,
         u.first_name,
         u.last_name,
         u.middle_name,
@@ -92,8 +96,8 @@ router.get('/requests', authenticateToken, async (req, res) => {
           json_agg(
             json_build_object(
               'id', vrsh.id,
-              'status', vrsh.status_id,
-              'statusName', vrsh.status_id::text,
+              'status', vrsh_rs.code,
+              'statusName', vrsh_rs.name,
               'changedAt', vrsh.changed_at,
               'changedBy', vrsh.changed_by,
               'changedByName', hu.last_name || ' ' || hu.first_name,
@@ -104,11 +108,14 @@ router.get('/requests', authenticateToken, async (req, res) => {
         ) as status_history
       FROM vacation_requests vr
       JOIN users u ON vr.user_id = u.id
+      JOIN request_statuses rs ON vr.status_id = rs.id
+      JOIN vacation_types vt ON vr.vacation_type_id = vt.id
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN vacation_request_status_history vrsh ON vr.id = vrsh.request_id
+      LEFT JOIN request_statuses vrsh_rs ON vrsh.status_id = vrsh_rs.id
       LEFT JOIN users hu ON vrsh.changed_by = hu.id
       ${whereClause}
-      GROUP BY vr.id, u.id, d.id
+      GROUP BY vr.id, u.id, d.id, rs.id, vt.id
       ORDER BY vr.created_at DESC
     `
 
@@ -117,9 +124,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
     const requests = result.rows.map((request) => ({
       ...request,
       status_code: request.status,
-      status_name: STATUS_NAMES[request.status] || request.status,
       vacation_type_code: request.vacation_type,
-      vacation_type_name: VACATION_TYPE_NAMES[request.vacation_type] || request.vacation_type,
       statusHistory: request.status_history,
     }))
 
@@ -274,8 +279,8 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status, changed_by)
-        VALUES ($1, 'on_approval', $2)`,
+        (request_id, status_id, changed_by)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $2)`,
       [request.id, userId]
     )
 
@@ -429,9 +434,9 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
 
     const result = await client.query(
       `UPDATE vacation_requests vr
-       SET status = 'approved', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
+       SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'), reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
        FROM vacation_balances vb
-       WHERE vr.id = $2 AND vr.status = 'on_approval' AND vb.user_id = vr.user_id
+       WHERE vr.id = $2 AND vr.status_id = (SELECT id FROM request_statuses WHERE code = 'on_approval') AND vb.user_id = vr.user_id
        RETURNING
          vr.*,
          vb.user_id as balance_user_id,
@@ -457,8 +462,8 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status, changed_by, comment)
-        VALUES ($1, 'approved', $2, 'Согласовано')`,
+        (request_id, status_id, changed_by, comment)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, 'Согласовано')`,
       [id, managerId]
     )
 
@@ -527,8 +532,8 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
 
     const result = await client.query(
       `UPDATE vacation_requests vr
-       SET status = 'rejected', rejection_reason = $1, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $2
-       WHERE vr.id = $3 AND vr.status = 'on_approval'
+       SET status_id = (SELECT id FROM request_statuses WHERE code = 'rejected'), rejection_reason = $1, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $2
+       WHERE vr.id = $3 AND vr.status_id = (SELECT id FROM request_statuses WHERE code = 'on_approval')
        RETURNING vr.*`,
       [reason, managerId, id]
     )
@@ -549,8 +554,8 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status, changed_by, comment)
-        VALUES ($1, 'rejected', $2, $3)`,
+        (request_id, status_id, changed_by, comment)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
       [id, managerId, reason]
     )
 
@@ -652,7 +657,7 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
 
     const result = await client.query(
       `UPDATE vacation_requests
-       SET status = 'cancelled_by_employee'
+       SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee')
        WHERE id = $1
        RETURNING *`,
       [id]
@@ -660,8 +665,8 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status, changed_by)
-        VALUES ($1, 'cancelled_by_employee', $2)`,
+        (request_id, status_id, changed_by)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2)`,
       [id, userId]
     )
 
@@ -729,8 +734,8 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
 
     const result = await client.query(
       `UPDATE vacation_requests vr
-       SET status = 'cancelled_by_manager', cancellation_reason = $1
-       WHERE vr.id = $2 AND vr.status = 'approved'
+       SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_manager'), cancellation_reason = $1
+       WHERE vr.id = $2 AND vr.status_id = (SELECT id FROM request_statuses WHERE code = 'approved')
        RETURNING vr.*`,
       [reason, id]
     )
@@ -751,8 +756,8 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status, changed_by, comment)
-        VALUES ($1, 'cancelled_by_manager', $2, $3)`,
+        (request_id, status_id, changed_by, comment)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_manager'), $2, $3)`,
       [id, managerId, reason]
     )
 
@@ -821,11 +826,13 @@ router.get('/calendar', authenticateToken, async (req, res) => {
         u.position,
         vr.start_date,
         vr.end_date,
-        vr.vacation_type,
-        vr.status
+        vt.code as vacation_type,
+        rs.code as status
       FROM vacation_requests vr
       JOIN users u ON vr.user_id = u.id
-      WHERE vr.status = 'approved'
+      JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+      JOIN request_statuses rs ON vr.status_id = rs.id
+      WHERE rs.code = 'approved'
       AND EXTRACT(YEAR FROM vr.start_date) = $1
     `
 
@@ -981,7 +988,8 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
         `SELECT vr.*, u.first_name, u.last_name
          FROM vacation_requests vr
          JOIN users u ON vr.user_id = u.id
-         WHERE vr.status = 'approved'
+         JOIN request_statuses rs ON vr.status_id = rs.id
+         WHERE rs.code = 'approved'
          AND vr.user_id != $1
          AND vr.user_id = ANY($2)
          AND (
