@@ -15,8 +15,17 @@
     "backend:install": "cd backend && npm install",
     "backend:migrate": "cd backend && npm run migrate",
     "backend:seed": "cd backend && npm run seed",
-    "deploy:dev": "powershell -ExecutionPolicy Bypass -File ./deploy/dev.ps1 start",
-    "deploy:prod": "cd deploy && powershell -ExecutionPolicy Bypass -File ./prod.ps1 deploy"
+    "deploy:dev": "node ./deploy/deploy.js dev start",
+    "deploy:dev:services": "node ./deploy/deploy.js dev services",
+    "deploy:dev:stop": "node ./deploy/deploy.js dev stop",
+    "deploy:dev:logs": "node ./deploy/deploy.js dev logs",
+    "deploy:dev:status": "node ./deploy/deploy.js dev status",
+    "deploy:prod": "node ./deploy/deploy.js prod deploy",
+    "deploy:prod:build": "node ./deploy/deploy.js prod build",
+    "deploy:prod:start": "node ./deploy/deploy.js prod start",
+    "deploy:prod:stop": "node ./deploy/deploy.js prod stop",
+    "deploy:prod:logs": "node ./deploy/deploy.js prod logs",
+    "deploy:prod:status": "node ./deploy/deploy.js prod status"
   },
   "dependencies": {
     "clsx": "^2.0.0",
