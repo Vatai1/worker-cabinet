@@ -39,7 +39,7 @@ start_server() {
     
     # Очистка портов перед запуском
     lsof -ti:3000 | xargs kill -9 2>/dev/null || true
-    lsof -ti:5001 | xargs kill -9 2>/dev/null || true
+    lsof -ti:5000 | xargs kill -9 2>/dev/null || true
     
     # Запуск в фоне с перенаправлением логов
     nohup npm run dev > "$LOG_DIR/server.log" 2>&1 &
@@ -85,7 +85,7 @@ stop_server() {
     # Очистка портов
     sleep 2
     lsof -ti:3000 | xargs kill -9 2>/dev/null || true
-    lsof -ti:5001 | xargs kill -9 2>/dev/null || true
+    lsof -ti:5000 | xargs kill -9 2>/dev/null || true
     
     # Удаление PID файла
     rm -f "$PID_FILE"

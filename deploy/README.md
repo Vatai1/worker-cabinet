@@ -52,7 +52,7 @@ logs        # Логи
 
 ### Порты dev окружения:
 - Frontend: http://localhost:3000
-- Backend: http://localhost:5001
+- Backend: http://localhost:5000
 - PostgreSQL: localhost:5433
 - MinIO: http://localhost:9000 (console: :9001)
 - OnlyOffice: http://localhost:8080

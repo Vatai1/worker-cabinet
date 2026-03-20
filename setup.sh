@@ -187,7 +187,7 @@ show_final_info() {
     echo ""
     echo -e "${CYAN}Адреса:${NC}"
     echo "  Frontend:  ${GREEN}http://localhost:3000${NC}"
-    echo "  Backend:   ${GREEN}http://localhost:5001${NC}"
+    echo "  Backend:   ${GREEN}http://localhost:5000${NC}"
     echo "  MinIO:     ${GREEN}http://localhost:9000${NC} (console: ${GREEN}:9001${NC})"
     echo "  OnlyOffice:${GREEN}http://localhost:8080${NC}"
     echo ""
