@@ -92,8 +92,8 @@ router.get('/requests', authenticateToken, async (req, res) => {
           json_agg(
             json_build_object(
               'id', vrsh.id,
-              'status', vrsh.status,
-              'statusName', vrsh.status::text,
+              'status', vrsh.status_id,
+              'statusName', vrsh.status_id::text,
               'changedAt', vrsh.changed_at,
               'changedBy', vrsh.changed_by,
               'changedByName', hu.last_name || ' ' || hu.first_name,
