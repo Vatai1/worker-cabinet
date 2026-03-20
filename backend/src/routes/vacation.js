@@ -234,13 +234,14 @@ router.post('/requests', authenticateToken, async (req, res) => {
     }
 
     const overlapResult = await client.query(
-      `SELECT id FROM vacation_requests
-        WHERE user_id = $1
-        AND status IN ('on_approval', 'approved')
+      `SELECT vr.id FROM vacation_requests vr
+        JOIN request_statuses rs ON vr.status_id = rs.id
+        WHERE vr.user_id = $1
+        AND rs.code IN ('on_approval', 'approved')
         AND (
-          (start_date <= $2 AND end_date >= $2)
-          OR (start_date <= $3 AND end_date >= $3)
-          OR (start_date >= $2 AND end_date <= $3)
+          (vr.start_date <= $2 AND vr.end_date >= $2)
+          OR (vr.start_date <= $3 AND vr.end_date >= $3)
+          OR (vr.start_date >= $2 AND vr.end_date <= $3)
         )`,
       [userId, formatDate(start), formatDate(end)]
     )
@@ -306,8 +307,11 @@ router.post('/requests', authenticateToken, async (req, res) => {
           telegram_notifications_enabled: manager.telegram_notifications_enabled
         },
         {
-          startDate: request.start_date,
-          endDate: request.end_date,
+          start_date: request.start_date,
+          end_date: request.end_date,
+          duration: request.duration,
+          vacation_type: request.vacation_type,
+          has_travel: request.has_travel,
           comment: request.comment
         },
         {
@@ -486,9 +490,11 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
         telegram_notifications_enabled: user.telegram_notifications_enabled
       },
       {
-        startDate: request.start_date,
-        endDate: request.end_date,
-        comment: request.comment
+        start_date: request.start_date,
+        end_date: request.end_date,
+        duration: request.duration,
+        vacation_type: request.vacation_type,
+        has_travel: request.has_travel
       }
     ).catch(console.error)
 
@@ -578,9 +584,10 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
         telegram_notifications_enabled: user.telegram_notifications_enabled
       },
       {
-        startDate: request.start_date,
-        endDate: request.end_date,
-        rejectionReason: request.rejection_reason
+        start_date: request.start_date,
+        end_date: request.end_date,
+        duration: request.duration,
+        rejection_reason: request.rejection_reason
       }
     ).catch(console.error)
 
@@ -692,8 +699,10 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
         telegram_notifications_enabled: user.telegram_notifications_enabled
       },
       {
-        startDate: request.start_date,
-        endDate: request.end_date
+        start_date: request.start_date,
+        end_date: request.end_date,
+        duration: request.duration,
+        status: 'cancelled_by_employee'
       }
     ).catch(console.error)
 
@@ -783,8 +792,10 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
         telegram_notifications_enabled: user.telegram_notifications_enabled
       },
       {
-        startDate: request.start_date,
-        endDate: request.end_date
+        start_date: request.start_date,
+        end_date: request.end_date,
+        duration: request.duration,
+        status: 'cancelled_by_manager'
       }
     ).catch(console.error)
 
