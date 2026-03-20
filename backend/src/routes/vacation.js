@@ -252,8 +252,8 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     const result = await client.query(
       `INSERT INTO vacation_requests 
-        (user_id, start_date, end_date, duration, vacation_type, comment, has_travel, travel_destination, reference_document, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'on_approval')
+        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, reference_document, status_id)
+        VALUES ($1, $2, $3, $4, (SELECT id FROM vacation_types WHERE code = $5), $6, $7, $8, $9, (SELECT id FROM request_statuses WHERE code = 'on_approval'))
         RETURNING *`,
       [
         userId,
@@ -352,7 +352,10 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     await client.query('BEGIN')
 
     const requestResult = await client.query(
-      'SELECT * FROM vacation_requests WHERE id = $1',
+      `SELECT vr.*, rs.code as status
+       FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       WHERE vr.id = $1`,
       [id]
     )
 
@@ -395,7 +398,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 
     const result = await client.query(
       `UPDATE vacation_requests
-       SET start_date = $1, end_date = $2, duration = $3, vacation_type = $4, comment = $5, has_travel = $6, reference_document = $7
+       SET start_date = $1, end_date = $2, duration = $3, vacation_type_id = (SELECT id FROM vacation_types WHERE code = $4), comment = $5, has_travel = $6, reference_document = $7
        WHERE id = $8
        RETURNING *`,
       [startDate, endDate, newDuration, vacationType, comment, hasTravel || false, referenceDocument || null, id]
@@ -618,7 +621,10 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     await client.query('BEGIN')
 
     const requestResult = await client.query(
-      'SELECT * FROM vacation_requests WHERE id = $1',
+      `SELECT vr.*, rs.code as status
+       FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       WHERE vr.id = $1`,
       [id]
     )
 
