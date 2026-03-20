@@ -870,8 +870,10 @@ function generatePreviewToken(documentId, projectId, userId) {
     type: 'document_preview',
     exp: Math.floor(Date.now() / 1000) + (60 * 30), // 30 minutes
   }
-  const secret = process.env.JWT_SECRET || 'your-secret-key'
-  return jwt.sign(payload, secret)
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not configured')
+  }
+  return jwt.sign(payload, process.env.JWT_SECRET)
 }
 
 // Get public API URL (accessible from Docker containers)
@@ -881,9 +883,11 @@ function getPublicApiUrl() {
 
 // Verify preview token
 function verifyPreviewToken(token) {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not configured')
+  }
   try {
-    const secret = process.env.JWT_SECRET || 'your-secret-key'
-    return jwt.verify(token, secret)
+    return jwt.verify(token, process.env.JWT_SECRET)
   } catch (error) {
     return null
   }
@@ -1099,11 +1103,13 @@ router.put('/:id/roadmap/reorder', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Order must be an array' })
     }
 
-    // Update order_index for each item
-    for (let i = 0; i < order.length; i++) {
+    if (order.length > 0) {
+      const caseStatements = order.map((itemId, index) => `WHEN id = $${index + 2} THEN ${index}`).join(' ')
+      const ids = order.map(itemId => itemId)
+      
       await query(
-        `UPDATE project_roadmap SET order_index = $1 WHERE id = $2 AND project_id = $3`,
-        [i, order[i], id]
+        `UPDATE project_roadmap SET order_index = CASE ${caseStatements} END WHERE project_id = $1 AND id = ANY($${order.length + 2}::int[])`,
+        [id, ...ids, ids]
       )
     }
 

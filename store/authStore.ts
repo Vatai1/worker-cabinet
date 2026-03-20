@@ -1,8 +1,7 @@
 import { create } from 'zustand'
 import type { User, AuthState } from '@/types'
 import { setCookie, getCookie, deleteCookie } from '@/lib/cookies'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+import { API_BASE_URL } from '@/lib/api'
 
 interface AuthStore extends AuthState {
   loading: boolean

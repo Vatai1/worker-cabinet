@@ -3,13 +3,12 @@ import { useParams, Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
+import { API_BASE_URL } from '@/lib/api'
 import {
   ArrowLeft, Plus, Trash2, Pencil, Check, X, Loader2,
   ChevronLeft, ChevronRight, ChevronDown, ChevronRight as CollapseRight,
   CheckCircle2, Clock, CircleDot, CalendarDays, LayoutGrid, Layers,
 } from 'lucide-react'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

@@ -13,6 +13,7 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { RestrictionModal } from '@/components/modals/RestrictionModal'
 import { VacationRequestStatus, VacationType } from '@/types'
 import { vacationApi } from '@/services/vacationApi'
+import { getErrorMessage } from '@/lib/utils'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -328,8 +329,8 @@ export function Vacation() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    } catch (error: any) {
-      alert(error.message || 'Ошибка при генерации заявления')
+    } catch (error: unknown) {
+      alert(getErrorMessage(error) || 'Ошибка при генерации заявления')
     }
   }
 

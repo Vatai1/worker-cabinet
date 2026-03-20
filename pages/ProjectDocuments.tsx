@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { DocumentPreviewModal } from '@/components/modals/DocumentPreviewModal'
 import { isPreviewable } from '@/lib/documentUtils'
+import type { FolderItem, DocItem, ProjectMeta, ContextMenuState } from '@/lib/documentUtils'
+import { getFileTypeLabel } from '@/lib/documentUtils'
 import { getAuthHeaders } from '@/lib/authHeaders'
+import { getErrorMessage } from '@/lib/utils'
+import { API_BASE_URL } from '@/lib/api'
 import {
   ArrowLeft, Loader2, Upload, FolderPlus, Folder, FolderOpen,
   File, FileText, FileImage, FileCode, FileArchive, Download,
@@ -14,105 +18,12 @@ import {
   Search,
 } from 'lucide-react'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-interface FolderItem {
-  id: string
-  name: string
-  path: string
-  parent_path: string
-  created_by: string
-  created_at: string
-}
-
-interface DocItem {
-  id: string
-  name: string
-  file_path: string
-  file_size: number
-  mime_type: string
-  folder_path: string
-  uploader_first_name?: string
-  uploader_last_name?: string
-  uploaded_by: string
-  created_at: string
-  tags?: string[]
-  description?: string
-}
-
-interface ProjectMeta {
-  id: string
-  name: string
-  members: { id: string; role: string }[]
-  leads: { id: string }[]
-}
-
-interface ContextMenuState {
-  x: number
-  y: number
-  type: 'folder' | 'doc'
-  folder?: FolderItem
-  doc?: DocItem
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────
-
 function getFileIcon(mimeType = '') {
   if (mimeType.startsWith('image/')) return FileImage
   if (mimeType === 'application/pdf') return FileText
   if (mimeType.startsWith('text/') || mimeType.includes('javascript') || mimeType.includes('json')) return FileCode
   if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z') || mimeType.includes('tar')) return FileArchive
   return File
-}
-
-const MIME_TYPE_LABELS: Record<string, string> = {
-  'application/pdf': 'PDF',
-  'application/msword': 'DOC',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
-  'application/vnd.ms-excel': 'XLS',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
-  'application/vnd.ms-powerpoint': 'PPT',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
-  'image/jpeg': 'JPEG',
-  'image/png': 'PNG',
-  'image/gif': 'GIF',
-  'image/webp': 'WebP',
-  'image/svg+xml': 'SVG',
-  'image/bmp': 'BMP',
-  'video/mp4': 'MP4',
-  'video/webm': 'WebM',
-  'video/quicktime': 'MOV',
-  'video/x-msvideo': 'AVI',
-  'audio/mpeg': 'MP3',
-  'audio/wav': 'WAV',
-  'audio/ogg': 'OGG',
-  'text/plain': 'TXT',
-  'text/html': 'HTML',
-  'text/css': 'CSS',
-  'text/javascript': 'JS',
-  'application/json': 'JSON',
-  'application/xml': 'XML',
-  'application/zip': 'ZIP',
-  'application/x-rar-compressed': 'RAR',
-  'application/x-7z-compressed': '7Z',
-  'application/x-tar': 'TAR',
-  'application/gzip': 'GZ',
-}
-
-function getFileTypeLabel(mimeType: string, fileName?: string): string {
-  if (MIME_TYPE_LABELS[mimeType]) return MIME_TYPE_LABELS[mimeType]
-
-  if (mimeType.startsWith('image/')) return mimeType.replace('image/', '').toUpperCase()
-  if (mimeType.startsWith('video/')) return mimeType.replace('video/', '').toUpperCase()
-  if (mimeType.startsWith('audio/')) return mimeType.replace('audio/', '').toUpperCase()
-  if (mimeType.startsWith('text/')) return mimeType.replace('text/', '').toUpperCase()
-
-  if (fileName) {
-    const ext = fileName.split('.').pop()?.toUpperCase()
-    if (ext && ext.length <= 5) return ext
-  }
-
-  return mimeType.split('/')[1]?.toUpperCase() || mimeType
 }
 
 function formatSize(bytes: number) {
@@ -137,7 +48,6 @@ function formatDateTime(d: string) {
   })
 }
 
-// Build breadcrumb segments from path like "/Документы/Отчёты/"
 function parseBreadcrumbs(path: string) {
   const parts = path.split('/').filter(Boolean)
   const crumbs: { label: string; path: string }[] = [{ label: 'Все файлы', path: '/' }]
@@ -148,8 +58,6 @@ function parseBreadcrumbs(path: string) {
   }
   return crumbs
 }
-
-// ── Create folder modal ───────────────────────────────────────────────────
 
 function NewFolderModal({
   projectId, currentPath, onCreated, onClose,
@@ -1054,8 +962,8 @@ export function ProjectDocuments() {
         }
       }
       fetchContent(currentPath)
-    } catch (error: any) {
-      alert(error.message)
+    } catch (error: unknown) {
+      alert(getErrorMessage(error))
     } finally {
       setMovingItem(false)
       setDraggedItem(null)

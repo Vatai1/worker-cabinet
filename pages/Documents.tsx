@@ -4,12 +4,11 @@ import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { formatDate } from '@/lib/utils'
+import { formatDate, getErrorMessage } from '@/lib/utils'
 import { getAuthHeaders } from '@/lib/authHeaders'
+import { API_BASE_URL } from '@/lib/api'
 import { FileText, Download, Search, Upload, Eye, X, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
 interface UserDocument {
   id: string
@@ -47,7 +46,7 @@ export function Documents() {
       } else {
         setDocuments([])
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching documents:', err)
       setDocuments([])
     } finally {
@@ -163,8 +162,8 @@ export function Documents() {
       setSelectedFile(null)
       setUploadCategory('other')
       setUploadDescription('')
-    } catch (error: any) {
-      alert(error.message || 'Не удалось загрузить документ')
+    } catch (error: unknown) {
+      alert(getErrorMessage(error) || 'Не удалось загрузить документ')
     } finally {
       setUploading(false)
     }

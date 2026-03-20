@@ -1,6 +1,5 @@
 import { getCookie } from '@/lib/cookies'
-
-const TELEGRAM_API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+import { API_BASE_URL } from '@/lib/api'
 
 function getAuthHeaders(): HeadersInit {
   const token = getCookie('auth_token')
@@ -17,7 +16,7 @@ function getAuthHeaders(): HeadersInit {
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const headers = getAuthHeaders()
-  const response = await fetch(`${TELEGRAM_API_URL}${url}`, {
+  const response = await fetch(`${API_BASE_URL}${url}`, {
     ...options,
     headers: { ...headers, ...options.headers }
   })

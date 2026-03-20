@@ -1,18 +1,21 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 
-const s3Client = new S3Client({
+export const S3_BUCKET = process.env.S3_BUCKET || 'worker-cabinet-docs'
+export const S3_ENDPOINT = process.env.S3_ENDPOINT || 'http://localhost:9000'
+
+export const s3Client = new S3Client({
   region: 'us-east-1',
-  endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
+  endpoint: S3_ENDPOINT,
   credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID || 'minioadmin',
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || 'minioadmin123',
+    accessKeyId: process.env.S3_ACCESS_KEY || process.env.S3_ACCESS_KEY_ID || 'minioadmin',
+    secretAccessKey: process.env.S3_SECRET_KEY || 'minioadmin123',
   },
   forcePathStyle: true,
 })
 
 export const uploadToS3 = async (file, key) => {
   const params = {
-    Bucket: process.env.S3_BUCKET || 'worker-cabinet-docs',
+    Bucket: S3_BUCKET,
     Key: key,
     Body: file.buffer,
     ContentType: file.mimetype,
@@ -25,12 +28,12 @@ export const uploadToS3 = async (file, key) => {
 
 export const getS3FileUrl = (key) => {
   const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/')
-  return `${process.env.S3_ENDPOINT || 'http://localhost:9000'}/${process.env.S3_BUCKET || 'worker-cabinet-docs'}/${encodedKey}`
+  return `${S3_ENDPOINT}/${S3_BUCKET}/${encodedKey}`
 }
 
 export const deleteFromS3 = async (key) => {
   const params = {
-    Bucket: process.env.S3_BUCKET || 'worker-cabinet-docs',
+    Bucket: S3_BUCKET,
     Key: key,
   }
 
@@ -39,7 +42,7 @@ export const deleteFromS3 = async (key) => {
 
 export const getFromS3 = async (key) => {
   const params = {
-    Bucket: process.env.S3_BUCKET || 'worker-cabinet-docs',
+    Bucket: S3_BUCKET,
     Key: key,
   }
 

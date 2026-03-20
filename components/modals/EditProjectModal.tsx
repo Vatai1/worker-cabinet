@@ -5,8 +5,8 @@ import { Label } from '@/components/ui/Label'
 import { Switch } from '@/components/ui/Switch'
 import { Pencil, X, Check } from 'lucide-react'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+import { getErrorMessage } from '@/lib/utils'
+import { API_BASE_URL } from '@/lib/api'
 
 function toDateInputValue(isoString?: string): string {
   if (!isoString) return ''
@@ -85,8 +85,8 @@ export function EditProjectModal({ project, open, onClose, onUpdated }: Props) {
       }
       onUpdated(await res.json())
       onClose()
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setSaving(false)
     }

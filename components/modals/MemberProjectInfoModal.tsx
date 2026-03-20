@@ -4,19 +4,11 @@ import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { User, X, Calendar, Shield, Save } from 'lucide-react'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
+import { getErrorMessage } from '@/lib/utils'
+import { API_BASE_URL } from '@/lib/api'
+import type { ProjectMember } from '@/types'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-interface Member {
-  id: string
-  first_name: string
-  last_name: string
-  position: string
-  department_name?: string
-  role: 'lead' | 'member'
-  joined_at?: string
-  description?: string
-}
+type Member = ProjectMember
 
 interface Props {
   member: Member
@@ -63,8 +55,8 @@ export function MemberProjectInfoModal({ member, projectId, open, onClose, onUpd
       member.description = description.trim() || undefined
       onUpdated()
       setEditing(false)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setSaving(false)
     }

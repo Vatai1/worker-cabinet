@@ -6,8 +6,8 @@ import { Switch } from '@/components/ui/Switch'
 import { FolderKanban, X, Plus } from 'lucide-react'
 import type { Project } from '@/pages/Projects'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+import { getErrorMessage } from '@/lib/utils'
+import { API_BASE_URL } from '@/lib/api'
 
 interface Props {
   open: boolean
@@ -75,8 +75,8 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
       const project = await res.json()
       onCreated(project)
       handleClose()
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setSaving(false)
     }
