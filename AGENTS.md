@@ -159,7 +159,7 @@ describe('Feature Name', () => {
   afterEach(async () => { /* Cleanup */ })
   
   it('should do something', async () => {
-    const response = await fetch('http://localhost:5001/api/endpoint')
+    const response = await fetch('http://localhost:5000/api/endpoint')
     assert.strictEqual(response.status, 200)
   })
 })
