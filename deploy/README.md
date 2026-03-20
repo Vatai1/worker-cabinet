@@ -1,23 +1,49 @@
 # Деплой Worker Cabinet
 
+## Кроссплатформенный запуск (Windows, macOS, Linux)
+
+Все команды работают через Node.js скрипт:
+
+```bash
+# Dev окружение
+npm run deploy:dev              # Полный запуск dev окружения
+npm run deploy:dev:services     # Только Docker сервисы
+npm run deploy:dev:stop         # Остановка сервисов
+npm run deploy:dev:logs         # Логи сервисов
+npm run deploy:dev:status       # Статус сервисов
+
+# Production окружение
+npm run deploy:prod             # Полный деплой
+npm run deploy:prod:build       # Сборка образов
+npm run deploy:prod:start       # Запуск
+npm run deploy:prod:stop        # Остановка
+npm run deploy:prod:logs        # Логи
+npm run deploy:prod:status      # Статус
+```
+
+Или напрямую через Node.js:
+
+```bash
+node deploy/deploy.js dev start      # Полный запуск dev
+node deploy/deploy.js dev services   # Только сервисы
+node deploy/deploy.js dev stop       # Остановка
+node deploy/deploy.js dev help       # Справка по dev командам
+
+node deploy/deploy.js prod deploy    # Полный деплой
+node deploy/deploy.js prod build     # Сборка
+node deploy/deploy.js prod help      # Справка по prod командам
+```
+
 ## Dev окружение
 
 Локальный запуск с сервисами в Docker:
 
-### Linux/Mac:
-```bash
-./deploy/dev.sh start
-```
-
-### Windows (PowerShell):
-```powershell
-.\deploy\dev.ps1 start
-```
-
 ### Команды:
-```bash
+```
 start       # Полный запуск (проверка, сервисы, миграции, dev сервер)
 services    # Только Docker сервисы (БД, MinIO, OnlyOffice)
+deps        # Установка зависимостей
+migrate     # Миграции БД
 dev         # Только dev сервер
 stop        # Остановка сервисов
 status      # Статус
@@ -35,20 +61,11 @@ logs        # Логи
 
 Полная сборка в Docker:
 
-### Linux/Mac:
 ```bash
 cd deploy
 cp .env.example .env
-nano .env
-./prod.sh deploy
-```
-
-### Windows (PowerShell):
-```powershell
-cd deploy
-Copy-Item .env.example .env
-notepad .env
-.\prod.ps1 deploy
+# Отредактируйте .env
+node deploy.js prod deploy
 ```
 
 ### Команды:
@@ -72,10 +89,11 @@ cleanup     # Полная очистка с удалением данных
 
 ```
 deploy/
-├── dev.sh                  # Скрипт для dev окружения (Linux/Mac)
-├── dev.ps1                 # Скрипт для dev окружения (Windows)
-├── prod.sh                 # Скрипт для production (Linux/Mac)
-├── prod.ps1                # Скрипт для production (Windows)
+├── deploy.js               # Кроссплатформенный Node.js скрипт
+├── dev.sh                  # Bash скрипт для dev (Linux/Mac)
+├── dev.ps1                 # PowerShell скрипт для dev (Windows)
+├── prod.sh                 # Bash скрипт для production (Linux/Mac)
+├── prod.ps1                # PowerShell скрипт для production (Windows)
 ├── docker-compose.prod.yml # Docker Compose для production
 ├── nginx.conf              # Конфигурация nginx для frontend
 ├── .env.example            # Пример env файла
