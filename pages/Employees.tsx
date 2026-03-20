@@ -5,9 +5,10 @@ import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
+import { API_BASE_URL } from '@/lib/api'
+import { getAvatarColor as getAvatarGradient } from '@/lib/constants'
+import { getErrorMessage } from '@/lib/utils'
 import { Users, Loader2, Search, Mail, Phone, Building2, ChevronRight } from 'lucide-react'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
 interface Employee {
   id: string
@@ -28,20 +29,6 @@ const statusConfig: Record<string, { label: string; variant: 'success' | 'destru
   on_leave: { label: 'В отпуске', variant: 'warning',     dot: 'bg-amber-500' },
 }
 
-const AVATAR_COLORS = [
-  'from-violet-500 to-purple-600',
-  'from-blue-500 to-indigo-600',
-  'from-emerald-500 to-teal-600',
-  'from-rose-500 to-pink-600',
-  'from-amber-500 to-orange-600',
-  'from-cyan-500 to-sky-600',
-]
-
-function getAvatarColor(id: string) {
-  const n = parseInt(id, 10) || 0
-  return AVATAR_COLORS[n % AVATAR_COLORS.length]
-}
-
 export function Employees() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
@@ -58,8 +45,8 @@ export function Employees() {
         const response = await fetch(`${API_BASE_URL}/users${params}`, { headers: getAuthHeadersWithContentType() })
         if (!response.ok) throw new Error('Не удалось загрузить список сотрудников')
         setEmployees(await response.json())
-      } catch (err: any) {
-        setError(err.message)
+      } catch (err: unknown) {
+        setError(getErrorMessage(err))
       } finally {
         setLoading(false)
       }
@@ -120,7 +107,7 @@ export function Employees() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((employee) => {
             const status = statusConfig[employee.status] ?? statusConfig.active
-            const color = getAvatarColor(employee.id)
+            const color = getAvatarGradient(employee.id)
 
             return (
               <button

@@ -112,3 +112,114 @@ export function getFileIconType(mimeType: string): 'pdf' | 'image' | 'video' | '
   if (type === 'other') return 'file'
   return type
 }
+
+export interface FolderItem {
+  id: string
+  name: string
+  path: string
+  parent_path: string
+  created_by: string
+  created_at: string
+}
+
+export interface DocItem {
+  id: string
+  name: string
+  file_path: string
+  file_size: number
+  mime_type: string
+  folder_path: string
+  uploader_first_name?: string
+  uploader_last_name?: string
+  uploaded_by: string
+  created_at: string
+  tags?: string[]
+  description?: string
+}
+
+export interface ProjectMeta {
+  id: string
+  name: string
+  members: { id: string; role: string }[]
+  leads: { id: string }[]
+}
+
+export interface ContextMenuState {
+  x: number
+  y: number
+  type: 'folder' | 'doc'
+  folder?: FolderItem
+  doc?: DocItem
+}
+
+export const MIME_TYPE_LABELS: Record<string, string> = {
+  'application/pdf': 'PDF',
+  'application/msword': 'DOC',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+  'application/vnd.ms-excel': 'XLS',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+  'application/vnd.ms-powerpoint': 'PPT',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+  'image/jpeg': 'JPEG',
+  'image/png': 'PNG',
+  'image/gif': 'GIF',
+  'image/webp': 'WebP',
+  'image/svg+xml': 'SVG',
+  'image/bmp': 'BMP',
+  'video/mp4': 'MP4',
+  'video/webm': 'WebM',
+  'video/quicktime': 'MOV',
+  'video/x-msvideo': 'AVI',
+  'audio/mpeg': 'MP3',
+  'audio/wav': 'WAV',
+  'audio/ogg': 'OGG',
+  'text/plain': 'TXT',
+  'text/html': 'HTML',
+  'text/css': 'CSS',
+  'text/javascript': 'JS',
+  'application/json': 'JSON',
+  'application/xml': 'XML',
+  'application/zip': 'ZIP',
+  'application/x-rar-compressed': 'RAR',
+  'application/x-7z-compressed': '7Z',
+  'application/x-tar': 'TAR',
+  'application/gzip': 'GZ',
+}
+
+export function getFileTypeLabel(mimeType: string, fileName?: string): string {
+  if (MIME_TYPE_LABELS[mimeType]) return MIME_TYPE_LABELS[mimeType]
+  if (fileName) {
+    const ext = fileName.split('.').pop()?.toUpperCase()
+    if (ext && ext.length <= 5) return ext
+  }
+  return 'FILE'
+}
+
+export function formatDateShort(d: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(d))
+}
+
+export function formatDateTimeShort(d: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(d))
+}
+
+export function parseBreadcrumbs(path: string) {
+  const parts = path.split('/').filter(Boolean)
+  const crumbs: { name: string; path: string }[] = [{ name: 'Home', path: '' }]
+  let acc = ''
+  for (const p of parts) {
+    acc += '/' + p
+    crumbs.push({ name: p, path: acc })
+  }
+  return crumbs
+}

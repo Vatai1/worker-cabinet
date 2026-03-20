@@ -5,6 +5,7 @@ import { formatFileSize, getDocumentType } from '@/lib/documentUtils'
 import { Button } from '@/components/ui/Button'
 import { OnlyOfficePreviewModal } from './OnlyOfficePreviewModal'
 import { getAuthHeaders } from '@/lib/authHeaders'
+import { API_BASE_URL } from '@/lib/api'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
 
@@ -20,8 +21,6 @@ interface DocumentPreviewModalProps {
     projectId?: string
   }
 }
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
 export function DocumentPreviewModal({ open, onClose, document: doc }: DocumentPreviewModalProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)

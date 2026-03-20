@@ -4,8 +4,8 @@ import { Input } from '@/components/ui/Input'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
 import { UserPlus, X, Search, Check } from 'lucide-react'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+import { API_BASE_URL } from '@/lib/api'
+import { getAvatarColor } from '@/lib/constants'
 
 interface User {
   id: string
@@ -21,18 +21,6 @@ interface Props {
   open: boolean
   onClose: () => void
   onAdded: () => void
-}
-
-const AVATAR_COLORS = [
-  'from-violet-500 to-purple-600',
-  'from-blue-500 to-indigo-600',
-  'from-emerald-500 to-teal-600',
-  'from-rose-500 to-pink-600',
-  'from-amber-500 to-orange-600',
-]
-function avatarColor(id: string) {
-  const n = parseInt(id, 10) || 0
-  return AVATAR_COLORS[n % AVATAR_COLORS.length]
 }
 
 export function AddMemberModal({ projectId, existingMemberIds, open, onClose, onAdded }: Props) {
@@ -127,7 +115,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
             </p>
           ) : (
             filtered.map((u) => {
-              const color = avatarColor(u.id)
+              const color = getAvatarColor(u.id)
               const selected = selectedId === String(u.id)
               return (
                 <button

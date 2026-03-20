@@ -1,8 +1,8 @@
 import PizZip from 'pizzip'
 import Docxtemplater from 'docxtemplater'
-import { getFromS3, uploadToS3 } from '../config/s3.js'
+import { getFromS3, uploadToS3, s3Client, S3_BUCKET } from '../config/s3.js'
 import { query } from '../config/database.js'
-import { S3Client, HeadBucketCommand, CreateBucketCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { HeadBucketCommand, CreateBucketCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import 'dotenv/config'
 
 function sanitizeXmlForDocxtemplater(xmlContent) {
@@ -75,18 +75,6 @@ function fixTemplateTags(zip) {
   return zip
 }
 
-const s3Client = new S3Client({
-  region: 'us-east-1',
-  endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID || 'minioadmin',
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || 'minioadmin123',
-  },
-  forcePathStyle: true,
-})
-
-const bucketName = process.env.S3_BUCKET || 'worker-cabinet-docs'
-
 const VACATION_TYPE_NAMES = {
   annual_paid: 'Ежегодный оплачиваемый',
   unpaid: 'Без сохранения зарплаты',
@@ -148,10 +136,10 @@ async function getDirector() {
 
 async function ensureBucketExists() {
   try {
-    await s3Client.send(new HeadBucketCommand({ Bucket: bucketName }))
+    await s3Client.send(new HeadBucketCommand({ Bucket: S3_BUCKET }))
   } catch (error) {
     if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
-      await s3Client.send(new CreateBucketCommand({ Bucket: bucketName }))
+      await s3Client.send(new CreateBucketCommand({ Bucket: S3_BUCKET }))
     } else {
       throw error
     }
@@ -259,7 +247,7 @@ async function loadTemplate() {
     if (error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
       const defaultTemplate = createDefaultTemplate()
       await s3Client.send(new PutObjectCommand({
-        Bucket: bucketName,
+        Bucket: S3_BUCKET,
         Key: templateKey,
         Body: defaultTemplate,
         ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

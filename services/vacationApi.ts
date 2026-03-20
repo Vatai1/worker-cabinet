@@ -7,8 +7,7 @@ import type {
   VacationValidationError,
 } from '@/types'
 import { getCookie } from '@/lib/cookies'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+import { API_BASE_URL } from '@/lib/api'
 
 class VacationApiError extends Error {
   code: string

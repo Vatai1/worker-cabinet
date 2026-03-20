@@ -15,19 +15,12 @@ import { AddMemberModal } from '@/components/modals/AddMemberModal'
 import { MemberProjectInfoModal } from '@/components/modals/MemberProjectInfoModal'
 import { ContextMenu } from '@/components/ui/ContextMenu'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
+import { API_BASE_URL } from '@/lib/api'
+import { getAvatarColor } from '@/lib/constants'
+import { getErrorMessage } from '@/lib/utils'
+import type { ProjectMember } from '@/types'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-interface Member {
-  id: string
-  first_name: string
-  last_name: string
-  position: string
-  department_name?: string
-  role: 'lead' | 'member'
-  joined_at?: string
-  description?: string
-}
+type Member = ProjectMember
 
 interface ProjectDetail {
   id: string
@@ -53,19 +46,6 @@ const statusConfig = {
   paused:    { label: 'На паузе', icon: Clock,        color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-950/30',     variant: 'warning'   as const },
 }
 
-const AVATAR_COLORS = [
-  'from-violet-500 to-purple-600',
-  'from-blue-500 to-indigo-600',
-  'from-emerald-500 to-teal-600',
-  'from-rose-500 to-pink-600',
-  'from-amber-500 to-orange-600',
-  'from-cyan-500 to-sky-600',
-]
-function avatarColor(id: string) {
-  const n = parseInt(id, 10) || 0
-  return AVATAR_COLORS[n % AVATAR_COLORS.length]
-}
-
 function formatDate(dateStr?: string) {
   if (!dateStr) return '—'
   // Parse date string considering local timezone
@@ -88,7 +68,7 @@ function MemberCard({ member, canRemove, onRemove, onContextMenu, isRemoving }: 
   onContextMenu: (e: React.MouseEvent, member: Member) => void
   isRemoving: boolean
 }) {
-  const color = avatarColor(member.id)
+  const color = getAvatarColor(member.id)
   return (
     <div
       className={`flex items-center gap-3 p-3 rounded-xl border border-border/50 hover:border-primary/20 transition-colors group cursor-pointer ${isRemoving ? 'opacity-50' : ''}`}
@@ -151,8 +131,8 @@ export function ProjectDetail() {
         leads:        data.members?.filter((m: Member) => m.role === 'lead') ?? [],
         participants: data.members?.filter((m: Member) => m.role === 'member') ?? [],
       })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }

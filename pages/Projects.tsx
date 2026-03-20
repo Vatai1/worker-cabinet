@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
 import { Input } from '@/components/ui/Input'
 import {
@@ -12,16 +11,12 @@ import {
 } from 'lucide-react'
 import { CreateProjectModal } from '@/components/modals/CreateProjectModal'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
+import { API_BASE_URL } from '@/lib/api'
+import { getAvatarColor } from '@/lib/constants'
+import { getErrorMessage } from '@/lib/utils'
+import type { ProjectMember as ProjectMemberType } from '@/types'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-
-export interface ProjectMember {
-  id: string
-  first_name: string
-  last_name: string
-  position: string
-  role: 'lead' | 'member'
-}
+export type { ProjectMemberType as ProjectMember }
 
 export interface Project {
   id: string
@@ -32,27 +27,15 @@ export interface Project {
   start_date?: string
   end_date?: string
   member_count: number
-  members: ProjectMember[]
+  members: ProjectMemberType[]
   created_at: string
+  created_by?: string
 }
 
 const statusConfig = {
-  active:    { label: 'Активный', icon: CircleDot,    variant: 'success'   as const, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
-  completed: { label: 'Завершён', icon: CheckCircle2, variant: 'default'   as const, color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
-  paused:    { label: 'На паузе', icon: Clock,        variant: 'warning'   as const, color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-950/30' },
-}
-
-const AVATAR_COLORS = [
-  'from-violet-500 to-purple-600',
-  'from-blue-500 to-indigo-600',
-  'from-emerald-500 to-teal-600',
-  'from-rose-500 to-pink-600',
-  'from-amber-500 to-orange-600',
-  'from-cyan-500 to-sky-600',
-]
-function avatarColor(id: string) {
-  const n = parseInt(id, 10) || 0
-  return AVATAR_COLORS[n % AVATAR_COLORS.length]
+  active:    { label: 'Активный', icon: CircleDot,    variant: 'success' as const, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
+  completed: { label: 'Завершён', icon: CheckCircle2, variant: 'default' as const, color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
+  paused:    { label: 'На паузе', icon: Clock,        variant: 'warning' as const, color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-950/30' },
 }
 
 const STATUS_FILTERS = [
@@ -199,8 +182,8 @@ function ProjectCard({ project }: { project: Project }) {
   )
 }
 
-function MemberRow({ member }: { member: ProjectMember }) {
-  const color = avatarColor(member.id)
+function MemberRow({ member }: { member: ProjectMemberType }) {
+  const color = getAvatarColor(member.id)
   return (
     <div className="flex items-center gap-2">
       <Avatar className="h-7 w-7 shrink-0">
@@ -237,8 +220,8 @@ export function Projects() {
       const res = await fetch(`${API_BASE_URL}/projects?${params}`, { headers: getAuthHeadersWithContentType() })
       if (!res.ok) throw new Error('Не удалось загрузить проекты')
       setProjects(await res.json())
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }

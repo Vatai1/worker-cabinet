@@ -3,17 +3,17 @@ import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
-import { formatDate } from '@/lib/utils'
+import { formatDate, getErrorMessage } from '@/lib/utils'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { AddSkillModal } from '@/components/modals/AddSkillModal'
 import { AddProjectModal } from '@/components/modals/AddProjectModal'
 import { useAuthStore } from '@/store/authStore'
+import { API_BASE_URL } from '@/lib/api'
+import { getAvatarColor as getAvatarGradient } from '@/lib/constants'
 import {
   Mail, Phone, Calendar, Building2, Briefcase, ArrowLeft, Loader2,
   FolderKanban, Wrench, User, CheckCircle2, Clock, CircleDot, Plus, Trash, Target, Crown,
 } from 'lucide-react'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
 interface EmployeeData {
   id: string
@@ -76,20 +76,6 @@ const SKILL_COLORS = [
   'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300',
 ]
 
-const AVATAR_COLORS = [
-  'from-violet-500 to-purple-600',
-  'from-blue-500 to-indigo-600',
-  'from-emerald-500 to-teal-600',
-  'from-rose-500 to-pink-600',
-  'from-amber-500 to-orange-600',
-  'from-cyan-500 to-sky-600',
-]
-
-function getAvatarColor(id: string) {
-  const n = parseInt(id, 10) || 0
-  return AVATAR_COLORS[n % AVATAR_COLORS.length]
-}
-
 const roleLabels: Record<string, string> = {
   employee: 'Сотрудник',
   manager:  'Руководитель',
@@ -135,8 +121,8 @@ export function EmployeeProfile() {
           projects:   data.projects   || [],
           responsibilityArea: data.responsibilityArea || data.responsibility_area,
         })
-      } catch (err: any) {
-        setError(err.message)
+      } catch (err: unknown) {
+        setError(getErrorMessage(err))
       } finally {
         setLoading(false)
       }
@@ -283,7 +269,7 @@ export function EmployeeProfile() {
   }
 
   const initials = `${employee.firstName?.[0] ?? ''}${employee.lastName?.[0] ?? ''}`
-  const avatarColor = getAvatarColor(employee.id)
+  const avatarColor = getAvatarGradient(employee.id)
   const status = statusConfig[employee.status] ?? statusConfig.active
   const fullName = [employee.lastName, employee.firstName, employee.middleName].filter(Boolean).join(' ')
 

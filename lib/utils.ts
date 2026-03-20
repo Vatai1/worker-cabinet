@@ -41,3 +41,9 @@ export function formatCurrency(amount: number): string {
     currency: 'RUB',
   }).format(amount)
 }
+
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return 'Произошла неизвестная ошибка'
+}

@@ -5,7 +5,7 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning'
 }
 
-function Badge({ className, variant = 'default', ...props }: BadgeProps) {
+const Badge = React.memo(function Badge({ className, variant = 'default', ...props }: BadgeProps) {
   const variants = {
     default: 'border-transparent bg-primary/10 text-primary shadow-sm',
     secondary: 'border-transparent bg-secondary text-secondary-foreground shadow-sm',
@@ -25,6 +25,6 @@ function Badge({ className, variant = 'default', ...props }: BadgeProps) {
       {...props}
     />
   )
-}
+})
 
 export { Badge }

@@ -4,8 +4,8 @@ import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Upload, X, FileText, Plus, Check } from 'lucide-react'
 import { getAuthHeaders } from '@/lib/authHeaders'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+import { getErrorMessage } from '@/lib/utils'
+import { API_BASE_URL } from '@/lib/api'
 
 interface Props {
   projectId: string
@@ -74,8 +74,8 @@ export function UploadDocumentModal({ projectId, open, onClose, onUploaded }: Pr
       }
       onUploaded()
       handleClose()
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
     } finally {
       setUploading(false)
     }
