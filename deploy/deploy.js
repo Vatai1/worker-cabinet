@@ -114,6 +114,44 @@ function askQuestion(query) {
   })
 }
 
+async function killPortProcess(port) {
+  const isWindows = process.platform === 'win32'
+  
+  try {
+    if (isWindows) {
+      const result = await runCommandAsync('netstat', ['-ano'])
+      const lines = result.stdout.split('\n')
+      const portLine = lines.find(line => line.includes(`:${port}`) && line.includes('LISTENING'))
+      
+      if (portLine) {
+        const parts = portLine.trim().split(/\s+/)
+        const pid = parts[parts.length - 1]
+        if (pid && !isNaN(pid)) {
+          log.info(`Завершение процесса на порту ${port} (PID: ${pid})...`)
+          await runCommandAsync('taskkill', ['/PID', pid, '/F'])
+          log.success(`Процесс на порту ${port} завершен`)
+        }
+      }
+    } else {
+      const result = await runCommandAsync('lsof', ['-ti', `:${port}`])
+      const pids = result.stdout.trim().split('\n').filter(p => p)
+      
+      if (pids.length > 0) {
+        log.info(`Завершение процесса на порту ${port} (PID: ${pids.join(', ')})...`)
+        await runCommandAsync('kill', ['-9', ...pids])
+        log.success(`Процесс на порту ${port} завершен`)
+      }
+    }
+  } catch {
+    // Порт свободен или процесс не найден
+  }
+}
+
+async function killDevPorts() {
+  await killPortProcess(3000)
+  await killPortProcess(5000)
+}
+
 // ==================== DEV COMMANDS ====================
 
 async function checkRequirements() {
@@ -193,6 +231,7 @@ async function seedDatabase() {
 }
 
 async function startDev() {
+  await killDevPorts()
   log.info('Запуск dev сервера...')
   await runCommand('npm', ['run', 'dev'])
 }
