@@ -102,3 +102,5 @@ export interface AppState {
 export * from './vacation'
 export * from './project'
 
+
+export * from './survey'
