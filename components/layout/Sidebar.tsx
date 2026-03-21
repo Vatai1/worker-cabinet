@@ -37,6 +37,7 @@ interface NavItem {
 const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Опросы', href: '/surveys', icon: ClipboardList },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
@@ -61,6 +62,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Опросы', href: '/surveys', icon: ClipboardList },
   {
     name: 'Документы',
     icon: FolderOpen,
@@ -74,7 +76,8 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
 
 const getHRNavigation = (_userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Опросы', href: '/hr/surveys', icon: ClipboardList },
+  { name: 'Опросы (HR)', href: '/hr/surveys', icon: ClipboardList },
+  { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
   {
