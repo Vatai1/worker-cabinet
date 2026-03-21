@@ -21,6 +21,7 @@ import {
   ChevronDown,
   FileStack,
   Building2,
+  ClipboardList,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -71,6 +72,22 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Уведомления', href: '/notifications', icon: Bell },
 ]
 
+const getHRNavigation = (userId?: string): NavItem[] => [
+  { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Опросы', href: '/hr/surveys', icon: ClipboardList },
+  { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Отделы', href: '/departments', icon: Building2 },
+  {
+    name: 'Документы',
+    icon: FolderOpen,
+    children: [
+      { name: 'Шаблоны', href: '/hr/document-templates' },
+      { name: 'Ваши документы', href: '/documents' },
+    ],
+  },
+  { name: 'Уведомления', href: '/notifications', icon: Bell },
+]
+
 export function Sidebar() {
   const { user, logout } = useAuthStore()
   const { sidebarOpen, toggleSidebar, notifications, darkMode, toggleTheme } = useUIStore()
@@ -80,7 +97,10 @@ export function Sidebar() {
 
   const userUnreadCount = notifications.filter((n) => n.userId === user?.id && !n.read).length
 
-  const navigation = user?.role === 'manager' ? getManagerNavigation(user?.id) : getEmployeeNavigation(user?.id)
+  const navigation =
+    user?.role === 'manager' ? getManagerNavigation(user?.id) :
+    ['hr', 'admin'].includes(user?.role ?? '') ? getHRNavigation(user?.id) :
+    getEmployeeNavigation(user?.id)
 
   useEffect(() => {
     navigation.forEach((item) => {
