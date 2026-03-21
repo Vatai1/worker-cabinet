@@ -179,6 +179,58 @@ async function runMigrations() {
       )
     `).catch(e => console.log('  - vacation_balances:', e.message))
 
+    // Create request_statuses dictionary table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS request_statuses (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL
+      )
+    `).catch(e => console.log('  - request_statuses:', e.message))
+
+    // Seed request_statuses
+    const requestStatusesData = [
+      { code: 'on_approval', name: 'На согласовании' },
+      { code: 'approved', name: 'Согласовано' },
+      { code: 'rejected', name: 'Отклонено' },
+      { code: 'cancelled_by_employee', name: 'Отменено сотрудником' },
+      { code: 'cancelled_by_manager', name: 'Отменено руководителем' }
+    ]
+    for (const status of requestStatusesData) {
+      await db.query(
+        `INSERT INTO request_statuses (code, name) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
+        [status.code, status.name]
+      )
+    }
+    console.log('  ✓ request_statuses seeded')
+
+    // Create vacation_types dictionary table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS vacation_types (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL
+      )
+    `).catch(e => console.log('  - vacation_types:', e.message))
+
+    // Seed vacation_types
+    const vacationTypesData = [
+      { code: 'annual_paid', name: 'Ежегодный оплачиваемый' },
+      { code: 'unpaid', name: 'Без сохранения зарплаты' },
+      { code: 'educational', name: 'Учебный' },
+      { code: 'maternity', name: 'Декретный' },
+      { code: 'child_care', name: 'По уходу за ребёнком' },
+      { code: 'additional', name: 'Дополнительный' },
+      { code: 'veteran', name: 'Ветеранский' }
+    ]
+    for (const type of vacationTypesData) {
+      await db.query(
+        `INSERT INTO vacation_types (code, name) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
+        [type.code, type.name]
+      )
+    }
+    console.log('  ✓ vacation_types seeded')
+
     await db.query(`
       CREATE TABLE IF NOT EXISTS vacation_requests (
         id SERIAL PRIMARY KEY,
@@ -186,8 +238,8 @@ async function runMigrations() {
         start_date DATE NOT NULL,
         end_date DATE NOT NULL,
         duration INTEGER NOT NULL,
-        vacation_type vacation_type_enum DEFAULT 'annual_paid',
-        status request_status_enum DEFAULT 'on_approval',
+        vacation_type_id INTEGER REFERENCES vacation_types(id),
+        status_id INTEGER REFERENCES request_statuses(id),
         comment TEXT,
         rejection_reason TEXT,
         cancellation_reason TEXT,
@@ -204,7 +256,7 @@ async function runMigrations() {
       CREATE TABLE IF NOT EXISTS vacation_request_status_history (
         id SERIAL PRIMARY KEY,
         request_id INTEGER NOT NULL REFERENCES vacation_requests(id) ON DELETE CASCADE,
-        status request_status_enum NOT NULL,
+        status_id INTEGER NOT NULL REFERENCES request_statuses(id),
         changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         changed_by INTEGER NOT NULL REFERENCES users(id),
         comment TEXT
@@ -243,12 +295,118 @@ async function runMigrations() {
       }
     }
 
-    console.log('✅ New columns added')
+    // Add status_id and vacation_type_id FK columns to vacation_requests
+    try {
+      await db.query(`ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS status_id INTEGER REFERENCES request_statuses(id)`)
+      console.log('  ✓ status_id column added to vacation_requests')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ status_id (already exists)')
+      } else {
+        console.log('  - status_id:', e.message)
+      }
+    }
+
+    try {
+      await db.query(`ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS vacation_type_id INTEGER REFERENCES vacation_types(id)`)
+      console.log('  ✓ vacation_type_id column added to vacation_requests')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ vacation_type_id (already exists)')
+      } else {
+        console.log('  - vacation_type_id:', e.message)
+      }
+    }
+
+    // Add status_id FK column to vacation_request_status_history
+    try {
+      await db.query(`ALTER TABLE vacation_request_status_history ADD COLUMN IF NOT EXISTS status_id INTEGER REFERENCES request_statuses(id)`)
+      console.log('  ✓ status_id column added to vacation_request_status_history')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ status_id (already exists in history)')
+      } else {
+        console.log('  - status_id in history:', e.message)
+      }
+    }
+
+    // Migrate existing ENUM data to FK columns
+    console.log('Migrating ENUM data to FK columns...')
+    
+    // Check if old ENUM columns exist
+    const vrColumns = await db.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'vacation_requests' AND column_name IN ('status', 'vacation_type')
+    `)
+    const vrHasStatus = vrColumns.rows.some(r => r.column_name === 'status')
+    const vrHasVacationType = vrColumns.rows.some(r => r.column_name === 'vacation_type')
+
+    const histColumns = await db.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'vacation_request_status_history' AND column_name = 'status'
+    `)
+    const histHasStatus = histColumns.rows.length > 0
+
+    // Migrate vacation_requests.status_id
+    if (vrHasStatus) {
+      try {
+        const migrateStatus = await db.query(`
+          UPDATE vacation_requests vr
+          SET status_id = rs.id
+          FROM request_statuses rs
+          WHERE vr.status_id IS NULL 
+            AND vr.status::text = rs.code
+        `)
+        if (migrateStatus.rowCount > 0) {
+          console.log(`  ✓ Migrated ${migrateStatus.rowCount} vacation_requests.status_id`)
+        }
+      } catch (e) {
+        console.log('  - migrate status:', e.message)
+      }
+    }
+
+    // Migrate vacation_requests.vacation_type_id
+    if (vrHasVacationType) {
+      try {
+        const migrateType = await db.query(`
+          UPDATE vacation_requests vr
+          SET vacation_type_id = vt.id
+          FROM vacation_types vt
+          WHERE vr.vacation_type_id IS NULL 
+            AND vr.vacation_type::text = vt.code
+        `)
+        if (migrateType.rowCount > 0) {
+          console.log(`  ✓ Migrated ${migrateType.rowCount} vacation_requests.vacation_type_id`)
+        }
+      } catch (e) {
+        console.log('  - migrate vacation_type:', e.message)
+      }
+    }
+
+    // Migrate vacation_request_status_history.status_id
+    if (histHasStatus) {
+      try {
+        const migrateHistory = await db.query(`
+          UPDATE vacation_request_status_history vrsh
+          SET status_id = rs.id
+          FROM request_statuses rs
+          WHERE vrsh.status_id IS NULL 
+            AND vrsh.status::text = rs.code
+        `)
+        if (migrateHistory.rowCount > 0) {
+          console.log(`  ✓ Migrated ${migrateHistory.rowCount} vacation_request_status_history.status_id`)
+        }
+      } catch (e) {
+        console.log('  - migrate history status:', e.message)
+      }
+    }
+
+    console.log('✅ ENUM data migration completed')
 
     // Step 3: Create indexes
     console.log('Creating indexes...')
     await db.query('CREATE INDEX IF NOT EXISTS idx_vacation_requests_user_id ON vacation_requests(user_id)').catch(e => {})
-    await db.query('CREATE INDEX IF NOT EXISTS idx_vacation_requests_status ON vacation_requests(status)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_vacation_requests_status_id ON vacation_requests(status_id)').catch(e => {})
     await db.query('CREATE INDEX IF NOT EXISTS idx_vacation_requests_dates ON vacation_requests(start_date, end_date)').catch(e => {})
     await db.query('CREATE INDEX IF NOT EXISTS idx_users_department ON users(department_id)').catch(e => {})
     await db.query('CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id)').catch(e => {})
@@ -391,9 +549,53 @@ async function runMigrations() {
 
     console.log('✅ Project roadmap table created')
 
-    // Step 6: Create roadmap v2 tables (rows + tasks)
+    // Step 6: Create roadmap v2 tables (rows + tasks) - for projectService
     console.log('Creating roadmap v2 tables...')
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS project_roadmap_rows (
+        id          SERIAL PRIMARY KEY,
+        project_id  INTEGER NOT NULL REFERENCES company_projects(id) ON DELETE CASCADE,
+        title       VARCHAR(255) NOT NULL,
+        color       VARCHAR(20) DEFAULT '#6366f1',
+        order_index INTEGER DEFAULT 0,
+        created_by  INTEGER REFERENCES users(id),
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - project_roadmap_rows:', e.message))
+
+    await db.query('CREATE INDEX IF NOT EXISTS idx_project_roadmap_rows_project ON project_roadmap_rows(project_id)').catch(e => {})
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS project_roadmap_tasks (
+        id          SERIAL PRIMARY KEY,
+        project_id  INTEGER NOT NULL REFERENCES company_projects(id) ON DELETE CASCADE,
+        row_id      INTEGER NOT NULL REFERENCES project_roadmap_rows(id) ON DELETE CASCADE,
+        title       VARCHAR(500) NOT NULL,
+        description TEXT,
+        start_date  DATE,
+        end_date    DATE,
+        status      VARCHAR(20) DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'in_progress', 'completed')),
+        priority    VARCHAR(20) DEFAULT 'medium',
+        assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        order_index INTEGER DEFAULT 0,
+        color       VARCHAR(20),
+        created_by  INTEGER REFERENCES users(id),
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - project_roadmap_tasks:', e.message))
+
+    await db.query('CREATE INDEX IF NOT EXISTS idx_project_roadmap_tasks_project ON project_roadmap_tasks(project_id)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_project_roadmap_tasks_row ON project_roadmap_tasks(row_id)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_project_roadmap_tasks_assignee ON project_roadmap_tasks(assignee_id)').catch(e => {})
+
+    await db.query('DROP TRIGGER IF EXISTS trg_project_roadmap_tasks_updated_at ON project_roadmap_tasks')
+    await db.query(`CREATE TRIGGER trg_project_roadmap_tasks_updated_at BEFORE UPDATE ON project_roadmap_tasks
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()`)
+
+    // Also create roadmap_rows and roadmap_tasks for routes/projects.js compatibility
     await db.query(`
       CREATE TABLE IF NOT EXISTS roadmap_rows (
         id          SERIAL PRIMARY KEY,
@@ -404,9 +606,7 @@ async function runMigrations() {
         created_by  INTEGER REFERENCES users(id),
         created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `).catch(e => console.log('  - roadmap_rows:', e.message))
-
-    await db.query('CREATE INDEX IF NOT EXISTS idx_roadmap_rows_project ON roadmap_rows(project_id)').catch(e => {})
+    `).catch(e => {})
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS roadmap_tasks (
@@ -415,32 +615,26 @@ async function runMigrations() {
         row_id      INTEGER NOT NULL REFERENCES roadmap_rows(id) ON DELETE CASCADE,
         title       VARCHAR(500) NOT NULL,
         description TEXT,
-        start_month VARCHAR(7) NOT NULL,
-        end_month   VARCHAR(7) NOT NULL,
+        start_month VARCHAR(7),
+        end_month   VARCHAR(7),
         status      VARCHAR(20) DEFAULT 'pending'
                     CHECK (status IN ('pending', 'in_progress', 'completed')),
+        priority    VARCHAR(20) DEFAULT 'medium',
+        is_milestone BOOLEAN DEFAULT false,
         color       VARCHAR(20),
         created_by  INTEGER REFERENCES users(id),
         created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `).catch(e => console.log('  - roadmap_tasks:', e.message))
+    `).catch(e => {})
 
+    await db.query('CREATE INDEX IF NOT EXISTS idx_roadmap_rows_project ON roadmap_rows(project_id)').catch(e => {})
     await db.query('CREATE INDEX IF NOT EXISTS idx_roadmap_tasks_project ON roadmap_tasks(project_id)').catch(e => {})
     await db.query('CREATE INDEX IF NOT EXISTS idx_roadmap_tasks_row ON roadmap_tasks(row_id)').catch(e => {})
 
-    await db.query(`
-      CREATE OR REPLACE FUNCTION update_roadmap_tasks_updated_at()
-      RETURNS TRIGGER AS $$
-      BEGIN
-        NEW.updated_at = CURRENT_TIMESTAMP;
-        RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql
-    `)
     await db.query('DROP TRIGGER IF EXISTS trg_roadmap_tasks_updated_at ON roadmap_tasks')
     await db.query(`CREATE TRIGGER trg_roadmap_tasks_updated_at BEFORE UPDATE ON roadmap_tasks
-      FOR EACH ROW EXECUTE FUNCTION update_roadmap_tasks_updated_at()`)
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()`)
 
     console.log('✅ Roadmap v2 tables created')
 
@@ -559,6 +753,26 @@ async function runMigrations() {
       )
     `).catch(e => console.log('  - skills:', e.message))
 
+    // Create skills_dictionary table (global skills catalog)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS skills_dictionary (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - skills_dictionary:', e.message))
+
+    // Create user_skills junction table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS user_skills (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        skill_id INTEGER NOT NULL REFERENCES skills_dictionary(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, skill_id)
+      )
+    `).catch(e => console.log('  - user_skills:', e.message))
+
     await db.query(`
       CREATE TABLE IF NOT EXISTS projects (
         id SERIAL PRIMARY KEY,
@@ -576,6 +790,8 @@ async function runMigrations() {
 
     await db.query('CREATE INDEX IF NOT EXISTS idx_skills_user_id ON skills(user_id)').catch(e => {})
     await db.query('CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_user_skills_user ON user_skills(user_id)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_user_skills_skill ON user_skills(skill_id)').catch(e => {})
 
     await db.query('DROP TRIGGER IF EXISTS update_projects_updated_at ON projects')
     await db.query(`CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects
@@ -643,11 +859,12 @@ async function runMigrations() {
     await db.query('CREATE INDEX IF NOT EXISTS idx_pfold_project_parent ON project_folders(project_id, parent_path)').catch(e => {})
     console.log('  ✓ project documents tables created')
 
-    // Add priority and is_milestone to roadmap_tasks
+    // Add missing columns to project_roadmap_tasks (for existing tables)
     try {
-      await db.query(`ALTER TABLE roadmap_tasks ADD COLUMN IF NOT EXISTS priority VARCHAR(20) DEFAULT 'medium'`)
-      await db.query(`ALTER TABLE roadmap_tasks ADD COLUMN IF NOT EXISTS is_milestone BOOLEAN DEFAULT false`)
-      console.log('  ✓ roadmap_tasks priority/is_milestone columns added')
+      await db.query(`ALTER TABLE project_roadmap_tasks ADD COLUMN IF NOT EXISTS priority VARCHAR(20) DEFAULT 'medium'`)
+      await db.query(`ALTER TABLE project_roadmap_tasks ADD COLUMN IF NOT EXISTS assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL`)
+      await db.query(`ALTER TABLE project_roadmap_tasks ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0`)
+      console.log('  ✓ project_roadmap_tasks columns added')
     } catch (e) {}
 
     console.log('✅ Migrations completed successfully')
