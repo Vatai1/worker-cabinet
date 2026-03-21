@@ -23,6 +23,9 @@ import { Settings } from '@/pages/Settings'
 import { Departments } from '@/pages/Departments'
 import { DepartmentDetail } from '@/pages/DepartmentDetail'
 import { HRDocumentTemplates } from '@/pages/HRDocumentTemplates'
+import { HRSurveys } from '@/pages/HRSurveys'
+import { Surveys } from '@/pages/Surveys'
+import { SurveyPage } from '@/pages/SurveyPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -103,6 +106,9 @@ function App() {
           <Route path="projects/:id/documents" element={<ProjectDocuments />} />
           <Route path="projects/:id/roadmap" element={<ProjectRoadmap />} />
           <Route path="hr/document-templates" element={<HRRoute><HRDocumentTemplates /></HRRoute>} />
+          <Route path="hr/surveys" element={<HRRoute><HRSurveys /></HRRoute>} />
+          <Route path="surveys" element={<ProtectedRoute><Surveys /></ProtectedRoute>} />
+          <Route path="surveys/:id" element={<ProtectedRoute><SurveyPage /></ProtectedRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
