@@ -867,6 +867,22 @@ async function runMigrations() {
       console.log('  ✓ project_roadmap_tasks columns added')
     } catch (e) {}
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS document_templates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        category TEXT NOT NULL CHECK (category IN ('hr', 'legal', 'finance', 'general')),
+        file_key TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size INT NOT NULL,
+        created_by INT REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        download_count INT DEFAULT 0
+      )
+    `).catch(e => console.log('  - document_templates:', e.message))
+    console.log('  ✓ document_templates')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     
