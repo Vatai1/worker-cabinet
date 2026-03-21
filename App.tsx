@@ -22,6 +22,7 @@ import { ProjectRoadmap } from '@/pages/ProjectRoadmap'
 import { Settings } from '@/pages/Settings'
 import { Departments } from '@/pages/Departments'
 import { DepartmentDetail } from '@/pages/DepartmentDetail'
+import { HRDocumentTemplates } from '@/pages/HRDocumentTemplates'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -40,6 +41,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
+  return <>{children}</>
+}
+
+function HRRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((state) => state.user)
+  const loading = useAuthStore((state) => state.loading)
+  if (loading) return null
+  if (!['hr', 'admin'].includes(user?.role ?? ''))
+    return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -92,6 +102,7 @@ function App() {
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="projects/:id/documents" element={<ProjectDocuments />} />
           <Route path="projects/:id/roadmap" element={<ProjectRoadmap />} />
+          <Route path="hr/document-templates" element={<HRRoute><HRDocumentTemplates /></HRRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
