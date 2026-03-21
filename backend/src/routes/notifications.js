@@ -10,7 +10,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const userId = req.user.id
 
     const result = await query(
-      `SELECT id, user_id as "userId", title, message, type, read, created_at as "createdAt"
+      `SELECT id, user_id as "userId", title, message, type, read, link, created_at as "createdAt"
        FROM notifications
        WHERE user_id = $1
        ORDER BY created_at DESC`,
