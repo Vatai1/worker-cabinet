@@ -72,7 +72,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Уведомления', href: '/notifications', icon: Bell },
 ]
 
-const getHRNavigation = (userId?: string): NavItem[] => [
+const getHRNavigation = (_userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Опросы', href: '/hr/surveys', icon: ClipboardList },
   { name: 'Сотрудники', href: '/employees', icon: Users },
