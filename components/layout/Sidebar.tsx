@@ -20,6 +20,7 @@ import {
   Moon,
   ChevronDown,
   FileStack,
+  Building2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -36,6 +37,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
   { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Заявления', href: '/requests', icon: FileText },
@@ -54,6 +56,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/leader', icon: Users },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
   { name: 'Отпуск', href: '/vacation', icon: Plane },

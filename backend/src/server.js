@@ -9,6 +9,7 @@ import notificationsRoutes from './routes/notifications.js'
 import projectsRoutes from './routes/projects.js'
 import documentsRoutes from './routes/documents.js'
 import userDocumentsRoutes from './routes/userDocuments.js'
+import departmentsRoutes from './routes/departments.js'
 import { errorHandler } from './middleware/errors.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 
@@ -56,6 +57,7 @@ app.use('/api/notifications', notificationsRoutes)
 app.use('/api/projects', projectsRoutes)
 app.use('/api/documents', documentsRoutes)
 app.use('/api/user-documents', userDocumentsRoutes)
+app.use('/api/departments', departmentsRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
