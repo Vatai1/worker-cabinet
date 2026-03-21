@@ -346,6 +346,7 @@ export function Vacation() {
 
   const currentYear = 2026
   const isManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin'
+  const isDepartmentManager = departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -459,7 +460,7 @@ export function Vacation() {
         </div>
       </Card>
 
-      {isManager && departmentRequests.length > 0 && (
+      {isDepartmentManager && departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL).length > 0 && (
         <Card>
           <div className="p-6">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
@@ -757,8 +758,8 @@ export function Vacation() {
           isOpen={showDetailModal}
           request={detailRequest}
           onClose={handleCloseDetailModal}
-          onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isManager ? handleApprove : undefined}
-          onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isManager ? handleReject : undefined}
+          onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && user?.id === String(detailRequest?.departmentManagerId) ? handleApprove : undefined}
+          onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && user?.id === String(detailRequest?.departmentManagerId) ? handleReject : undefined}
           loading={loading}
           intersectionWarnings={intersectionWarnings}
         />

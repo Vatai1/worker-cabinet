@@ -92,6 +92,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
         u.position,
         u.department_id,
         d.name as department_name,
+        d.manager_id as department_manager_id,
         COALESCE(
           json_agg(
             json_build_object(
@@ -126,6 +127,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       status_code: request.status,
       vacation_type_code: request.vacation_type,
       statusHistory: request.status_history,
+      departmentManagerId: request.department_manager_id,
     }))
 
     res.json(requests)
@@ -439,6 +441,26 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
 
     await client.query('BEGIN')
 
+    const deptCheck = await client.query(
+      `SELECT d.manager_id 
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    if (deptCheck.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Request not found' })
+    }
+
+    const deptManagerId = deptCheck.rows[0].manager_id
+    if (deptManagerId !== managerId) {
+      await client.query('ROLLBACK')
+      return res.status(403).json({ error: 'Только руководитель отдела может согласовывать заявки' })
+    }
+
     const result = await client.query(
       `UPDATE vacation_requests vr
        SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'), reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
@@ -538,6 +560,26 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     }
 
     await client.query('BEGIN')
+
+    const deptCheck = await client.query(
+      `SELECT d.manager_id 
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    if (deptCheck.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Request not found' })
+    }
+
+    const deptManagerId = deptCheck.rows[0].manager_id
+    if (deptManagerId !== managerId) {
+      await client.query('ROLLBACK')
+      return res.status(403).json({ error: 'Только руководитель отдела может отклонять заявки' })
+    }
 
     const result = await client.query(
       `UPDATE vacation_requests vr
