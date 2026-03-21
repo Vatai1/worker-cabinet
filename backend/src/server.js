@@ -44,7 +44,8 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`)
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress
+  console.log(`${req.method} ${req.path} - ${ip}`)
   next()
 })
 
