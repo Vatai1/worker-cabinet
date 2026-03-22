@@ -14,6 +14,7 @@ import { RestrictionModal } from '@/components/modals/RestrictionModal'
 import { VacationRequestStatus, VacationType } from '@/types'
 import { vacationApi } from '@/services/vacationApi'
 import { getErrorMessage } from '@/lib/utils'
+import { useUIStore } from '@/store/uiStore'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -329,6 +330,7 @@ export function Vacation() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
+      useUIStore.getState().fetchNotifications()
     } catch (error: unknown) {
       alert(getErrorMessage(error) || 'Ошибка при генерации заявления')
     }
@@ -682,7 +684,7 @@ export function Vacation() {
                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                     </svg>
-                                    Скачать заявление
+                                    Сформировать заявление
                                   </Button>
                                 )}
                                 <Button
