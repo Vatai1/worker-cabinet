@@ -1134,7 +1134,7 @@ router.post('/requests/:id/statement', authenticateToken, async (req, res) => {
     res.send(buffer)
 
     createNotification(
-      userId,
+      request.user_id,
       'Заявление сформировано',
       'Документ доступен в разделе "Ваши документы"',
       'success'
