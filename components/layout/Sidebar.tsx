@@ -80,6 +80,7 @@ const getHRNavigation = (_userId?: string): NavItem[] => [
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
+  { name: 'Проекты', href: '/projects', icon: FolderKanban },
   {
     name: 'Документы',
     icon: FolderOpen,
