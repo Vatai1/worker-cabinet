@@ -20,6 +20,8 @@ import {
   Moon,
   ChevronDown,
   FileStack,
+  Building2,
+  ClipboardList,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -35,7 +37,9 @@ interface NavItem {
 const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Опросы', href: '/surveys', icon: ClipboardList },
   { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Заявления', href: '/requests', icon: FileText },
@@ -54,15 +58,34 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/leader', icon: Users },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Опросы', href: '/surveys', icon: ClipboardList },
   {
     name: 'Документы',
     icon: FolderOpen,
     children: [
       { name: 'Ваши документы', href: '/documents' },
       { name: 'Шаблоны документов', href: '/document-templates' },
+    ],
+  },
+  { name: 'Уведомления', href: '/notifications', icon: Bell },
+]
+
+const getHRNavigation = (_userId?: string): NavItem[] => [
+  { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Опросы (HR)', href: '/hr/surveys', icon: ClipboardList },
+  { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
+  { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Отделы', href: '/departments', icon: Building2 },
+  {
+    name: 'Документы',
+    icon: FolderOpen,
+    children: [
+      { name: 'Шаблоны', href: '/hr/document-templates' },
+      { name: 'Ваши документы', href: '/documents' },
     ],
   },
   { name: 'Уведомления', href: '/notifications', icon: Bell },
@@ -77,7 +100,10 @@ export function Sidebar() {
 
   const userUnreadCount = notifications.filter((n) => n.userId === user?.id && !n.read).length
 
-  const navigation = user?.role === 'manager' ? getManagerNavigation(user?.id) : getEmployeeNavigation(user?.id)
+  const navigation =
+    user?.role === 'manager' ? getManagerNavigation(user?.id) :
+    ['hr', 'admin'].includes(user?.role ?? '') ? getHRNavigation(user?.id) :
+    getEmployeeNavigation(user?.id)
 
   useEffect(() => {
     navigation.forEach((item) => {

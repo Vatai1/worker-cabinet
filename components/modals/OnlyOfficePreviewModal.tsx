@@ -7,12 +7,14 @@ interface OnlyOfficePreviewModalProps {
   open: boolean
   onClose: () => void
   document: {
-    id: string
+    id: string | number
     name: string
     mimeType: string
     url: string | (() => Promise<string>)
     size?: number
   }
+  editable?: boolean
+  callbackUrl?: string
 }
 
 const ONLYOFFICE_URL = import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'
@@ -20,7 +22,7 @@ const ONLYOFFICE_API_URL = `${ONLYOFFICE_URL}/web-apps/apps/api/documents/api.js
 
 let editorCounter = 0
 
-export function OnlyOfficePreviewModal({ open, onClose, document: doc }: OnlyOfficePreviewModalProps) {
+export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, callbackUrl }: OnlyOfficePreviewModalProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editorId] = useState(() => `onlyoffice-editor-${++editorCounter}`)
@@ -105,15 +107,15 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc }: OnlyOff
             title: doc.name,
             url: fileUrl,
             permissions: {
-              edit: false,
+              edit: editable,
               download: true,
               print: true,
             },
           },
           editorConfig: {
             lang: 'ru',
-            mode: 'view',
-            callbackUrl: '',
+            mode: editable ? 'edit' : 'view',
+            callbackUrl: editable ? callbackUrl : '',
             user: {
               id: 'preview-user',
               name: 'Preview User',

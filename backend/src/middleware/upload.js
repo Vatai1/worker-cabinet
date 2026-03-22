@@ -32,3 +32,22 @@ const upload = multer({
 })
 
 export { upload }
+
+export const uploadTemplate = multer({
+  storage,
+  limits: {
+    fileSize: 20 * 1024 * 1024, // 20MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Допустимы только .pdf и .docx файлы'))
+    }
+  },
+})

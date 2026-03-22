@@ -5,26 +5,9 @@ import { Badge } from '@/components/ui/Badge'
 import { formatDate } from '@/lib/utils'
 import { FileText, Download, Search, FilePlus } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
-
-interface DocumentTemplate {
-  id: string
-  name: string
-  description: string
-  category: 'hr' | 'legal' | 'finance' | 'general'
-  createdAt: string
-  downloads: number
-}
-
-const MOCK_TEMPLATES: DocumentTemplate[] = [
-  { id: '1', name: 'Заявление на отпуск', description: 'Шаблон заявления на ежегодный оплачиваемый отпуск', category: 'hr', createdAt: '2025-01-15', downloads: 145 },
-  { id: '2', name: 'Трудовой договор', description: 'Стандартный шаблон трудового договора', category: 'legal', createdAt: '2025-01-10', downloads: 89 },
-  { id: '3', name: 'Заявление на увольнение', description: 'Шаблон заявления об увольнении по собственному желанию', category: 'hr', createdAt: '2025-01-08', downloads: 67 },
-  { id: '4', name: 'Авансовый отчёт', description: 'Форма авансового отчёта для командировочных расходов', category: 'finance', createdAt: '2025-01-05', downloads: 123 },
-  { id: '5', name: 'NDA', description: 'Соглашение о неразглашении конфиденциальной информации', category: 'legal', createdAt: '2024-12-20', downloads: 234 },
-  { id: '6', name: 'Служебная записка', description: 'Общий шаблон служебной записки', category: 'general', createdAt: '2024-12-15', downloads: 312 },
-  { id: '7', name: 'Заявление на командировку', description: 'Шаблон заявления на направление в командировку', category: 'hr', createdAt: '2024-12-10', downloads: 78 },
-  { id: '8', name: 'Договор подряда', description: 'Шаблон договора подряда с физическим лицом', category: 'legal', createdAt: '2024-12-05', downloads: 56 },
-]
+import { templateApi } from '@/services/templateApi'
+import { getErrorMessage } from '@/lib/utils'
+import type { DocumentTemplate } from '@/types'
 
 const CATEGORY_LABELS = {
   hr: { label: 'Кадры', className: 'bg-blue-100 text-blue-800' },
@@ -40,31 +23,34 @@ export function DocumentTemplates() {
   const [searchQuery, setSearchQuery] = useState('')
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setTimeout(() => {
-      setTemplates(MOCK_TEMPLATES)
-      setLoading(false)
-    }, 500)
+    templateApi.list()
+      .then(setTemplates)
+      .catch((err: unknown) => setError(getErrorMessage(err)))
+      .finally(() => setLoading(false))
   }, [])
 
   const filteredTemplates = templates.filter((template) => {
     const matchesCategory = filterCategory === 'all' || template.category === filterCategory
     const matchesSearch = searchQuery === '' ||
       template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      template.description.toLowerCase().includes(searchQuery.toLowerCase())
+      (template.description ?? '').toLowerCase().includes(searchQuery.toLowerCase())
     return matchesCategory && matchesSearch
   })
 
-  const handleDownload = (template: DocumentTemplate) => {
-    setTemplates(prev => prev.map(t => 
-      t.id === template.id ? { ...t, downloads: t.downloads + 1 } : t
-    ))
-    alert(`Загрузка шаблона "${template.name}" начнётся автоматически`)
+  const handleDownload = async (id: number) => {
+    try {
+      const { url } = await templateApi.incrementDownload(id)
+      window.open(url, '_blank')
+    } catch (err: unknown) {
+      console.error(err)
+    }
   }
 
-  const handleUseTemplate = (template: DocumentTemplate) => {
-    alert(`Создание документа на основе шаблона "${template.name}"`)
+  const handleUseTemplate = async (template: DocumentTemplate) => {
+    await handleDownload(template.id)
   }
 
   return (
@@ -133,6 +119,15 @@ export function DocumentTemplates() {
             </div>
           </CardContent>
         </Card>
+      ) : error ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="text-center">
+              <FileText className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+              <p className="mt-4 text-lg font-medium text-destructive">{error}</p>
+            </div>
+          </CardContent>
+        </Card>
       ) : filteredTemplates.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -151,7 +146,7 @@ export function DocumentTemplates() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredTemplates.map((template) => {
             const categoryInfo = CATEGORY_LABELS[template.category]
-            
+
             return (
               <Card key={template.id} className="hover:shadow-md transition-shadow">
                 <CardHeader>
@@ -176,27 +171,27 @@ export function DocumentTemplates() {
                         {categoryInfo.label}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {template.downloads} загрузок
+                        {template.downloadCount} загрузок
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Добавлен: {formatDate(template.createdAt)}
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        className="flex-1" 
-                        variant="default" 
-                        size="sm" 
+                      <Button
+                        className="flex-1"
+                        variant="default"
+                        size="sm"
                         onClick={() => handleUseTemplate(template)}
                       >
                         <FilePlus className="mr-2 h-4 w-4" />
                         Использовать
                       </Button>
-                      <Button 
-                        className="flex-1" 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleDownload(template)}
+                      <Button
+                        className="flex-1"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownload(template.id)}
                       >
                         <Download className="mr-2 h-4 w-4" />
                         Скачать
@@ -233,7 +228,7 @@ export function DocumentTemplates() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {templates.reduce((acc, t) => acc + t.downloads, 0)}
+              {templates.reduce((acc, t) => acc + t.downloadCount, 0)}
             </div>
           </CardContent>
         </Card>
