@@ -1132,6 +1132,13 @@ router.post('/requests/:id/statement', authenticateToken, async (req, res) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
     res.send(buffer)
+
+    createNotification(
+      userId,
+      'Заявление сформировано',
+      'Документ доступен в разделе "Ваши документы"',
+      'success'
+    ).catch(console.error)
   } catch (error) {
     console.error('Error generating vacation statement:', error)
     res.status(500).json({ error: error.message || 'Ошибка при генерации заявления' })
