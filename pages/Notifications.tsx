@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -12,6 +13,7 @@ type NotificationType = 'all' | 'unread' | 'info' | 'success' | 'warning' | 'err
 export function Notifications() {
   const { notifications, markAsRead, markAllAsRead, removeNotification } = useUIStore()
   const { user } = useAuthStore()
+  const navigate = useNavigate()
   const [filterType, setFilterType] = useState<NotificationType>('all')
 
   const userNotifications = notifications.filter((n) => n.userId === user?.id)
@@ -122,6 +124,16 @@ export function Notifications() {
                         <p className="text-sm text-muted-foreground mt-1">
                           {notification.message}
                         </p>
+                        {notification.link && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => navigate(notification.link!)}
+                          >
+                            Перейти к опросу
+                          </Button>
+                        )}
                       </div>
                       <Badge
                         variant={notification.read ? 'outline' : 'default'}

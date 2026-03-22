@@ -9,6 +9,9 @@ import notificationsRoutes from './routes/notifications.js'
 import projectsRoutes from './routes/projects.js'
 import documentsRoutes from './routes/documents.js'
 import userDocumentsRoutes from './routes/userDocuments.js'
+import departmentsRoutes from './routes/departments.js'
+import templatesRoutes from './routes/templates.js'
+import surveysRoutes from './routes/surveys.js'
 import { errorHandler } from './middleware/errors.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 
@@ -43,7 +46,8 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`)
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress
+  console.log(`${req.method} ${req.path} - ${ip}`)
   next()
 })
 
@@ -56,6 +60,9 @@ app.use('/api/notifications', notificationsRoutes)
 app.use('/api/projects', projectsRoutes)
 app.use('/api/documents', documentsRoutes)
 app.use('/api/user-documents', userDocumentsRoutes)
+app.use('/api/departments', departmentsRoutes)
+app.use('/api/templates', templatesRoutes)
+app.use('/api/surveys', surveysRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

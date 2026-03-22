@@ -7,8 +7,8 @@ Guidelines for agentic coding agents working in this repository.
 Worker Cabinet is a full-stack HR management system:
 - **Frontend**: React + TypeScript + Vite + Tailwind CSS
 - **Backend**: Node.js + Express + PostgreSQL
-- **State Management**: Zustand (persisted to localStorage)
-- **File Storage**: AWS S3
+- **State Management**: Zustand (persisted to cookies)
+- **File Storage**: AWS S3 / MinIO
 
 ## Build/Lint/Test Commands
 
@@ -33,15 +33,20 @@ npm run test:vacation-history  # Run vacation tests
 ### Running a Single Test
 ```bash
 cd backend
-node --test src/tests/auth.test.js                          # Run specific file
-node --test --test-name-pattern="JWT Token" src/tests/auth.test.js  # Run matching tests
+node --test src/tests/auth.test.js                                    # Run specific file
+node --test --test-name-pattern="JWT Token" src/tests/auth.test.js    # Run matching tests
+```
+
+### After Making Changes
+```bash
+npm run lint && npm run typecheck    # MUST run after any frontend changes
 ```
 
 ## Code Style Guidelines
 
 ### TypeScript/React (Frontend)
 
-**Imports Order**: React → External libs → Internal (`@/`) → Types → Utilities
+**Imports Order**: React → External libs → Internal (`@/`) → Types
 
 ```typescript
 import { useState, useEffect } from 'react'
@@ -49,25 +54,58 @@ import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Calendar, Users } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
-import type { User } from '@/types'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
+import { formatDate, getErrorMessage } from '@/lib/utils'
+import { API_BASE_URL } from '@/lib/api'
+import type { User, Project } from '@/types'
 ```
 
 **Naming Conventions**:
-- Components: PascalCase (`EditProjectModal.tsx`)
+- Components: PascalCase files (`EditProjectModal.tsx`)
 - Hooks: camelCase with `use` prefix (`useAuthStore`)
 - Constants: SCREAMING_SNAKE_CASE for global, camelCase for local
 - Interfaces: PascalCase (`ProjectDetail`, `Member`)
-- CSS: Tailwind with `cn()` utility
+- CSS: Tailwind with `cn()` utility from `@/lib/utils`
 
 **Component Structure**:
 ```typescript
-const STATUS_CONFIG = { active: { label: 'Активный', color: 'text-emerald-600' } }
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Активный' },
+  { value: 'paused', label: 'На паузе' },
+]
 
-interface Props { projectId: string; onSave: () => void }
+interface Props {
+  projectId: string
+  onSave: () => void
+}
 
 export function MyComponent({ projectId, onSave }: Props) {
   const [state, setState] = useState(null)
-  const handleClick = () => {}
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`${API_BASE_URL}/endpoint`, {
+        method: 'POST',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ projectId }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Ошибка')
+      }
+      onSave()
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return <div className="...">...</div>
 }
 ```
@@ -84,10 +122,18 @@ router.post('/:id/resource', authenticateToken, async (req, res) => {
 
     if (!field1?.trim()) return res.status(400).json({ error: 'Field is required' })
 
-    const accessCheck = await query(`SELECT 1 FROM table WHERE id = $1 AND user_id = $2`, [id, userId])
-    if (accessCheck.rows.length === 0) return res.status(403).json({ error: 'Forbidden' })
+    const accessCheck = await query(
+      `SELECT 1 FROM table WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    )
+    if (accessCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
 
-    const result = await query(`INSERT INTO table (field) VALUES ($1) RETURNING *`, [field1])
+    const result = await query(
+      `INSERT INTO table (field) VALUES ($1) RETURNING *`,
+      [field1]
+    )
     res.status(201).json(result.rows[0])
   } catch (error) {
     console.error('Error:', error)
@@ -96,46 +142,78 @@ router.post('/:id/resource', authenticateToken, async (req, res) => {
 })
 ```
 
-**Database Queries**: Use `$1, $2, ...` placeholders, `RETURNING *` for INSERT/UPDATE, `query()` from `../config/database.js`
-
-### Authentication
-
-**Frontend** - `getAuthHeaders()` helper:
-```typescript
-const getAuthHeaders = () => {
-  const authStorage = localStorage.getItem('auth-storage')
-  const headers: Record<string, string> = {}
-  if (authStorage) {
-    try {
-      const { state } = JSON.parse(authStorage)
-      if (state?.token) headers['Authorization'] = `Bearer ${state.token}`
-    } catch {}
-  }
-  return headers
+**Transaction Pattern** (for multi-step operations):
+```javascript
+const client = await getClient()
+try {
+  await client.query('BEGIN')
+  
+  const result = await client.query(`INSERT INTO ... RETURNING *`, [...])
+  await client.query(`INSERT INTO ...`, [...])
+  
+  await client.query('COMMIT')
+  res.status(201).json(result.rows[0])
+} catch (error) {
+  await client.query('ROLLBACK')
+  console.error('Error:', error)
+  res.status(500).json({ error: 'Failed to create' })
+} finally {
+  client.release()
 }
 ```
 
-**Backend**: Use `authenticateToken` middleware for protected routes.
+**Database Queries**:
+- Use `$1, $2, ...` placeholders (parameterized queries)
+- Always use `RETURNING *` for INSERT/UPDATE
+- Import `query` and `getClient` from `../config/database.js`
+
+### Authentication
+
+**Frontend** - Use helpers from `@/lib/authHeaders`:
+```typescript
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
+
+// For GET requests
+const res = await fetch(url, { headers: getAuthHeaders() })
+
+// For POST/PUT/DELETE requests
+const res = await fetch(url, {
+  method: 'POST',
+  headers: getAuthHeadersWithContentType(),
+  body: JSON.stringify(data),
+})
+```
+
+**Backend**: Import and use `authenticateToken` middleware for protected routes:
+```javascript
+import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+
+router.get('/protected', authenticateToken, handler)
+router.get('/admin-only', authenticateToken, authorizeRoles('admin', 'hr'), handler)
+```
 
 ### Error Handling
 
 **Frontend**:
 ```typescript
+import { getErrorMessage } from '@/lib/utils'
+
 try {
   const res = await fetch(url, options)
   if (!res.ok) {
     const data = await res.json()
     throw new Error(data.error || 'Ошибка')
   }
-} catch (error: any) {
-  alert(error.message)
+  // success
+} catch (err: unknown) {
+  setError(getErrorMessage(err))
 }
 ```
 
 **Backend**:
 ```javascript
 try {
-  // Operation
+  // operation
 } catch (error) {
   console.error('Error context:', error)
   res.status(500).json({ error: 'User-friendly message' })
@@ -146,7 +224,14 @@ try {
 
 - **Success**: Return JSON object or array directly
 - **Error**: `{ error: 'Human readable message' }`
-- **Status codes**: 200 (GET/PUT), 201 (POST), 400 (validation), 401 (unauthorized), 403 (forbidden), 404 (not found), 500 (server error)
+- **Status codes**:
+  - 200: GET/PUT success
+  - 201: POST creation
+  - 400: Validation error
+  - 401: Unauthorized (no/invalid token)
+  - 403: Forbidden (insufficient permissions)
+  - 404: Not found
+  - 500: Server error
 
 ### Testing
 
@@ -155,12 +240,19 @@ import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert'
 
 describe('Feature Name', () => {
-  beforeEach(async () => { /* Setup */ })
-  afterEach(async () => { /* Cleanup */ })
+  beforeEach(async () => {
+    // Setup: create test data
+  })
+  
+  afterEach(async () => {
+    // Cleanup: delete test data
+  })
   
   it('should do something', async () => {
     const response = await fetch('http://localhost:5000/api/endpoint')
     assert.strictEqual(response.status, 200)
+    const data = await response.json()
+    assert.ok(data.id)
   })
 })
 ```
@@ -169,16 +261,23 @@ describe('Feature Name', () => {
 
 ```
 /
-├── components/          # React components (modals/, sections/, ui/)
-├── pages/              # Route pages
-├── store/              # Zustand stores
-├── lib/                # Utilities (cn, formatDate, etc.)
-├── types/              # TypeScript types
+├── components/           # React components
+│   ├── modals/          # Modal dialogs
+│   ├── layout/          # Header, Sidebar, Layout
+│   ├── ui/              # Reusable UI primitives (Button, Input, etc.)
+│   ├── forms/           # Form components
+│   └── calendar/        # Calendar components
+├── pages/               # Route pages
+├── store/               # Zustand stores
+├── lib/                 # Utilities (cn, formatDate, authHeaders, etc.)
+├── types/               # TypeScript type definitions
 └── backend/src/
-    ├── routes/         # Express routes
-    ├── middleware/     # Express middleware
-    ├── config/         # Database, S3 config
-    └── db/             # Migrations, seeds
+    ├── routes/          # Express route handlers
+    ├── middleware/      # Express middleware (auth, upload, etc.)
+    ├── services/        # Business logic services
+    ├── config/          # Database, S3 configuration
+    ├── db/              # Migrations, seeds
+    └── tests/           # Test files
 ```
 
 ## Important Notes
@@ -187,6 +286,8 @@ describe('Feature Name', () => {
 2. **Database schema changes**: Add migration to `backend/src/db/migrate.js`
 3. **No comments in code** unless explicitly requested
 4. **Russian language** for UI text and error messages
-5. **Use path aliases**: Import with `@/` prefix, not relative paths for cross-module imports
+5. **Use path aliases**: Import with `@/` prefix for cross-module imports
 6. **Date handling**: Use `formatDate()` from `@/lib/utils` - handles timezone issues with YYYY-MM-DD format
-7. **Environment setup**: Copy `.env.example` to `.env` in backend directory
+7. **Environment setup**: Copy `backend/.env.example` to `backend/.env` and configure values
+8. **Access control**: Check permissions in route handlers before performing operations
+9. **Error messages**: Use Russian language for user-facing error messages

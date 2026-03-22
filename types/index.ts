@@ -64,6 +64,19 @@ export interface Document {
   mimeType?: string
 }
 
+export interface DocumentTemplate {
+  id: number
+  name: string
+  description?: string
+  category: 'hr' | 'legal' | 'finance' | 'general'
+  fileKey: string
+  mimeType: string
+  size: number
+  downloadCount: number
+  createdAt: string
+  url: string
+}
+
 export interface Notification {
   id: string
   userId: string
@@ -72,6 +85,7 @@ export interface Notification {
   type: 'info' | 'success' | 'warning' | 'error'
   read: boolean
   createdAt: string
+  link?: string
 }
 
 export interface AuthState {
@@ -89,3 +103,5 @@ export interface AppState {
 export * from './vacation'
 export * from './project'
 
+
+export * from './survey'

@@ -20,6 +20,12 @@ import { ProjectDetail } from '@/pages/ProjectDetail'
 import { ProjectDocuments } from '@/pages/ProjectDocuments'
 import { ProjectRoadmap } from '@/pages/ProjectRoadmap'
 import { Settings } from '@/pages/Settings'
+import { Departments } from '@/pages/Departments'
+import { DepartmentDetail } from '@/pages/DepartmentDetail'
+import { HRDocumentTemplates } from '@/pages/HRDocumentTemplates'
+import { HRSurveys } from '@/pages/HRSurveys'
+import { Surveys } from '@/pages/Surveys'
+import { SurveyPage } from '@/pages/SurveyPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -38,6 +44,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
+  return <>{children}</>
+}
+
+function HRRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((state) => state.user)
+  const loading = useAuthStore((state) => state.loading)
+  if (loading) return null
+  if (!['hr', 'admin'].includes(user?.role ?? ''))
+    return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -75,7 +90,9 @@ function App() {
           <Route path="leader" element={<LeaderDashboard />} />
           <Route path="manager" element={<ManagerDashboard />} />
           <Route path="vacation" element={<Vacation />} />
-          <Route path="employees" element={<Employees />} />
+<Route path="employees" element={<Employees />} />
+          <Route path="departments" element={<Departments />} />
+          <Route path="departments/:id" element={<DepartmentDetail />} />
           <Route path="profile" element={<Profile />} />
           <Route path="settings" element={<Settings />} />
 
@@ -88,6 +105,10 @@ function App() {
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="projects/:id/documents" element={<ProjectDocuments />} />
           <Route path="projects/:id/roadmap" element={<ProjectRoadmap />} />
+          <Route path="hr/document-templates" element={<HRRoute><HRDocumentTemplates /></HRRoute>} />
+          <Route path="hr/surveys" element={<HRRoute><HRSurveys /></HRRoute>} />
+          <Route path="surveys" element={<ProtectedRoute><Surveys /></ProtectedRoute>} />
+          <Route path="surveys/:id" element={<ProtectedRoute><SurveyPage /></ProtectedRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

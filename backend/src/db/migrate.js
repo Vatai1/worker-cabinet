@@ -867,6 +867,85 @@ async function runMigrations() {
       console.log('  ✓ project_roadmap_tasks columns added')
     } catch (e) {}
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS document_templates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        category TEXT NOT NULL CHECK (category IN ('hr', 'legal', 'finance', 'general')),
+        file_key TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size INT NOT NULL,
+        created_by INT REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        download_count INT DEFAULT 0
+      )
+    `).catch(e => console.log('  - document_templates:', e.message))
+    console.log('  ✓ document_templates')
+
+    // Add link column to notifications
+    await db.query(`
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link TEXT
+    `).catch(e => console.log('  - notifications.link:', e.message))
+    console.log('  ✓ notifications.link column')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS surveys (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        created_by INT REFERENCES users(id),
+        target_type TEXT NOT NULL CHECK (target_type IN ('all', 'department', 'employees')),
+        target_ids JSONB DEFAULT '[]',
+        deadline DATE,
+        anonymous BOOLEAN DEFAULT false,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'closed')),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(e => console.log('  - surveys:', e.message))
+    console.log('  ✓ surveys')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS survey_questions (
+        id SERIAL PRIMARY KEY,
+        survey_id INT REFERENCES surveys(id) ON DELETE CASCADE,
+        order_index INT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('radio', 'checkbox', 'text', 'scale')),
+        text TEXT NOT NULL,
+        options JSONB DEFAULT '[]',
+        scale_min INT DEFAULT 1,
+        scale_max INT DEFAULT 5 CHECK (scale_max > scale_min),
+        required BOOLEAN DEFAULT false
+      )
+    `).catch(e => console.log('  - survey_questions:', e.message))
+    console.log('  ✓ survey_questions')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS survey_responses (
+        id SERIAL PRIMARY KEY,
+        survey_id INT REFERENCES surveys(id) ON DELETE CASCADE,
+        user_id INT REFERENCES users(id),
+        submitted_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(e => console.log('  - survey_responses:', e.message))
+    console.log('  ✓ survey_responses')
+    // Partial unique index — prevents duplicate non-anonymous responses
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS survey_responses_unique_non_anon
+        ON survey_responses (survey_id, user_id) WHERE user_id IS NOT NULL
+    `).catch(e => console.log('  - survey_responses index:', e.message))
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS survey_answers (
+        id SERIAL PRIMARY KEY,
+        response_id INT REFERENCES survey_responses(id) ON DELETE CASCADE,
+        question_id INT REFERENCES survey_questions(id) ON DELETE CASCADE,
+        value TEXT,
+        values JSONB
+      )
+    `).catch(e => console.log('  - survey_answers:', e.message))
+    console.log('  ✓ survey_answers')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     

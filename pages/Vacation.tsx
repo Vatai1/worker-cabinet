@@ -14,6 +14,7 @@ import { RestrictionModal } from '@/components/modals/RestrictionModal'
 import { VacationRequestStatus, VacationType } from '@/types'
 import { vacationApi } from '@/services/vacationApi'
 import { getErrorMessage } from '@/lib/utils'
+import { useUIStore } from '@/store/uiStore'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -49,6 +50,7 @@ export function Vacation() {
   const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<any[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -319,6 +321,7 @@ export function Vacation() {
   }
 
   const handleDownload = async (request: any) => {
+    setDownloadingId(request.id)
     try {
       const blob = await vacationApi.generateStatement(request.id)
       const url = URL.createObjectURL(blob)
@@ -329,8 +332,11 @@ export function Vacation() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
+      useUIStore.getState().fetchNotifications()
     } catch (error: unknown) {
       alert(getErrorMessage(error) || 'Ошибка при генерации заявления')
+    } finally {
+      setDownloadingId(null)
     }
   }
 
@@ -346,6 +352,7 @@ export function Vacation() {
 
   const currentYear = 2026
   const isManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin'
+  const isDepartmentManager = departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -459,7 +466,7 @@ export function Vacation() {
         </div>
       </Card>
 
-      {isManager && departmentRequests.length > 0 && (
+      {isDepartmentManager && departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL).length > 0 && (
         <Card>
           <div className="p-6">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
@@ -676,12 +683,12 @@ export function Vacation() {
                                       e.stopPropagation()
                                       handleDownload(request)
                                     }}
-                                    disabled={loading}
+                                    disabled={downloadingId === request.id}
                                   >
                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                     </svg>
-                                    Скачать заявление
+                                    {downloadingId === request.id ? 'Формирование...' : 'Сформировать заявление'}
                                   </Button>
                                 )}
                                 <Button
@@ -757,8 +764,8 @@ export function Vacation() {
           isOpen={showDetailModal}
           request={detailRequest}
           onClose={handleCloseDetailModal}
-          onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isManager ? handleApprove : undefined}
-          onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isManager ? handleReject : undefined}
+          onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && user?.id === String(detailRequest?.departmentManagerId) ? handleApprove : undefined}
+          onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && user?.id === String(detailRequest?.departmentManagerId) ? handleReject : undefined}
           loading={loading}
           intersectionWarnings={intersectionWarnings}
         />

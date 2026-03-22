@@ -110,6 +110,7 @@ export interface VacationRequest {
   userMiddleName?: string
   userPosition: string
   userDepartment: string
+  departmentManagerId?: string
   
   startDate: string
   endDate: string
