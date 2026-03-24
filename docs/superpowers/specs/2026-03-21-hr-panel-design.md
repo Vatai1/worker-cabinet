@@ -8,8 +8,9 @@ Two new pages accessible only to users with role `hr` or `admin`:
 1. `/hr/surveys` — survey management with a full survey constructor
 2. `/hr/document-templates` — document template management with OnlyOffice editing
 
-Plus one new page accessible to all authenticated users:
-- `/surveys/:id` — public survey response page (access-controlled per survey)
+Plus two new pages accessible to all authenticated users:
+- `/surveys` — employee survey list (shows active surveys targeting the current user)
+- `/surveys/:id` — survey response page (access-controlled per survey)
 
 ---
 
@@ -83,6 +84,24 @@ Survey view endpoint (`GET /api/surveys/:id/view`) checks target audience member
 - Toolbar: search input + «Создать» button
 - Tabs: Активные / Черновики / Закрытые
 - List of survey cards
+
+**Publishing behaviour:**
+When HR clicks «Опубликовать» (either from the builder or from a draft card), the backend:
+1. Sets `surveys.status = 'active'`
+2. Resolves the target user list:
+   - `target_type = 'all'` → all active users
+   - `target_type = 'department'` → all active users where `department_id` is in `target_ids`
+   - `target_type = 'employees'` → users whose `id` is in `target_ids`
+3. Inserts one row into `notifications` per target user via the existing `notificationService`:
+   ```
+   title: "Новый опрос: <survey title>"
+   message: "Вас приглашают пройти опрос."
+   type: "info"
+   link: "/surveys/<id>"    ← new optional field (see Notifications update below)
+   ```
+4. Returns the updated survey object
+
+**Notifications table update:** Add optional `link TEXT` column to the existing `notifications` table (migration). When a notification has a `link`, the `Notifications.tsx` page renders a «Перейти к опросу» button (or similar label based on link target) that navigates to the URL. Notifications without a `link` render as before.
 
 **Survey card shows:**
 - Title, question count, target audience, deadline
@@ -207,7 +226,29 @@ This endpoint: if `body.status === 2` (document saved) → download from `body.u
 
 ---
 
-## Page 3: `/surveys/:id` (all authenticated users)
+## Page 3: `/surveys` — Employee Survey List (all authenticated users)
+
+### File: `pages/Surveys.tsx`
+
+**Layout:**
+- Page title «Опросы»
+- List of active surveys targeting the current user
+- Empty state: «Для вас нет активных опросов» (centered, with an icon)
+
+**Survey card shows:**
+- Title and description
+- Deadline (if set): «До DD.MM.YYYY»
+- Target label: «Для всех» / «Отдел: <name>» / «Выбранные сотрудники»
+- «Пройти опрос» button → navigates to `/surveys/:id`
+- If user already responded: badge «Пройдено» instead of the button
+
+**Data:** `GET /api/surveys/my` — returns active surveys where the current user is in the target audience and the survey `status = 'active'`. Includes a `responded: boolean` flag per survey (checked via `survey_responses` table).
+
+**Sidebar:** Add «Опросы» nav item (icon: `ClipboardList`) to `getEmployeeNavigation` and `getManagerNavigation`, linking to `/surveys`.
+
+---
+
+## Page 4: `/surveys/:id` (all authenticated users)
 
 ### File: `pages/SurveyPage.tsx`
 
@@ -306,8 +347,9 @@ CREATE TABLE document_templates (
 | GET | `/api/surveys/:id` | hr/admin | Get survey with questions |
 | PUT | `/api/surveys/:id` | hr/admin | Update survey |
 | DELETE | `/api/surveys/:id` | hr/admin | Delete survey |
-| POST | `/api/surveys/:id/publish` | hr/admin | Set status → active |
+| POST | `/api/surveys/:id/publish` | hr/admin | Set status → active, send notifications to target |
 | POST | `/api/surveys/:id/close` | hr/admin | Set status → closed |
+| GET | `/api/surveys/my` | any authenticated | List active surveys targeting current user (with responded flag) |
 | GET | `/api/surveys/:id/view` | any authenticated | Get survey for response (checks access) |
 | POST | `/api/surveys/:id/respond` | any authenticated | Submit response |
 | GET | `/api/surveys/:id/analytics` | hr/admin | Get aggregated analytics |
@@ -331,7 +373,8 @@ CREATE TABLE document_templates (
 pages/
   HRSurveys.tsx
   HRDocumentTemplates.tsx
-  SurveyPage.tsx
+  Surveys.tsx          (employee survey list)
+  SurveyPage.tsx       (individual survey response)
 
 components/modals/
   SurveyBuilderModal.tsx
@@ -358,9 +401,10 @@ backend/src/services/
 ```
 
 **Modified files:**
-- `App.tsx` — add HRRoute component + routes for hr/surveys, hr/document-templates, surveys/:id
-- `components/layout/Sidebar.tsx` — add getHRNavigation(), update navigation selector line 83
+- `App.tsx` — add HRRoute component + routes for hr/surveys, hr/document-templates, surveys, surveys/:id
+- `components/layout/Sidebar.tsx` — add getHRNavigation(), add «Опросы» to getEmployeeNavigation and getManagerNavigation, update navigation selector line 83
 - `components/modals/OnlyOfficePreviewModal.tsx` — add optional `editable?: boolean` prop
 - `backend/src/server.js` — register surveysRoutes and templatesRoutes
-- `backend/src/db/migrate.js` — add 4 new tables (surveys, survey_questions, survey_responses, survey_answers, document_templates)
+- `backend/src/db/migrate.js` — add 5 new tables + ALTER TABLE notifications ADD COLUMN link TEXT
+- `pages/Notifications.tsx` — render «Перейти» button when notification has a link
 - `pages/DocumentTemplates.tsx` — replace mock data with real API call to GET /api/templates
