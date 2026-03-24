@@ -33,6 +33,8 @@ async function getProjectWithMembers(projectId) {
        u.first_name,
        u.last_name,
        u.position,
+       u.gender,
+       u.avatar,
        d.name AS department_name
      FROM company_project_members m
      JOIN users u ON m.user_id = u.id
@@ -77,7 +79,9 @@ router.get('/', authenticateToken, async (req, res) => {
               'first_name', u.first_name,
               'last_name',  u.last_name,
               'position',   u.position,
-              'role',       m.role
+              'role',       m.role,
+              'gender',     u.gender,
+              'avatar',     u.avatar
             )
             ORDER BY CASE m.role WHEN 'lead' THEN 0 ELSE 1 END, u.last_name
           ) FILTER (WHERE m.user_id IS NOT NULL),
