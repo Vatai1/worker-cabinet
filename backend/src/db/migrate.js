@@ -968,6 +968,7 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `).catch(e => console.log('  - onboarding_templates:', e.message))
+    console.log('  ✓ onboarding_templates')
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS employee_onboarding (
@@ -978,6 +979,7 @@ async function runMigrations() {
         completed_at TIMESTAMP
       )
     `).catch(e => console.log('  - employee_onboarding:', e.message))
+    console.log('  ✓ employee_onboarding')
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS employee_onboarding_documents (
@@ -988,6 +990,7 @@ async function runMigrations() {
         UNIQUE (onboarding_id, template_id)
       )
     `).catch(e => console.log('  - employee_onboarding_documents:', e.message))
+    console.log('  ✓ employee_onboarding_documents')
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
