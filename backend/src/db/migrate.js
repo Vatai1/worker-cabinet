@@ -111,6 +111,15 @@ async function runMigrations() {
     }
 
     try {
+      await db.query(`ALTER TYPE user_role_enum ADD VALUE IF NOT EXISTS 'onboarding'`)
+      console.log('  ✓ onboarding value added to user_role_enum')
+    } catch (e) {
+      if (!e.message.includes('already exists')) {
+        console.log('  - onboarding enum:', e.message)
+      }
+    }
+
+    try {
       await db.query(`CREATE TYPE user_status_enum AS ENUM (
         'active',
         'inactive',
@@ -945,6 +954,40 @@ async function runMigrations() {
       )
     `).catch(e => console.log('  - survey_answers:', e.message))
     console.log('  ✓ survey_answers')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS onboarding_templates (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        content_text TEXT,
+        file_key VARCHAR(500),
+        CONSTRAINT content_or_file CHECK (content_text IS NOT NULL OR file_key IS NOT NULL),
+        department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
+        position VARCHAR(255),
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `).catch(e => console.log('  - onboarding_templates:', e.message))
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS employee_onboarding (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        started_by INTEGER REFERENCES users(id),
+        started_at TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP
+      )
+    `).catch(e => console.log('  - employee_onboarding:', e.message))
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS employee_onboarding_documents (
+        id SERIAL PRIMARY KEY,
+        onboarding_id INTEGER REFERENCES employee_onboarding(id) ON DELETE CASCADE,
+        template_id INTEGER REFERENCES onboarding_templates(id) ON DELETE RESTRICT,
+        acknowledged_at TIMESTAMP,
+        UNIQUE (onboarding_id, template_id)
+      )
+    `).catch(e => console.log('  - employee_onboarding_documents:', e.message))
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
