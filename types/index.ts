@@ -18,6 +18,7 @@ export interface User {
   subordinates?: string[]
   managerId?: string
   responsibilityArea?: string
+  gender?: 'male' | 'female' | 'other'
 }
 
 export interface Salary {

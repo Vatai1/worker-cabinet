@@ -11,6 +11,8 @@ export interface ProjectMember {
   role: ProjectMemberRole
   joined_at?: string
   description?: string
+  gender?: 'male' | 'female' | 'other'
+  avatar?: string
 }
 
 export interface RoadmapRow {
