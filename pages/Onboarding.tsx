@@ -1,0 +1,217 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/store/authStore'
+import { API_BASE_URL } from '@/lib/api'
+import { getAuthHeaders } from '@/lib/authHeaders'
+import { getErrorMessage, formatDate } from '@/lib/utils'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
+import { CheckCircle2, Circle, FileText, Download, Loader2, BookOpen } from 'lucide-react'
+
+interface OnboardingDocument {
+  id: number
+  templateId: number
+  title: string
+  contentText: string | null
+  fileKey: string | null
+  fileUrl: string | null
+  acknowledgedAt: string | null
+}
+
+interface OnboardingData {
+  id: number
+  userId: number
+  startedAt: string
+  firstName: string
+  lastName: string
+  position: string
+  documents: OnboardingDocument[]
+}
+
+export function Onboarding() {
+  const navigate = useNavigate()
+  const { checkAuth } = useAuthStore()
+  const [onboarding, setOnboarding] = useState<OnboardingData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [selectedDoc, setSelectedDoc] = useState<OnboardingDocument | null>(null)
+  const [confirmDocId, setConfirmDocId] = useState<number | null>(null)
+  const [acknowledging, setAcknowledging] = useState(false)
+  const [ackError, setAckError] = useState<string | null>(null)
+
+  const fetchOnboarding = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/onboarding/me`, { headers: getAuthHeaders() })
+      if (res.status === 404) {
+        await checkAuth()
+        navigate('/dashboard', { replace: true })
+        return
+      }
+      if (!res.ok) throw new Error('Ошибка загрузки')
+      const data = await res.json()
+      setOnboarding(data)
+    } catch {
+      navigate('/dashboard', { replace: true })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchOnboarding() }, [])
+
+  const handleAcknowledge = async () => {
+    if (!confirmDocId) return
+    setAcknowledging(true)
+    setAckError(null)
+    try {
+      const res = await fetch(`${API_BASE_URL}/onboarding/me/documents/${confirmDocId}/acknowledge`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Ошибка')
+      }
+      await checkAuth()
+      const updatedUser = useAuthStore.getState().user
+      if (updatedUser?.role === 'employee') {
+        navigate('/dashboard', { replace: true })
+        return
+      }
+      setSelectedDoc(null)
+      setConfirmDocId(null)
+      await fetchOnboarding()
+    } catch (err: unknown) {
+      setAckError(getErrorMessage(err))
+    } finally {
+      setAcknowledging(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!onboarding) return null
+
+  const total = onboarding.documents.length
+  const acknowledged = onboarding.documents.filter(d => d.acknowledgedAt).length
+  const percent = total > 0 ? Math.round((acknowledged / total) * 100) : 0
+
+  return (
+    <div className="space-y-6 max-w-3xl mx-auto">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Онбординг</h1>
+        <p className="text-muted-foreground">Добро пожаловать, {onboarding.firstName} {onboarding.lastName}!</p>
+      </div>
+
+      {/* Progress block */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Прогресс</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span>Ознакомлено документов: <strong>{acknowledged} из {total}</strong></span>
+            <span className="font-semibold text-primary">{percent}%</span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Document list */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold">Документы</h2>
+        {onboarding.documents.map((doc) => (
+          <Card key={doc.id} className="border border-border/50">
+            <CardContent className="flex items-center gap-4 py-4">
+              <div className="shrink-0">
+                {doc.acknowledgedAt
+                  ? <CheckCircle2 className="h-6 w-6 text-green-500" />
+                  : <Circle className="h-6 w-6 text-muted-foreground" />
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{doc.title}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  {doc.contentText && <Badge variant="secondary" className="text-xs">Текст</Badge>}
+                  {doc.fileKey && <Badge variant="secondary" className="text-xs"><FileText className="h-3 w-3 mr-1" />Файл</Badge>}
+                  {doc.acknowledgedAt && (
+                    <span className="text-xs text-muted-foreground">Ознакомлен {formatDate(doc.acknowledgedAt)}</span>
+                  )}
+                </div>
+              </div>
+              {!doc.acknowledgedAt && (
+                <Button size="sm" variant="outline" onClick={() => setSelectedDoc(doc)}>
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Открыть
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Document modal */}
+      {selectedDoc && !confirmDocId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-border/50">
+              <h3 className="text-lg font-semibold">{selectedDoc.title}</h3>
+              <button onClick={() => setSelectedDoc(null)} className="text-muted-foreground hover:text-foreground transition-colors">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {selectedDoc.contentText && (
+                <div className="text-sm whitespace-pre-wrap leading-relaxed">{selectedDoc.contentText}</div>
+              )}
+              {selectedDoc.fileUrl && (
+                <a
+                  href={selectedDoc.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 mt-4 text-primary hover:underline"
+                >
+                  <Download className="h-4 w-4" />
+                  Скачать файл
+                </a>
+              )}
+            </div>
+            <div className="p-6 border-t border-border/50 flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setSelectedDoc(null)}>Закрыть</Button>
+              <Button onClick={() => setConfirmDocId(selectedDoc.id)}>Ознакомлен</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm modal */}
+      {confirmDocId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <h3 className="text-lg font-semibold">Подтверждение</h3>
+            <p className="text-muted-foreground">Вы подтверждаете ознакомление с документом?</p>
+            {ackError && <p className="text-sm text-destructive">{ackError}</p>}
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => { setConfirmDocId(null); setAckError(null) }} disabled={acknowledging}>
+                Отмена
+              </Button>
+              <Button onClick={handleAcknowledge} disabled={acknowledging}>
+                {acknowledging ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Подтвердить
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
