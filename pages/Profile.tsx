@@ -1,18 +1,57 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
-import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
-import { formatDate } from '@/lib/utils'
-import { Mail, Phone, Calendar, MapPin, Briefcase, Building2, Edit2, Save, X } from 'lucide-react'
+import { formatDate, getErrorMessage } from '@/lib/utils'
+import { Mail, Phone, Calendar, MapPin, Briefcase, Building2, Edit2, Save, X, Camera, Loader2 } from 'lucide-react'
+import { generateAvatarUrl } from '@/lib/avatar'
+import { getAuthHeaders } from '@/lib/authHeaders'
+import { API_BASE_URL } from '@/lib/api'
 
 export function Profile() {
   const { user, updateUser } = useAuthStore()
   const [isEditing, setIsEditing] = useState(false)
   const [editedUser, setEditedUser] = useState(user)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarError, setAvatarError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('Файл слишком большой (максимум 5 МБ)')
+      return
+    }
+
+    setAvatarError(null)
+    setAvatarUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('avatar', file)
+      const res = await fetch(`${API_BASE_URL}/users/me/avatar`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData,
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Ошибка загрузки')
+      }
+      const data = await res.json()
+      updateUser({ avatar: data.avatar })
+    } catch (err: unknown) {
+      setAvatarError(getErrorMessage(err))
+    } finally {
+      setAvatarUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   const handleSave = () => {
     if (editedUser) {
@@ -78,11 +117,39 @@ export function Profile() {
         {/* Profile card */}
         <Card className="md:col-span-1">
           <CardHeader className="text-center">
-            <Avatar className="mx-auto h-24 w-24">
-              <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-                {getUserInitials()}
-              </AvatarFallback>
-            </Avatar>
+            <div className="relative mx-auto w-24 h-24">
+              <Avatar className="h-24 w-24">
+                <AvatarImage
+                  src={user.avatar || generateAvatarUrl(user.id, user.gender)}
+                  alt={`${user.firstName} ${user.lastName}`}
+                />
+                <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
+                  {getUserInitials()}
+                </AvatarFallback>
+              </Avatar>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarUploading}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+                aria-label="Изменить фото"
+              >
+                {avatarUploading
+                  ? <Loader2 className="h-6 w-6 text-white animate-spin" />
+                  : <Camera className="h-6 w-6 text-white" />
+                }
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+            </div>
+            {avatarError && (
+              <p className="text-xs text-destructive text-center mt-1">{avatarError}</p>
+            )}
             <CardTitle className="mt-4">
               {user.lastName} {user.firstName}
             </CardTitle>
