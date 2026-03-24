@@ -112,7 +112,7 @@ function App() {
           <Route path="leader" element={<BlockOnboardingRoute><LeaderDashboard /></BlockOnboardingRoute>} />
           <Route path="manager" element={<BlockOnboardingRoute><ManagerDashboard /></BlockOnboardingRoute>} />
           <Route path="vacation" element={<BlockOnboardingRoute><Vacation /></BlockOnboardingRoute>} />
-<Route path="employees" element={<Employees />} />
+          <Route path="employees" element={<Employees />} />
           <Route path="departments" element={<Departments />} />
           <Route path="departments/:id" element={<DepartmentDetail />} />
           <Route path="profile" element={<Profile />} />
