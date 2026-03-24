@@ -12,6 +12,7 @@ import userDocumentsRoutes from './routes/userDocuments.js'
 import departmentsRoutes from './routes/departments.js'
 import templatesRoutes from './routes/templates.js'
 import surveysRoutes from './routes/surveys.js'
+import onboardingRoutes from './routes/onboarding.js'
 import { errorHandler } from './middleware/errors.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 
@@ -63,6 +64,7 @@ app.use('/api/user-documents', userDocumentsRoutes)
 app.use('/api/departments', departmentsRoutes)
 app.use('/api/templates', templatesRoutes)
 app.use('/api/surveys', surveysRoutes)
+app.use('/api/onboarding', onboardingRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
