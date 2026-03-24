@@ -76,6 +76,8 @@ export function HROnboarding() {
   const [deleteTemplateTarget, setDeleteTemplateTarget] = useState<OnboardingTemplate | null>(null)
 
   const [departments, setDepartments] = useState<Department[]>([])
+  const [templateFilterDept, setTemplateFilterDept] = useState('')
+  const [templateFilterPos, setTemplateFilterPos] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -111,10 +113,14 @@ export function HROnboarding() {
     }
   }
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = async (deptId?: string, pos?: string) => {
     setTemplatesLoading(true)
+    const params = new URLSearchParams()
+    if (deptId) params.set('department_id', deptId)
+    if (pos) params.set('position', pos)
+    const query = params.toString() ? `?${params.toString()}` : ''
     try {
-      const res = await fetch(`${API_BASE_URL}/onboarding/templates`, { headers: getAuthHeaders() })
+      const res = await fetch(`${API_BASE_URL}/onboarding/templates${query}`, { headers: getAuthHeaders() })
       const data = await res.json()
       setTemplates(data.map((t: any) => ({
         id: t.id,
@@ -192,8 +198,14 @@ export function HROnboarding() {
   const handleTabChange = (newTab: 'employees' | 'templates') => {
     setTab(newTab)
     if (newTab === 'templates' && templates.length === 0) {
-      fetchTemplates()
+      fetchTemplates(templateFilterDept, templateFilterPos)
     }
+  }
+
+  const handleTemplateFilter = (deptId: string, pos: string) => {
+    setTemplateFilterDept(deptId)
+    setTemplateFilterPos(pos)
+    fetchTemplates(deptId, pos)
   }
 
   const handleDeleteTemplate = async () => {
@@ -206,7 +218,7 @@ export function HROnboarding() {
       })
       if (!res.ok) throw new Error((await res.json()).error)
       setDeleteTemplateTarget(null)
-      await fetchTemplates()
+      await fetchTemplates(templateFilterDept, templateFilterPos)
     } catch (err: unknown) {
       setActionError(getErrorMessage(err))
     }
@@ -298,7 +310,23 @@ export function HROnboarding() {
       )}
 
       {tab === 'templates' && (
-        <div>
+        <div className="space-y-4">
+          <div className="flex gap-3 flex-wrap">
+            <select
+              value={templateFilterDept}
+              onChange={e => handleTemplateFilter(e.target.value, templateFilterPos)}
+              className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Все отделы</option>
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <Input
+              placeholder="Должность..."
+              value={templateFilterPos}
+              onChange={e => handleTemplateFilter(templateFilterDept, e.target.value)}
+              className="h-9 w-48"
+            />
+          </div>
           {templatesLoading ? (
             <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
           ) : templates.length === 0 ? (
@@ -332,6 +360,7 @@ export function HROnboarding() {
           )}
         </div>
       )}
+
 
       {(detail !== null || detailLoading) && (
         <OnboardingDetailModal
@@ -370,7 +399,7 @@ export function HROnboarding() {
           template={editTemplate}
           departments={departments}
           onClose={() => { setShowTemplateModal(false); setEditTemplate(null) }}
-          onSuccess={() => { setShowTemplateModal(false); setEditTemplate(null); fetchTemplates() }}
+          onSuccess={() => { setShowTemplateModal(false); setEditTemplate(null); fetchTemplates(templateFilterDept, templateFilterPos) }}
         />
       )}
 
