@@ -74,8 +74,9 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Уведомления', href: '/notifications', icon: Bell },
 ]
 
-const getHRNavigation = (_userId?: string): NavItem[] => [
+const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Опросы (HR)', href: '/hr/surveys', icon: ClipboardList },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
   { name: 'Сотрудники', href: '/employees', icon: Users },
