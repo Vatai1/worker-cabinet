@@ -86,6 +86,8 @@ router.get('/', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), asy
         u.status,
         u.role,
         u.manager_id,
+        u.gender,
+        u.avatar,
         m.first_name || ' ' || m.last_name as manager_name
       FROM users u
       LEFT JOIN departments d ON u.department_id = d.id
@@ -138,6 +140,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.role,
         u.manager_id,
         u.responsibility_area,
+        u.gender,
+        u.avatar,
         m.first_name || ' ' || m.last_name as manager_name,
         vb.total_days,
         vb.used_days,
