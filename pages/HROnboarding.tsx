@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { API_BASE_URL } from '@/lib/api'
-import { getAuthHeaders } from '@/lib/authHeaders'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage, formatDate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -87,12 +87,14 @@ export function HROnboarding() {
 
   useEffect(() => {
     if (urlId) openDetail(parseInt(urlId))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlId])
 
   const fetchRecords = async () => {
     setRecordsLoading(true)
     try {
       const res = await fetch(`${API_BASE_URL}/onboarding`, { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка загрузки')
       const data = await res.json()
       setRecords(data.map((r: any) => ({
         id: r.id,
@@ -121,6 +123,7 @@ export function HROnboarding() {
     const query = params.toString() ? `?${params.toString()}` : ''
     try {
       const res = await fetch(`${API_BASE_URL}/onboarding/templates${query}`, { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка загрузки')
       const data = await res.json()
       setTemplates(data.map((t: any) => ({
         id: t.id,
@@ -142,6 +145,7 @@ export function HROnboarding() {
   const fetchDepartments = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка загрузки')
       const data = await res.json()
       setDepartments(data)
     } catch {
@@ -153,6 +157,7 @@ export function HROnboarding() {
     setDetailLoading(true)
     try {
       const res = await fetch(`${API_BASE_URL}/onboarding/${id}`, { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка загрузки')
       const data = await res.json()
       setDetail({
         id: data.id,
@@ -505,6 +510,7 @@ function AddOnboardingModal({ departments, templates, onTemplatesNeeded, onClose
 
   useEffect(() => {
     if (templates.length === 0) onTemplatesNeeded()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -532,7 +538,7 @@ function AddOnboardingModal({ departments, templates, onTemplatesNeeded, onClose
     try {
       const res = await fetch(`${API_BASE_URL}/onboarding`, {
         method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({
           ...form,
           department_id: form.department_id || null,
