@@ -207,28 +207,32 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, async (req, res)
 
     const { id } = req.params
 
-    const docResult = await query(
-      `SELECT eod.*, eo.user_id, eo.id as onboarding_id
-       FROM employee_onboarding_documents eod
-       JOIN employee_onboarding eo ON eod.onboarding_id = eo.id
-       WHERE eod.id = $1`,
-      [id]
-    )
-    if (docResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Документ не найден' })
-    }
-    const doc = docResult.rows[0]
-
-    if (doc.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Forbidden' })
-    }
-    if (doc.acknowledged_at) {
-      return res.status(400).json({ error: 'Уже подтверждено' })
-    }
-
     const client = await getClient()
     try {
       await client.query('BEGIN')
+
+      const docResult = await client.query(
+        `SELECT eod.*, eo.user_id, eo.id as onboarding_id
+         FROM employee_onboarding_documents eod
+         JOIN employee_onboarding eo ON eod.onboarding_id = eo.id
+         WHERE eod.id = $1
+         FOR UPDATE`,
+        [id]
+      )
+      if (docResult.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return res.status(404).json({ error: 'Документ не найден' })
+      }
+      const doc = docResult.rows[0]
+
+      if (doc.user_id !== req.user.id) {
+        await client.query('ROLLBACK')
+        return res.status(403).json({ error: 'Forbidden' })
+      }
+      if (doc.acknowledged_at) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'Уже подтверждено' })
+      }
 
       await client.query(
         'UPDATE employee_onboarding_documents SET acknowledged_at = NOW() WHERE id = $1',
