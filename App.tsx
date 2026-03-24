@@ -26,6 +26,8 @@ import { HRDocumentTemplates } from '@/pages/HRDocumentTemplates'
 import { HRSurveys } from '@/pages/HRSurveys'
 import { Surveys } from '@/pages/Surveys'
 import { SurveyPage } from '@/pages/SurveyPage'
+import { Onboarding } from '@/pages/Onboarding'
+import { HROnboarding } from '@/pages/HROnboarding'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -56,6 +58,22 @@ function HRRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function OnboardingRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((state) => state.user)
+  const loading = useAuthStore((state) => state.loading)
+  if (loading) return null
+  if (user?.role !== 'onboarding') return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
+function BlockOnboardingRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((state) => state.user)
+  const loading = useAuthStore((state) => state.loading)
+  if (loading) return null
+  if (user?.role === 'onboarding') return <Navigate to="/onboarding" replace />
+  return <>{children}</>
+}
+
 function App() {
   const user = useAuthStore((state) => state.user)
   const checkAuth = useAuthStore((state) => state.checkAuth)
@@ -81,34 +99,41 @@ function App() {
             index
             element={
               <Navigate
-                to={user?.role === 'manager' ? '/leader' : '/dashboard'}
+                to={
+                  user?.role === 'manager' ? '/leader' :
+                  user?.role === 'onboarding' ? '/onboarding' :
+                  '/dashboard'
+                }
                 replace
               />
             }
           />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="leader" element={<LeaderDashboard />} />
-          <Route path="manager" element={<ManagerDashboard />} />
-          <Route path="vacation" element={<Vacation />} />
+          <Route path="dashboard" element={<BlockOnboardingRoute><Dashboard /></BlockOnboardingRoute>} />
+          <Route path="leader" element={<BlockOnboardingRoute><LeaderDashboard /></BlockOnboardingRoute>} />
+          <Route path="manager" element={<BlockOnboardingRoute><ManagerDashboard /></BlockOnboardingRoute>} />
+          <Route path="vacation" element={<BlockOnboardingRoute><Vacation /></BlockOnboardingRoute>} />
 <Route path="employees" element={<Employees />} />
           <Route path="departments" element={<Departments />} />
           <Route path="departments/:id" element={<DepartmentDetail />} />
           <Route path="profile" element={<Profile />} />
           <Route path="settings" element={<Settings />} />
 
-          <Route path="requests" element={<Requests />} />
-          <Route path="documents" element={<Documents />} />
-          <Route path="document-templates" element={<DocumentTemplates />} />
-          <Route path="notifications" element={<Notifications />} />
+          <Route path="requests" element={<BlockOnboardingRoute><Requests /></BlockOnboardingRoute>} />
+          <Route path="documents" element={<BlockOnboardingRoute><Documents /></BlockOnboardingRoute>} />
+          <Route path="document-templates" element={<BlockOnboardingRoute><DocumentTemplates /></BlockOnboardingRoute>} />
+          <Route path="notifications" element={<BlockOnboardingRoute><Notifications /></BlockOnboardingRoute>} />
           <Route path="employees/:id" element={<EmployeeProfile />} />
-          <Route path="projects" element={<Projects />} />
-          <Route path="projects/:id" element={<ProjectDetail />} />
-          <Route path="projects/:id/documents" element={<ProjectDocuments />} />
-          <Route path="projects/:id/roadmap" element={<ProjectRoadmap />} />
+          <Route path="projects" element={<BlockOnboardingRoute><Projects /></BlockOnboardingRoute>} />
+          <Route path="projects/:id" element={<BlockOnboardingRoute><ProjectDetail /></BlockOnboardingRoute>} />
+          <Route path="projects/:id/documents" element={<BlockOnboardingRoute><ProjectDocuments /></BlockOnboardingRoute>} />
+          <Route path="projects/:id/roadmap" element={<BlockOnboardingRoute><ProjectRoadmap /></BlockOnboardingRoute>} />
           <Route path="hr/document-templates" element={<HRRoute><HRDocumentTemplates /></HRRoute>} />
           <Route path="hr/surveys" element={<HRRoute><HRSurveys /></HRRoute>} />
           <Route path="surveys" element={<ProtectedRoute><Surveys /></ProtectedRoute>} />
           <Route path="surveys/:id" element={<ProtectedRoute><SurveyPage /></ProtectedRoute>} />
+          <Route path="onboarding" element={<OnboardingRoute><Onboarding /></OnboardingRoute>} />
+          <Route path="hr/onboarding" element={<HRRoute><HROnboarding /></HRRoute>} />
+          <Route path="hr/onboarding/:id" element={<HRRoute><HROnboarding /></HRRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
