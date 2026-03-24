@@ -1,6 +1,8 @@
 import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { uploadAvatar } from '../middleware/upload.js'
+import { uploadToS3, getS3FileUrl } from '../config/s3.js'
 
 const router = express.Router()
 
@@ -109,6 +111,29 @@ router.get('/', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), asy
   } catch (error) {
     console.error('Error fetching users:', error)
     res.status(500).json({ error: 'Failed to fetch users' })
+  }
+})
+
+// Upload current user avatar
+router.post('/me/avatar', authenticateToken, uploadAvatar.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Файл не загружен' })
+    }
+
+    const userId = req.user.id
+    const ext = req.file.mimetype.split('/')[1].replace('jpeg', 'jpg')
+    const key = `avatars/${userId}/${Date.now()}.${ext}`
+
+    await uploadToS3(req.file, key)
+    const avatarUrl = getS3FileUrl(key)
+
+    await query('UPDATE users SET avatar = $1 WHERE id = $2', [avatarUrl, userId])
+
+    res.json({ avatar: avatarUrl })
+  } catch (error) {
+    console.error('Error uploading avatar:', error)
+    res.status(500).json({ error: 'Не удалось загрузить фото' })
   }
 })
 
