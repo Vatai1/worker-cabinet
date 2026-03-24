@@ -59,7 +59,13 @@ router.post('/templates', authenticateToken, authorizeRoles('hr', 'admin'), uplo
       const ext = req.file.originalname.split('.').pop()
       file_key = `onboarding-templates/${id}/${Date.now()}.${ext}`
       await uploadToS3(req.file, file_key)
-      await query('UPDATE onboarding_templates SET file_key = $1 WHERE id = $2', [file_key, id])
+      try {
+        await query('UPDATE onboarding_templates SET file_key = $1 WHERE id = $2', [file_key, id])
+      } catch (updateErr) {
+        await deleteFromS3(file_key).catch(() => {})
+        await query('DELETE FROM onboarding_templates WHERE id = $1', [id]).catch(() => {})
+        throw updateErr
+      }
     }
 
     const result = await query(
@@ -86,12 +92,13 @@ router.put('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), u
 
     let file_key = template.file_key
     if (req.file) {
-      if (template.file_key) {
-        await deleteFromS3(template.file_key)
-      }
       const ext = req.file.originalname.split('.').pop()
-      file_key = `onboarding-templates/${id}/${Date.now()}.${ext}`
-      await uploadToS3(req.file, file_key)
+      const new_file_key = `onboarding-templates/${id}/${Date.now()}.${ext}`
+      await uploadToS3(req.file, new_file_key)
+      if (template.file_key) {
+        await deleteFromS3(template.file_key).catch(() => {})
+      }
+      file_key = new_file_key
     }
 
     await query(
@@ -141,6 +148,9 @@ router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin')
     res.json({ success: true })
   } catch (error) {
     console.error('DELETE /onboarding/templates/:id error:', error)
+    if (error.code === '23503') {
+      return res.status(400).json({ error: 'Шаблон используется в онбординге' })
+    }
     res.status(500).json({ error: 'Ошибка удаления шаблона' })
   }
 })
@@ -148,12 +158,8 @@ router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin')
 // ─── EMPLOYEE ENDPOINTS ────────────────────────────────────────────────────────
 
 // GET /me — MUST precede /:id
-router.get('/me', authenticateToken, async (req, res) => {
+router.get('/me', authenticateToken, authorizeRoles('onboarding'), async (req, res) => {
   try {
-    if (req.user.role !== 'onboarding') {
-      return res.status(403).json({ error: 'Forbidden' })
-    }
-
     const onboarding = await query(
       `SELECT eo.*, u.first_name, u.last_name, u.position
        FROM employee_onboarding eo
@@ -199,12 +205,8 @@ router.get('/me', authenticateToken, async (req, res) => {
   }
 })
 
-router.post('/me/documents/:id/acknowledge', authenticateToken, async (req, res) => {
+router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('onboarding'), async (req, res) => {
   try {
-    if (req.user.role !== 'onboarding') {
-      return res.status(403).json({ error: 'Forbidden' })
-    }
-
     const { id } = req.params
 
     const client = await getClient()
@@ -376,8 +378,8 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
     }
   } catch (error) {
     console.error('POST /onboarding error:', error)
-    if (error.message?.includes('Email уже зарегистрирован')) {
-      return res.status(400).json({ error: error.message })
+    if (error.message?.includes('Email уже зарегистрирован') || error.code === '23505') {
+      return res.status(400).json({ error: 'Email уже зарегистрирован' })
     }
     res.status(500).json({ error: 'Ошибка создания онбординга' })
   }
@@ -413,7 +415,15 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
 
     const ob = result.rows[0]
     res.json({
-      ...ob,
+      id: ob.id,
+      userId: ob.user_id,
+      startedAt: ob.started_at,
+      completedAt: ob.completed_at,
+      firstName: ob.first_name,
+      lastName: ob.last_name,
+      email: ob.email,
+      position: ob.position,
+      department: ob.department,
       documents: docs.rows.map(d => ({
         id: d.id,
         templateId: d.template_id,
