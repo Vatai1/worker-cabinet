@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
+import { generateAvatarUrl } from '@/lib/avatar'
 import { formatDate, getErrorMessage } from '@/lib/utils'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { AddSkillModal } from '@/components/modals/AddSkillModal'
@@ -36,6 +37,8 @@ interface EmployeeData {
   projects?: Project[]
   responsibilityArea?: string
   responsibility_area?: string
+  gender?: 'male' | 'female' | 'other'
+  avatar?: string
 }
 
 interface Project {
@@ -290,6 +293,10 @@ export function EmployeeProfile() {
         />
         <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-5">
           <Avatar className="h-20 w-20 ring-4 ring-white/30 shrink-0">
+            <AvatarImage
+              src={employee.avatar || generateAvatarUrl(employee.id, employee.gender)}
+              alt={initials}
+            />
             <AvatarFallback className={`bg-gradient-to-br ${avatarColor} text-white text-2xl font-bold`}>
               {initials}
             </AvatarFallback>

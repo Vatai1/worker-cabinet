@@ -4,7 +4,8 @@ import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { Bell } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
+import { generateAvatarUrl } from '@/lib/avatar'
 
 export function Header() {
   const { user } = useAuthStore()
@@ -43,6 +44,12 @@ export function Header() {
             <p className="text-xs text-muted-foreground">{user?.position}</p>
           </div>
           <Avatar className="h-10 w-10 ring-2 ring-primary/20 hover:ring-primary/40 transition-all cursor-pointer">
+            {user && (
+              <AvatarImage
+                src={user.avatar || generateAvatarUrl(user.id, user.gender)}
+                alt={`${user.firstName} ${user.lastName}`}
+              />
+            )}
             <AvatarFallback className="gradient-primary text-white text-sm font-semibold">
               {getUserInitials()}
             </AvatarFallback>

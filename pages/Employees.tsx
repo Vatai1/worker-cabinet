@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
-import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
+import { generateAvatarUrl } from '@/lib/avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
@@ -21,6 +22,8 @@ interface Employee {
   email: string
   status: 'active' | 'inactive' | 'on_leave'
   role: string
+  gender?: 'male' | 'female' | 'other'
+  avatar?: string
 }
 
 const statusConfig: Record<string, { label: string; variant: 'success' | 'destructive' | 'warning'; dot: string }> = {
@@ -118,6 +121,10 @@ export function Employees() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <Avatar className="h-12 w-12 shrink-0 ring-2 ring-primary/10">
+                      <AvatarImage
+                        src={employee.avatar || generateAvatarUrl(employee.id, employee.gender)}
+                        alt={`${employee.first_name} ${employee.last_name}`}
+                      />
                       <AvatarFallback className={`bg-gradient-to-br ${color} text-white text-sm font-bold`}>
                         {employee.first_name?.[0]}{employee.last_name?.[0]}
                       </AvatarFallback>

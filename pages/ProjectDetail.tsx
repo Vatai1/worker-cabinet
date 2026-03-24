@@ -3,7 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
+import { generateAvatarUrl } from '@/lib/avatar'
 import { Badge } from '@/components/ui/Badge'
 import {
   ArrowLeft, Loader2, FolderKanban, Calendar, Users, Crown,
@@ -76,6 +77,10 @@ function MemberCard({ member, canRemove, onRemove, onContextMenu, isRemoving }: 
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <Avatar className="h-9 w-9 shrink-0">
+          <AvatarImage
+            src={member.avatar || generateAvatarUrl(member.id, member.gender)}
+            alt={`${member.first_name} ${member.last_name}`}
+          />
           <AvatarFallback className={`bg-gradient-to-br ${color} text-white text-xs font-bold`}>
             {member.first_name?.[0]}{member.last_name?.[0]}
           </AvatarFallback>

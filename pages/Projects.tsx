@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
+import { generateAvatarUrl } from '@/lib/avatar'
 import { Input } from '@/components/ui/Input'
 import {
   FolderKanban, Plus, Search, Loader2, ChevronDown, ChevronUp,
@@ -187,6 +188,10 @@ function MemberRow({ member }: { member: ProjectMemberType }) {
   return (
     <div className="flex items-center gap-2">
       <Avatar className="h-7 w-7 shrink-0">
+        <AvatarImage
+          src={member.avatar || generateAvatarUrl(member.id, member.gender)}
+          alt={`${member.first_name} ${member.last_name}`}
+        />
         <AvatarFallback className={`bg-gradient-to-br ${color} text-white text-xs font-semibold`}>
           {member.first_name?.[0]}{member.last_name?.[0]}
         </AvatarFallback>
