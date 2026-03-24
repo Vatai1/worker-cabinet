@@ -34,6 +34,12 @@ interface NavItem {
   children?: { name: string; href: string }[]
 }
 
+const getOnboardingNavigation = (): NavItem[] => [
+  { name: 'Онбординг', href: '/onboarding', icon: ClipboardList },
+  { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Отделы', href: '/departments', icon: Building2 },
+]
+
 const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
@@ -76,6 +82,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
 
 const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Онбординг', href: '/hr/onboarding', icon: ClipboardList },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Опросы (HR)', href: '/hr/surveys', icon: ClipboardList },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
@@ -104,6 +111,7 @@ export function Sidebar() {
   const userUnreadCount = notifications.filter((n) => n.userId === user?.id && !n.read).length
 
   const navigation =
+    user?.role === 'onboarding' ? getOnboardingNavigation() :
     user?.role === 'manager' ? getManagerNavigation(user?.id) :
     ['hr', 'admin'].includes(user?.role ?? '') ? getHRNavigation(user?.id) :
     getEmployeeNavigation(user?.id)
