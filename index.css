@@ -33,28 +33,28 @@
   }
 
   .dark {
-    --background: 222 47% 4%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 6%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 6%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 262 83% 58%;
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --card: 222 55% 7%;
+    --card-foreground: 213 31% 91%;
+    --popover: 222 55% 9%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 262 80% 68%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 262 83% 58%;
+    --secondary: 222 47% 12%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 222 47% 12%;
+    --muted-foreground: 215 16% 57%;
+    --accent: 262 80% 68%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 65%;
     --destructive-foreground: 0 0% 100%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 262 83% 58%;
-    --success: 142 76% 36%;
+    --border: 222 35% 40%;
+    --input: 222 47% 10%;
+    --ring: 262 80% 68%;
+    --success: 142 70% 45%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
+    --warning: 38 92% 55%;
     --warning-foreground: 0 0% 100%;
   }
 }
@@ -68,9 +68,23 @@
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
   ::selection {
     @apply bg-primary/20 text-foreground;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
   }
 }
 
@@ -88,7 +102,7 @@
   }
 
   .dark .gradient-card {
-    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(220 20% 12%) 100%);
+    background: linear-gradient(135deg, hsl(222 55% 7%) 0%, hsl(222 47% 11%) 100%);
   }
 
   .gradient-bg {
@@ -96,7 +110,7 @@
   }
 
   .dark .gradient-bg {
-    background: linear-gradient(135deg, hsl(222 47% 4%) 0%, hsl(262 47% 8%) 50%, hsl(222 47% 4%) 100%);
+    background: linear-gradient(135deg, hsl(224 71% 4%) 0%, hsl(262 47% 7%) 50%, hsl(224 71% 4%) 100%);
   }
 
   .animate-in {
@@ -135,16 +149,24 @@
   }
 
   .dark .glass {
-    background: rgba(30, 30, 40, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(10, 14, 30, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.07);
   }
 
   .shadow-glow {
     box-shadow: 0 0 20px rgba(162, 89, 255, 0.15);
   }
 
+  .dark .shadow-glow {
+    box-shadow: 0 0 25px rgba(162, 89, 255, 0.3);
+  }
+
   .shadow-glow-lg {
     box-shadow: 0 0 40px rgba(162, 89, 255, 0.2);
+  }
+
+  .dark .shadow-glow-lg {
+    box-shadow: 0 0 50px rgba(162, 89, 255, 0.35);
   }
 
   .pdf-document {
