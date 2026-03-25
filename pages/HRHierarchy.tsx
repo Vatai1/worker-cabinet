@@ -33,7 +33,7 @@ import {
 import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { API_BASE_URL } from '@/lib/api'
-import { getAuthHeaders } from '@/lib/authHeaders'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
 import { useUIStore } from '@/store/uiStore'
 
@@ -289,7 +289,6 @@ const edgeTypes: EdgeTypes = {
   editable: EditableEdge,
 }
 
-const STORAGE_KEY = 'hr-hierarchy-v1'
 const EDGE_STYLE = { stroke: '#6b7280', strokeWidth: 2 }
 const EDGE_MARKER = { type: MarkerType.ArrowClosed, color: '#6b7280' }
 
@@ -549,6 +548,9 @@ export function HRHierarchy() {
   const { darkMode } = useUIStore()
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)
+  const [hierarchyLoading, setHierarchyLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [savedLabel, setSavedLabel] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
@@ -557,8 +559,8 @@ export function HRHierarchy() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
-  const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null)
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null)
+  const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
 
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([])
   const isRestoringRef = useRef(false)
@@ -601,14 +603,27 @@ export function HRHierarchy() {
   }, [onEdgesChange, saveSnapshot])
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
+    const loadHierarchy = async () => {
       try {
-        const { nodes: n, edges: e } = JSON.parse(saved)
-        if (n) setNodes(n)
-        if (e) setEdges((e as Edge[]).map(ed => ({ ...ed, type: 'editable' })))
-      } catch { /* ignore */ }
+        const res = await fetch(`${API_BASE_URL}/hierarchy`, { headers: getAuthHeaders() })
+        if (!res.ok) throw new Error('Не удалось загрузить иерархию')
+        const { data } = await res.json()
+        if (data.nodes) setNodes(data.nodes)
+        if (data.edges) setEdges((data.edges as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })))
+        if (data.viewport) {
+          if (rfInstanceRef.current) {
+            rfInstanceRef.current.setViewport(data.viewport)
+          } else {
+            pendingViewportRef.current = data.viewport
+          }
+        }
+      } catch (err) {
+        setError(getErrorMessage(err))
+      } finally {
+        setHierarchyLoading(false)
+      }
     }
+    loadHierarchy()
   }, [setNodes, setEdges])
 
   useEffect(() => {
@@ -666,8 +681,11 @@ export function HRHierarchy() {
   }, [])
 
   const handleInit = useCallback((inst: ReactFlowInstance) => {
-    setRfInstance(inst)
     rfInstanceRef.current = inst
+    if (pendingViewportRef.current) {
+      inst.setViewport(pendingViewportRef.current)
+      pendingViewportRef.current = null
+    }
   }, [])
 
   const handleSelectDepartment = (dept: Department, description: string) => {
@@ -795,8 +813,29 @@ export function HRHierarchy() {
     return () => document.removeEventListener('click', close)
   }, [contextMenu, edgeContextMenu])
 
-  const save = () => rfInstance && localStorage.setItem(STORAGE_KEY, JSON.stringify(rfInstance.toObject()))
-  const clear = () => { setNodes([]); setEdges([]); localStorage.removeItem(STORAGE_KEY) }
+  const save = async () => {
+    const inst = rfInstanceRef.current
+    if (!inst) return
+    setSaving(true)
+    try {
+      const { nodes: n, edges: e, viewport } = inst.toObject()
+      const res = await fetch(`${API_BASE_URL}/hierarchy`, {
+        method: 'PUT',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ nodes: n, edges: e, viewport }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Не удалось сохранить иерархию')
+      }
+      setSavedLabel(true)
+      setTimeout(() => setSavedLabel(false), 2000)
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div
@@ -814,13 +853,11 @@ export function HRHierarchy() {
             Перетащите блоки на холст, затем выберите отдел или сотрудника. Соединяйте точками на краях.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={save}>
+        <div className="flex items-center gap-2">
+          {savedLabel && <span className="text-xs text-green-600 dark:text-green-400">Сохранено</span>}
+          <Button size="sm" variant="outline" onClick={save} disabled={saving}>
             <Save className="h-4 w-4 mr-1.5" />
-            Сохранить
-          </Button>
-          <Button size="sm" variant="outline" onClick={clear} title="Очистить холст">
-            <Trash2 className="h-4 w-4" />
+            {saving ? 'Сохранение...' : 'Сохранить'}
           </Button>
         </div>
       </div>
@@ -882,7 +919,12 @@ export function HRHierarchy() {
         {/* Canvas */}
         <SaveSnapshotContext.Provider value={saveSnapshot}>
         <div className="flex-1 relative" style={{ minHeight: 0 }}>
-          {nodes.length === 0 && (
+          {hierarchyLoading && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+              <div className="text-sm text-muted-foreground">Загрузка...</div>
+            </div>
+          )}
+          {!hierarchyLoading && nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
               <div className="text-center text-muted-foreground/40">
                 <Network className="h-16 w-16 mx-auto mb-3" />
