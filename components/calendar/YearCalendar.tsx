@@ -3,6 +3,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay,
 import { ru } from 'date-fns/locale'
 import type { VacationRequest } from '@/types'
 import { VacationRequestStatus } from '@/types'
+import { cn } from '@/lib/utils'
 
 interface YearCalendarProps {
   year: number
@@ -29,6 +30,17 @@ const COLORS = [
   'bg-indigo-500',
   'bg-red-500',
 ]
+
+const COLOR_MAP: Record<string, string> = {
+  'bg-blue-500': '#3b82f6',
+  'bg-green-500': '#22c55e',
+  'bg-purple-500': '#a855f7',
+  'bg-pink-500': '#ec4899',
+  'bg-orange-500': '#f97316',
+  'bg-teal-500': '#14b8a6',
+  'bg-indigo-500': '#6366f1',
+  'bg-red-500': '#ef4444',
+}
 
 function getUserColor(userId: string): string {
   let hash = 0
@@ -171,7 +183,7 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
           {hasSelection && (
             <button
               onClick={clearSelection}
-              className="text-sm text-gray-600 hover:text-gray-900 underline"
+              className="text-sm text-muted-foreground hover:text-foreground underline"
             >
               Очистить выбор
             </button>
@@ -193,20 +205,20 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
         )}
       </div>
 
-      <div className="text-sm text-gray-600">
+      <div className="text-sm text-muted-foreground">
         💡 <strong>Подсказка:</strong> Дни с заявками на отпуск заштрихованы. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки.
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {months.map(month => (
-          <div key={month.index} className="border rounded-lg p-3 bg-white">
+          <div key={month.index} className="border rounded-lg p-3 bg-card">
             <div className="text-center font-semibold mb-2 text-sm">
               {month.name}
             </div>
             
             <div className="grid grid-cols-7 gap-1 text-xs">
               {WEEKDAYS.map(day => (
-                <div key={day} className="text-center text-gray-500 font-medium p-1">
+                <div key={day} className="text-center text-muted-foreground font-medium p-1">
                   {day}
                 </div>
               ))}
@@ -224,49 +236,47 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                 const hasVacation = vacations.length > 0
                 const visibleVacations = vacations.slice(0, 3)
                 const remainingCount = vacations.length > 3 ? vacations.length - 3 : 0
-                
+
+                const bgLayers: string[] = []
+                if (hasVacation && !isSelected) {
+                  visibleVacations
+                    .filter(v => v.status === VacationRequestStatus.ON_APPROVAL)
+                    .forEach(v => {
+                      const color = COLOR_MAP[getUserColor(v.userId)] || '#3b82f6'
+                      bgLayers.push(`repeating-linear-gradient(45deg, ${color}90 0px, ${color}90 2px, transparent 2px, transparent 6px)`)
+                    })
+                  const approvedVacations = visibleVacations.filter(v => v.status === VacationRequestStatus.APPROVED)
+                  if (approvedVacations.length > 0) {
+                    const color = COLOR_MAP[getUserColor(approvedVacations[0].userId)] || '#3b82f6'
+                    bgLayers.push(`linear-gradient(${color}30, ${color}30)`)
+                  }
+                }
+
                 return (
                   <div
                     key={dateStr}
                     data-date-cell="true"
                     onClick={() => {
-                      console.log('Date clicked', dateStr)
                       handleDateClick(day)
                     }}
                     onContextMenu={(e) => {
-                      console.log('Context menu attempt', dateStr)
                       handleContextMenu(e as any, day)
                     }}
                     onMouseEnter={() => setHoverDate(dateStr)}
                     onMouseLeave={() => setHoverDate(null)}
-                    className={`
-                      relative p-1 text-center cursor-pointer rounded transition-all
-                      ${isWeekend && !isSelected ? 'bg-gray-200 text-gray-600 font-medium' : ''}
-                      ${!isWeekend && !isSelected && !hasVacation ? 'hover:bg-gray-100' : ''}
-                      ${isSelected ? 'bg-blue-500 text-white hover:bg-blue-600' : ''}
-                      ${isHovered ? 'bg-blue-200' : ''}
-                      ${hasVacation && !isSelected && !isWeekend ? 'font-semibold' : ''}
-                      ${hasVacation && !isSelected && !isWeekend ? 'bg-white' : ''}
-                    `}
-                    style={(hasVacation && !isSelected && visibleVacations.some(v => v.status === 'on_approval')) ? {
-                      backgroundImage: visibleVacations
-                        .filter(v => v.status === 'on_approval')
-                        .map(v => {
-                          const colorClass = getUserColor(v.userId)
-                          const colorMap: Record<string, string> = {
-                            'bg-blue-500': '#3b82f6',
-                            'bg-green-500': '#22c55e',
-                            'bg-purple-500': '#a855f7',
-                            'bg-pink-500': '#ec4899',
-                            'bg-orange-500': '#f97316',
-                            'bg-teal-500': '#14b8a6',
-                            'bg-indigo-500': '#6366f1',
-                            'bg-red-500': '#ef4444',
-                          }
-                          const color = colorMap[colorClass] || '#3b82f6'
-                          return `repeating-linear-gradient(45deg, ${color}40 0px, ${color}40 2px, transparent 2px, transparent 4px)`
-                        }).join(', ')
-                    } : undefined}
+                    className={cn(
+                      'relative p-1 text-center cursor-pointer rounded transition-all',
+                      isSelected
+                        ? 'bg-blue-500 text-white hover:bg-blue-600'
+                        : isHovered
+                          ? 'bg-blue-200 dark:bg-blue-800'
+                          : isWeekend
+                            ? 'bg-muted text-muted-foreground font-medium'
+                            : hasVacation
+                              ? 'font-semibold hover:bg-muted/30'
+                              : 'hover:bg-muted/50'
+                    )}
+                    style={bgLayers.length > 0 ? { backgroundImage: bgLayers.join(', ') } : undefined}
                     title={vacations.map(v => {
                       const statusText = v.status === 'approved' ? '(одобрено)' : v.status === 'on_approval' ? '(на согласовании)' : `(${v.status})`
                       return `${v.userLastName} ${v.userFirstName} ${statusText}`
@@ -288,7 +298,7 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                          </div>
                        )}
                       {remainingCount > 0 && (
-                        <div className="absolute -bottom-1 -right-0.5 text-xs font-bold text-gray-500">
+                        <div className="absolute -bottom-1 -right-0.5 text-xs font-bold text-muted-foreground">
                           +{remainingCount}
                         </div>
                       )}
@@ -302,24 +312,27 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
       </div>
 
        {visibleRequests.length > 0 && (
-          <div className="border rounded-lg p-4 bg-white">
+          <div className="border rounded-lg p-4 bg-card">
             <h3 className="font-semibold mb-3">Легенда</h3>
 
-             <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
+             <div className="mb-3 grid grid-cols-3 gap-2 text-sm">
                <div className="flex items-center gap-2">
-                 <div className="w-6 h-6 rounded border bg-white flex items-center justify-center">
-                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                 </div>
+                 <div
+                   className="w-6 h-6 rounded border"
+                   style={{ backgroundImage: 'linear-gradient(#3b82f630, #3b82f630)' }}
+                 />
                  <span>Одобрено</span>
                </div>
                <div className="flex items-center gap-2">
                  <div
-                   className="w-6 h-6 rounded border bg-white"
-                   style={{
-                     backgroundImage: 'repeating-linear-gradient(45deg, #3b82f640 0px, #3b82f640 2px, transparent 2px, transparent 4px)'
-                   }}
+                   className="w-6 h-6 rounded border"
+                   style={{ backgroundImage: 'repeating-linear-gradient(45deg, #3b82f690 0px, #3b82f690 2px, transparent 2px, transparent 6px)' }}
                  />
                  <span>На согласовании</span>
+               </div>
+               <div className="flex items-center gap-2">
+                 <div className="w-6 h-6 rounded border bg-muted" />
+                 <span>Выходной</span>
                </div>
              </div>
 
@@ -341,7 +354,7 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
 
         {contextMenu && (
           <div
-            className="fixed bg-white rounded-lg shadow-xl border z-50 min-w-48"
+            className="fixed bg-card rounded-lg shadow-xl border z-50 min-w-48"
             style={{
               left: contextMenu.x,
               top: contextMenu.y,
@@ -350,7 +363,7 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="p-2">
-              <div className="text-xs text-gray-500 mb-2 px-2">
+              <div className="text-xs text-muted-foreground mb-2 px-2">
                 {format(contextMenu.date, 'dd MMMM yyyy', { locale: ru })}
               </div>
               {getVacationsForDay(contextMenu.date).length > 0 ? (
@@ -376,7 +389,7 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-gray-500 px-2 py-2">
+                <div className="text-sm text-muted-foreground px-2 py-2">
                   Нет отпусков в этот день
                 </div>
               )}
