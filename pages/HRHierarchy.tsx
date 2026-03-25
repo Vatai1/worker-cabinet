@@ -1,24 +1,33 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, createContext, useContext } from 'react'
 import {
   ReactFlow,
   addEdge,
+  reconnectEdge,
   useNodesState,
   useEdgesState,
   Controls,
   MiniMap,
   Background,
   BackgroundVariant,
+  BaseEdge,
+  EdgeLabelRenderer,
   Handle,
   Position,
   MarkerType,
+  useReactFlow,
+  getSmoothStepPath,
   type Connection,
   type NodeTypes,
+  type EdgeTypes,
   type NodeProps,
+  type EdgeProps,
   type Node,
   type Edge,
   type ReactFlowInstance,
   type NodeMouseHandler,
   type EdgeMouseHandler,
+  type NodeChange,
+  type EdgeChange,
   ConnectionMode,
 } from '@xyflow/react'
 import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft } from 'lucide-react'
@@ -27,6 +36,8 @@ import { API_BASE_URL } from '@/lib/api'
 import { getAuthHeaders } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
 import { useUIStore } from '@/store/uiStore'
+
+const SaveSnapshotContext = createContext<() => void>(() => {})
 
 interface DeptEmployee {
   id: number
@@ -58,12 +69,15 @@ const NODE_COLORS = [
 
 // ─── Custom Nodes ─────────────────────────────────────────────────────────────
 
+const HANDLE_STYLE = { width: 14, height: 14, background: '#6b7280', border: '2px solid white' }
+const HANDLE_CLASS = '!opacity-0 group-hover:!opacity-100 !transition-opacity'
+
 const HANDLES = (
   <>
-    <Handle type="target" position={Position.Top} className="!opacity-0 group-hover:!opacity-100 !transition-opacity" style={{ width: 14, height: 14, background: '#6b7280', border: '2px solid white' }} />
-    <Handle type="source" position={Position.Bottom} className="!opacity-0 group-hover:!opacity-100 !transition-opacity" style={{ width: 14, height: 14, background: '#6b7280', border: '2px solid white' }} />
-    <Handle type="source" position={Position.Left} id="left" className="!opacity-0 group-hover:!opacity-100 !transition-opacity" style={{ width: 14, height: 14, background: '#6b7280', border: '2px solid white' }} />
-    <Handle type="source" position={Position.Right} id="right" className="!opacity-0 group-hover:!opacity-100 !transition-opacity" style={{ width: 14, height: 14, background: '#6b7280', border: '2px solid white' }} />
+    <Handle type="source" id="top" position={Position.Top} className={HANDLE_CLASS} style={HANDLE_STYLE} />
+    <Handle type="source" id="bottom" position={Position.Bottom} className={HANDLE_CLASS} style={HANDLE_STYLE} />
+    <Handle type="source" id="left" position={Position.Left} className={HANDLE_CLASS} style={HANDLE_STYLE} />
+    <Handle type="source" id="right" position={Position.Right} className={HANDLE_CLASS} style={HANDLE_STYLE} />
   </>
 )
 
@@ -138,10 +152,141 @@ function TextNode({ data }: NodeProps) {
   )
 }
 
+type Waypoint = { x: number; y: number }
+
+function extractSmoothStepCorners(path: string, sx: number, sy: number, tx: number, ty: number): Waypoint[] {
+  const pts: Waypoint[] = []
+  const re = /L\s+([-\d.]+)[,\s]+([-\d.]+)/g
+  let m
+  while ((m = re.exec(path)) !== null) {
+    const x = parseFloat(m[1])
+    const y = parseFloat(m[2])
+    if (!(Math.abs(x - sx) < 1 && Math.abs(y - sy) < 1) &&
+        !(Math.abs(x - tx) < 1 && Math.abs(y - ty) < 1)) {
+      pts.push({ x, y })
+    }
+  }
+  return pts
+}
+
+function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, markerStart, style, data, selected }: EdgeProps) {
+  const { setEdges, screenToFlowPosition } = useReactFlow()
+  const saveSnapshot = useContext(SaveSnapshotContext)
+  const waypoints: Waypoint[] = (data as { waypoints?: Waypoint[] })?.waypoints ?? []
+  const hasWaypoints = waypoints.length > 0
+
+  const [smoothPath, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
+
+  const allPoints = [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }]
+  const polyPath = allPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ')
+
+  const pathD = hasWaypoints ? polyPath : smoothPath
+
+  const dragWaypoint = (e: React.MouseEvent, idx: number) => {
+    e.stopPropagation()
+    saveSnapshot()
+    const move = (me: MouseEvent) => {
+      const pos = screenToFlowPosition({ x: me.clientX, y: me.clientY })
+      setEdges(eds => eds.map(ed => {
+        if (ed.id !== id) return ed
+        const wps = [...((ed.data as { waypoints?: Waypoint[] })?.waypoints ?? [])]
+        wps[idx] = pos
+        return { ...ed, data: { ...ed.data, waypoints: wps } }
+      }))
+    }
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up) }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }
+
+  const removeWaypoint = (e: React.MouseEvent, idx: number) => {
+    e.stopPropagation()
+    e.preventDefault()
+    saveSnapshot()
+    setEdges(eds => eds.map(ed => {
+      if (ed.id !== id) return ed
+      const wps = [...((ed.data as { waypoints?: Waypoint[] })?.waypoints ?? [])]
+      wps.splice(idx, 1)
+      return { ...ed, data: { ...ed.data, waypoints: wps } }
+    }))
+  }
+
+  const addWaypoint = (e: React.MouseEvent, segIdx: number, x: number, y: number) => {
+    e.stopPropagation()
+    saveSnapshot()
+    setEdges(eds => eds.map(ed => {
+      if (ed.id !== id) return ed
+      const wps = [...((ed.data as { waypoints?: Waypoint[] })?.waypoints ?? [])]
+      if (wps.length === 0) {
+        const corners = extractSmoothStepCorners(smoothPath, sourceX, sourceY, targetX, targetY)
+        if (corners.length > 0) {
+          return { ...ed, data: { ...ed.data, waypoints: corners } }
+        }
+      }
+      wps.splice(segIdx, 0, { x, y })
+      return { ...ed, data: { ...ed.data, waypoints: wps } }
+    }))
+  }
+
+  return (
+    <>
+      <path d={pathD} fill="none" stroke="transparent" strokeWidth={20} />
+      <BaseEdge path={pathD} markerEnd={markerEnd} markerStart={markerStart} style={style} />
+      {selected && (
+        <EdgeLabelRenderer>
+          {hasWaypoints && waypoints.map((wp, i) => (
+            <div
+              key={`wp-${i}`}
+              style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${wp.x}px, ${wp.y}px)`, pointerEvents: 'all' }}
+              className="nodrag nopan"
+              onMouseDown={e => dragWaypoint(e, i)}
+              onDoubleClick={e => removeWaypoint(e, i)}
+              title="Тащите • двойной клик — удалить"
+            >
+              <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'white', border: '2px solid #6b7280', cursor: 'move' }} />
+            </div>
+          ))}
+          {hasWaypoints
+            ? allPoints.slice(0, -1).map((p, i) => {
+                const mx = (p.x + allPoints[i + 1].x) / 2
+                const my = (p.y + allPoints[i + 1].y) / 2
+                return (
+                  <div
+                    key={`mid-${i}`}
+                    style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${mx}px, ${my}px)`, pointerEvents: 'all' }}
+                    className="nodrag nopan"
+                    onClick={e => addWaypoint(e, i, mx, my)}
+                    title="Клик — добавить точку опоры"
+                  >
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', cursor: 'pointer', opacity: 0.7 }} />
+                  </div>
+                )
+              })
+            : (
+              <div
+                style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: 'all' }}
+                className="nodrag nopan"
+                onClick={e => addWaypoint(e, 0, labelX, labelY)}
+                title="Клик — добавить точку опоры"
+              >
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', cursor: 'pointer', opacity: 0.7 }} />
+              </div>
+            )
+          }
+        </EdgeLabelRenderer>
+      )}
+    </>
+  )
+}
+
 const nodeTypes: NodeTypes = {
   department: DepartmentNode,
   employee: EmployeeNode,
   text: TextNode,
+}
+
+const edgeTypes: EdgeTypes = {
+  editable: EditableEdge,
 }
 
 const STORAGE_KEY = 'hr-hierarchy-v1'
@@ -415,13 +560,53 @@ export function HRHierarchy() {
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null)
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null)
 
+  const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([])
+  const isRestoringRef = useRef(false)
+
+  const saveSnapshot = useCallback(() => {
+    if (isRestoringRef.current) return
+    const inst = rfInstanceRef.current
+    if (!inst) return
+    historyRef.current = [...historyRef.current.slice(-49), { nodes: inst.getNodes(), edges: inst.getEdges() }]
+  }, [])
+
+  const undo = useCallback(() => {
+    if (historyRef.current.length === 0) return
+    const snapshot = historyRef.current.pop()!
+    isRestoringRef.current = true
+    setNodes(snapshot.nodes)
+    setEdges(snapshot.edges)
+    isRestoringRef.current = false
+  }, [setNodes, setEdges])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.code === 'KeyZ')) {
+        e.preventDefault()
+        undo()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [undo])
+
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) saveSnapshot()
+    onNodesChange(changes)
+  }, [onNodesChange, saveSnapshot])
+
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+    if (!isRestoringRef.current && changes.some(c => c.type === 'remove')) saveSnapshot()
+    onEdgesChange(changes)
+  }, [onEdgesChange, saveSnapshot])
+
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
       try {
         const { nodes: n, edges: e } = JSON.parse(saved)
         if (n) setNodes(n)
-        if (e) setEdges(e)
+        if (e) setEdges((e as Edge[]).map(ed => ({ ...ed, type: 'editable' })))
       } catch { /* ignore */ }
     }
   }, [setNodes, setEdges])
@@ -431,16 +616,8 @@ export function HRHierarchy() {
       try {
         const res = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
         if (!res.ok) throw new Error('Не удалось загрузить отделы')
-        const list: Department[] = await res.json()
-        const withEmps = await Promise.all(
-          list.map(async d => {
-            const r = await fetch(`${API_BASE_URL}/departments/${d.id}`, { headers: getAuthHeaders() })
-            if (!r.ok) return d
-            const data = await r.json()
-            return { ...d, employees: data.employees ?? [] }
-          })
-        )
-        setDepartments(withEmps)
+        const data: Department[] = await res.json()
+        setDepartments(data)
       } catch (err) {
         setError(getErrorMessage(err))
       } finally {
@@ -450,11 +627,28 @@ export function HRHierarchy() {
     load()
   }, [])
 
-  const onConnect = useCallback(
-    (params: Connection) =>
-      setEdges(eds => addEdge({ ...params, type: 'smoothstep', style: EDGE_STYLE, markerEnd: EDGE_MARKER } as Edge, eds)),
-    [setEdges]
-  )
+  const onConnect = useCallback((params: Connection) => {
+    saveSnapshot()
+    setEdges(eds => addEdge({ ...params, type: 'editable', style: EDGE_STYLE, markerEnd: EDGE_MARKER } as Edge, eds))
+  }, [setEdges, saveSnapshot])
+
+  const onNodeDragStart = useCallback(() => { saveSnapshot() }, [saveSnapshot])
+
+  const edgeReconnectRef = useRef(true)
+
+  const onReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
+    edgeReconnectRef.current = true
+    saveSnapshot()
+    setEdges(eds => reconnectEdge(oldEdge, newConnection, eds))
+  }, [setEdges, saveSnapshot])
+
+  const onReconnectStart = useCallback(() => {
+    edgeReconnectRef.current = false
+  }, [])
+
+  const onReconnectEnd = useCallback(() => {
+    edgeReconnectRef.current = true
+  }, [])
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -478,6 +672,7 @@ export function HRHierarchy() {
 
   const handleSelectDepartment = (dept: Department, description: string) => {
     if (!pendingDrop) return
+    saveSnapshot()
     setNodes(nds => [...nds, {
       id: `department-${dept.id}-${Date.now()}`,
       type: 'department',
@@ -489,6 +684,7 @@ export function HRHierarchy() {
 
   const handleSelectEmployee = (emp: DeptEmployee, description: string) => {
     if (!pendingDrop) return
+    saveSnapshot()
     setNodes(nds => [...nds, {
       id: `employee-${emp.id}-${Date.now()}`,
       type: 'employee',
@@ -516,6 +712,7 @@ export function HRHierarchy() {
   }, [])
 
   const reverseEdge = useCallback((edgeId: string) => {
+    saveSnapshot()
     setEdges(eds => eds.map(e => {
       if (e.id !== edgeId) return e
       const hasStart = !!e.markerStart
@@ -526,23 +723,26 @@ export function HRHierarchy() {
       }
     }))
     setEdgeContextMenu(null)
-  }, [setEdges])
+  }, [setEdges, saveSnapshot])
 
   const deleteEdge = useCallback((edgeId: string) => {
+    saveSnapshot()
     setEdges(eds => eds.filter(e => e.id !== edgeId))
     setEdgeContextMenu(null)
-  }, [setEdges])
+  }, [setEdges, saveSnapshot])
 
   const deleteNode = useCallback((nodeId: string) => {
+    saveSnapshot()
     setNodes(nds => nds.filter(n => n.id !== nodeId))
     setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId))
     setContextMenu(null)
-  }, [setNodes, setEdges])
+  }, [setNodes, setEdges, saveSnapshot])
 
   const setNodeColor = useCallback((nodeId: string, color: string) => {
+    saveSnapshot()
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, color } } : n))
     setContextMenu(null)
-  }, [setNodes])
+  }, [setNodes, saveSnapshot])
 
   const startEdit = useCallback((nodeId: string, nodeType: 'department' | 'employee' | 'text') => {
     setEditingNode({ id: nodeId, type: nodeType })
@@ -551,6 +751,7 @@ export function HRHierarchy() {
 
   const handleEditDepartment = (dept: Department, description: string) => {
     if (!editingNode) return
+    saveSnapshot()
     setNodes(nds => nds.map(n => n.id === editingNode.id ? {
       ...n,
       data: { id: dept.id, name: dept.name, employeeCount: dept.employee_count, managerName: dept.manager_name, description },
@@ -560,6 +761,7 @@ export function HRHierarchy() {
 
   const handleSelectText = (text: string) => {
     if (!pendingDrop) return
+    saveSnapshot()
     setNodes(nds => [...nds, {
       id: `text-${Date.now()}`,
       type: 'text',
@@ -571,12 +773,14 @@ export function HRHierarchy() {
 
   const handleEditText = (text: string) => {
     if (!editingNode) return
+    saveSnapshot()
     setNodes(nds => nds.map(n => n.id === editingNode.id ? { ...n, data: { text } } : n))
     setEditingNode(null)
   }
 
   const handleEditEmployee = (emp: DeptEmployee, description: string) => {
     if (!editingNode) return
+    saveSnapshot()
     setNodes(nds => nds.map(n => n.id === editingNode.id ? {
       ...n,
       data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, position: emp.position, department: emp.departmentName, description },
@@ -676,6 +880,7 @@ export function HRHierarchy() {
         </div>
 
         {/* Canvas */}
+        <SaveSnapshotContext.Provider value={saveSnapshot}>
         <div className="flex-1 relative" style={{ minHeight: 0 }}>
           {nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -689,15 +894,20 @@ export function HRHierarchy() {
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
+            onNodeDragStart={onNodeDragStart}
             onInit={handleInit}
             onDrop={onDrop}
             onDragOver={onDragOver}
             onNodeContextMenu={onNodeContextMenu}
             onEdgeContextMenu={onEdgeContextMenu}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            onReconnect={onReconnect}
+            onReconnectStart={onReconnectStart}
+            onReconnectEnd={onReconnectEnd}
             connectionMode={ConnectionMode.Loose}
             colorMode={darkMode ? 'dark' : 'light'}
             deleteKeyCode="Delete"
@@ -709,6 +919,7 @@ export function HRHierarchy() {
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(var(--border))" />
           </ReactFlow>
         </div>
+        </SaveSnapshotContext.Provider>
       </div>
 
       {/* Modals */}
