@@ -30,8 +30,9 @@ import {
   type EdgeChange,
   ConnectionMode,
 } from '@xyflow/react'
-import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft } from 'lucide-react'
+import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { DepartmentHierarchyOverlay } from '@/components/hierarchy/DepartmentHierarchyOverlay'
 import { API_BASE_URL } from '@/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
@@ -556,6 +557,7 @@ export function HRHierarchy() {
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [edgeContextMenu, setEdgeContextMenu] = useState<EdgeContextMenu | null>(null)
   const [editingNode, setEditingNode] = useState<{ id: string; type: 'department' | 'employee' | 'text' } | null>(null)
+  const [activeDepartment, setActiveDepartment] = useState<{ id: number; name: string } | null>(null)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -863,7 +865,7 @@ export function HRHierarchy() {
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+      <div className="relative flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
         {/* Left panel */}
         <div className="w-52 flex-shrink-0 border-r border-border p-4 space-y-3">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -962,6 +964,14 @@ export function HRHierarchy() {
           </ReactFlow>
         </div>
         </SaveSnapshotContext.Provider>
+        {activeDepartment && (
+          <DepartmentHierarchyOverlay
+            departmentId={activeDepartment.id}
+            departmentName={activeDepartment.name}
+            departments={departments}
+            onClose={() => setActiveDepartment(null)}
+          />
+        )}
       </div>
 
       {/* Modals */}
@@ -1077,6 +1087,23 @@ export function HRHierarchy() {
               })}
             </div>
           </div>
+          {contextMenu.nodeType === 'department' && (
+            <>
+              <button
+                onClick={() => {
+                  const node = nodes.find(n => n.id === contextMenu.nodeId)
+                  const d = node?.data as { id: number; name: string }
+                  setActiveDepartment({ id: d.id, name: d.name })
+                  setContextMenu(null)
+                }}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+              >
+                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                Просмотреть отдел
+              </button>
+              <div className="h-px bg-border mx-2" />
+            </>
+          )}
           <button
             onClick={() => startEdit(contextMenu.nodeId, contextMenu.nodeType)}
             className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
@@ -1097,3 +1124,8 @@ export function HRHierarchy() {
     </div>
   )
 }
+
+export { DepartmentNode, EmployeeNode, TextNode, nodeTypes, EditableEdge, edgeTypes }
+export { SelectDepartmentModal, SelectEmployeeModal, TextInputModal }
+export type { Department, DeptEmployee }
+export { SaveSnapshotContext, EDGE_STYLE, EDGE_MARKER, NODE_COLORS }
