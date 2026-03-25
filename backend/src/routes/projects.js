@@ -2,7 +2,7 @@ import express from 'express'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
-import { uploadToS3, deleteFromS3, getFromS3, getS3FileUrl } from '../config/s3.js'
+import { uploadToS3, deleteFromS3, getFromS3, getPresignedUrl } from '../config/s3.js'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 
@@ -29,12 +29,11 @@ async function getProjectWithMembers(projectId) {
        m.role,
        m.joined_at,
        m.description,
-       u.id,
-       u.first_name,
-       u.last_name,
-       u.position,
-       u.gender,
-       u.avatar,
+        u.id,
+        u.first_name,
+        u.last_name,
+        u.position,
+        u.avatar,
        d.name AS department_name
      FROM company_project_members m
      JOIN users u ON m.user_id = u.id
@@ -80,7 +79,6 @@ router.get('/', authenticateToken, async (req, res) => {
               'last_name',  u.last_name,
               'position',   u.position,
               'role',       m.role,
-              'gender',     u.gender,
               'avatar',     u.avatar
             )
             ORDER BY CASE m.role WHEN 'lead' THEN 0 ELSE 1 END, u.last_name
@@ -361,10 +359,12 @@ router.get('/:id/documents', authenticateToken, async (req, res) => {
     sql += ' ORDER BY d.created_at DESC'
 
     const result = await query(sql, params)
-    const documents = result.rows.map(doc => ({
-      ...doc,
-      file_path: getS3FileUrl(doc.file_path)
-    }))
+    const documents = await Promise.all(
+      result.rows.map(async doc => ({
+        ...doc,
+        file_path: await getPresignedUrl(doc.file_path)
+      }))
+    )
     res.json(documents)
   } catch (error) {
     console.error('Error fetching documents:', error)
