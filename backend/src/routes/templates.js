@@ -21,10 +21,12 @@ router.get('/', authenticateToken, async (req, res) => {
        FROM document_templates
        ORDER BY created_at DESC`
     )
-    const templates = result.rows.map((t) => ({
-      ...t,
-      url: getTemplateUrl(t.fileKey),
-    }))
+    const templates = await Promise.all(
+      result.rows.map(async (t) => ({
+        ...t,
+        url: await getTemplateUrl(t.fileKey),
+      }))
+    )
     res.json(templates)
   } catch (error) {
     console.error('GET /templates error:', error)
@@ -48,7 +50,7 @@ router.post(
       if (!req.file) return res.status(400).json({ error: 'Файл обязателен' })
 
       const template = await uploadTemplate(req.file, { name, description, category }, req.user.id)
-      res.status(201).json({ ...template, url: getTemplateUrl(template.file_key) })
+      res.status(201).json({ ...template, url: await getTemplateUrl(template.file_key) })
     } catch (error) {
       console.error('POST /templates error:', error)
       res.status(500).json({ error: 'Ошибка загрузки шаблона' })
@@ -71,7 +73,7 @@ router.put('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
       [name, description || null, category, id]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Шаблон не найден' })
-    res.json({ ...result.rows[0], url: getTemplateUrl(result.rows[0].file_key) })
+    res.json({ ...result.rows[0], url: await getTemplateUrl(result.rows[0].file_key) })
   } catch (error) {
     console.error('PUT /templates/:id error:', error)
     res.status(500).json({ error: 'Ошибка обновления шаблона' })
@@ -99,7 +101,7 @@ router.get('/:id/onlyoffice', authenticateToken, authorizeRoles('hr', 'admin'), 
     if (!result.rows.length) return res.status(404).json({ error: 'Шаблон не найден' })
     const t = result.rows[0]
     res.json({
-      url: getTemplateUrl(t.file_key),
+      url: await getTemplateUrl(t.file_key),
       key: `template-${t.id}-${Date.now()}`,
       name: t.name,
       mimeType: t.mime_type,
@@ -130,7 +132,7 @@ router.post('/:id/download', authenticateToken, async (req, res) => {
       [req.params.id]
     )
     if (!result.rows.length) return res.status(404).json({ error: 'Шаблон не найден' })
-    res.json({ url: getTemplateUrl(result.rows[0].file_key) })
+    res.json({ url: await getTemplateUrl(result.rows[0].file_key) })
   } catch (error) {
     console.error('POST /templates/:id/download error:', error)
     res.status(500).json({ error: 'Ошибка' })

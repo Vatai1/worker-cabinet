@@ -992,6 +992,20 @@ async function runMigrations() {
     `).catch(e => console.log('  - employee_onboarding_documents:', e.message))
     console.log('  ✓ employee_onboarding_documents')
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS document_access_tokens (
+        id SERIAL PRIMARY KEY,
+        token VARCHAR(255) UNIQUE NOT NULL,
+        document_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - document_access_tokens:', e.message))
+    await db.query('CREATE INDEX IF NOT EXISTS idx_dat_token ON document_access_tokens(token)').catch(e => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_dat_expires ON document_access_tokens(expires_at)').catch(e => {})
+    console.log('  ✓ document_access_tokens')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     

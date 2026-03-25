@@ -1,9 +1,10 @@
 import express from 'express'
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { uploadTemplate as uploadTemplateMiddleware } from '../middleware/upload.js'
-import { uploadToS3, getS3FileUrl, deleteFromS3 } from '../config/s3.js'
+import { uploadToS3, getS3FileUrl, deleteFromS3, getPresignedUrl, getFromS3 } from '../config/s3.js'
 
 const router = express.Router()
 
@@ -182,6 +183,30 @@ router.get('/me', authenticateToken, authorizeRoles('onboarding'), async (req, r
       [ob.id]
     )
 
+    const documentsWithUrls = await Promise.all(
+      docs.rows.map(async d => {
+        const ext = d.file_key?.split('.').pop()?.toLowerCase() || ''
+        const mimeType = {
+          'pdf': 'application/pdf',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'xls': 'application/vnd.ms-excel',
+          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }[ext] || 'application/octet-stream'
+
+        return {
+          id: d.id,
+          templateId: d.template_id,
+          title: d.title,
+          contentText: d.content_text,
+          fileKey: d.file_key,
+          fileUrl: d.file_key ? await getPresignedUrl(d.file_key) : null,
+          mimeType,
+          acknowledgedAt: d.acknowledged_at,
+        }
+      })
+    )
+
     res.json({
       id: ob.id,
       userId: ob.user_id,
@@ -189,19 +214,131 @@ router.get('/me', authenticateToken, authorizeRoles('onboarding'), async (req, r
       firstName: ob.first_name,
       lastName: ob.last_name,
       position: ob.position,
-      documents: docs.rows.map(d => ({
-        id: d.id,
-        templateId: d.template_id,
-        title: d.title,
-        contentText: d.content_text,
-        fileKey: d.file_key,
-        fileUrl: d.file_key ? getS3FileUrl(d.file_key) : null,
-        acknowledgedAt: d.acknowledged_at,
-      })),
+      documents: documentsWithUrls,
     })
   } catch (error) {
     console.error('GET /onboarding/me error:', error)
     res.status(500).json({ error: 'Ошибка загрузки онбординга' })
+  }
+})
+
+router.post('/documents/:id/access-token', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+
+    console.log('[ACCESS TOKEN] Request for document:', id, 'by user:', userId)
+
+    const docResult = await query(
+      `SELECT eod.*, eo.user_id
+       FROM employee_onboarding_documents eod
+       JOIN employee_onboarding eo ON eod.onboarding_id = eo.id
+       WHERE eod.id = $1`,
+      [id]
+    )
+
+    if (docResult.rows.length === 0) {
+      console.log('[ACCESS TOKEN] Document not found:', id)
+      return res.status(404).json({ error: 'Документ не найден' })
+    }
+
+    const doc = docResult.rows[0]
+
+    const isHRorAdmin = ['hr', 'admin'].includes(req.user.role)
+    const isOwner = doc.user_id === userId
+
+    if (!isHRorAdmin && !isOwner) {
+      console.log('[ACCESS TOKEN] Forbidden - user:', userId, 'role:', req.user.role)
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const accessToken = crypto.randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 3600000)
+
+    await query(
+      `INSERT INTO document_access_tokens (token, document_id, user_id, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [accessToken, id, userId, expiresAt]
+    )
+
+    console.log('[ACCESS TOKEN] Token created:', accessToken.substring(0, 8) + '...')
+    res.json({ accessToken, expiresAt })
+  } catch (error) {
+    console.error('POST /onboarding/documents/:id/access-token error:', error)
+    res.status(500).json({ error: 'Ошибка создания токена' })
+  }
+})
+
+router.options('/documents/:id/file', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*')
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  res.header('Access-Control-Allow-Headers', 'Content-Type')
+  res.status(200).end()
+})
+
+router.get('/documents/:id/file', async (req, res) => {
+  try {
+    const { id } = req.params
+    const token = req.query.token
+
+    console.log('[FILE REQUEST] Document:', id, 'Token:', token ? token.substring(0, 8) + '...' : 'MISSING')
+
+    if (!token) {
+      console.log('[FILE REQUEST] ERROR: Token required')
+      return res.status(401).json({ error: 'Token required' })
+    }
+
+    const tokenResult = await query(
+      `SELECT * FROM document_access_tokens WHERE token = $1 AND document_id = $2 AND expires_at > NOW()`,
+      [token, id]
+    )
+
+    if (tokenResult.rows.length === 0) {
+      console.log('[FILE REQUEST] ERROR: Invalid or expired token')
+      return res.status(403).json({ error: 'Invalid or expired token' })
+    }
+
+    console.log('[FILE REQUEST] Token validated, deleting...')
+    await query('DELETE FROM document_access_tokens WHERE token = $1', [token])
+
+    const docResult = await query(
+      `SELECT eod.*, eo.user_id, ot.file_key, ot.title
+       FROM employee_onboarding_documents eod
+       JOIN employee_onboarding eo ON eod.onboarding_id = eo.id
+       JOIN onboarding_templates ot ON eod.template_id = ot.id
+       WHERE eod.id = $1`,
+      [id]
+    )
+
+    if (docResult.rows.length === 0) {
+      console.log('[FILE REQUEST] ERROR: Document not found')
+      return res.status(404).json({ error: 'Документ не найден' })
+    }
+
+    const doc = docResult.rows[0]
+    console.log('[FILE REQUEST] Document found:', doc.title, 'File key:', doc.file_key)
+
+    if (!doc.file_key) {
+      console.log('[FILE REQUEST] ERROR: No file key')
+      return res.status(404).json({ error: 'Файл не найден' })
+    }
+
+    console.log('[FILE REQUEST] Fetching from S3...')
+    const s3Response = await getFromS3(doc.file_key)
+    const stream = s3Response.Body
+
+    res.setHeader('Content-Type', 'application/octet-stream')
+    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.title)}.pdf`)
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    
+    stream.transformToByteArray().then(bytes => {
+      console.log('[FILE REQUEST] Sending file, size:', bytes.length)
+      res.send(Buffer.from(bytes))
+    })
+  } catch (error) {
+    console.error('GET /onboarding/documents/:id/file error:', error)
+    res.status(500).json({ error: 'Ошибка скачивания файла' })
   }
 })
 
@@ -413,6 +550,30 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
       [id]
     )
 
+    const documentsWithUrls = await Promise.all(
+      docs.rows.map(async d => {
+        const ext = d.file_key?.split('.').pop()?.toLowerCase() || ''
+        const mimeType = {
+          'pdf': 'application/pdf',
+          'doc': 'application/msword',
+          'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'xls': 'application/vnd.ms-excel',
+          'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }[ext] || 'application/octet-stream'
+
+        return {
+          id: d.id,
+          templateId: d.template_id,
+          title: d.title,
+          contentText: d.content_text,
+          fileKey: d.file_key,
+          fileUrl: d.file_key ? await getPresignedUrl(d.file_key) : null,
+          mimeType,
+          acknowledgedAt: d.acknowledged_at,
+        }
+      })
+    )
+
     const ob = result.rows[0]
     res.json({
       id: ob.id,
@@ -424,15 +585,7 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
       email: ob.email,
       position: ob.position,
       department: ob.department,
-      documents: docs.rows.map(d => ({
-        id: d.id,
-        templateId: d.template_id,
-        title: d.title,
-        contentText: d.content_text,
-        fileKey: d.file_key,
-        fileUrl: d.file_key ? getS3FileUrl(d.file_key) : null,
-        acknowledgedAt: d.acknowledged_at,
-      })),
+      documents: documentsWithUrls,
     })
   } catch (error) {
     console.error('GET /onboarding/:id error:', error)

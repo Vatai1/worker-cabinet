@@ -13,7 +13,7 @@ const CATEGORY_LABELS = {
   hr: { label: 'Кадры', className: 'bg-blue-100 text-blue-800' },
   legal: { label: 'Правовые', className: 'bg-purple-100 text-purple-800' },
   finance: { label: 'Финансы', className: 'bg-green-100 text-green-800' },
-  general: { label: 'Общие', className: 'bg-gray-100 text-gray-800' },
+  general: { label: 'Общие', className: 'bg-muted text-muted-foreground' },
 }
 
 type CategoryType = 'all' | 'hr' | 'legal' | 'finance' | 'general'

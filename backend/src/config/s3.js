@@ -1,4 +1,8 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import dotenv from 'dotenv'
+
+dotenv.config()
 
 export const S3_BUCKET = process.env.S3_BUCKET || 'worker-cabinet-docs'
 export const S3_ENDPOINT = process.env.S3_ENDPOINT || 'http://localhost:9000'
@@ -41,11 +45,28 @@ export const deleteFromS3 = async (key) => {
 }
 
 export const getFromS3 = async (key) => {
+  console.log('[S3] Getting file from S3:', { bucket: S3_BUCKET, key })
   const params = {
     Bucket: S3_BUCKET,
     Key: key,
   }
 
-  const response = await s3Client.send(new GetObjectCommand(params))
-  return response
+  try {
+    const response = await s3Client.send(new GetObjectCommand(params))
+    console.log('[S3] File retrieved successfully, size:', response.ContentLength)
+    return response
+  } catch (error) {
+    console.error('[S3] Error getting file:', error.message, 'Code:', error.Code)
+    throw error
+  }
+}
+
+export const getPresignedUrl = async (key, expiresIn = 3600) => {
+  const params = {
+    Bucket: S3_BUCKET,
+    Key: key,
+  }
+
+  const url = await getSignedUrl(s3Client, new GetObjectCommand(params), { expiresIn })
+  return url
 }

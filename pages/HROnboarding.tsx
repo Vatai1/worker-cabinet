@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { Badge } from '@/components/ui/Badge'
+import { OnlyOfficePreviewModal } from '@/components/modals/OnlyOfficePreviewModal'
 import {
   Plus, Trash2, Edit2, CheckCircle2, Circle, FileText, Loader2,
-  Users, BookOpen, Building2, X, Download,
+  Users, BookOpen, Building2, X, Download, Eye,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -35,6 +36,8 @@ interface OnboardingDetail extends OnboardingRecord {
     title: string
     contentText: string | null
     fileUrl: string | null
+    fileKey: string | null
+    mimeType: string
     acknowledgedAt: string | null
   }[]
 }
@@ -76,13 +79,21 @@ export function HROnboarding() {
   const [deleteTemplateTarget, setDeleteTemplateTarget] = useState<OnboardingTemplate | null>(null)
 
   const [departments, setDepartments] = useState<Department[]>([])
+  const [positions, setPositions] = useState<string[]>([])
   const [templateFilterDept, setTemplateFilterDept] = useState('')
   const [templateFilterPos, setTemplateFilterPos] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
+  const [onlyOfficeDoc, setOnlyOfficeDoc] = useState<{
+    id: number
+    name: string
+    url: string
+    mimeType: string
+  } | null>(null)
 
   useEffect(() => {
     fetchRecords()
     fetchDepartments()
+    fetchPositions()
   }, [])
 
   useEffect(() => {
@@ -150,6 +161,17 @@ export function HROnboarding() {
       setDepartments(data)
     } catch {
       setDepartments([])
+    }
+  }
+
+  const fetchPositions = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/positions/all`, { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка загрузки')
+      const data = await res.json()
+      setPositions(data)
+    } catch {
+      setPositions([])
     }
   }
 
@@ -325,12 +347,14 @@ export function HROnboarding() {
               <option value="">Все отделы</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
-            <Input
-              placeholder="Должность..."
+            <select
               value={templateFilterPos}
               onChange={e => handleTemplateFilter(templateFilterDept, e.target.value)}
-              className="h-9 w-48"
-            />
+              className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Все должности</option>
+              {positions.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
           </div>
           {templatesLoading ? (
             <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
@@ -373,6 +397,37 @@ export function HROnboarding() {
           loading={detailLoading}
           onClose={() => setDetail(null)}
           onCancel={(record) => setCancelTarget(record)}
+          onOpenOnlyOffice={async (doc) => {
+            try {
+              console.log('[HR] Getting access token for document:', doc.id)
+              const res = await fetch(`${API_BASE_URL}/onboarding/documents/${doc.id}/access-token`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+              })
+              if (!res.ok) {
+                const error = await res.json()
+                throw new Error(error.error || 'Ошибка получения токена')
+              }
+              const { accessToken } = await res.json()
+              console.log('[HR] Access token received:', accessToken.substring(0, 8) + '...')
+              
+              // Replace localhost with host.docker.internal for OnlyOffice in Docker
+              const fileUrl = `${API_BASE_URL}/onboarding/documents/${doc.id}/file?token=${accessToken}`
+                .replace('localhost:5000', 'host.docker.internal:5000')
+              
+              console.log('[HR] File URL for OnlyOffice:', fileUrl)
+              console.log('[HR] MIME type:', doc.mimeType)
+              setOnlyOfficeDoc({ 
+                id: doc.id, 
+                name: doc.title, 
+                url: fileUrl,
+                mimeType: doc.mimeType
+              })
+            } catch (err) {
+              console.error('[HR] Error getting access token:', err)
+              alert('Ошибка: ' + (err instanceof Error ? err.message : 'Неизвестная ошибка'))
+            }
+          }}
         />
       )}
 
@@ -392,6 +447,7 @@ export function HROnboarding() {
       {showAddModal && (
         <AddOnboardingModal
           departments={departments}
+          positions={positions}
           templates={templates}
           onTemplatesNeeded={fetchTemplates}
           onClose={() => setShowAddModal(false)}
@@ -403,6 +459,7 @@ export function HROnboarding() {
         <TemplateModal
           template={editTemplate}
           departments={departments}
+          positions={positions}
           onClose={() => { setShowTemplateModal(false); setEditTemplate(null) }}
           onSuccess={() => { setShowTemplateModal(false); setEditTemplate(null); fetchTemplates(templateFilterDept, templateFilterPos) }}
         />
@@ -419,17 +476,28 @@ export function HROnboarding() {
           onClose={() => { setDeleteTemplateTarget(null); setActionError(null) }}
         />
       )}
+
+      {onlyOfficeDoc && (
+        <OnlyOfficePreviewModal
+          open={!!onlyOfficeDoc}
+          onClose={() => setOnlyOfficeDoc(null)}
+          document={onlyOfficeDoc}
+          editable={false}
+          acknowledged={true}
+        />
+      )}
     </div>
   )
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
-function OnboardingDetailModal({ detail, loading, onClose, onCancel }: {
+function OnboardingDetailModal({ detail, loading, onClose, onCancel, onOpenOnlyOffice }: {
   detail: OnboardingDetail | null
   loading: boolean
   onClose: () => void
   onCancel: (r: OnboardingDetail) => void
+  onOpenOnlyOffice: (doc: { id: number; title: string; fileUrl: string; mimeType: string }) => void
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -471,9 +539,24 @@ function OnboardingDetailModal({ detail, loading, onClose, onCancel }: {
                       )}
                     </div>
                     {doc.fileUrl && (
-                      <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                        <Download className="h-4 w-4" />
-                      </a>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onOpenOnlyOffice({ 
+                            id: doc.id, 
+                            title: doc.title, 
+                            fileUrl: doc.fileUrl!, 
+                            mimeType: doc.mimeType 
+                          })}
+                          className="text-primary hover:text-primary"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary">
+                          <Download className="h-4 w-4" />
+                        </a>
+                      </>
                     )}
                   </div>
                 ))}
@@ -493,8 +576,9 @@ function OnboardingDetailModal({ detail, loading, onClose, onCancel }: {
   )
 }
 
-function AddOnboardingModal({ departments, templates, onTemplatesNeeded, onClose, onSuccess }: {
+function AddOnboardingModal({ departments, positions, templates, onTemplatesNeeded, onClose, onSuccess }: {
   departments: Department[]
+  positions: string[]
   templates: OnboardingTemplate[]
   onTemplatesNeeded: () => void
   onClose: () => void
@@ -581,7 +665,14 @@ function AddOnboardingModal({ departments, templates, onTemplatesNeeded, onClose
             </div>
             <div className="space-y-1">
               <Label>Должность</Label>
-              <Input value={form.position} onChange={e => setForm(prev => ({ ...prev, position: e.target.value }))} />
+              <select
+                value={form.position}
+                onChange={e => setForm(prev => ({ ...prev, position: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Выберите должность</option>
+                {positions.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
             </div>
             <div className="space-y-1">
               <Label>Отдел</Label>
@@ -637,9 +728,10 @@ function AddOnboardingModal({ departments, templates, onTemplatesNeeded, onClose
   )
 }
 
-function TemplateModal({ template, departments, onClose, onSuccess }: {
+function TemplateModal({ template, departments, positions, onClose, onSuccess }: {
   template: OnboardingTemplate | null
   departments: Department[]
+  positions: string[]
   onClose: () => void
   onSuccess: () => void
 }) {
@@ -727,7 +819,14 @@ function TemplateModal({ template, departments, onClose, onSuccess }: {
             </div>
             <div className="space-y-1">
               <Label>Должность (опционально)</Label>
-              <Input value={position} onChange={e => setPosition(e.target.value)} placeholder="Например: Разработчик" />
+              <select
+                value={position}
+                onChange={e => setPosition(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Все должности</option>
+                {positions.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
             </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

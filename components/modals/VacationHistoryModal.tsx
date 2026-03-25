@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { VacationRequestStatus } from '@/types'
 import { getVacationRequestStatusBadge } from '@/data/mockVacationData'
 import { Button } from '@/components/ui/Button'
 import { X, Calendar, FileText, Filter, RotateCcw } from 'lucide-react'
@@ -53,11 +52,11 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col">
-        <div className="p-6 border-b flex justify-between items-center bg-white">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col">
+        <div className="p-6 border-b flex justify-between items-center bg-card">
           <div>
             <h2 className="text-xl font-semibold">История отпусков</h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               {hasActiveFilters 
                 ? `Найдено: ${filteredRequests.length} из ${requests.length}`
                 : `Всего заявок: ${requests.length}`
@@ -66,17 +65,17 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-muted-foreground hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Фильтры */}
-        <div className="p-4 border-b bg-gray-50">
+        <div className="p-4 border-b bg-muted/50">
           <div className="flex items-center gap-2 mb-3">
-            <Filter className="h-4 w-4 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">Фильтры</span>
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Фильтры</span>
             {hasActiveFilters && (
               <Button
                 size="sm"
@@ -93,11 +92,11 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Фильтр по году */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Год</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Год</label>
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="all">Все года</option>
                 {years.map(year => (
@@ -108,11 +107,11 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
 
             {/* Фильтр по статусу */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Статус</label>
+              <label className="block text-xs font-medium text-foreground mb-1">Статус</label>
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="all">Все статусы</option>
                 <option value="on_approval">На согласовании</option>
@@ -128,7 +127,7 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
         {/* Список заявок */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {filteredRequests.length === 0 ? (
-            <div className="text-center py-8 text-gray-600">
+            <div className="text-center py-8 text-muted-foreground">
               {hasActiveFilters 
                 ? 'По выбранным фильтрам ничего не найдено'
                 : 'История отпусков пуста'
@@ -138,12 +137,12 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
             filteredRequests.map((request) => {
               const statusBadge = getVacationRequestStatusBadge(request.status)
               return (
-                <div key={request.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                <div key={request.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <Calendar className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm text-gray-600">
+<Calendar className="h-4 w-4 text-muted-foreground" />
+                         <span className="text-sm text-muted-foreground">
                           Создано: {new Date(request.createdAt).toLocaleDateString('ru-RU')}{' '}
                           {new Date(request.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                         </span>
@@ -174,18 +173,18 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
                         </span>
                       </div>
 
-                      <div className="text-sm text-gray-700 mb-2">
+                      <div className="text-sm text-foreground mb-2">
                         <span className="font-medium">
                           {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
                           {new Date(request.endDate).toLocaleDateString('ru-RU')}
                         </span>
-                        <span className="ml-2 text-gray-600">
+                        <span className="ml-2 text-muted-foreground">
                           ({request.duration} {request.duration === 1 ? 'день' : request.duration >= 2 && request.duration <= 4 ? 'дня' : 'дней'})
                         </span>
                       </div>
 
                       {request.comment && (
-                        <div className="text-sm text-gray-600 mb-2 flex items-start gap-2">
+                        <div className="text-sm text-muted-foreground mb-2 flex items-start gap-2">
                           <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
                           <span className="flex-1">Комментарий: {request.comment}</span>
                         </div>
@@ -204,7 +203,7 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
                       )}
 
                       {request.statusHistory && request.statusHistory.length > 0 && (
-                        <div className="text-xs text-gray-500 mt-2 pt-2 border-t">
+                        <div className="text-xs text-muted-foreground mt-2 pt-2 border-t">
                           <div className="font-medium mb-1">История изменений:</div>
                           <div className="space-y-1">
                             {request.statusHistory.map((history: any, index: number) => (
@@ -222,7 +221,7 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
                                   </span>
                                 </div>
                                 {history.changedByName && (
-                                  <div className="text-gray-400 text-xs mt-0.5">
+                                  <div className="text-muted-foreground text-xs mt-0.5">
                                     {history.changedByName}
                                   </div>
                                 )}
@@ -239,7 +238,7 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
           )}
         </div>
 
-        <div className="p-6 border-t bg-gray-50">
+        <div className="p-6 border-t bg-muted/50">
           <Button
             onClick={onClose}
             className="w-full"

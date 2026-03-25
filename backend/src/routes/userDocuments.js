@@ -2,7 +2,7 @@ import express from 'express'
 import multer from 'multer'
 import { query } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
-import { uploadToS3, getFromS3, deleteFromS3, getS3FileUrl } from '../config/s3.js'
+import { uploadToS3, getFromS3, deleteFromS3 } from '../config/s3.js'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })

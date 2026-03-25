@@ -169,12 +169,12 @@ export function CreateVacationFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b flex justify-between items-center">
           <h2 className="text-xl font-semibold">Создать заявку на отпуск</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-muted-foreground hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
@@ -184,7 +184,7 @@ export function CreateVacationFormModal({
           {/* Период отпуска */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="startDate" className="block text-sm font-medium text-muted-foreground mb-1">
                 Дата начала
               </label>
               <input
@@ -193,15 +193,15 @@ export function CreateVacationFormModal({
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 min={new Date().toISOString().split('T')[0]}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
                 disabled={loading}
               />
               {errors.startDate && (
-                <p className="text-xs text-red-600 mt-1">{errors.startDate}</p>
+                <p className="text-xs text-destructive mt-1">{errors.startDate}</p>
               )}
             </div>
             <div>
-              <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="endDate" className="block text-sm font-medium text-muted-foreground mb-1">
                 Дата окончания
               </label>
               <input
@@ -210,31 +210,31 @@ export function CreateVacationFormModal({
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 min={startDate || new Date().toISOString().split('T')[0]}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
                 disabled={loading || !startDate}
               />
               {errors.endDate && (
-                <p className="text-xs text-red-600 mt-1">{errors.endDate}</p>
+                <p className="text-xs text-destructive mt-1">{errors.endDate}</p>
               )}
             </div>
           </div>
 
           {duration > 0 && (
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-muted-foreground">
               Продолжительность: {duration} {duration === 1 ? 'день' : duration >= 2 && duration <= 4 ? 'дня' : 'дней'}
             </div>
           )}
 
           {/* Тип отпуска */}
           <div>
-            <label htmlFor="vacationType" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="vacationType" className="block text-sm font-medium text-muted-foreground mb-1">
               Тип отпуска
             </label>
             <select
               id="vacationType"
               value={vacationType}
               onChange={(e) => setVacationType(e.target.value as VacationType)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
               disabled={loading}
             >
               {Object.values(VacationType).map((type) => {
@@ -247,7 +247,7 @@ export function CreateVacationFormModal({
               })}
             </select>
             {vacationTypeInfo && (
-              <p className="text-xs text-gray-600 mt-1">{vacationTypeInfo.description}</p>
+              <p className="text-xs text-muted-foreground mt-1">{vacationTypeInfo.description}</p>
             )}
           </div>
 
@@ -259,19 +259,19 @@ export function CreateVacationFormModal({
               checked={hasTravel}
               onChange={(e) => setHasTravel(e.target.checked)}
               disabled={loading || !balance?.travelAvailable}
-              className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="mt-1 h-4 w-4 text-primary focus:ring-ring border-input rounded"
             />
              <div className="flex-1">
-              <label htmlFor="hasTravel" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="hasTravel" className="block text-sm font-medium text-muted-foreground">
                 С проездом к месту проведения отпуска
               </label>
                {balance?.travelAvailable ? (
-                 <p className="text-xs text-gray-600 mt-1">
+                 <p className="text-xs text-muted-foreground mt-1">
                    Доступно
                    {balance.travelNextAvailableDate && ` до ${new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')}`}
                   </p>
                 ) : (
-                  <p className="text-xs text-red-600 mt-1">
+                  <p className="text-xs text-destructive mt-1">
                     Недоступно
                     {balance?.travelNextAvailableDate && ` (доступно с ${new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')})`}
                   </p>
@@ -281,7 +281,7 @@ export function CreateVacationFormModal({
 
             {hasTravel && (
               <div>
-                <label htmlFor="travelDestination" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="travelDestination" className="block text-sm font-medium text-muted-foreground mb-1">
                   Город назначения
                 </label>
                 <input
@@ -289,7 +289,7 @@ export function CreateVacationFormModal({
                   id="travelDestination"
                   value={travelDestination}
                   onChange={(e) => setTravelDestination(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder="Введите город проезда"
                   disabled={loading}
                 />
@@ -298,15 +298,15 @@ export function CreateVacationFormModal({
 
           {/* Комментарий */}
           <div>
-            <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-1">
-              Комментарий <span className="text-gray-500">(необязательно)</span>
+            <label htmlFor="comment" className="block text-sm font-medium text-muted-foreground mb-1">
+              Комментарий <span className="text-muted-foreground">(необязательно)</span>
             </label>
             <textarea
               id="comment"
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               rows={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="Укажите причину или дополнительные сведения..."
               disabled={loading}
             />
@@ -315,19 +315,19 @@ export function CreateVacationFormModal({
           {/* Справка для учебного отпуска */}
           {vacationType === VacationType.EDUCATIONAL && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Справка <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-muted-foreground mb-1">
+                Справка <span className="text-destructive">*</span>
               </label>
               <div className="mt-1">
                 {referenceFile ? (
-                  <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <FileText className="h-5 w-5 text-blue-600" />
-                    <span className="flex-1 text-sm text-blue-900 truncate">{referenceFile.name}</span>
+                  <div className="flex items-center gap-2 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+                    <FileText className="h-5 w-5 text-primary" />
+                    <span className="flex-1 text-sm text-primary truncate">{referenceFile.name}</span>
                     <button
                       type="button"
                       onClick={() => setReferenceFile(null)}
                       disabled={loading}
-                      className="text-blue-600 hover:text-blue-800 p-1"
+                      className="text-primary hover:text-primary/80 p-1"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -351,12 +351,12 @@ export function CreateVacationFormModal({
                       htmlFor="referenceFile"
                       className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors ${
                         loading
-                          ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                          : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                          ? 'border-input bg-muted text-muted-foreground cursor-not-allowed'
+                          : 'border-input hover:border-primary hover:bg-primary/10'
                       }`}
                     >
-                      <Upload className="h-5 w-5 text-gray-500" />
-                      <span className="text-sm text-gray-600">
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
                         Загрузите справку (PDF, изображение)
                       </span>
                     </label>
@@ -373,11 +373,11 @@ export function CreateVacationFormModal({
                 <div className="font-medium mb-1">
                   {hasEnoughDays ? '✅ Достаточно дней' : '⚠️ Недостаточно дней'}
                 </div>
-                <div className="text-gray-600">
+                <div className="text-muted-foreground">
                   Требуется: {requiredDays} дней
                 </div>
                 {balance && (
-                  <div className="text-gray-600">
+                  <div className="text-muted-foreground">
                     Доступно: {balance.availableDays} дней
                   </div>
                 )}
