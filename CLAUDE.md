@@ -32,6 +32,8 @@ npm run test:auth        # Run auth tests
 npm run test:vacation-history  # Run vacation history tests
 node --test src/tests/auth.test.js                                    # Single test file
 node --test --test-name-pattern="JWT Token" src/tests/auth.test.js    # Filter by name
+node --test src/tests/surveys.test.js
+node --test src/tests/templates.test.js
 ```
 
 **Always run after frontend changes:**
@@ -70,12 +72,14 @@ backend/src/
 ```
 
 ### Roles and Access
-User roles: `employee`, `manager`, `hr`, `admin`
+User roles: `employee`, `manager`, `hr`, `admin`, `onboarding`
 
-- `manager` role → redirected to `/leader` on login
+- `manager` → redirected to `/leader` on login
+- `onboarding` → redirected to `/onboarding`, can only access `/onboarding`, `/employees`, `/departments`; role auto-upgrades to `employee` when all onboarding documents are acknowledged
 - Other roles → redirected to `/dashboard`
 - Only the department manager can approve/reject vacation requests
 - Route-level access uses `authenticateToken` + `authorizeRoles()` middleware
+- Frontend route guards: `HRRoute` (hr/admin only), `OnboardingRoute` (onboarding only), `BlockOnboardingRoute` (blocks onboarding users from general routes)
 
 ### API Base URL
 Frontend reads `VITE_API_BASE_URL` env var, defaults to `http://localhost:5000/api`.
@@ -161,7 +165,19 @@ Each role has its own navigation function (`getEmployeeNavigation`, `getManagerN
 
 - **employee**: Дашборд, Отпуск, Опросы, Сотрудники, Отделы, Проекты, Профиль, Заявления, Документы, Уведомления
 - **manager**: Дашборд, Профиль, Сотрудники, Отделы, Проекты, Рассмотреть заявки, Отпуск, Опросы, Документы, Уведомления
-- **hr/admin**: Дашборд, Профиль, Опросы (HR), Мои опросы, Отпуск, Сотрудники, Отделы, Проекты, Документы, Уведомления
+- **hr/admin**: Дашборд, Профиль, HR (Опросы, Онбординг, Шаблоны документов, Иерархия), Мои опросы, Отпуск, Сотрудники, Отделы, Проекты, Документы, Уведомления
+- **onboarding**: Онбординг, Сотрудники, Отделы
+
+## Key Subsystems
+
+### Onboarding (`/hr/onboarding`, `/onboarding`)
+HR creates a user with role `onboarding` and assigns document templates in one request (`POST /api/onboarding`). The employee acknowledges each document (`POST /api/onboarding/me/documents/:id/acknowledge`); when all are done, a transaction atomically sets `role = 'employee'`, marks completion, and inserts HR notifications. Backend route order in `onboarding.js` matters: `/templates`, `/me`, `/me/documents/:id/acknowledge` must precede `/:id` to avoid Express matching literal paths as params.
+
+### File Uploads
+`backend/src/middleware/upload.js` exports multer instances: `uploadDocument` (user docs), `uploadTemplate` (HR document templates, PDF/DOCX ≤ 20 MB). MinIO helpers in `backend/src/config/s3.js`: `uploadToS3`, `getS3FileUrl`, `deleteFromS3`. Key format for onboarding templates: `onboarding-templates/{templateId}/{timestamp}.{ext}`.
+
+### HR Hierarchy (`/hr/hierarchy`)
+React Flow (`@xyflow/react`) canvas stored in `localStorage` key `hr-hierarchy-v1`. Lazy-loaded via `React.lazy`. Nodes: `department`, `employee`, `text`. All handles are `type="source"` with `ConnectionMode.Loose` to allow connections from any point. Custom `EditableEdge`: smoothstep rendering by default, switches to polyline when `data.waypoints` array is populated. Waypoints are materialized from smoothstep corners on first click to preserve route shape.
 
 ## Important Notes
 
