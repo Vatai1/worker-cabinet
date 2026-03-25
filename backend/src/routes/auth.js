@@ -124,7 +124,6 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
       role: user.role,
       managerId: user.manager_id,
       subordinates,
-      gender: user.gender,
       avatar: user.avatar,
     },
   })
@@ -173,7 +172,6 @@ router.get('/me', asyncHandler(async (req, res) => {
     status: user.status,
     role: user.role,
     managerId: user.manager_id,
-    gender: user.gender,
     avatar: user.avatar,
   })
 }))

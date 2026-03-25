@@ -57,7 +57,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.phone,
         u.status,
         u.role,
-        u.gender,
         u.avatar
       FROM users u
       WHERE u.department_id = $1
