@@ -43,4 +43,46 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
   }
 })
 
+router.get('/department/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params
+  try {
+    const result = await query(
+      'SELECT data, updated_at, updated_by FROM department_hierarchy WHERE department_id = $1',
+      [id]
+    )
+    if (result.rows.length === 0) {
+      return res.json({ data: DEFAULT_DATA, updated_at: null, updated_by: null })
+    }
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('GET /hierarchy/department/:id error:', error)
+    res.status(500).json({ error: 'Не удалось загрузить иерархию отдела' })
+  }
+})
+
+router.put('/department/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  const { id } = req.params
+  const { nodes, edges, viewport } = req.body
+  if (!nodes || !edges) {
+    return res.status(400).json({ error: 'Поля nodes и edges обязательны' })
+  }
+  try {
+    const data = JSON.stringify({ nodes, edges, viewport: viewport ?? DEFAULT_DATA.viewport })
+    const result = await query(
+      `INSERT INTO department_hierarchy (department_id, data, updated_at, updated_by)
+       VALUES ($1, $2, NOW(), $3)
+       ON CONFLICT (department_id) DO UPDATE
+         SET data = EXCLUDED.data,
+             updated_at = EXCLUDED.updated_at,
+             updated_by = EXCLUDED.updated_by
+       RETURNING updated_at`,
+      [id, data, req.user.id]
+    )
+    res.json({ updated_at: result.rows[0].updated_at })
+  } catch (error) {
+    console.error('PUT /hierarchy/department/:id error:', error)
+    res.status(500).json({ error: 'Не удалось сохранить иерархию отдела' })
+  }
+})
+
 export default router

@@ -1017,6 +1017,16 @@ async function runMigrations() {
     `).catch(e => console.log('  - hr_hierarchy:', e.message))
     console.log('  ✓ hr_hierarchy')
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS department_hierarchy (
+        department_id INTEGER PRIMARY KEY REFERENCES departments(id) ON DELETE CASCADE,
+        data JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}',
+        updated_at TIMESTAMP DEFAULT NOW(),
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )
+    `).catch(e => console.log('  - department_hierarchy:', e.message))
+    console.log('  ✓ department_hierarchy')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     
