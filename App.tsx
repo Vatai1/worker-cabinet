@@ -1,5 +1,16 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense, Component, type ReactNode } from 'react'
+
+class PageErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(e: Error) { return { error: e.message } }
+  render() {
+    if (this.state.error) return (
+      <div className="p-8 text-destructive text-sm">Ошибка загрузки страницы: {this.state.error}</div>
+    )
+    return this.props.children
+  }
+}
 import { useAuthStore } from '@/store/authStore'
 import { Login } from '@/pages/Login'
 import { Layout } from '@/components/layout/Layout'
@@ -28,6 +39,7 @@ import { Surveys } from '@/pages/Surveys'
 import { SurveyPage } from '@/pages/SurveyPage'
 import { Onboarding } from '@/pages/Onboarding'
 import { HROnboarding } from '@/pages/HROnboarding'
+const HRHierarchy = lazy(() => import('@/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -134,6 +146,7 @@ function App() {
           <Route path="onboarding" element={<OnboardingRoute><Onboarding /></OnboardingRoute>} />
           <Route path="hr/onboarding" element={<HRRoute><HROnboarding /></HRRoute>} />
           <Route path="hr/onboarding/:id" element={<HRRoute><HROnboarding /></HRRoute>} />
+          <Route path="hr/hierarchy" element={<HRRoute><PageErrorBoundary><Suspense fallback={<div className="p-8 text-muted-foreground">Загрузка...</div>}><HRHierarchy /></Suspense></PageErrorBoundary></HRRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

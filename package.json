@@ -30,6 +30,7 @@
   "dependencies": {
     "@dicebear/collection": "^9.4.2",
     "@dicebear/core": "^9.4.2",
+    "@xyflow/react": "^12.10.1",
     "clsx": "^2.0.0",
     "date-fns": "^4.1.0",
     "docx-preview": "^0.3.7",
