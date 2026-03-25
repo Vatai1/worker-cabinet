@@ -1006,6 +1006,17 @@ async function runMigrations() {
     await db.query('CREATE INDEX IF NOT EXISTS idx_dat_expires ON document_access_tokens(expires_at)').catch(e => {})
     console.log('  ✓ document_access_tokens')
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS hr_hierarchy (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        data JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}',
+        updated_at TIMESTAMP DEFAULT NOW(),
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        CONSTRAINT single_row CHECK (id = 1)
+      )
+    `).catch(e => console.log('  - hr_hierarchy:', e.message))
+    console.log('  ✓ hr_hierarchy')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     
