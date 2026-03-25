@@ -71,7 +71,7 @@ export function Documents() {
       contract: { label: 'Договор', className: 'bg-blue-100 text-blue-800' },
       certificate: { label: 'Сертификат', className: 'bg-yellow-100 text-yellow-800' },
       policy: { label: 'Политика', className: 'bg-green-100 text-green-800' },
-      other: { label: 'Другое', className: 'bg-gray-100 text-gray-800' },
+      other: { label: 'Другое', className: 'bg-muted text-muted-foreground' },
     }
     return badges[category] || badges.other
   }

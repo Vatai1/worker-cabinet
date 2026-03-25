@@ -82,9 +82,16 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
 
 const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Онбординг', href: '/hr/onboarding', icon: ClipboardList },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
-  { name: 'Опросы (HR)', href: '/hr/surveys', icon: ClipboardList },
+  {
+    name: 'HR',
+    icon: Users,
+    children: [
+      { name: 'Опросы', href: '/hr/surveys' },
+      { name: 'Онбординг', href: '/hr/onboarding' },
+      { name: 'Шаблоны документов', href: '/hr/document-templates' },
+    ],
+  },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
   { name: 'Сотрудники', href: '/employees', icon: Users },
@@ -94,7 +101,6 @@ const getHRNavigation = (userId?: string): NavItem[] => [
     name: 'Документы',
     icon: FolderOpen,
     children: [
-      { name: 'Шаблоны', href: '/hr/document-templates' },
       { name: 'Ваши документы', href: '/documents' },
     ],
   },

@@ -36,6 +36,7 @@ app.use(cors({
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
     'http://127.0.0.1:8080',
+    'http://host.docker.internal:5000',
     process.env.FRONTEND_URL,
   ].filter(Boolean),
   credentials: true,

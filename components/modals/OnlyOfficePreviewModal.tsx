@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Edit, Loader2 } from 'lucide-react'
+import { X, Edit, Loader2, CheckCircle2 } from 'lucide-react'
 import { formatFileSize } from '@/lib/documentUtils'
 import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 
 interface OnlyOfficePreviewModalProps {
   open: boolean
@@ -15,6 +16,8 @@ interface OnlyOfficePreviewModalProps {
   }
   editable?: boolean
   callbackUrl?: string
+  onAcknowledge?: () => Promise<void>
+  acknowledged?: boolean
 }
 
 const ONLYOFFICE_URL = import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'
@@ -22,12 +25,14 @@ const ONLYOFFICE_API_URL = `${ONLYOFFICE_URL}/web-apps/apps/api/documents/api.js
 
 let editorCounter = 0
 
-export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, callbackUrl }: OnlyOfficePreviewModalProps) {
+export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, callbackUrl, onAcknowledge, acknowledged }: OnlyOfficePreviewModalProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editorId] = useState(() => `onlyoffice-editor-${++editorCounter}`)
   const editorRef = useRef<any>(null)
   const isInitializedRef = useRef(false)
+  const [acknowledging, setAcknowledging] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
 
   const destroyEditor = useCallback(() => {
     if (editorRef.current) {
@@ -41,6 +46,24 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
     }
     isInitializedRef.current = false
   }, [])
+
+  const handleAcknowledge = async () => {
+    if (!onAcknowledge) return
+    setAcknowledging(true)
+    try {
+      await onAcknowledge()
+      setShowConfirmModal(false)
+      onClose()
+    } catch (err) {
+      console.error('Error acknowledging:', err)
+    } finally {
+      setAcknowledging(false)
+    }
+  }
+
+  const handleAcknowledgeClick = () => {
+    setShowConfirmModal(true)
+  }
 
   useEffect(() => {
     if (!open) {
@@ -78,7 +101,9 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
         } else {
           fileUrl = doc.url
         }
-        console.log('📄 Document URL:', fileUrl.substring(0, 80) + '...')
+        console.log('📄 Document URL:', fileUrl)
+        console.log('📄 URL length:', fileUrl.length)
+        console.log('📄 URL starts with:', fileUrl.substring(0, 100))
 
         if (fileUrl.startsWith('blob:')) {
           console.log('🔄 Converting blob URL to data URL...')
@@ -244,9 +269,43 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           />
         </div>
 
+        {showConfirmModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+              <h3 className="text-lg font-semibold">Подтверждение ознакомления</h3>
+              <p className="text-muted-foreground">
+                Вы подтверждаете, что ознакомились с документом «{doc.name}»?
+              </p>
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setShowConfirmModal(false)} disabled={acknowledging}>
+                  Отмена
+                </Button>
+                <Button onClick={handleAcknowledge} disabled={acknowledging}>
+                  {acknowledging && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  Подтвердить
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between p-4 border-t border-border/60 shrink-0">
           <p className="text-sm text-muted-foreground">Powered by OnlyOffice</p>
-          <Button variant="outline" onClick={onClose}>Закрыть</Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={onClose}>Закрыть</Button>
+            {!editable && onAcknowledge && !acknowledged && (
+              <Button onClick={handleAcknowledgeClick} disabled={acknowledging}>
+                {acknowledging && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Ознакомиться
+              </Button>
+            )}
+            {acknowledged && (
+              <Badge variant="success" className="px-3 py-1">
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Ознакомлен
+              </Badge>
+            )}
+          </div>
         </div>
       </div>
     </div>

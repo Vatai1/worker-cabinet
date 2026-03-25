@@ -1,5 +1,5 @@
 import { query } from '../config/database.js'
-import { uploadToS3, deleteFromS3, getS3FileUrl } from '../config/s3.js'
+import { uploadToS3, deleteFromS3, getPresignedUrl } from '../config/s3.js'
 import https from 'https'
 import http from 'http'
 
@@ -22,8 +22,8 @@ export async function deleteTemplate(id) {
   await query('DELETE FROM document_templates WHERE id = $1', [id])
 }
 
-export function getTemplateUrl(fileKey) {
-  return getS3FileUrl(fileKey)
+export async function getTemplateUrl(fileKey) {
+  return await getPresignedUrl(fileKey)
 }
 
 export async function handleOnlyOfficeCallback(id, body) {

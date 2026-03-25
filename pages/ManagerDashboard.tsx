@@ -200,7 +200,7 @@ export function ManagerDashboard() {
                   </div>
 
                   {selectedRequest === request.id ? (
-                    <div className="space-y-3 rounded-lg bg-white p-4 border">
+                    <div className="space-y-3 rounded-lg bg-card p-4 border">
                       <div className="space-y-2">
                         <Label htmlFor="comment">Комментарий (обязательно при отклонении)</Label>
                         <textarea

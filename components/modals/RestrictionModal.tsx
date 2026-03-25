@@ -73,14 +73,14 @@ export function RestrictionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-6 border-b flex justify-between items-center">
           <h2 className="text-xl font-semibold">Настроить пересечения отпусков</h2>
           <Button
             type="button"
             variant="ghost"
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-muted-foreground hover:text-muted-foreground"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -103,7 +103,7 @@ export function RestrictionModal({
                       className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
                         restrictionType === 'pair'
                           ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-300 hover:border-gray-400'
+                          : 'border-input hover:border-input'
                       }`}
                     >
                       Парное
@@ -114,7 +114,7 @@ export function RestrictionModal({
                       className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
                         restrictionType === 'group'
                           ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-300 hover:border-gray-400'
+                          : 'border-input hover:border-input'
                       }`}
                     >
                       Групповое
@@ -134,18 +134,18 @@ export function RestrictionModal({
 
                 <div>
                   <label className="block text-sm font-medium mb-2">Выберите сотрудников</label>
-                  <div className="border-2 border-gray-300 rounded-lg max-h-60 overflow-y-auto">
+                  <div className="border-2 border-input rounded-lg max-h-60 overflow-y-auto">
                     {departmentUsers.map((employee) => (
                       <button
                         key={employee.id}
                         type="button"
                         onClick={() => toggleEmployee(employee.id)}
-                        className={`w-full px-4 py-2 text-left border-b border-gray-200 last:border-0 hover:bg-gray-50 flex items-center gap-2 ${
+                        className={`w-full px-4 py-2 text-left border-b border-input last:border-0 hover:bg-muted/50 flex items-center gap-2 ${
                           selectedEmployees.includes(employee.id) ? 'bg-blue-50' : ''
                         }`}
                       >
                         <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
-                          selectedEmployees.includes(employee.id) ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                          selectedEmployees.includes(employee.id) ? 'border-blue-500 bg-blue-500' : 'border-input'
                         }`}>
                           {selectedEmployees.includes(employee.id) && (
                             <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -155,12 +155,12 @@ export function RestrictionModal({
                         </div>
                         <div>
                           <div className="text-sm font-medium">{employee.lastName} {employee.firstName}</div>
-                          <div className="text-xs text-gray-500">{employee.position}</div>
+                          <div className="text-xs text-muted-foreground">{employee.position}</div>
                         </div>
                       </button>
                     ))}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">Выбрано: {selectedEmployees.length}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Выбрано: {selectedEmployees.length}</div>
                 </div>
 
                 {restrictionType === 'group' && (
@@ -172,7 +172,7 @@ export function RestrictionModal({
                       max={selectedEmployees.length - 1 || 1}
                       value={maxConcurrent}
                       onChange={(e) => setMaxConcurrent(parseInt(e.target.value) || 1)}
-                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                      className="w-full px-3 py-2 border-2 border-input rounded-lg focus:border-blue-500 focus:outline-none"
                     />
                   </div>
                 )}
@@ -184,7 +184,7 @@ export function RestrictionModal({
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Например, для обеспечения непрерывной работы..."
-                    className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                    className="w-full px-3 py-2 border-2 border-input rounded-lg focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
@@ -202,13 +202,13 @@ export function RestrictionModal({
             <div>
               <h3 className="text-lg font-semibold mb-4">Текущие ограничения</h3>
               {restrictions.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">Нет ограничений</div>
+                <div className="text-center py-8 text-muted-foreground">Нет ограничений</div>
               ) : (
                 <div className="space-y-3 max-h-[calc(90vh-300px)] overflow-y-auto">
                   {restrictions.map((restriction) => (
                     <div
                       key={restriction.id}
-                      className="border-2 border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
+                      className="border-2 border-input rounded-lg p-4 hover:border-input transition-colors"
                     >
                       <div className="flex justify-between items-start gap-2 mb-2">
                         <div>
@@ -218,7 +218,7 @@ export function RestrictionModal({
                             {restriction.type === 'pair' ? 'Парное' : 'Групповое'}
                           </span>
                           {restriction.maxConcurrent && (
-                            <span className="ml-2 text-xs text-gray-600">
+                            <span className="ml-2 text-xs text-muted-foreground">
                               (максимум {restriction.maxConcurrent} {restriction.maxConcurrent === 1 ? 'одновременно' : 'одновременно'})
                             </span>
                           )}
@@ -237,7 +237,7 @@ export function RestrictionModal({
                         {restriction.employeeIds.map((id) => getEmployeeName(id)).join(', ')}
                       </div>
                       {restriction.description && (
-                        <div className="text-xs text-gray-500 italic">{restriction.description}</div>
+                        <div className="text-xs text-muted-foreground italic">{restriction.description}</div>
                       )}
                     </div>
                   ))}

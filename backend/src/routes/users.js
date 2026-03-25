@@ -19,6 +19,19 @@ router.get('/skills/all', authenticateToken, async (req, res) => {
   }
 })
 
+// Get all unique positions
+router.get('/positions/all', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT DISTINCT position FROM users WHERE position IS NOT NULL ORDER BY position'
+    )
+    res.json(result.rows.map(r => r.position))
+  } catch (error) {
+    console.error('Error fetching all positions:', error)
+    res.status(500).json({ error: 'Failed to fetch positions' })
+  }
+})
+
 // Search users (for adding members to projects - no role restriction)
 router.get('/search', authenticateToken, async (req, res) => {
   try {
@@ -68,8 +81,8 @@ router.get('/search', authenticateToken, async (req, res) => {
   }
 })
 
-// Get all users (for managers/hr)
-router.get('/', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+// Get all users (for managers/hr/employees)
+router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', 'admin'), async (req, res) => {
   try {
     const { departmentId } = req.query
     
@@ -88,7 +101,6 @@ router.get('/', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), asy
         u.status,
         u.role,
         u.manager_id,
-        u.gender,
         u.avatar,
         m.first_name || ' ' || m.last_name as manager_name
       FROM users u
@@ -165,7 +177,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.role,
         u.manager_id,
         u.responsibility_area,
-        u.gender,
         u.avatar,
         m.first_name || ' ' || m.last_name as manager_name,
         vb.total_days,

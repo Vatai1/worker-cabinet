@@ -7,7 +7,8 @@ import { getErrorMessage, formatDate } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { CheckCircle2, Circle, FileText, Download, Loader2, BookOpen } from 'lucide-react'
+import { OnlyOfficePreviewModal } from '@/components/modals/OnlyOfficePreviewModal'
+import { CheckCircle2, Circle, FileText, Download, Loader2, BookOpen, Eye } from 'lucide-react'
 
 interface OnboardingDocument {
   id: number
@@ -16,6 +17,7 @@ interface OnboardingDocument {
   contentText: string | null
   fileKey: string | null
   fileUrl: string | null
+  mimeType: string
   acknowledgedAt: string | null
 }
 
@@ -38,6 +40,13 @@ export function Onboarding() {
   const [confirmDocId, setConfirmDocId] = useState<number | null>(null)
   const [acknowledging, setAcknowledging] = useState(false)
   const [ackError, setAckError] = useState<string | null>(null)
+  const [onlyOfficeDoc, setOnlyOfficeDoc] = useState<{
+    id: number
+    name: string
+    url: string
+    mimeType: string
+    acknowledged: boolean
+  } | null>(null)
 
   const fetchOnboarding = async () => {
     try {
@@ -174,15 +183,57 @@ export function Onboarding() {
                 <div className="text-sm whitespace-pre-wrap leading-relaxed">{selectedDoc.contentText}</div>
               )}
               {selectedDoc.fileUrl && (
-                <a
-                  href={selectedDoc.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 mt-4 text-primary hover:underline"
-                >
-                  <Download className="h-4 w-4" />
-                  Скачать файл
-                </a>
+                <div className="flex gap-3 mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        console.log('[Onboarding] Getting access token for document:', selectedDoc.id)
+                        const res = await fetch(`${API_BASE_URL}/onboarding/documents/${selectedDoc.id}/access-token`, {
+                          method: 'POST',
+                          headers: getAuthHeaders(),
+                        })
+                        if (!res.ok) {
+                          const error = await res.json()
+                          throw new Error(error.error || 'Ошибка получения токена')
+                        }
+                        const { accessToken } = await res.json()
+                        console.log('[Onboarding] Access token received:', accessToken.substring(0, 8) + '...')
+                        
+                        // Replace localhost with host.docker.internal for OnlyOffice in Docker
+                        const fileUrl = `${API_BASE_URL}/onboarding/documents/${selectedDoc.id}/file?token=${accessToken}`
+                          .replace('localhost:5000', 'host.docker.internal:5000')
+                        
+                        console.log('[Onboarding] File URL for OnlyOffice:', fileUrl)
+                        console.log('[Onboarding] MIME type:', selectedDoc.mimeType)
+                        setSelectedDoc(null)
+                        setOnlyOfficeDoc({
+                          id: selectedDoc.id,
+                          name: selectedDoc.title,
+                          url: fileUrl,
+                          mimeType: selectedDoc.mimeType,
+                          acknowledged: selectedDoc.acknowledgedAt !== null,
+                        })
+                      } catch (err) {
+                        console.error('[Onboarding] Error getting access token:', err)
+                        alert('Ошибка: ' + (err instanceof Error ? err.message : 'Неизвестная ошибка'))
+                      }
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Открыть в OnlyOffice
+                  </Button>
+                  <a
+                    href={selectedDoc.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-primary hover:underline text-sm"
+                  >
+                    <Download className="h-4 w-4" />
+                    Скачать файл
+                  </a>
+                </div>
               )}
             </div>
             <div className="p-6 border-t border-border/50 flex justify-end gap-3">
@@ -211,6 +262,37 @@ export function Onboarding() {
             </div>
           </div>
         </div>
+      )}
+
+      {onlyOfficeDoc && (
+        <OnlyOfficePreviewModal
+          open={!!onlyOfficeDoc}
+          onClose={() => setOnlyOfficeDoc(null)}
+          document={onlyOfficeDoc}
+          editable={false}
+          acknowledged={onlyOfficeDoc.acknowledged}
+          onAcknowledge={async () => {
+            try {
+              const res = await fetch(`${API_BASE_URL}/onboarding/me/documents/${onlyOfficeDoc.id}/acknowledge`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+              })
+              if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error || 'Ошибка')
+              }
+              await checkAuth()
+              const updatedUser = useAuthStore.getState().user
+              if (updatedUser?.role === 'employee') {
+                navigate('/dashboard', { replace: true })
+                return
+              }
+              await fetchOnboarding()
+            } catch (err) {
+              throw err
+            }
+          }}
+        />
       )}
     </div>
   )

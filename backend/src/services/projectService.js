@@ -1,6 +1,6 @@
 import { query, getClient } from '../config/database.js'
 import { NotFoundError, ForbiddenError, ValidationError } from '../middleware/errors.js'
-import { uploadToS3, deleteFromS3, getFromS3, getS3FileUrl } from '../config/s3.js'
+import { uploadToS3, deleteFromS3, getFromS3, getPresignedUrl } from '../config/s3.js'
 
 class ProjectService {
   async getProjectsWithFilters(filters = {}) {
@@ -358,10 +358,12 @@ class ProjectService {
        ORDER BY name`,
       [projectId, folderPath]
     )
-    return result.rows.map(doc => ({
-      ...doc,
-      url: getS3FileUrl(doc.path),
-    }))
+    return await Promise.all(
+      result.rows.map(async doc => ({
+        ...doc,
+        url: await getPresignedUrl(doc.path),
+      }))
+    )
   }
 
   async uploadDocument(projectId, file, folderPath, userId) {
@@ -380,7 +382,7 @@ class ProjectService {
 
     return {
       ...result.rows[0],
-      url: getS3FileUrl(key),
+      url: await getPresignedUrl(key),
     }
   }
 

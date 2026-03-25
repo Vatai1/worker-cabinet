@@ -25,13 +25,13 @@ export function ConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4">
         <div className="p-6 border-b">
           <h2 className="text-xl font-semibold">{title}</h2>
         </div>
 
         <div className="p-6">
-          <p className="text-gray-700">{message}</p>
+          <p className="text-foreground">{message}</p>
         </div>
 
         <div className="flex gap-3 px-6 pb-6">

@@ -77,7 +77,7 @@ export function Profile() {
   const getStatusBadge = (status: typeof user.status) => {
     const badges = {
       active: { label: 'Активен', className: 'bg-green-100 text-green-800' },
-      inactive: { label: 'Неактивен', className: 'bg-gray-100 text-gray-800' },
+      inactive: { label: 'Неактивен', className: 'bg-muted text-muted-foreground' },
       on_leave: { label: 'В отпуске', className: 'bg-yellow-100 text-yellow-800' },
     }
     return badges[status]
