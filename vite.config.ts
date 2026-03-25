@@ -41,7 +41,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_ONLYOFFICE_URL': JSON.stringify(env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'),
     },
     optimizeDeps: {
-      include: ['react-pdf'],
+      include: ['react-pdf', '@xyflow/react'],
     },
     server: {
       port: 3000,

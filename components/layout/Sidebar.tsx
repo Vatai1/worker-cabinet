@@ -90,6 +90,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
       { name: 'Опросы', href: '/hr/surveys' },
       { name: 'Онбординг', href: '/hr/onboarding' },
       { name: 'Шаблоны документов', href: '/hr/document-templates' },
+      { name: 'Иерархия', href: '/hr/hierarchy' },
     ],
   },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
