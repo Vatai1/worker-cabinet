@@ -5,42 +5,44 @@
 
 ## Overview
 
-Add a "Просмотреть отдел" context menu item to department nodes in the HR Hierarchy canvas. Clicking it opens a full-canvas overlay showing a per-department editable org chart — same blocks, same editing tools, stored separately per department in PostgreSQL.
+Add a "Просмотреть отдел" context menu item to department nodes in the HR Hierarchy canvas. Clicking it opens a full-body overlay showing a per-department editable org chart — same blocks, same editing tools, stored separately per department in PostgreSQL.
 
 ## Database
 
-Add to `backend/src/db/migrate.js`:
+Add to `backend/src/db/migrate.js` before the final `console.log('✅ Migrations completed successfully')`:
 
-```sql
-CREATE TABLE IF NOT EXISTS department_hierarchy (
-  department_id INTEGER PRIMARY KEY REFERENCES departments(id) ON DELETE CASCADE,
-  data JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}',
-  updated_at TIMESTAMP DEFAULT NOW(),
-  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
-)
+```js
+await db.query(`
+  CREATE TABLE IF NOT EXISTS department_hierarchy (
+    department_id INTEGER PRIMARY KEY REFERENCES departments(id) ON DELETE CASCADE,
+    data JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}',
+    updated_at TIMESTAMP DEFAULT NOW(),
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+  )
+`).catch(e => console.log('  - department_hierarchy:', e.message))
+console.log('  ✓ department_hierarchy')
 ```
 
-`department_id` is the primary key — one row per department, no duplicate hierarchies. `ON DELETE CASCADE` removes the hierarchy when the department is deleted.
+`department_id` is the primary key — one row per department. `ON DELETE CASCADE` removes the hierarchy when the department is deleted.
 
 ## Backend API
 
-Add two endpoints to the existing `backend/src/routes/hierarchy.js`. **Route order matters**: register `/department/:id` routes before any `/:id` catch-all to prevent Express from treating the literal string `"department"` as a numeric id.
+Add two endpoints to `backend/src/routes/hierarchy.js` **before** `export default router`. Register them before any future `/:id` routes to prevent Express matching the literal string `"department"` as an id parameter.
 
 ### `GET /api/hierarchy/department/:id`
 
 - Middleware: `authenticateToken`
-- If no row exists for this department, return the empty default (no 404):
-  ```json
-  { "data": { "nodes": [], "edges": [], "viewport": { "x": 0, "y": 0, "zoom": 1 } }, "updated_at": null, "updated_by": null }
-  ```
-- On success return the stored row: `{ data, updated_at, updated_by }`
+- Query: `SELECT data, updated_at, updated_by FROM department_hierarchy WHERE department_id = $1`
+- If no row: return `{ data: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }, updated_at: null, updated_by: null }`
+- On success: return `{ data, updated_at, updated_by }`
 - On DB error: `500 { "error": "Не удалось загрузить иерархию отдела" }`
 
 ### `PUT /api/hierarchy/department/:id`
 
 - Middleware: `authenticateToken`, `authorizeRoles('hr', 'admin')`
-- Body: `{ nodes, edges, viewport }` from `rfInstance.toObject()`
-- Validate: if `nodes` or `edges` missing → `400 { "error": "Поля nodes и edges обязательны" }`
+- Body: `{ nodes, edges, viewport }`
+- Validate: missing `nodes` or `edges` → `400 { "error": "Поля nodes и edges обязательны" }`
+- Build data payload applying viewport fallback: `{ nodes, edges, viewport: viewport ?? { x: 0, y: 0, zoom: 1 } }`
 - Upsert:
   ```sql
   INSERT INTO department_hierarchy (department_id, data, updated_at, updated_by)
@@ -56,16 +58,16 @@ Add two endpoints to the existing `backend/src/routes/hierarchy.js`. **Route ord
 
 ## Frontend
 
-All changes in `pages/HRHierarchy.tsx` plus a new component `components/hierarchy/DepartmentHierarchyOverlay.tsx`.
-
 ### Context menu change (`pages/HRHierarchy.tsx`)
 
-Add state:
+**New state:**
 ```ts
 const [activeDepartment, setActiveDepartment] = useState<{ id: number; name: string } | null>(null)
 ```
 
-In the context menu JSX, before the "Изменить" button, add — only when `contextMenu.nodeType === 'department'`:
+**New lucide import:** add `ExternalLink` to the existing lucide-react import line.
+
+**Context menu JSX:** inside the `{contextMenu && (...)}` block, add before the "Изменить" button:
 ```tsx
 {contextMenu.nodeType === 'department' && (
   <>
@@ -86,49 +88,111 @@ In the context menu JSX, before the "Изменить" button, add — only when
 )}
 ```
 
-Import `ExternalLink` from `lucide-react`.
-
-When `activeDepartment` is set, render the overlay inside the canvas area:
+**Overlay render:** add `relative` class to the body wrapper div (`<div className="flex flex-1 overflow-hidden">`), then render the overlay as its last child:
 ```tsx
 {activeDepartment && (
   <DepartmentHierarchyOverlay
     departmentId={activeDepartment.id}
     departmentName={activeDepartment.name}
+    departments={departments}
     onClose={() => setActiveDepartment(null)}
   />
 )}
 ```
 
-Place this inside the `<SaveSnapshotContext.Provider>` wrapper, as a sibling to the `<div className="flex-1 relative">` canvas div — but outside ReactFlow itself.
+`absolute inset-0` on the overlay is scoped to this `relative` body div, covering both the left panel and the canvas — but not the main "Иерархия" page header above.
 
-### `DepartmentHierarchyOverlay` component (`components/hierarchy/DepartmentHierarchyOverlay.tsx`)
+### `DepartmentHierarchyOverlay` (`components/hierarchy/DepartmentHierarchyOverlay.tsx`)
 
-Props:
+**Props:**
 ```ts
 interface Props {
   departmentId: number
   departmentName: string
+  departments: Department[]   // passed from parent — avoids duplicate API call
   onClose: () => void
 }
 ```
 
-Self-contained component with its own state: `nodes`, `edges` (via `useNodesState`/`useEdgesState`), `historyRef`, `isRestoringRef`, `rfInstanceRef`, `pendingViewportRef`, `departments` (for SelectDepartmentModal/SelectEmployeeModal), `saving`, `savedLabel`, `error`, `loading`, `pendingDrop`, `editingNode`, `contextMenu`, `edgeContextMenu`.
+**Imports needed from lucide-react:** `ChevronLeft`, `Save`, `Building2`, `User`, `AlignLeft`, `Search`, `X`, `Pencil`, `ArrowLeftRight`, `Trash2`
 
-**Load on mount**: `GET /api/hierarchy/department/:departmentId`. Restore nodes, edges, viewport (same `pendingViewportRef` pattern as main hierarchy).
+The component is self-contained with its own state:
+- `nodes`, `edges` via `useNodesState` / `useEdgesState`
+- `rfInstanceRef`, `pendingViewportRef` (for deferred viewport restore in `handleInit`)
+- `historyRef`, `isRestoringRef` (undo stack)
+- `saving`, `savedLabel`, `error`, `hierarchyLoading`
+- `pendingDrop`, `editingNode`, `contextMenu`, `edgeContextMenu`
 
-**Save**: `PUT /api/hierarchy/department/:departmentId` with `rfInstanceRef.current.toObject()`.
+**Reused shared pieces** (import directly, do not redefine):
+- Node components: `DepartmentNode`, `EmployeeNode`, `TextNode`, `nodeTypes`
+- Edge: `EditableEdge`, `edgeTypes`, `EditableEdge`-related constants
+- Modals: `SelectDepartmentModal`, `SelectEmployeeModal`, `TextInputModal`
+- Context: `SaveSnapshotContext`
+- Types: `Department`, `DeptEmployee`, `Waypoint`
 
-**Undo**: same `historyRef` + `useEffect` keyboard handler for Ctrl+Z / `e.code === 'KeyZ'`. The handler must use `e.stopPropagation()` is not needed, but attach to `document` scoped inside a `useEffect` that cleans up on unmount — this naturally overrides the main hierarchy's handler while the overlay is open (last registered handler runs last; since both call `e.preventDefault()`, both will fire; use a `ref` guard or check overlay is mounted).
+Add the `export` keyword to the following declarations **in place** in `HRHierarchy.tsx` — do not move them to a separate file:
+```ts
+export { DepartmentNode, EmployeeNode, TextNode, nodeTypes, EditableEdge, edgeTypes }
+export { SelectDepartmentModal, SelectEmployeeModal, TextInputModal }
+export type { Department, DeptEmployee }
+export { SaveSnapshotContext, EDGE_STYLE, EDGE_MARKER, NODE_COLORS }
+```
+The existing lazy import in `App.tsx` (`import('@/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy }))`) is unaffected by adding more named exports.
 
-Actually: attach the keyboard handler inside `DepartmentHierarchyOverlay` with `useEffect`, and detach on unmount. Since the main HRHierarchy also listens, both will fire. Prevent this by checking a ref: pass no special ref — instead, the overlay handler calls `e.stopPropagation()` (keyboard events don't bubble by default on `document`). Solution: use `{ capture: true }` in the overlay's listener so it fires first, then call `e.preventDefault()` to block browser default. The main hierarchy's handler will also fire but has no effect since history is separate.
+**Undo (Ctrl+Z):** attach a `keydown` listener on `document` in a `useEffect`, same pattern as `HRHierarchy`. When the overlay is mounted, both the main hierarchy's handler and the overlay's handler fire on Ctrl+Z. This is harmless — each operates on its own isolated `historyRef`, so the main hierarchy's undo attempts to pop from its own history (unaffected by overlay edits). No special capture or stopPropagation needed.
 
-Simpler solution: When the overlay is mounted, it captures Ctrl+Z. Both handlers fire but each operates on its own `historyRef` — no conflict. This is acceptable.
+**Load on mount:**
+```ts
+useEffect(() => {
+  const load = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/hierarchy/department/${departmentId}`, { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error('Не удалось загрузить иерархию отдела')
+      const { data } = await res.json()
+      if (data.nodes) setNodes(data.nodes)
+      if (data.edges) setEdges((data.edges as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })))
+      if (data.viewport) {
+        if (rfInstanceRef.current) rfInstanceRef.current.setViewport(data.viewport)
+        else pendingViewportRef.current = data.viewport
+      }
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setHierarchyLoading(false)
+    }
+  }
+  load()
+}, [departmentId, setNodes, setEdges])
+```
 
-**Editable edges**: same `EditableEdge` component, same `SaveSnapshotContext.Provider`, same `edgeTypes`.
+**Save:**
+```ts
+const save = async () => {
+  const inst = rfInstanceRef.current
+  if (!inst) return
+  setSaving(true)
+  try {
+    const { nodes: n, edges: e, viewport } = inst.toObject()
+    const res = await fetch(`${API_BASE_URL}/hierarchy/department/${departmentId}`, {
+      method: 'PUT',
+      headers: getAuthHeadersWithContentType(),
+      body: JSON.stringify({ nodes: n, edges: e, viewport }),
+    })
+    if (!res.ok) {
+      const d = await res.json()
+      throw new Error(d.error || 'Не удалось сохранить иерархию отдела')
+    }
+    setSavedLabel(true)
+    setTimeout(() => setSavedLabel(false), 2000)
+  } catch (err) {
+    setError(getErrorMessage(err))
+  } finally {
+    setSaving(false)
+  }
+}
+```
 
-**Canvas**: same ReactFlow setup — `ConnectionMode.Loose`, `deleteKeyCode="Delete"`, `edgeTypes`, `nodeTypes`, `onReconnect`, left panel with draggable blocks, modals for department/employee/text selection.
-
-**Layout**: absolute overlay covering the entire canvas+body area (not the page header):
+**Layout:**
 ```tsx
 <div className="absolute inset-0 z-20 flex flex-col bg-card">
   {/* Header */}
@@ -140,6 +204,7 @@ Simpler solution: When the overlay is mounted, it captures Ctrl+Z. Both handlers
     <div className="h-4 w-px bg-border" />
     <span className="text-sm font-semibold">{departmentName}</span>
     <div className="ml-auto flex items-center gap-2">
+      {error && <span className="text-xs text-destructive">{error}</span>}
       {savedLabel && <span className="text-xs text-green-600 dark:text-green-400">Сохранено</span>}
       <Button size="sm" variant="outline" onClick={save} disabled={saving}>
         <Save className="h-4 w-4 mr-1.5" />
@@ -147,32 +212,32 @@ Simpler solution: When the overlay is mounted, it captures Ctrl+Z. Both handlers
       </Button>
     </div>
   </div>
-  {/* Body: left panel + canvas */}
+  {/* Body: left panel + canvas — same structure as HRHierarchy */}
+  <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+    {/* left panel */}
+    {/* canvas */}
+  </div>
 </div>
 ```
 
-The overlay is placed as a child of the `<div className="flex flex-col overflow-hidden ...">` root element of `HRHierarchy`, so `absolute inset-0` covers the full component area including the header of the main page.
-
-Wait — it should cover only the body area (below the main "Иерархия" header), not the whole page. Place it inside the `<div className="flex flex-1 overflow-hidden">` body wrapper, so `absolute inset-0` is scoped to that div (which has `position: relative` or we add it).
-
-Actually the body div is: `<div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>`. Add `relative` to this div and render the overlay inside it.
+The left panel and canvas structure mirrors `HRHierarchy` exactly (same drag items, same ReactFlow props, same context menus, same modals).
 
 ## Access Control
 
-Same as main hierarchy — the `HRRoute` guard already restricts the page. No additional checks needed.
+`HRRoute` already restricts the page to `hr`/`admin`. No additional checks needed.
 
 ## Error Handling
 
-| Case | Response |
+| Case | Behavior |
 |------|----------|
 | `GET` DB error | `500 { "error": "Не удалось загрузить иерархию отдела" }` |
 | `PUT` missing nodes/edges | `400 { "error": "Поля nodes и edges обязательны" }` |
 | `PUT` DB error | `500 { "error": "Не удалось сохранить иерархию отдела" }` |
-| Frontend load error | show error in overlay body |
-| Frontend save error | show error in overlay header area |
+| Frontend load error | shown in overlay header (`error` state) |
+| Frontend save error | shown in overlay header (`error` state) |
 
 ## Out of Scope
 
-- Navigating between department hierarchies without going back to main first
-- Auto-populating department hierarchy from existing department employees
+- Navigating between department hierarchies without going back to main view
+- Auto-populating from existing department employees
 - Department hierarchy visible to non-HR users
