@@ -1027,6 +1027,17 @@ async function runMigrations() {
     `).catch(e => console.log('  - department_hierarchy:', e.message))
     console.log('  ✓ department_hierarchy')
 
+    await db.query(`ALTER TABLE document_templates ADD COLUMN IF NOT EXISTS purpose TEXT`)
+      .catch(e => console.log('  - document_templates.purpose:', e.message))
+    console.log('  ✓ document_templates.purpose')
+
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_dt_purpose
+      ON document_templates (purpose)
+      WHERE purpose IS NOT NULL
+    `).catch(e => console.log('  - idx_dt_purpose:', e.message))
+    console.log('  ✓ idx_dt_purpose')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     

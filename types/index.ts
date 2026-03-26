@@ -76,6 +76,7 @@ export interface DocumentTemplate {
   downloadCount: number
   createdAt: string
   url: string
+  purpose?: string | null
 }
 
 export interface Notification {

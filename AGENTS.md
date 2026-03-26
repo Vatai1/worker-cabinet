@@ -12,34 +12,25 @@ Worker Cabinet is a full-stack HR management system:
 
 ## Build/Lint/Test Commands
 
-### Frontend (root)
 ```bash
+# Frontend (root)
 npm run dev              # Start both frontend and backend
-npm run build            # Build for production (tsc + vite build)
-npm run lint             # Run ESLint on .ts/.tsx files
+npm run build            # Build for production
+npm run lint             # Run ESLint
 npm run typecheck        # Run TypeScript type checking
-```
 
-### Backend
-```bash
-cd backend
-npm run dev              # Start with nodemon (hot reload)
-npm run migrate          # Run database migrations
-npm run seed             # Seed database
-npm run test:auth        # Run auth tests
-npm run test:vacation-history  # Run vacation tests
-```
+# Backend
+cd backend && npm run dev              # Start with nodemon
+cd backend && npm run migrate          # Run database migrations
+cd backend && npm run seed             # Seed database
+cd backend && npm run test:auth        # Run auth tests
 
-### Running a Single Test
-```bash
-cd backend
-node --test src/tests/auth.test.js                                    # Run specific file
-node --test --test-name-pattern="JWT Token" src/tests/auth.test.js    # Run matching tests
-```
+# Run a single test
+cd backend && node --test src/tests/auth.test.js
+cd backend && node --test --test-name-pattern="JWT Token" src/tests/auth.test.js
 
-### After Making Changes
-```bash
-npm run lint && npm run typecheck    # MUST run after any frontend changes
+# After making changes (MUST run)
+npm run lint && npm run typecheck
 ```
 
 ## Code Style Guidelines
@@ -51,8 +42,8 @@ npm run lint && npm run typecheck    # MUST run after any frontend changes
 ```typescript
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Card, CardContent } from '@/components/ui/Card'
-import { Calendar, Users } from 'lucide-react'
+import { Card } from '@/components/ui/Card'
+import { Calendar } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { formatDate, getErrorMessage } from '@/lib/utils'
@@ -67,20 +58,14 @@ import type { User, Project } from '@/types'
 - Interfaces: PascalCase (`ProjectDetail`, `Member`)
 - CSS: Tailwind with `cn()` utility from `@/lib/utils`
 
-**Component Structure**:
+**Component Pattern**:
 ```typescript
-const STATUS_OPTIONS = [
-  { value: 'active', label: 'Активный' },
-  { value: 'paused', label: 'На паузе' },
-]
-
 interface Props {
   projectId: string
   onSave: () => void
 }
 
 export function MyComponent({ projectId, onSave }: Props) {
-  const [state, setState] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -94,10 +79,7 @@ export function MyComponent({ projectId, onSave }: Props) {
         headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ projectId }),
       })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Ошибка')
-      }
+      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка')
       onSave()
     } catch (err: unknown) {
       setError(getErrorMessage(err))
@@ -105,8 +87,7 @@ export function MyComponent({ projectId, onSave }: Props) {
       setLoading(false)
     }
   }
-
-  return <div className="...">...</div>
+  return <div>...</div>
 }
 ```
 
@@ -142,49 +123,39 @@ router.post('/:id/resource', authenticateToken, async (req, res) => {
 })
 ```
 
-**Transaction Pattern** (for multi-step operations):
+**Transaction Pattern**:
 ```javascript
 const client = await getClient()
 try {
   await client.query('BEGIN')
-  
   const result = await client.query(`INSERT INTO ... RETURNING *`, [...])
-  await client.query(`INSERT INTO ...`, [...])
-  
   await client.query('COMMIT')
   res.status(201).json(result.rows[0])
 } catch (error) {
   await client.query('ROLLBACK')
-  console.error('Error:', error)
   res.status(500).json({ error: 'Failed to create' })
 } finally {
   client.release()
 }
 ```
 
-**Database Queries**:
-- Use `$1, $2, ...` placeholders (parameterized queries)
-- Always use `RETURNING *` for INSERT/UPDATE
-- Import `query` and `getClient` from `../config/database.js`
+**Database Queries**: Use `$1, $2, ...` placeholders. Always use `RETURNING *` for INSERT/UPDATE. Import `query` and `getClient` from `../config/database.js`.
 
 ### Authentication
 
-**Frontend** - Use helpers from `@/lib/authHeaders`:
+**Frontend**:
 ```typescript
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 
-// For GET requests
-const res = await fetch(url, { headers: getAuthHeaders() })
-
-// For POST/PUT/DELETE requests
+const res = await fetch(url, { headers: getAuthHeaders() })  // GET
 const res = await fetch(url, {
   method: 'POST',
   headers: getAuthHeadersWithContentType(),
   body: JSON.stringify(data),
-})
+})  // POST/PUT/DELETE
 ```
 
-**Backend**: Import and use `authenticateToken` middleware for protected routes:
+**Backend**:
 ```javascript
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 
@@ -200,11 +171,7 @@ import { getErrorMessage } from '@/lib/utils'
 
 try {
   const res = await fetch(url, options)
-  if (!res.ok) {
-    const data = await res.json()
-    throw new Error(data.error || 'Ошибка')
-  }
-  // success
+  if (!res.ok) throw new Error((await res.json()).error || 'Ошибка')
 } catch (err: unknown) {
   setError(getErrorMessage(err))
 }
@@ -224,14 +191,7 @@ try {
 
 - **Success**: Return JSON object or array directly
 - **Error**: `{ error: 'Human readable message' }`
-- **Status codes**:
-  - 200: GET/PUT success
-  - 201: POST creation
-  - 400: Validation error
-  - 401: Unauthorized (no/invalid token)
-  - 403: Forbidden (insufficient permissions)
-  - 404: Not found
-  - 500: Server error
+- **Status codes**: 200 (GET/PUT), 201 (POST), 400 (validation), 401 (unauthorized), 403 (forbidden), 404 (not found), 500 (server error)
 
 ### Testing
 
@@ -240,13 +200,8 @@ import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert'
 
 describe('Feature Name', () => {
-  beforeEach(async () => {
-    // Setup: create test data
-  })
-  
-  afterEach(async () => {
-    // Cleanup: delete test data
-  })
+  beforeEach(async () => { /* Setup */ })
+  afterEach(async () => { /* Cleanup */ })
   
   it('should do something', async () => {
     const response = await fetch('http://localhost:5000/api/endpoint')
@@ -261,12 +216,7 @@ describe('Feature Name', () => {
 
 ```
 /
-├── components/           # React components
-│   ├── modals/          # Modal dialogs
-│   ├── layout/          # Header, Sidebar, Layout
-│   ├── ui/              # Reusable UI primitives (Button, Input, etc.)
-│   ├── forms/           # Form components
-│   └── calendar/        # Calendar components
+├── components/           # React components (modals/, layout/, ui/, forms/, calendar/)
 ├── pages/               # Route pages
 ├── store/               # Zustand stores
 ├── lib/                 # Utilities (cn, formatDate, authHeaders, etc.)
@@ -290,4 +240,3 @@ describe('Feature Name', () => {
 6. **Date handling**: Use `formatDate()` from `@/lib/utils` - handles timezone issues with YYYY-MM-DD format
 7. **Environment setup**: Copy `backend/.env.example` to `backend/.env` and configure values
 8. **Access control**: Check permissions in route handlers before performing operations
-9. **Error messages**: Use Russian language for user-facing error messages

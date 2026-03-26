@@ -271,10 +271,10 @@ export const vacationApi = {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }))
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
       throw new VacationApiError(
         error.code || 'GENERATION_ERROR',
-        error.message || 'Failed to generate statement'
+        error.error || error.message || 'Failed to generate statement'
       )
     }
 

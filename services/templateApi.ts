@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '@/lib/api'
-import { getAuthHeaders } from '@/lib/authHeaders'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import type { DocumentTemplate } from '@/types'
 
 export const templateApi = {
@@ -63,5 +63,13 @@ export const templateApi = {
     })
     if (!res.ok) throw new Error('Ошибка')
     return res.json()
+  },
+
+  setPurpose(id: number, purpose: string | null): Promise<Response> {
+    return fetch(`${API_BASE_URL}/templates/${id}/purpose`, {
+      method: 'PUT',
+      headers: getAuthHeadersWithContentType(),
+      body: JSON.stringify({ purpose }),
+    })
   },
 }

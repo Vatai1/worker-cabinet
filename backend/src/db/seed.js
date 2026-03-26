@@ -12,16 +12,20 @@ const MIDDLE_NAMES_MALE = ['Александрович', 'Дмитриевич',
 const MIDDLE_NAMES_FEMALE = ['Александровна', 'Дмитриевна', 'Максимовна', 'Сергеевна', 'Андреевна', 'Алексеевна', 'Ивановна', 'Владимировна', 'Павловна', 'Романовна', 'Николаевна', 'Евгеньевна', 'Олеговна', 'Игоревна', 'Вадимовна']
 
 const DEPARTMENTS_DATA = [
-  { name: 'Отдел разработки', positions: ['Senior Frontend Developer', 'Backend Developer', 'Fullstack Developer', 'Junior Developer', 'Tech Lead'] },
-  { name: 'Отдел дизайна', positions: ['UI/UX Designer', 'Graphic Designer', 'Motion Designer', 'Art Director'] },
-  { name: 'Отдел QA', positions: ['QA Engineer', 'QA Automation Engineer', 'QA Lead', 'Manual QA'] },
-  { name: 'Отдел маркетинга', positions: ['Marketing Manager', 'Content Manager', 'SEO Specialist', 'Marketing Lead'] },
-  { name: 'Отдел продаж', positions: ['Sales Manager', 'Account Manager', 'Sales Lead', 'Business Development Manager'] },
-  { name: 'Отдел аналитики', positions: ['Data Analyst', 'Business Analyst', 'Analytics Lead', 'Product Analyst'] },
-  { name: 'Отдел поддержки', positions: ['Support Specialist', 'Senior Support', 'Support Lead', 'Technical Support'] },
-  { name: 'Финансовый отдел', positions: ['Accountant', 'Financial Analyst', 'Finance Lead', 'Controller'] },
-  { name: 'HR отдел', positions: ['HR Manager', 'Recruiter', 'HR Lead', 'People Partner'] },
-  { name: 'Отдел DevOps', positions: ['DevOps Engineer', 'SRE Engineer', 'DevOps Lead', 'Cloud Architect'] },
+  { name: 'Отдел разработки', positions: ['Senior Frontend Developer', 'Backend Developer', 'Fullstack Developer', 'Junior Developer', 'Tech Lead', 'Senior Backend Developer', 'Middle Frontend Developer'] },
+  { name: 'Отдел дизайна', positions: ['UI/UX Designer', 'Graphic Designer', 'Motion Designer', 'Art Director', 'Product Designer', 'UX Researcher'] },
+  { name: 'Отдел QA', positions: ['QA Engineer', 'QA Automation Engineer', 'QA Lead', 'Manual QA', 'Performance QA', 'Security QA'] },
+  { name: 'Отдел маркетинга', positions: ['Marketing Manager', 'Content Manager', 'SEO Specialist', 'Marketing Lead', 'Social Media Manager', 'Brand Manager', 'Growth Hacker'] },
+  { name: 'Отдел продаж', positions: ['Sales Manager', 'Account Manager', 'Sales Lead', 'Business Development Manager', 'Enterprise Sales', 'Inside Sales Representative'] },
+  { name: 'Отдел аналитики', positions: ['Data Analyst', 'Business Analyst', 'Analytics Lead', 'Product Analyst', 'Data Scientist', 'BI Analyst'] },
+  { name: 'Отдел поддержки', positions: ['Support Specialist', 'Senior Support', 'Support Lead', 'Technical Support', 'Customer Success Manager', 'Implementation Specialist'] },
+  { name: 'Финансовый отдел', positions: ['Accountant', 'Financial Analyst', 'Finance Lead', 'Controller', 'Payroll Specialist', 'Treasury Analyst', 'Risk Manager'] },
+  { name: 'HR отдел', positions: ['HR Manager', 'Recruiter', 'HR Lead', 'People Partner', 'Talent Acquisition', 'HR Business Partner', 'Compensation Analyst'] },
+  { name: 'Отдел DevOps', positions: ['DevOps Engineer', 'SRE Engineer', 'DevOps Lead', 'Cloud Architect', 'Platform Engineer', 'Infrastructure Engineer'] },
+  { name: 'Юридический отдел', positions: ['Legal Counsel', 'Corporate Lawyer', 'Legal Lead', 'Compliance Officer', 'Contract Manager'] },
+  { name: 'Отдел продукта', positions: ['Product Manager', 'Senior Product Manager', 'Product Owner', 'Scrum Master', 'Product Director'] },
+  { name: 'Отдел безопасности', positions: ['Security Engineer', 'CISO', 'Security Analyst', 'Penetration Tester', 'Security Architect'] },
+  { name: 'Отдел мобильной разработки', positions: ['iOS Developer', 'Android Developer', 'Mobile Team Lead', 'Flutter Developer', 'React Native Developer'] },
 ]
 
 const SKILLS_DATA = [
@@ -29,7 +33,15 @@ const SKILLS_DATA = [
   'PostgreSQL', 'MongoDB', 'Redis', 'Docker', 'Kubernetes', 'AWS', 'Git', 'CI/CD', 'Linux', 'Nginx',
   'Figma', 'Sketch', 'Adobe XD', 'Photoshop', 'Illustrator', 'After Effects',
   'Selenium', 'Cypress', 'Jest', 'Playwright',
-  'Jira', 'Confluence', 'Slack', 'Agile', 'Scrum'
+  'Jira', 'Confluence', 'Slack', 'Agile', 'Scrum',
+  'GraphQL', 'REST API', 'Microservices', 'RabbitMQ', 'Kafka',
+  'Machine Learning', 'TensorFlow', 'PyTorch', 'Data Science',
+  'Swift', 'Kotlin', 'Flutter', 'React Native',
+  'Elasticsearch', 'Terraform', 'Ansible', 'Prometheus', 'Grafana',
+  'Product Management', 'User Research', 'A/B Testing', 'Analytics',
+  'SEO', 'SEM', 'Google Analytics', 'Facebook Ads', 'Content Marketing',
+  'Salesforce', 'HubSpot', 'Pardot', 'Marketo',
+  'English', 'German', 'French', 'Spanish', 'Chinese',
 ]
 
 const PROJECTS_DATA = [
@@ -48,6 +60,16 @@ const PROJECTS_DATA = [
   { name: 'Inventory', full_name: 'Inventory Management', description: 'Система управления складом', status: 'paused' },
   { name: 'Video Conferencing', full_name: 'Video Conferencing Tool', description: 'Инструмент видеоконференций', status: 'active' },
   { name: 'Feedback System', full_name: 'Employee Feedback System', description: 'Система обратной связи сотрудников', status: 'completed' },
+  { name: 'Knowledge Base', full_name: 'Corporate Knowledge Base', description: 'Корпоративная база знаний', status: 'active' },
+  { name: 'Time Tracking', full_name: 'Time Tracking System', description: 'Система учёта рабочего времени', status: 'active' },
+  { name: 'Helpdesk', full_name: 'IT Helpdesk System', description: 'Система технической поддержки', status: 'active' },
+  { name: 'Compliance Monitor', full_name: 'Compliance Monitoring System', description: 'Система мониторинга соответствия', status: 'active' },
+  { name: 'Performance Review', full_name: 'Performance Review Platform', description: 'Платформа оценки эффективности', status: 'active' },
+  { name: 'Onboarding App', full_name: 'Employee Onboarding Application', description: 'Приложение для адаптации сотрудников', status: 'active' },
+  { name: 'Budget Planner', full_name: 'Budget Planning System', description: 'Система планирования бюджета', status: 'active' },
+  { name: 'Asset Management', full_name: 'IT Asset Management', description: 'Управление IT-активами', status: 'paused' },
+  { name: 'Integration Hub', full_name: 'Integration Hub Platform', description: 'Платформа интеграций', status: 'active' },
+  { name: 'Report Generator', full_name: 'Automated Report Generator', description: 'Автоматический генератор отчётов', status: 'active' },
 ]
 
 const NOTIFICATION_TEMPLATES = [
@@ -59,6 +81,16 @@ const NOTIFICATION_TEMPLATES = [
   { title: 'Новая задача', message: 'Вам назначена новая задача в проекте {project}' },
   { title: 'Напоминание о документах', message: 'Пожалуйста, обновите личные документы' },
   { title: 'Баланс отпуска', message: 'Ваш доступный баланс отпуска: {days} дней' },
+  { title: 'Добро пожаловать!', message: 'Добро пожаловать в команду, {name}!' },
+  { title: 'Обучение назначено', message: 'Вам назначено обучение: {project}' },
+  { title: 'Дедлайн приближается', message: 'Дедлайн по проекту {project} через {days} дней' },
+  { title: 'Еженедельный отчёт', message: 'Не забудьте заполнить еженедельный отчёт' },
+  { title: 'Новый сотрудник в отделе', message: 'В ваш отдел присоединился {name}' },
+  { title: 'Изменение графика', message: 'Ваш график на {date} был изменён' },
+  { title: 'Обновление навыков', message: 'Ваши навыки были обновлены' },
+  { title: 'Назначение наставника', message: '{name} назначен вашим наставником' },
+  { title: 'Завершение испытательного срока', message: 'Ваш испытательный срок завершается {date}' },
+  { title: 'Годовщина работы', message: 'Поздравляем с {days} днём работы в компании!' },
 ]
 
 const ROADMAP_ROWS = ['Планирование', 'Разработка', 'Тестирование', 'Деплой', 'Поддержка']
@@ -157,6 +189,9 @@ async function seed() {
     const hrUsers = [
       { email: 'elena@example.com', firstName: 'Елена', lastName: 'Соколова', middleName: 'Владимировна', position: 'HR Director', isMale: false },
       { email: 'maria@example.com', firstName: 'Мария', lastName: 'Кузнецова', middleName: 'Александровна', position: 'HR Manager', isMale: false },
+      { email: 'anna@example.com', firstName: 'Анна', lastName: 'Петрова', middleName: 'Сергеевна', position: 'Recruiter', isMale: false },
+      { email: 'irina@example.com', firstName: 'Ирина', lastName: 'Смирнова', middleName: 'Николаевна', position: 'People Partner', isMale: false },
+      { email: 'olga@example.com', firstName: 'Ольга', lastName: 'Волкова', middleName: 'Дмитриевна', position: 'Talent Acquisition', isMale: false },
     ]
     
     const hrDept = departments.find(d => d.name === 'HR отдел')
@@ -210,7 +245,7 @@ async function seed() {
     }
     users.push(...managers)
 
-    const employeesPerDept = Math.ceil((100 - 1 - 2 - managers.length) / departments.length)
+    const employeesPerDept = Math.ceil((150 - 1 - 3 - managers.length) / departments.length)
     let userIndex = 0
     
     for (const dept of departments) {
@@ -524,7 +559,7 @@ async function seed() {
     let notificationsCreated = 0
     const notificationUsers = users.filter(u => u.role !== 'admin')
     
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 200; i++) {
       const user = randomItem(notificationUsers)
       const template = randomItem(NOTIFICATION_TEMPLATES)
       
@@ -597,20 +632,23 @@ async function seed() {
     }
     console.log(`  ✓ ${restrictionsCreated} vacation restrictions created`)
 
-    console.log('\n✅ Comprehensive seed completed successfully!')
-    console.log('\nSummary:')
-    console.log(`  Departments: ${departments.length}`)
-    console.log(`  Users: ${users.length} (1 admin, 2 HR, ${managers.length} managers, ${users.length - 1 - 2 - managers.length} employees)`)
-    console.log(`  Projects: ${projects.length}`)
-    console.log(`  Skills in dictionary: ${SKILLS_DATA.length}`)
-    console.log(`  Vacation requests: ${requestsCreated}`)
-    console.log(`  Notifications: ${notificationsCreated}`)
-    console.log(`  Vacation restrictions: ${restrictionsCreated}`)
-    console.log('\nLogin credentials:')
-    console.log('  admin@example.com (admin)')
-    console.log('  elena@example.com (HR Director)')
-    console.log('  maria@example.com (HR Manager)')
-    console.log('  Password: password123 (for all users)')
+ console.log('\n✅ Comprehensive seed completed successfully!')
+console.log('\nSummary:')
+console.log(`  Departments: ${departments.length}`)
+console.log(`  Users: ${users.length} (1 admin, 2 HR, ${managers.length} managers, ${users.length - 1 - 2 - managers.length} employees)`)
+console.log(`  Projects: ${projects.length}`)
+console.log(`  Skills in dictionary: ${SKILLS_DATA.length}`)
+console.log(`  Vacation requests: ${requestsCreated}`)
+console.log(`  Notifications: ${notificationsCreated}`)
+console.log(`  Vacation restrictions: ${restrictionsCreated}`)
+console.log('\nLogin credentials:')
+console.log('  admin@example.com (admin)')
+console.log('  elena@example.com (HR Director)')
+console.log('  maria@example.com (HR Manager)')
+console.log('  ivana@example.com (HR Business Partner)')
+console.log('  natalia@example.com (Talent Acquisition)')
+console.log('  olga@example.com (Recruiter)')
+console.log('  Password: password123 (for all users)')
     
     process.exit(0)
   } catch (error) {

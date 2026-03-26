@@ -17,7 +17,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const result = await query(
       `SELECT id, name, description, category, mime_type as "mimeType",
               size, download_count as "downloadCount", created_at as "createdAt",
-              file_key as "fileKey"
+              file_key as "fileKey", purpose
        FROM document_templates
        ORDER BY created_at DESC`
     )
@@ -136,6 +136,34 @@ router.post('/:id/download', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('POST /templates/:id/download error:', error)
     res.status(500).json({ error: 'Ошибка' })
+  }
+})
+
+router.put('/:id/purpose', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  const { id } = req.params
+  const { purpose } = req.body
+  if (purpose !== 'vacation_statement' && purpose !== null) {
+    return res.status(400).json({ error: 'Недопустимое значение purpose' })
+  }
+  try {
+    if (purpose === null) {
+      const result = await query(
+        `UPDATE document_templates SET purpose = NULL WHERE id = $1 RETURNING *`,
+        [id]
+      )
+      if (!result.rows.length) return res.status(404).json({ error: 'Шаблон не найден' })
+      return res.json({ ...result.rows[0], url: await getTemplateUrl(result.rows[0].file_key) })
+    }
+    await query(`UPDATE document_templates SET purpose = NULL WHERE purpose = $1`, [purpose])
+    const result = await query(
+      `UPDATE document_templates SET purpose = $1 WHERE id = $2 RETURNING *`,
+      [purpose, id]
+    )
+    if (!result.rows.length) return res.status(404).json({ error: 'Шаблон не найден' })
+    res.json({ ...result.rows[0], url: await getTemplateUrl(result.rows[0].file_key) })
+  } catch (error) {
+    console.error('PUT /templates/:id/purpose error:', error)
+    res.status(500).json({ error: 'Ошибка обновления шаблона' })
   }
 })
 
