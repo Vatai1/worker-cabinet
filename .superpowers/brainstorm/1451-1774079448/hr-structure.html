@@ -1,0 +1,65 @@
+<h2>Как организовать HR-раздел?</h2>
+<p class="subtitle">Выберите вариант структуры страниц для HR-функций</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px;background:#0f172a;border-radius:8px;">
+      <div class="mock-nav" style="margin-bottom:8px;font-size:11px;">HR-панель</div>
+      <div style="display:flex;gap:4px;margin-bottom:10px;">
+        <div style="padding:4px 10px;background:#6366f1;color:#fff;border-radius:4px;font-size:10px;">Опросы</div>
+        <div style="padding:4px 10px;background:#1e293b;color:#94a3b8;border-radius:4px;font-size:10px;">Шаблоны</div>
+      </div>
+      <div style="background:#1e293b;border-radius:6px;padding:10px;">
+        <div class="placeholder" style="height:14px;margin-bottom:6px;width:60%;"></div>
+        <div class="placeholder" style="height:10px;margin-bottom:4px;"></div>
+        <div class="placeholder" style="height:10px;width:80%;"></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Одна страница с вкладками</h3>
+      <p>Всё в одном месте: вкладки «Опросы» и «Шаблоны документов» на странице <code>/hr</code>. Простая навигация, минималистично.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px;background:#0f172a;border-radius:8px;">
+      <div style="display:flex;gap:8px;height:80px;">
+        <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px;">
+          <div style="font-size:9px;color:#6366f1;font-weight:600;margin-bottom:6px;">ОПРОСЫ</div>
+          <div class="placeholder" style="height:10px;margin-bottom:4px;width:80%;"></div>
+          <div class="placeholder" style="height:10px;width:60%;"></div>
+        </div>
+        <div style="flex:1;background:#1e293b;border-radius:6px;padding:8px;">
+          <div style="font-size:9px;color:#a855f7;font-weight:600;margin-bottom:6px;">ШАБЛОНЫ</div>
+          <div class="placeholder" style="height:10px;margin-bottom:4px;width:80%;"></div>
+          <div class="placeholder" style="height:10px;width:60%;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Две отдельные страницы</h3>
+      <p>Страница <code>/hr/surveys</code> для опросов и <code>/hr/document-templates</code> для шаблонов. Больше пространства для каждого раздела, ссылки в боковом меню.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:16px;background:#0f172a;border-radius:8px;">
+      <div class="mock-nav" style="margin-bottom:8px;font-size:11px;">HR-панель</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <div style="padding:3px 8px;background:#1e293b;color:#94a3b8;border-radius:4px;font-size:9px;">Опросы</div>
+        <div style="padding:3px 8px;background:#1e293b;color:#94a3b8;border-radius:4px;font-size:9px;">Шаблоны</div>
+        <div style="padding:3px 8px;background:#1e293b;color:#94a3b8;border-radius:4px;font-size:9px;">Отчёты</div>
+      </div>
+      <div style="background:#1e293b;border-radius:6px;padding:8px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+          <div class="placeholder" style="height:20px;border-radius:4px;"></div>
+          <div class="placeholder" style="height:20px;border-radius:4px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — HR-дашборд + вкладки</h3>
+      <p>Отдельная страница <code>/hr</code> с обзорными статистиками вверху и вкладками ниже. Легко расширяемо (например, добавить «Отчёты» позже).</p>
+    </div>
+  </div>
+</div>

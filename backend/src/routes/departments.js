@@ -19,7 +19,31 @@ router.get('/', authenticateToken, async (req, res) => {
       LEFT JOIN users m ON d.manager_id = m.id
       ORDER BY d.name
     `)
-    res.json(result.rows)
+
+    const employeesResult = await query(`
+      SELECT 
+        u.id,
+        u.first_name,
+        u.last_name,
+        u.middle_name,
+        u.position,
+        u.email,
+        u.phone,
+        u.status,
+        u.role,
+        u.avatar,
+        u.department_id
+      FROM users u
+      WHERE u.department_id IS NOT NULL
+      ORDER BY u.last_name, u.first_name
+    `)
+
+    const departmentsWithEmployees = result.rows.map(dept => ({
+      ...dept,
+      employees: employeesResult.rows.filter(emp => emp.department_id === dept.id)
+    }))
+
+    res.json(departmentsWithEmployees)
   } catch (error) {
     console.error('Error fetching departments:', error)
     res.status(500).json({ error: 'Failed to fetch departments' })

@@ -75,6 +75,16 @@ export function HRDocumentTemplates() {
     }
   }
 
+  const handleSetPurpose = async (id: number, purpose: string | null) => {
+    try {
+      const res = await templateApi.setPurpose(id, purpose)
+      if (!res.ok) throw new Error()
+      await load()
+    } catch {
+      setError('Ошибка обновления шаблона')
+    }
+  }
+
   const handleOpenOnlyOffice = async (template: DocumentTemplate, editable: boolean) => {
     try {
       const info = await templateApi.getOnlyOfficeInfo(template.id)
@@ -150,13 +160,31 @@ export function HRDocumentTemplates() {
                   {t.mimeType === 'application/pdf' ? 'PDF' : 'DOC'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{t.name}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium truncate">{t.name}</p>
+                    {t.purpose === 'vacation_statement' && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs border border-green-500 text-green-600 dark:text-green-400">
+                        Шаблон заявлений
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     {CATEGORY_LABELS[t.category]} · {formatFileSize(t.size)} · {t.downloadCount} скачиваний
                   </p>
                 </div>
                 <span className="px-2 py-0.5 rounded-full text-xs border border-border">{CATEGORY_LABELS[t.category]}</span>
                 <div className="flex items-center gap-2">
+                  {isDocx(t) && (
+                    t.purpose === 'vacation_statement' ? (
+                      <Button size="sm" variant="ghost" onClick={() => handleSetPurpose(t.id, null)}>
+                        Снять
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="ghost" onClick={() => handleSetPurpose(t.id, 'vacation_statement')}>
+                        Установить как шаблон заявлений
+                      </Button>
+                    )
+                  )}
                   {isDocx(t) ? (
                     <Button size="sm" variant="outline" onClick={() => handleOpenOnlyOffice(t, true)}>
                       <ExternalLink className="h-3 w-3 mr-1" />
