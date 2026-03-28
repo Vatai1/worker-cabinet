@@ -12,9 +12,6 @@ import { VacationHistoryModal } from '@/components/modals/VacationHistoryModal'
 import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { RestrictionModal } from '@/components/modals/RestrictionModal'
 import { VacationRequestStatus, VacationType } from '@/types'
-import { vacationApi } from '@/services/vacationApi'
-import { getErrorMessage } from '@/lib/utils'
-import { useUIStore } from '@/store/uiStore'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -50,7 +47,6 @@ export function Vacation() {
   const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<any[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
-  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -320,25 +316,7 @@ export function Vacation() {
     setRestrictionWarningsCalendar(warnings)
   }
 
-  const handleDownload = async (request: any) => {
-    setDownloadingId(request.id)
-    try {
-      const blob = await vacationApi.generateStatement(request.id)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `заявление-отпуск-${request.id}.docx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      useUIStore.getState().fetchNotifications()
-    } catch (error: unknown) {
-      alert(getErrorMessage(error) || 'Ошибка при генерации заявления')
-    } finally {
-      setDownloadingId(null)
-    }
-  }
+
 
   const calendarRequests = useMemo(() => {
     const merged = [...departmentRequests]
@@ -675,22 +653,6 @@ export function Vacation() {
                                 </div>
                               )}
                               <div className="flex flex-wrap gap-3 pt-2">
-                                {request.status !== VacationRequestStatus.ON_APPROVAL && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleDownload(request)
-                                    }}
-                                    disabled={downloadingId === request.id}
-                                  >
-                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                    </svg>
-                                    {downloadingId === request.id ? 'Формирование...' : 'Сформировать заявление'}
-                                  </Button>
-                                )}
                                 <Button
                                   size="sm"
                                   variant="outline"

@@ -10,7 +10,6 @@ import projectsRoutes from './routes/projects.js'
 import documentsRoutes from './routes/documents.js'
 import userDocumentsRoutes from './routes/userDocuments.js'
 import departmentsRoutes from './routes/departments.js'
-import templatesRoutes from './routes/templates.js'
 import surveysRoutes from './routes/surveys.js'
 import onboardingRoutes from './routes/onboarding.js'
 import hierarchyRoutes from './routes/hierarchy.js'
@@ -64,7 +63,6 @@ app.use('/api/projects', projectsRoutes)
 app.use('/api/documents', documentsRoutes)
 app.use('/api/user-documents', userDocumentsRoutes)
 app.use('/api/departments', departmentsRoutes)
-app.use('/api/templates', templatesRoutes)
 app.use('/api/surveys', surveysRoutes)
 app.use('/api/onboarding', onboardingRoutes)
 app.use('/api/hierarchy', hierarchyRoutes)
