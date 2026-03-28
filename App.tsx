@@ -19,7 +19,6 @@ import { Profile } from '@/pages/Profile'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { Requests } from '@/pages/Requests'
 import { Documents } from '@/pages/Documents'
-import { DocumentTemplates } from '@/pages/DocumentTemplates'
 import { Notifications } from '@/pages/Notifications'
 import { ManagerDashboard } from '@/pages/ManagerDashboard'
 import { LeaderDashboard } from '@/pages/LeaderDashboard'
@@ -33,7 +32,6 @@ import { ProjectRoadmap } from '@/pages/ProjectRoadmap'
 import { Settings } from '@/pages/Settings'
 import { Departments } from '@/pages/Departments'
 import { DepartmentDetail } from '@/pages/DepartmentDetail'
-import { HRDocumentTemplates } from '@/pages/HRDocumentTemplates'
 import { HRSurveys } from '@/pages/HRSurveys'
 import { Surveys } from '@/pages/Surveys'
 import { SurveyPage } from '@/pages/SurveyPage'
@@ -132,14 +130,12 @@ function App() {
 
           <Route path="requests" element={<BlockOnboardingRoute><Requests /></BlockOnboardingRoute>} />
           <Route path="documents" element={<BlockOnboardingRoute><Documents /></BlockOnboardingRoute>} />
-          <Route path="document-templates" element={<BlockOnboardingRoute><DocumentTemplates /></BlockOnboardingRoute>} />
           <Route path="notifications" element={<BlockOnboardingRoute><Notifications /></BlockOnboardingRoute>} />
           <Route path="employees/:id" element={<EmployeeProfile />} />
           <Route path="projects" element={<BlockOnboardingRoute><Projects /></BlockOnboardingRoute>} />
           <Route path="projects/:id" element={<BlockOnboardingRoute><ProjectDetail /></BlockOnboardingRoute>} />
           <Route path="projects/:id/documents" element={<BlockOnboardingRoute><ProjectDocuments /></BlockOnboardingRoute>} />
           <Route path="projects/:id/roadmap" element={<BlockOnboardingRoute><ProjectRoadmap /></BlockOnboardingRoute>} />
-          <Route path="hr/document-templates" element={<HRRoute><HRDocumentTemplates /></HRRoute>} />
           <Route path="hr/surveys" element={<HRRoute><HRSurveys /></HRRoute>} />
           <Route path="surveys" element={<ProtectedRoute><Surveys /></ProtectedRoute>} />
           <Route path="surveys/:id" element={<ProtectedRoute><SurveyPage /></ProtectedRoute>} />

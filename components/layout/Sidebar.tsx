@@ -54,7 +54,6 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
     icon: FolderOpen,
     children: [
       { name: 'Ваши документы', href: '/documents' },
-      { name: 'Шаблоны документов', href: '/document-templates' },
     ],
   },
   { name: 'Уведомления', href: '/notifications', icon: Bell },
@@ -74,7 +73,6 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
     icon: FolderOpen,
     children: [
       { name: 'Ваши документы', href: '/documents' },
-      { name: 'Шаблоны документов', href: '/document-templates' },
     ],
   },
   { name: 'Уведомления', href: '/notifications', icon: Bell },
@@ -89,7 +87,6 @@ const getHRNavigation = (userId?: string): NavItem[] => [
     children: [
       { name: 'Опросы', href: '/hr/surveys' },
       { name: 'Онбординг', href: '/hr/onboarding' },
-      { name: 'Шаблоны документов', href: '/hr/document-templates' },
       { name: 'Иерархия', href: '/hr/hierarchy' },
     ],
   },

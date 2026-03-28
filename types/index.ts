@@ -65,20 +65,6 @@ export interface Document {
   mimeType?: string
 }
 
-export interface DocumentTemplate {
-  id: number
-  name: string
-  description?: string
-  category: 'hr' | 'legal' | 'finance' | 'general'
-  fileKey: string
-  mimeType: string
-  size: number
-  downloadCount: number
-  createdAt: string
-  url: string
-  purpose?: string | null
-}
-
 export interface Notification {
   id: string
   userId: string

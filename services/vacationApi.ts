@@ -264,23 +264,6 @@ export const vacationApi = {
     return handleResponse(response)
   },
 
-  async generateStatement(requestId: string): Promise<Blob> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/statement`, {
-      method: 'POST',
-      headers: getAuthHeadersWithContentType(),
-    })
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-      throw new VacationApiError(
-        error.code || 'GENERATION_ERROR',
-        error.error || error.message || 'Failed to generate statement'
-      )
-    }
-
-    return response.blob()
-  },
-
   async addComment(requestId: string, comment: string): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/comment`, {
       method: 'POST',
