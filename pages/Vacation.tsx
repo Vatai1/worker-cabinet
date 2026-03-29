@@ -12,6 +12,8 @@ import { VacationHistoryModal } from '@/components/modals/VacationHistoryModal'
 import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { RestrictionModal } from '@/components/modals/RestrictionModal'
 import { VacationRequestStatus, VacationType } from '@/types'
+import { getAuthHeaders } from '@/lib/authHeaders'
+import { API_BASE_URL } from '@/lib/api'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -47,6 +49,7 @@ export function Vacation() {
   const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<any[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
+  const [vacationBlocked, setVacationBlocked] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -58,6 +61,15 @@ export function Vacation() {
         fetchRestrictions(user.departmentId || '1')
       } else {
         fetchDepartmentRequests(user.departmentId || '1')
+      }
+
+      if (user.departmentId) {
+        fetch(`${API_BASE_URL}/departments/${user.departmentId}`, { headers: getAuthHeaders() })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data?.vacation_requests_blocked) setVacationBlocked(true)
+          })
+          .catch(() => {})
       }
     }
   }, [user?.id, user?.departmentId, user?.role])
@@ -418,12 +430,21 @@ export function Vacation() {
         </Card>
       )}
 
+      {vacationBlocked && (
+        <div className="rounded-xl border-2 border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 flex items-center gap-2">
+          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <span className="font-medium">Подача заявок на отпуск для вашего отдела временно заблокирована HR</span>
+        </div>
+      )}
+
       <Card>
         <div className="p-6">
           <YearCalendar
             year={currentYear}
             requests={calendarRequests}
-            onDateRangeSelect={handleDateRangeSelect}
+            onDateRangeSelect={vacationBlocked ? () => {} : handleDateRangeSelect}
             selectedStartDate={selectedStartDate}
             selectedEndDate={selectedEndDate}
           />

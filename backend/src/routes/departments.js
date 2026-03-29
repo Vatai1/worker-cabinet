@@ -1,6 +1,6 @@
 import express from 'express'
 import { query } from '../config/database.js'
-import { authenticateToken } from '../middleware/auth.js'
+import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 
 const router = express.Router()
 
@@ -13,6 +13,7 @@ router.get('/', authenticateToken, async (req, res) => {
         d.manager_id,
         d.created_at,
         d.updated_at,
+        d.vacation_requests_blocked,
         m.first_name || ' ' || m.last_name as manager_name,
         (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
       FROM departments d
@@ -60,6 +61,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         d.manager_id,
         d.created_at,
         d.updated_at,
+        d.vacation_requests_blocked,
         m.first_name || ' ' || m.last_name as manager_name
       FROM departments d
       LEFT JOIN users m ON d.manager_id = m.id
@@ -94,6 +96,35 @@ router.get('/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching department:', error)
     res.status(500).json({ error: 'Failed to fetch department' })
+  }
+})
+
+router.patch('/:id/vacation-block', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { blocked } = req.body
+
+    if (typeof blocked !== 'boolean') {
+      return res.status(400).json({ error: 'Поле blocked обязательно (boolean)' })
+    }
+
+    const result = await query(
+      `UPDATE departments SET vacation_requests_blocked = $1 WHERE id = $2 RETURNING *`,
+      [blocked, id]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Отдел не найден' })
+    }
+
+    res.json({
+      id: result.rows[0].id,
+      name: result.rows[0].name,
+      vacation_requests_blocked: result.rows[0].vacation_requests_blocked,
+    })
+  } catch (error) {
+    console.error('Error toggling vacation block:', error)
+    res.status(500).json({ error: 'Failed to toggle vacation block' })
   }
 })
 

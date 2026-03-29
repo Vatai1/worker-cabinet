@@ -176,6 +176,14 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, referenceDocument } = req.body
     const userId = req.user.id
 
+    const blockCheck = await query(
+      `SELECT d.vacation_requests_blocked FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
+      [userId]
+    )
+    if (blockCheck.rows.length > 0 && blockCheck.rows[0].vacation_requests_blocked) {
+      return res.status(403).json({ error: 'Подача заявок на отпуск для вашего отдела временно заблокирована HR' })
+    }
+
     await client.query('BEGIN')
 
     const parseLocalDate = (dateStr) => {
