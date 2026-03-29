@@ -87,6 +87,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
     children: [
       { name: 'Опросы', href: '/hr/surveys' },
       { name: 'Онбординг', href: '/hr/onboarding' },
+      { name: 'Отпуск', href: '/hr/vacation-calendar' },
       { name: 'Иерархия', href: '/hr/hierarchy' },
     ],
   },

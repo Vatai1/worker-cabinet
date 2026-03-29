@@ -92,8 +92,12 @@ const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
 })
 
 export const vacationApi = {
-  async getAllRequests(): Promise<VacationRequest[]> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests`, {
+  async getAllRequests(filters?: { departmentId?: string; year?: number }): Promise<VacationRequest[]> {
+    const params = new URLSearchParams()
+    if (filters?.departmentId) params.set('departmentId', filters.departmentId)
+    if (filters?.year) params.set('year', filters.year.toString())
+    const query = params.toString() ? `?${params.toString()}` : ''
+    const response = await fetch(`${API_BASE_URL}/vacation/requests${query}`, {
       headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
