@@ -26,6 +26,7 @@ export function HRVacationCalendar() {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('')
   const [year, setYear] = useState(new Date().getFullYear())
   const [togglingBlock, setTogglingBlock] = useState<number | null>(null)
+  const [togglingAll, setTogglingAll] = useState(false)
 
   const fetchDepartments = async () => {
     try {
@@ -82,6 +83,30 @@ export function HRVacationCalendar() {
       console.error('Error toggling block:', err)
     } finally {
       setTogglingBlock(null)
+    }
+  }
+
+  const allBlocked = departments.length > 0 && departments.every((d) => d.vacation_requests_blocked)
+
+  const handleToggleAll = async () => {
+    setTogglingAll(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/departments/vacation-block-all`, {
+        method: 'PATCH',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ blocked: !allBlocked }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Ошибка')
+      }
+      setDepartments((prev) =>
+        prev.map((d) => ({ ...d, vacation_requests_blocked: !allBlocked }))
+      )
+    } catch (err: any) {
+      console.error('Error toggling block all:', err)
+    } finally {
+      setTogglingAll(false)
     }
   }
 
@@ -180,7 +205,27 @@ export function HRVacationCalendar() {
 
       <Card>
         <div className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Управление заявками по отделам</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Управление заявками по отделам</h2>
+            {departments.length > 0 && (
+              <Button
+                variant={allBlocked ? 'outline' : 'destructive'}
+                size="sm"
+                onClick={handleToggleAll}
+                disabled={togglingAll}
+                className="gap-1.5"
+              >
+                {togglingAll ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : allBlocked ? (
+                  <Unlock className="w-3.5 h-3.5" />
+                ) : (
+                  <Lock className="w-3.5 h-3.5" />
+                )}
+                {allBlocked ? 'Разблокировать все' : 'Заблокировать все'}
+              </Button>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {departments.map((dept) => (
               <div

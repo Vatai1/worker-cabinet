@@ -99,6 +99,26 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 })
 
+router.patch('/vacation-block-all', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const { blocked } = req.body
+
+    if (typeof blocked !== 'boolean') {
+      return res.status(400).json({ error: 'Поле blocked обязательно (boolean)' })
+    }
+
+    await query(
+      `UPDATE departments SET vacation_requests_blocked = $1`,
+      [blocked]
+    )
+
+    res.json({ success: true, blocked })
+  } catch (error) {
+    console.error('Error toggling vacation block all:', error)
+    res.status(500).json({ error: 'Failed to toggle vacation block' })
+  }
+})
+
 router.patch('/:id/vacation-block', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params

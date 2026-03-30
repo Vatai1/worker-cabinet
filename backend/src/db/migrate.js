@@ -1039,6 +1039,17 @@ async function runMigrations() {
     console.log('  ✓ idx_dt_purpose')
 
     try {
+      await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS description TEXT`)
+      console.log('  ✓ description column added to departments')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ description (already exists)')
+      } else {
+        console.log('  - description:', e.message)
+      }
+    }
+
+    try {
       await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS vacation_requests_blocked BOOLEAN DEFAULT false`)
       console.log('  ✓ vacation_requests_blocked column added to departments')
     } catch (e) {

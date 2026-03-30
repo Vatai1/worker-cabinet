@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Building2, Wrench, Palmtree, Briefcase, Plus, Pencil, Trash2, X, Check, Search, Users } from 'lucide-react'
+import { Building2, Wrench, Palmtree, Briefcase, FileText, Plus, Pencil, Trash2, X, Check, Search, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
@@ -14,6 +14,7 @@ const TABS = [
   { value: 'skills', label: 'Навыки', icon: Wrench, color: 'text-violet-500', bgColor: 'bg-violet-50 dark:bg-violet-950/30' },
   { value: 'vacation-types', label: 'Типы отпусков', icon: Palmtree, color: 'text-emerald-500', bgColor: 'bg-emerald-50 dark:bg-emerald-950/30' },
   { value: 'positions', label: 'Должности', icon: Briefcase, color: 'text-amber-500', bgColor: 'bg-amber-50 dark:bg-amber-950/30' },
+  { value: 'doc-templates', label: 'Шаблоны документов', icon: FileText, color: 'text-rose-500', bgColor: 'bg-rose-50 dark:bg-rose-950/30' },
 ]
 
 interface DictItem {
@@ -25,6 +26,10 @@ interface DictItem {
   request_count?: number
   manager_name?: string
   vacation_requests_blocked?: boolean
+  description?: string
+  purpose?: string
+  download_count?: number
+  created_at?: string
   _type?: string
 }
 
@@ -44,6 +49,7 @@ export function HRDictionaries() {
   const [editName, setEditName] = useState('')
   const [editCode, setEditCode] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DictItem | null>(null)
+  const [editDocTemplate, setEditDocTemplate] = useState<DictItem | null>(null)
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -109,9 +115,13 @@ export function HRDictionaries() {
   const totalSearchResults = searchResults.reduce((sum, g) => sum + g.items.length, 0)
 
   const handleEdit = (item: DictItem) => {
-    setEditingId(item.id!)
-    setEditName(item.name)
-    setEditCode(item.code || '')
+    if (tab === 'doc-templates') {
+      setEditDocTemplate(item)
+    } else {
+      setEditingId(item.id!)
+      setEditName(item.name)
+      setEditCode(item.code || '')
+    }
   }
 
   const handleSaveEdit = async () => {
@@ -150,7 +160,8 @@ export function HRDictionaries() {
 
   const filtered = items.filter((item) =>
     item.name.toLowerCase().includes(search.toLowerCase()) ||
-    (item.code && item.code.toLowerCase().includes(search.toLowerCase()))
+    (item.code && item.code.toLowerCase().includes(search.toLowerCase())) ||
+    (item.purpose && item.purpose.toLowerCase().includes(search.toLowerCase()))
   )
 
   const canAdd = tab !== 'positions'
@@ -181,6 +192,12 @@ export function HRDictionaries() {
           { key: 'name', label: 'Должность' },
           { key: 'employee_count', label: 'Сотрудников' },
         ]
+      case 'doc-templates':
+        return [
+          { key: 'name', label: 'Название' },
+          { key: 'purpose', label: 'Назначение' },
+          { key: 'download_count', label: 'Скачиваний' },
+        ]
       default:
         return []
     }
@@ -200,6 +217,16 @@ export function HRDictionaries() {
         return item.manager_name ? (
           <span className="text-muted-foreground">{item.manager_name}</span>
         ) : <span className="text-muted-foreground/50">Не назначен</span>
+      case 'purpose':
+        return item.purpose ? (
+          <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">{item.purpose}</code>
+        ) : <span className="text-muted-foreground/50">—</span>
+      case 'download_count':
+        return (
+          <Badge variant="secondary" className="font-mono tabular-nums">
+            {item.download_count ?? 0}
+          </Badge>
+        )
       case 'employee_count':
         return (
           <Badge variant="secondary" className="font-mono tabular-nums">
@@ -369,7 +396,7 @@ export function HRDictionaries() {
           {canAdd && (
             <Button onClick={() => setIsAddModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Добавить {activeTab.label.toLowerCase().replace('отделы', 'отдел').replace('навыки', 'навык').replace('типы отпусков', 'тип отпуска')}
+              Добавить {activeTab.label.toLowerCase().replace('отделы', 'отдел').replace('навыки', 'навык').replace('типы отпусков', 'тип отпуска').replace('шаблоны документов', 'шаблон документа')}
             </Button>
           )}
 
@@ -518,7 +545,17 @@ export function HRDictionaries() {
           open={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
           onAdded={fetchItems}
-          tab={tab as 'departments' | 'skills' | 'vacation-types'}
+          tab={tab as 'departments' | 'skills' | 'vacation-types' | 'doc-templates'}
+        />
+      )}
+
+      {editDocTemplate && (
+        <AddDictItemModal
+          open={true}
+          onClose={() => setEditDocTemplate(null)}
+          onAdded={() => { setEditDocTemplate(null); fetchItems() }}
+          tab="doc-templates"
+          editItem={editDocTemplate}
         />
       )}
     </div>
