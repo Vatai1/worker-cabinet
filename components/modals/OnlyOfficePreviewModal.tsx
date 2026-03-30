@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Edit, Loader2, CheckCircle2 } from 'lucide-react'
+import { X, Edit, Loader2, CheckCircle2, Copy, Check as CheckIcon, ChevronDown, ChevronUp } from 'lucide-react'
 import { formatFileSize } from '@/lib/documentUtils'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+
+interface Placeholder {
+  tag: string
+  desc: string
+}
 
 interface OnlyOfficePreviewModalProps {
   open: boolean
@@ -18,6 +23,7 @@ interface OnlyOfficePreviewModalProps {
   callbackUrl?: string
   onAcknowledge?: () => Promise<void>
   acknowledged?: boolean
+  placeholders?: Placeholder[]
 }
 
 const ONLYOFFICE_URL = import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'
@@ -25,9 +31,18 @@ const ONLYOFFICE_API_URL = `${ONLYOFFICE_URL}/web-apps/apps/api/documents/api.js
 
 let editorCounter = 0
 
-export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, callbackUrl, onAcknowledge, acknowledged }: OnlyOfficePreviewModalProps) {
+export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, callbackUrl, onAcknowledge, acknowledged, placeholders }: OnlyOfficePreviewModalProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showPlaceholders, setShowPlaceholders] = useState(true)
+  const [copiedTag, setCopiedTag] = useState<string | null>(null)
+
+  const handleCopy = (tag: string) => {
+    navigator.clipboard.writeText(tag).then(() => {
+      setCopiedTag(tag)
+      setTimeout(() => setCopiedTag(null), 1500)
+    })
+  }
   const [editorId] = useState(() => `onlyoffice-editor-${++editorCounter}`)
   const editorRef = useRef<any>(null)
   const isInitializedRef = useRef(false)
@@ -286,6 +301,37 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
                 </Button>
               </div>
             </div>
+          </div>
+        )}
+
+        {placeholders && placeholders.length > 0 && (
+          <div className="border-t border-border/60 shrink-0">
+            <button
+              onClick={() => setShowPlaceholders(v => !v)}
+              className="flex items-center justify-between w-full px-4 py-2 text-sm font-medium hover:bg-muted/40 transition-colors"
+            >
+              <span>Плейсхолдеры шаблона</span>
+              {showPlaceholders ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
+            </button>
+            {showPlaceholders && (
+              <div className="flex flex-wrap gap-1.5 px-4 pb-3 max-h-32 overflow-y-auto">
+                {placeholders.map(p => (
+                  <button
+                    key={p.tag}
+                    onClick={() => handleCopy(p.tag)}
+                    title={p.desc}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/60 bg-muted/30 hover:bg-muted/60 transition-colors text-xs"
+                  >
+                    <code className="font-mono text-primary">{p.tag}</code>
+                    <span className="text-muted-foreground hidden sm:inline">— {p.desc}</span>
+                    {copiedTag === p.tag
+                      ? <CheckIcon className="h-3 w-3 text-emerald-500 shrink-0" />
+                      : <Copy className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                    }
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

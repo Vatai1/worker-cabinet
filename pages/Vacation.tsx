@@ -17,7 +17,8 @@ import type { VacationRequest } from '@/types'
 import { vacationApi } from '@/services/vacationApi'
 import { getAuthHeaders } from '@/lib/authHeaders'
 import { API_BASE_URL } from '@/lib/api'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText } from 'lucide-react'
+import { VacationApplicationModal } from '@/components/modals/VacationApplicationModal'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -52,6 +53,7 @@ export function Vacation() {
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferRequest, setTransferRequest] = useState<VacationRequest | null>(null)
   const [showRestrictionModal, setShowRestrictionModal] = useState(false)
+  const [showApplicationModal, setShowApplicationModal] = useState(false)
   const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<any[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
@@ -383,6 +385,14 @@ export function Vacation() {
               Настроить пересечения
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setShowApplicationModal(true)}
+            size="default"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Заявление на отпуск
+          </Button>
           <Button
             variant="outline"
             onClick={() => setShowHistoryModal(true)}
@@ -822,6 +832,14 @@ export function Vacation() {
           onCreateRestriction={handleCreateRestriction}
           onDeleteRestriction={handleDeleteRestriction}
           onClose={() => setShowRestrictionModal(false)}
+        />
+      )}
+
+      {showApplicationModal && (
+        <VacationApplicationModal
+          open={showApplicationModal}
+          onClose={() => setShowApplicationModal(false)}
+          defaultYear={year}
         />
       )}
 
