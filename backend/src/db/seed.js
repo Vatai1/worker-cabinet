@@ -632,23 +632,258 @@ async function seed() {
     }
     console.log(`  ✓ ${restrictionsCreated} vacation restrictions created`)
 
- console.log('\n✅ Comprehensive seed completed successfully!')
-console.log('\nSummary:')
-console.log(`  Departments: ${departments.length}`)
-console.log(`  Users: ${users.length} (1 admin, 2 HR, ${managers.length} managers, ${users.length - 1 - 2 - managers.length} employees)`)
-console.log(`  Projects: ${projects.length}`)
-console.log(`  Skills in dictionary: ${SKILLS_DATA.length}`)
-console.log(`  Vacation requests: ${requestsCreated}`)
-console.log(`  Notifications: ${notificationsCreated}`)
-console.log(`  Vacation restrictions: ${restrictionsCreated}`)
-console.log('\nLogin credentials:')
-console.log('  admin@example.com (admin)')
-console.log('  elena@example.com (HR Director)')
-console.log('  maria@example.com (HR Manager)')
-console.log('  ivana@example.com (HR Business Partner)')
-console.log('  natalia@example.com (Talent Acquisition)')
-console.log('  olga@example.com (Recruiter)')
-console.log('  Password: password123 (for all users)')
+    console.log('Creating surveys...')
+    const hrUsersList = users.filter(u => u.role === 'hr')
+    const surveyIds = []
+    let surveysCreated = 0
+
+    const SURVEYS_DATA = [
+      {
+        title: 'Удовлетворённость условиями работы',
+        description: 'Опрос для оценки общего уровня удовлетворённости сотрудников условиями работы в компании.',
+        targetType: 'all',
+        targetIds: [],
+        deadline: '2026-06-30',
+        anonymous: true,
+        status: 'active',
+        questions: [
+          { order_index: 1, type: 'scale', text: 'Оцените ваш общий уровень удовлетворённости работой в компании', options: [], scale_min: 1, scale_max: 10, required: true },
+          { order_index: 2, type: 'radio', text: 'Как вы оцениваете баланс между работой и личной жизнью?', options: ['Отлично', 'Хорошо', 'Удовлетворительно', 'Плохо', 'Очень плохо'], required: true },
+          { order_index: 3, type: 'radio', text: 'Довольны ли вы оборудованием и рабочим местом?', options: ['Полностью доволен', 'Скорее доволен', 'Нейтрально', 'Скорее недоволен', 'Полностью недоволен'], required: true },
+          { order_index: 4, type: 'checkbox', text: 'Что бы вы хотели улучшить на рабочем месте?', options: ['Освещение', 'Температура', 'Шумоизоляция', 'Оборудование', 'Переговорные комнаты', 'Зона отдыха', 'Парковка', 'Кухня'], required: false },
+          { order_index: 5, type: 'text', text: 'Ваши предложения по улучшению условий работы', options: [], required: false },
+        ]
+      },
+      {
+        title: 'Обратная связь по процессу онбординга',
+        description: 'Опрос для новых сотрудников о качестве процесса адаптации в компании.',
+        targetType: 'employees',
+        targetIds: [],
+        deadline: '2026-04-15',
+        anonymous: false,
+        status: 'active',
+        questions: [
+          { order_index: 1, type: 'radio', text: 'Насколько хорошо вас ознакомили с компанией и культурой в первый день?', options: ['Отлично', 'Хорошо', 'Средне', 'Плохо'], required: true },
+          { order_index: 2, type: 'radio', text: 'Был ли назначен вам наставник?', options: ['Да, в первый день', 'Да, через несколько дней', 'Да, через неделю и более', 'Нет'], required: true },
+          { order_index: 3, type: 'scale', text: 'Оцените качество вводных материалов и документации', options: [], scale_min: 1, scale_max: 5, required: true },
+          { order_index: 4, type: 'checkbox', text: 'Какие аспекты онбординга были наиболее полезны?', options: ['Знакомство с командой', 'Обзор продуктов компании', 'Настройка оборудования', 'Обучение инструментам', 'Знакомство с процессами', 'Менторство'], required: false },
+          { order_index: 5, type: 'text', text: 'Что бы вы улучшили в процессе онбординга?', options: [], required: false },
+        ]
+      },
+      {
+        title: 'Предпочтения по формату работы',
+        description: 'Опрос отдела разработки о предпочтениях между удалённой и офисной работой.',
+        targetType: 'department',
+        targetIds: [],
+        deadline: '2026-05-01',
+        anonymous: true,
+        status: 'active',
+        questions: [
+          { order_index: 1, type: 'radio', text: 'Какой формат работы вы предпочитаете?', options: ['Полностью удалённый', 'Гибридный (2-3 дня в офисе)', 'Гибридный (1 день удалённо)', 'Полностью из офиса'], required: true },
+          { order_index: 2, type: 'checkbox', text: 'Какие дни вам удобнее работать из офиса?', options: ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница'], required: false },
+          { order_index: 3, type: 'scale', text: 'Оцените продуктивность при работе из дома (1 — очень низкая, 5 — очень высокая)', options: [], scale_min: 1, scale_max: 5, required: true },
+          { order_index: 4, type: 'text', text: 'Что мешает вам эффективно работать удалённо?', options: [], required: false },
+        ]
+      },
+      {
+        title: 'Оценка корпоративных мероприятий 2025',
+        description: 'Обратная связь по прошедшим корпоративным мероприятиям за 2025 год.',
+        targetType: 'all',
+        targetIds: [],
+        deadline: '2025-12-31',
+        anonymous: false,
+        status: 'closed',
+        questions: [
+          { order_index: 1, type: 'radio', text: 'Как вы оцениваете новогодний корпоратив?', options: ['Отлично', 'Хорошо', 'Средне', 'Плохо', 'Не посещал'], required: true },
+          { order_index: 2, type: 'radio', text: 'Как вы оцениваете летний тимбилдинг?', options: ['Отлично', 'Хорошо', 'Средне', 'Плохо', 'Не посещал'], required: true },
+          { order_index: 3, type: 'checkbox', text: 'Какие мероприятия вы посещали?', options: ['Новогодний корпоратив', 'Летний тимбилдинг', 'День рождения компании', 'Спортивные турниры', 'Мастер-классы', 'Благотворительные акции'], required: true },
+          { order_index: 4, type: 'scale', text: 'Общая оценка корпоративной культуры', options: [], scale_min: 1, scale_max: 10, required: true },
+          { order_index: 5, type: 'text', text: 'Какие мероприятия вы бы хотели видеть в будущем?', options: [], required: false },
+        ]
+      },
+      {
+        title: 'Качество внутреннего обучения',
+        description: 'Опрос по оценке программ обучения и развития.',
+        targetType: 'all',
+        targetIds: [],
+        deadline: '2026-07-15',
+        anonymous: true,
+        status: 'closed',
+        questions: [
+          { order_index: 1, type: 'radio', text: 'Прошли ли вы какие-либо внутренние курсы за последний год?', options: ['Да, несколько', 'Да, один', 'Нет'], required: true },
+          { order_index: 2, type: 'scale', text: 'Оцените качество пройденных курсов', options: [], scale_min: 1, scale_max: 5, required: true },
+          { order_index: 3, type: 'checkbox', text: 'Какие темы вам были наиболее полезны?', options: ['Технические навыки', 'Мягкие навыки', 'Управление проектами', 'Лидерство', 'Безопасность', 'Продуктовые знания'], required: false },
+          { order_index: 4, type: 'text', text: 'Какие темы обучения вы бы хотели видеть в будущем?', options: [], required: false },
+        ]
+      },
+      {
+        title: 'Опрос вовлечённости сотрудников (черновик)',
+        description: 'Ежеквартальный опрос для измерения уровня вовлечённости.',
+        targetType: 'all',
+        targetIds: [],
+        deadline: null,
+        anonymous: true,
+        status: 'draft',
+        questions: [
+          { order_index: 1, type: 'scale', text: 'Насколько вы чувствуете себя частью команды?', options: [], scale_min: 1, scale_max: 10, required: true },
+          { order_index: 2, type: 'radio', text: 'Понимаете ли вы, как ваша работа влияет на успех компании?', options: ['Полностью понимаю', 'В общих чертах', 'Слабо понимаю', 'Не понимаю'], required: true },
+          { order_index: 3, type: 'radio', text: 'Получаете ли вы достаточно признания за свою работу?', options: ['Да, регулярно', 'Иногда', 'Редко', 'Никогда'], required: true },
+          { order_index: 4, type: 'text', text: 'Что может повысить вашу вовлечённость в работу?', options: [], required: false },
+        ]
+      },
+      {
+        title: 'Потребности в обучении Q2 2026',
+        description: 'Опрос для планирования обучающих программ на второй квартал.',
+        targetType: 'all',
+        targetIds: [],
+        deadline: '2026-04-30',
+        anonymous: false,
+        status: 'draft',
+        questions: [
+          { order_index: 1, type: 'checkbox', text: 'В каких направлениях вы хотели бы развиваться?', options: ['Программирование', 'Управление', 'Дизайн', 'Аналитика', 'DevOps', 'Soft skills', 'Безопасность', 'Mobile'], required: true },
+          { order_index: 2, type: 'radio', text: 'Предпочтительный формат обучения?', options: ['Онлайн-курсы', 'Вебинары', 'Очные тренинги', 'Менторство', 'Самостоятельное изучение'], required: true },
+          { order_index: 3, type: 'text', text: 'Укажите конкретные курсы или темы, которые вас интересуют', options: [], required: false },
+        ]
+      },
+    ]
+
+    const devDept = departments.find(d => d.name === 'Отдел разработки')
+    const recentHires = users.filter(u => u.role === 'employee').slice(-10)
+
+    for (let i = 0; i < SURVEYS_DATA.length; i++) {
+      const sd = SURVEYS_DATA[i]
+      const existing = await query('SELECT id FROM surveys WHERE title = $1', [sd.title])
+      if (existing.rows.length > 0) {
+        surveyIds.push({ id: existing.rows[0].id, status: sd.status, ...sd })
+        continue
+      }
+
+      let targetIds = sd.targetIds
+      if (sd.targetType === 'department' && devDept) {
+        targetIds = [devDept.id]
+      } else if (sd.targetType === 'employees') {
+        targetIds = recentHires.slice(0, 5).map(u => u.id)
+      }
+
+      const creator = randomItem(hrUsersList)
+      const result = await query(
+        `INSERT INTO surveys (title, description, created_by, target_type, target_ids, deadline, anonymous, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+        [sd.title, sd.description, creator.id, sd.targetType, JSON.stringify(targetIds), sd.deadline, sd.anonymous, sd.status, new Date(Date.now() - randomInt(1, 30) * 24 * 60 * 60 * 1000).toISOString()]
+      )
+      const surveyId = result.rows[0].id
+
+      for (const q of sd.questions) {
+        await query(
+          `INSERT INTO survey_questions (survey_id, order_index, type, text, options, scale_min, scale_max, required)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [surveyId, q.order_index, q.type, q.text, JSON.stringify(q.options), q.scale_min || 1, q.scale_max || 5, q.required]
+        )
+      }
+
+      surveyIds.push({ id: surveyId, status: sd.status, ...sd })
+      surveysCreated++
+    }
+    console.log(`  ✓ ${surveysCreated} surveys created`)
+
+    console.log('Creating survey responses and answers...')
+    let responsesCreated = 0
+    let answersCreated = 0
+
+    for (const survey of surveyIds) {
+      if (survey.status === 'draft') continue
+
+      const questionRows = await query('SELECT id, type, options, scale_min, scale_max FROM survey_questions WHERE survey_id = $1 ORDER BY order_index', [survey.id])
+      if (questionRows.rows.length === 0) continue
+
+      const respondentCount = survey.status === 'closed' ? randomInt(8, 15) : randomInt(3, 8)
+      let respondents
+
+      if (survey.targetType === 'all') {
+        respondents = [...users].filter(u => u.role !== 'admin').sort(() => Math.random() - 0.5).slice(0, respondentCount)
+      } else if (survey.targetType === 'department' && devDept) {
+        respondents = users.filter(u => u.departmentId === devDept.id).sort(() => Math.random() - 0.5).slice(0, respondentCount)
+      } else {
+        respondents = recentHires.slice(0, Math.min(respondentCount, recentHires.length))
+      }
+
+      for (const respondent of respondents) {
+        const existingResp = await query(
+          'SELECT id FROM survey_responses WHERE survey_id = $1 AND user_id = $2',
+          [survey.id, respondent.id]
+        )
+        if (existingResp.rows.length > 0) continue
+
+        const respResult = await query(
+          `INSERT INTO survey_responses (survey_id, user_id, submitted_at) VALUES ($1, $2, $3) RETURNING id`,
+          [survey.id, survey.anonymous ? null : respondent.id, new Date(Date.now() - randomInt(0, 14) * 24 * 60 * 60 * 1000).toISOString()]
+        )
+        const responseId = respResult.rows[0].id
+        responsesCreated++
+
+        for (const question of questionRows.rows) {
+          let value = null
+          let values = null
+
+          if (question.type === 'radio') {
+            const opts = question.options || []
+            if (opts.length > 0) value = randomItem(opts)
+          } else if (question.type === 'checkbox') {
+            const opts = question.options || []
+            if (opts.length > 0) {
+              const count = randomInt(1, Math.min(3, opts.length))
+              const shuffled = [...opts].sort(() => Math.random() - 0.5)
+              values = shuffled.slice(0, count)
+            }
+          } else if (question.type === 'scale') {
+            value = String(randomInt(question.scale_min, question.scale_max))
+          } else if (question.type === 'text') {
+            if (Math.random() > 0.4) {
+              const textAnswers = [
+                'Всё устраивает, продолжайте в том же духе.',
+                'Хотелось бы больше неформального общения с коллегами.',
+                'Нужно улучшить документацию по внутренним процессам.',
+                'Отличная работа команды HR, спасибо!',
+                'Было бы здорово добавить больше гибкости в график.',
+                'Рекомендую добавить регулярные встречи один на один с руководителем.',
+                'Хотелось бы видеть больше прозрачности в карьерном росте.',
+                'Неплохо, но есть куда расти.',
+              ]
+              value = randomItem(textAnswers)
+            }
+          }
+
+          if (value || values) {
+            await query(
+              `INSERT INTO survey_answers (response_id, question_id, value, values) VALUES ($1, $2, $3, $4)`,
+              [responseId, question.id, value, values ? JSON.stringify(values) : null]
+            )
+            answersCreated++
+          }
+        }
+      }
+    }
+    console.log(`  ✓ ${responsesCreated} survey responses, ${answersCreated} answers created`)
+
+    console.log('\n✅ Comprehensive seed completed successfully!')
+    console.log('\nSummary:')
+    console.log(`  Departments: ${departments.length}`)
+    console.log(`  Users: ${users.length} (1 admin, ${hrUsersList.length} HR, ${managers.length} managers, ${users.length - 1 - hrUsersList.length - managers.length} employees)`)
+    console.log(`  Projects: ${projects.length}`)
+    console.log(`  Skills in dictionary: ${SKILLS_DATA.length}`)
+    console.log(`  Vacation requests: ${requestsCreated}`)
+    console.log(`  Notifications: ${notificationsCreated}`)
+    console.log(`  Vacation restrictions: ${restrictionsCreated}`)
+    console.log(`  Surveys: ${surveysCreated}`)
+    console.log(`  Survey responses: ${responsesCreated}`)
+    console.log('\nLogin credentials:')
+    console.log('  admin@example.com (admin)')
+    console.log('  elena@example.com (HR Director)')
+    console.log('  maria@example.com (HR Manager)')
+    console.log('  ivana@example.com (HR Business Partner)')
+    console.log('  natalia@example.com (Talent Acquisition)')
+    console.log('  olga@example.com (Recruiter)')
+    console.log('  Password: password123 (for all users)')
     
     process.exit(0)
   } catch (error) {
