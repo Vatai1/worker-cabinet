@@ -129,6 +129,10 @@ export interface VacationRequest {
   
   referenceDocument?: string
   
+  transferRequestedAt?: string
+  transferReason?: string
+  transferredFromId?: string
+  
   createdAt: string
   reviewedAt?: string
   reviewedBy?: string
@@ -146,6 +150,7 @@ export interface VacationRequestStatusHistory {
 
 export interface VacationBalance {
   userId: string
+  year: number
   
   totalDays: number
   usedDays: number
@@ -209,4 +214,17 @@ export interface VacationApiError {
   code: string
   message: string
   details?: any
+}
+
+export interface VacationTransferRequest {
+  originalRequestId: string
+  newStartDate: string
+  newEndDate: string
+  reason: string
+}
+
+export interface VacationTransferInfo {
+  transferRequestedAt?: string
+  transferReason?: string
+  transferredFromId?: string
 }

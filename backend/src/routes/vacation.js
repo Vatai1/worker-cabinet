@@ -26,6 +26,13 @@ const VACATION_TYPE_NAMES = {
 
 const VALID_VACATION_TYPES = ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran']
 
+function extractYear(date) {
+  if (!date) return new Date().getFullYear()
+  if (typeof date === 'string') return parseInt(date.substring(0, 4))
+  if (date instanceof Date) return date.getFullYear()
+  return new Date(date).getFullYear()
+}
+
 // Get all vacation requests (with filters)
 router.get('/requests', authenticateToken, async (req, res) => {
   try {
@@ -140,23 +147,25 @@ router.get('/requests', authenticateToken, async (req, res) => {
 router.get('/balance/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params
+    const { year } = req.query
     const currentUser = req.user
+    const targetYear = year ? parseInt(year) : new Date().getFullYear()
 
     if (currentUser.role === 'employee' && currentUser.id !== parseInt(userId)) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
     const result = await query(
-      'SELECT * FROM vacation_balances WHERE user_id = $1',
-      [userId]
+      'SELECT * FROM vacation_balances WHERE user_id = $1 AND year = $2',
+      [userId, targetYear]
     )
 
     if (result.rows.length === 0) {
       const newBalance = await query(
-        `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days)
-         VALUES ($1, 28, 0, 0)
+        `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days, year)
+         VALUES ($1, 47, 0, 0, $2)
          RETURNING *`,
-        [userId]
+        [userId, targetYear]
       )
       return res.json(newBalance.rows[0])
     }
@@ -226,10 +235,11 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     const duration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
     const finalDuration = hasTravel ? duration + 2 : duration
+    const requestYear = start.getFullYear()
 
     const balanceResult = await client.query(
-      'SELECT * FROM vacation_balances WHERE user_id = $1',
-      [userId]
+      'SELECT * FROM vacation_balances WHERE user_id = $1 AND year = $2',
+      [userId, requestYear]
     )
 
     const balance = balanceResult.rows[0]
@@ -283,8 +293,8 @@ router.post('/requests', authenticateToken, async (req, res) => {
     await client.query(
       `UPDATE vacation_balances 
        SET reserved_days = reserved_days + $1
-       WHERE user_id = $2`,
-      [finalDuration, userId]
+       WHERE user_id = $2 AND year = $3`,
+      [finalDuration, userId, requestYear]
     )
 
     await client.query(
@@ -394,18 +404,20 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     const newDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
 
     if (request.status === 'on_approval') {
+      const origYear = extractYear(request.start_date)
       await client.query(
         `UPDATE vacation_balances
          SET reserved_days = reserved_days - $1 + $2
-         WHERE user_id = $3`,
-        [request.duration, newDuration, request.user_id]
+         WHERE user_id = $3 AND year = $4`,
+        [request.duration, newDuration, request.user_id, origYear]
       )
     } else if (request.status === 'approved') {
+      const origYear = extractYear(request.start_date)
       await client.query(
         `UPDATE vacation_balances
          SET used_days = used_days - $1 + $2
-         WHERE user_id = $3`,
-        [request.duration, newDuration, request.user_id]
+         WHERE user_id = $3 AND year = $4`,
+        [request.duration, newDuration, request.user_id, origYear]
       )
     }
 
@@ -472,10 +484,11 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
       `UPDATE vacation_requests vr
        SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'), reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
        FROM vacation_balances vb
-       WHERE vr.id = $2 AND vr.status_id = (SELECT id FROM request_statuses WHERE code = 'on_approval') AND vb.user_id = vr.user_id
+       WHERE vr.id = $2 AND vr.status_id = (SELECT id FROM request_statuses WHERE code = 'on_approval') AND vb.user_id = vr.user_id AND vb.year = EXTRACT(YEAR FROM vr.start_date)
        RETURNING
          vr.*,
          vb.user_id as balance_user_id,
+         vb.year as balance_year,
          vr.duration
        `,
       [managerId, id]
@@ -492,8 +505,8 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
       `UPDATE vacation_balances
        SET reserved_days = reserved_days - $1,
            used_days = used_days + $1
-       WHERE user_id = $2`,
-      [request.duration, request.balance_user_id]
+       WHERE user_id = $2 AND year = $3`,
+      [request.duration, request.balance_user_id, request.balance_year]
     )
 
     await client.query(
@@ -602,12 +615,13 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     }
 
     const request = result.rows[0]
+    const requestYear = extractYear(request.start_date)
 
     await client.query(
       `UPDATE vacation_balances
        SET reserved_days = reserved_days - $1
-       WHERE user_id = $2`,
-      [request.duration, request.user_id]
+       WHERE user_id = $2 AND year = $3`,
+      [request.duration, request.user_id, requestYear]
     )
 
     await client.query(
@@ -690,6 +704,7 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     }
 
     const request = requestResult.rows[0]
+    const requestYear = extractYear(request.start_date)
 
     if (request.user_id !== userId) {
       await client.query('ROLLBACK')
@@ -705,15 +720,15 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
       await client.query(
         `UPDATE vacation_balances
          SET reserved_days = reserved_days - $1
-         WHERE user_id = $2`,
-        [request.duration, userId]
+         WHERE user_id = $2 AND year = $3`,
+        [request.duration, userId, requestYear]
       )
     } else {
       await client.query(
         `UPDATE vacation_balances
          SET used_days = used_days - $1
-         WHERE user_id = $2`,
-        [request.duration, userId]
+         WHERE user_id = $2 AND year = $3`,
+        [request.duration, userId, requestYear]
       )
     }
 
@@ -810,12 +825,13 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
     }
 
     const request = result.rows[0]
+    const requestYear = extractYear(request.start_date)
 
     await client.query(
       `UPDATE vacation_balances
        SET used_days = used_days - $1
-       WHERE user_id = $2`,
-      [request.duration, request.user_id]
+       WHERE user_id = $2 AND year = $3`,
+      [request.duration, request.user_id, requestYear]
     )
 
     await client.query(
@@ -1108,6 +1124,592 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error checking vacation restrictions:', error)
     res.status(500).json({ error: 'Failed to check vacation restrictions' })
+  }
+})
+
+router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
+  const client = await getClient()
+  
+  try {
+    const { id } = req.params
+    const { newStartDate, newEndDate, reason } = req.body
+    const userId = req.user.id
+
+    if (!newStartDate || !newEndDate || !reason?.trim()) {
+      return res.status(400).json({ error: 'Необходимо указать новые даты и причину переноса' })
+    }
+
+    await client.query('BEGIN')
+
+    const requestResult = await client.query(
+      `SELECT vr.*, rs.code as status
+       FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    if (requestResult.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Заявка не найдена' })
+    }
+
+    const originalRequest = requestResult.rows[0]
+    const originalYear = extractYear(originalRequest.start_date)
+
+    if (originalRequest.user_id !== userId) {
+      await client.query('ROLLBACK')
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (originalRequest.status !== 'approved') {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Можно переносить только согласованные заявки' })
+    }
+
+    const parseLocalDate = (dateStr) => {
+      const [year, month, day] = dateStr.split('-').map(Number)
+      return new Date(year, month - 1, day)
+    }
+
+    const newStart = parseLocalDate(newStartDate)
+    const newEnd = parseLocalDate(newEndDate)
+    const newYear = newStart.getFullYear()
+
+    if (newYear !== originalYear) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Перенос возможен только в пределах одного года' })
+    }
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    if (newStart < today) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Нельзя переносить на прошедшую дату' })
+    }
+
+    if (newEnd < newStart) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Дата окончания не может быть раньше даты начала' })
+    }
+
+    const newDuration = Math.floor((newEnd - newStart) / (1000 * 60 * 60 * 24)) + 1
+
+    if (newDuration > originalRequest.duration) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Новая продолжительность не может превышать исходную' })
+    }
+
+    const overlapResult = await client.query(
+      `SELECT vr.id FROM vacation_requests vr
+        JOIN request_statuses rs ON vr.status_id = rs.id
+        WHERE vr.user_id = $1
+        AND vr.id != $2
+        AND rs.code IN ('on_approval', 'approved')
+        AND (
+          (vr.start_date <= $3 AND vr.end_date >= $3)
+          OR (vr.start_date <= $4 AND vr.end_date >= $4)
+          OR (vr.start_date >= $3 AND vr.end_date <= $4)
+        )`,
+      [userId, id, newStartDate, newEndDate]
+    )
+
+    if (overlapResult.rows.length > 0) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Пересечение с существующей заявкой' })
+    }
+
+    const balanceResult = await client.query(
+      'SELECT * FROM vacation_balances WHERE user_id = $1 AND year = $2',
+      [userId, originalYear]
+    )
+    const balance = balanceResult.rows[0]
+
+    const durationDiff = newDuration - originalRequest.duration
+
+    if (durationDiff > 0 && balance.available_days < durationDiff) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({
+        error: 'Недостаточно дней на балансе',
+        available: balance?.available_days || 0,
+        required: durationDiff
+      })
+    }
+
+    const newRequestResult = await client.query(
+      `INSERT INTO vacation_requests 
+        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, 
+         reference_document, status_id, transferred_from_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 
+                (SELECT id FROM request_statuses WHERE code = 'on_approval'), $10)
+        RETURNING *`,
+      [
+        userId,
+        newStartDate,
+        newEndDate,
+        newDuration,
+        originalRequest.vacation_type_id,
+        reason,
+        originalRequest.has_travel,
+        originalRequest.travel_destination,
+        originalRequest.reference_document,
+        id
+      ]
+    )
+
+    const newRequest = newRequestResult.rows[0]
+
+    await client.query(
+      `UPDATE vacation_requests
+       SET transfer_requested_at = CURRENT_TIMESTAMP,
+           transfer_reason = $1
+       WHERE id = $2`,
+      [reason, id]
+    )
+
+    if (durationDiff !== 0) {
+      await client.query(
+        `UPDATE vacation_balances
+         SET used_days = used_days + $1,
+             reserved_days = reserved_days + $2
+         WHERE user_id = $3 AND year = $4`,
+        [-originalRequest.duration, newDuration, userId, originalYear]
+      )
+    } else {
+      await client.query(
+        `UPDATE vacation_balances
+         SET used_days = used_days - $1,
+             reserved_days = reserved_days + $1
+         WHERE user_id = $2 AND year = $3`,
+        [originalRequest.duration, userId, originalYear]
+      )
+    }
+
+    await client.query(
+      `INSERT INTO vacation_request_status_history
+        (request_id, status_id, changed_by, comment)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $2, $3)`,
+      [newRequest.id, userId, `Перенос из заявки #${id}: ${reason}`]
+    )
+
+    await client.query('COMMIT')
+
+    const managerResult = await client.query(
+      `SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id =
+       (SELECT manager_id FROM users WHERE id = $1)`,
+      [userId]
+    )
+    const manager = managerResult.rows[0]
+    const employeeResult = await client.query(
+      'SELECT id, first_name, last_name, position FROM users WHERE id = $1',
+      [userId]
+    )
+    const employee = employeeResult.rows[0]
+
+    if (manager) {
+      TelegramService.sendNewRequestNotification(
+        {
+          firstName: manager.first_name,
+          lastName: manager.last_name,
+          telegram_chat_id: manager.telegram_chat_id,
+          telegram_notifications_enabled: manager.telegram_notifications_enabled
+        },
+        {
+          start_date: newRequest.start_date,
+          end_date: newRequest.end_date,
+          duration: newRequest.duration,
+          vacation_type: originalRequest.vacation_type,
+          has_travel: newRequest.has_travel,
+          comment: `Перенос из заявки #${id}: ${reason}`
+        },
+        {
+          firstName: employee.first_name,
+          lastName: employee.last_name,
+          position: employee.position
+        }
+      ).catch(console.error)
+
+      createNotification(
+        manager.id,
+        'Запрос на перенос отпуска',
+        `${employee.last_name} ${employee.first_name} запросил(а) перенос отпуска с ${originalRequest.start_date} на ${newStartDate}`,
+        'info'
+      ).catch(console.error)
+    }
+
+    const fullResult = await client.query(
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [newRequest.id]
+    )
+
+    res.status(201).json(fullResult.rows[0])
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Error requesting vacation transfer:', error)
+    res.status(500).json({ error: 'Failed to request vacation transfer' })
+  } finally {
+    client.release()
+  }
+})
+
+router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  const client = await getClient()
+
+  try {
+    const { id } = req.params
+    const managerId = req.user.id
+
+    await client.query('BEGIN')
+
+    const newRequestResult = await client.query(
+      `SELECT vr.*, rs.code as status, d.manager_id
+       FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
+      [id]
+    )
+
+    if (newRequestResult.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Запрос на перенос не найден' })
+    }
+
+    const newRequest = newRequestResult.rows[0]
+
+    if (newRequest.status !== 'on_approval') {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Можно одобрить только заявку на согласовании' })
+    }
+
+    if (newRequest.manager_id !== managerId) {
+      await client.query('ROLLBACK')
+      return res.status(403).json({ error: 'Только руководитель отдела может согласовывать заявки' })
+    }
+
+    const originalRequestResult = await client.query(
+      `SELECT * FROM vacation_requests WHERE id = $1`,
+      [newRequest.transferred_from_id]
+    )
+
+    if (originalRequestResult.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Исходная заявка не найдена' })
+    }
+
+    const originalRequest = originalRequestResult.rows[0]
+
+    await client.query(
+      `UPDATE vacation_requests
+       SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'),
+           cancellation_reason = 'Перенесён на другие даты (заявка #' + $1 + ')'
+       WHERE id = $2`,
+      [id, originalRequest.id]
+    )
+
+    await client.query(
+      `INSERT INTO vacation_request_status_history
+        (request_id, status_id, changed_by, comment)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2, $3)`,
+      [originalRequest.id, managerId, `Перенесён на другие даты (заявка #${id})`]
+    )
+
+    await client.query(
+      `UPDATE vacation_requests vr
+       SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'),
+           reviewed_at = CURRENT_TIMESTAMP,
+           reviewed_by = $1
+       WHERE vr.id = $2`,
+      [managerId, id]
+    )
+
+    await client.query(
+      `UPDATE vacation_balances
+       SET reserved_days = reserved_days - $1,
+           used_days = used_days + $1
+       WHERE user_id = $2 AND year = EXTRACT(YEAR FROM $3::date)`,
+      [newRequest.duration, newRequest.user_id, newRequest.start_date]
+    )
+
+    await client.query(
+      `INSERT INTO vacation_request_status_history
+        (request_id, status_id, changed_by, comment)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, 'Перенос одобрен')`,
+      [id, managerId]
+    )
+
+    await client.query('COMMIT')
+
+    const userResult = await client.query(
+      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
+      [newRequest.user_id]
+    )
+    const user = userResult.rows[0]
+
+    TelegramService.sendVacationApprovedNotification(
+      {
+        firstName: user.first_name,
+        lastName: user.last_name,
+        telegram_chat_id: user.telegram_chat_id,
+        telegram_notifications_enabled: user.telegram_notifications_enabled
+      },
+      {
+        start_date: newRequest.start_date,
+        end_date: newRequest.end_date,
+        duration: newRequest.duration,
+        vacation_type: newRequest.vacation_type,
+        has_travel: newRequest.has_travel
+      }
+    ).catch(console.error)
+
+    createNotification(
+      user.id,
+      'Перенос отпуска одобрен',
+      `Ваш запрос на перенос отпуска с ${originalRequest.start_date} на ${newRequest.start_date} одобрен`,
+      'success'
+    ).catch(console.error)
+
+    const fullResult = await client.query(
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    res.json(fullResult.rows[0])
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Error approving vacation transfer:', error)
+    res.status(500).json({ error: 'Failed to approve vacation transfer' })
+  } finally {
+    client.release()
+  }
+})
+
+router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  const client = await getClient()
+
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    const managerId = req.user.id
+
+    if (!reason?.trim()) {
+      return res.status(400).json({ error: 'Необходимо указать причину отклонения' })
+    }
+
+    await client.query('BEGIN')
+
+    const newRequestResult = await client.query(
+      `SELECT vr.*, rs.code as status, d.manager_id
+       FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
+      [id]
+    )
+
+    if (newRequestResult.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Запрос на перенос не найден' })
+    }
+
+    const newRequest = newRequestResult.rows[0]
+
+    if (newRequest.status !== 'on_approval') {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Можно отклонить только заявку на согласовании' })
+    }
+
+    if (newRequest.manager_id !== managerId) {
+      await client.query('ROLLBACK')
+      return res.status(403).json({ error: 'Только руководитель отдела может отклонять заявки' })
+    }
+
+    const originalRequestResult = await client.query(
+      `SELECT * FROM vacation_requests WHERE id = $1`,
+      [newRequest.transferred_from_id]
+    )
+    const originalRequest = originalRequestResult.rows[0]
+
+    await client.query(
+      `UPDATE vacation_requests vr
+       SET status_id = (SELECT id FROM request_statuses WHERE code = 'rejected'),
+           rejection_reason = $1,
+           reviewed_at = CURRENT_TIMESTAMP,
+           reviewed_by = $2
+       WHERE vr.id = $3`,
+      [reason, managerId, id]
+    )
+
+    await client.query(
+      `UPDATE vacation_balances
+       SET reserved_days = reserved_days - $1,
+           used_days = used_days + $1
+       WHERE user_id = $2 AND year = EXTRACT(YEAR FROM $3::date)`,
+      [newRequest.duration, newRequest.user_id, newRequest.start_date]
+    )
+
+    await client.query(
+      `UPDATE vacation_requests
+       SET transfer_requested_at = NULL,
+           transfer_reason = NULL
+       WHERE id = $1`,
+      [originalRequest.id]
+    )
+
+    await client.query(
+      `INSERT INTO vacation_request_status_history
+        (request_id, status_id, changed_by, comment)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
+      [id, managerId, reason]
+    )
+
+    await client.query('COMMIT')
+
+    const userResult = await client.query(
+      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
+      [newRequest.user_id]
+    )
+    const user = userResult.rows[0]
+
+    TelegramService.sendVacationRejectedNotification(
+      {
+        firstName: user.first_name,
+        lastName: user.last_name,
+        telegram_chat_id: user.telegram_chat_id,
+        telegram_notifications_enabled: user.telegram_notifications_enabled
+      },
+      {
+        start_date: newRequest.start_date,
+        end_date: newRequest.end_date,
+        duration: newRequest.duration,
+        rejection_reason: reason
+      }
+    ).catch(console.error)
+
+    createNotification(
+      user.id,
+      'Перенос отпуска отклонён',
+      `Ваш запрос на перенос отпуска отклонён. Причина: ${reason}`,
+      'error'
+    ).catch(console.error)
+
+    const fullResult = await client.query(
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    res.json(fullResult.rows[0])
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Error rejecting vacation transfer:', error)
+    res.status(500).json({ error: 'Failed to reject vacation transfer' })
+  } finally {
+    client.release()
+  }
+})
+
+router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res) => {
+  const client = await getClient()
+  
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+
+    await client.query('BEGIN')
+
+    const newRequestResult = await client.query(
+      `SELECT vr.*, rs.code as status
+       FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
+      [id]
+    )
+
+    if (newRequestResult.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Запрос на перенос не найден' })
+    }
+
+    const newRequest = newRequestResult.rows[0]
+
+    if (newRequest.user_id !== userId) {
+      await client.query('ROLLBACK')
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (newRequest.status !== 'on_approval') {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Можно отменить только заявку на согласовании' })
+    }
+
+    const originalRequestResult = await client.query(
+      `SELECT * FROM vacation_requests WHERE id = $1`,
+      [newRequest.transferred_from_id]
+    )
+    const originalRequest = originalRequestResult.rows[0]
+
+    await client.query(
+      `UPDATE vacation_requests
+       SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee')
+       WHERE id = $1`,
+      [id]
+    )
+
+    await client.query(
+      `UPDATE vacation_balances
+       SET reserved_days = reserved_days - $1,
+           used_days = used_days + $1
+       WHERE user_id = $2 AND year = EXTRACT(YEAR FROM $3::date)`,
+      [newRequest.duration, userId, newRequest.start_date]
+    )
+
+    await client.query(
+      `UPDATE vacation_requests
+       SET transfer_requested_at = NULL,
+           transfer_reason = NULL
+       WHERE id = $1`,
+      [originalRequest.id]
+    )
+
+    await client.query(
+      `INSERT INTO vacation_request_status_history
+        (request_id, status_id, changed_by, comment)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2, 'Отмена переноса')`,
+      [id, userId]
+    )
+
+    await client.query('COMMIT')
+
+    const fullResult = await client.query(
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+       FROM vacation_requests vr
+       JOIN users u ON vr.user_id = u.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE vr.id = $1`,
+      [id]
+    )
+
+    res.json(fullResult.rows[0])
+  } catch (error) {
+    await client.query('ROLLBACK')
+    console.error('Error cancelling vacation transfer:', error)
+    res.status(500).json({ error: 'Failed to cancel vacation transfer' })
+  } finally {
+    client.release()
   }
 })
 

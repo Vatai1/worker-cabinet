@@ -29,7 +29,7 @@ interface VacationStore {
   fetchAllRequests: () => Promise<void>
   fetchUserRequests: (userId: string) => Promise<void>
   fetchDepartmentRequests: (departmentId: string) => Promise<void>
-  fetchBalance: (userId: string) => Promise<VacationBalance>
+  fetchBalance: (userId: string, year: number) => Promise<VacationBalance>
   fetchRestrictions: (departmentId: string) => Promise<void>
 
   createRequest: (userId: string, data: VacationFormData) => Promise<VacationRequest | null>
@@ -105,9 +105,9 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         }
       },
       
-      fetchBalance: async (userId: string) => {
+      fetchBalance: async (userId: string, year: number) => {
         try {
-          const balance = await vacationApi.getBalance(userId)
+          const balance = await vacationApi.getBalance(userId, year)
           set((state) => ({
             balances: {
               ...state.balances,
