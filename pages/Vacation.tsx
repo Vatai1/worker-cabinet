@@ -11,9 +11,13 @@ import { VacationDetailModal } from '@/components/modals/VacationDetailModal'
 import { VacationHistoryModal } from '@/components/modals/VacationHistoryModal'
 import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { RestrictionModal } from '@/components/modals/RestrictionModal'
+import { VacationTransferModal } from '@/components/modals/VacationTransferModal'
 import { VacationRequestStatus, VacationType } from '@/types'
+import type { VacationRequest } from '@/types'
+import { vacationApi } from '@/services/vacationApi'
 import { getAuthHeaders } from '@/lib/authHeaders'
 import { API_BASE_URL } from '@/lib/api'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -45,16 +49,19 @@ export function Vacation() {
   const [myRequestsExpanded, setMyRequestsExpanded] = useState(true)
   const [addingComment, setAddingComment] = useState<string | null>(null)
   const [newComment, setNewComment] = useState('')
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [transferRequest, setTransferRequest] = useState<VacationRequest | null>(null)
   const [showRestrictionModal, setShowRestrictionModal] = useState(false)
   const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<any[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
   const [vacationBlocked, setVacationBlocked] = useState(false)
+  const [year, setYear] = useState(new Date().getFullYear())
 
   useEffect(() => {
     if (user) {
       fetchUserRequests(user.id)
-      fetchBalance(user.id).then(setBalance)
+      fetchBalance(user.id, year).then(setBalance)
 
       if (user.role === 'manager') {
         fetchAllRequests()
@@ -72,7 +79,7 @@ export function Vacation() {
           .catch(() => {})
       }
     }
-  }, [user?.id, user?.departmentId, user?.role])
+  }, [user?.id, user?.departmentId, user?.role, year])
 
   const handleApprove = async (requestId: string) => {
     if (!user) return
@@ -80,7 +87,7 @@ export function Vacation() {
       await approveRequest(requestId, user.id)
       fetchUserRequests(user.id)
       fetchDepartmentRequests(user.departmentId || '1')
-      fetchBalance(user.id).then(setBalance)
+      fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
       console.error('Error approving request:', err)
     }
@@ -93,7 +100,7 @@ export function Vacation() {
       await rejectRequest(requestId, user.id, reason)
       fetchUserRequests(user.id)
       fetchDepartmentRequests(user.departmentId || '1')
-      fetchBalance(user.id).then(setBalance)
+      fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
       console.error('Error rejecting request:', err)
     }
@@ -109,7 +116,7 @@ export function Vacation() {
     try {
       await useVacationStore.getState().cancelRequest(cancellingRequestId)
       setExpandedRequestId(null)
-      fetchBalance(user.id).then(setBalance)
+      fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
       console.error('Error canceling request:', err)
       alert('Ошибка при отмене заявки')
@@ -122,6 +129,11 @@ export function Vacation() {
   const handleCancelClose = () => {
     setShowCancelModal(false)
     setCancellingRequestId(null)
+  }
+
+  const handleTransferClick = (request: VacationRequest) => {
+    setTransferRequest(request)
+    setShowTransferModal(true)
   }
 
   const findIntersections = (request: any) => {
@@ -202,7 +214,7 @@ export function Vacation() {
       setShowCreateFromCalendar(false)
       fetchUserRequests(user.id)
       fetchDepartmentRequests(user.departmentId || '1')
-      fetchBalance(user.id).then(setBalance)
+      fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
       console.error('Error creating request:', err)
     }
@@ -236,7 +248,7 @@ export function Vacation() {
       setShowCreateForm(false)
       fetchUserRequests(user.id)
       fetchDepartmentRequests(user.departmentId || '1')
-      fetchBalance(user.id).then(setBalance)
+      fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
       console.error('Error creating request:', err)
     }
@@ -340,7 +352,9 @@ export function Vacation() {
     return merged
   }, [departmentRequests, currentUserRequests])
 
-  const currentYear = 2026
+  const handlePrevYear = () => setYear((y) => y - 1)
+  const handleNextYear = () => setYear((y) => y + 1)
+
   const isManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin'
   const isDepartmentManager = departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
 
@@ -441,12 +455,23 @@ export function Vacation() {
 
       <Card>
         <div className="p-6">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Button variant="outline" size="icon" onClick={handlePrevYear}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-lg font-semibold min-w-[60px] text-center">{year}</span>
+            <Button variant="outline" size="icon" onClick={handleNextYear}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
           <YearCalendar
-            year={currentYear}
+            year={year}
             requests={calendarRequests}
             onDateRangeSelect={vacationBlocked ? () => {} : handleDateRangeSelect}
             selectedStartDate={selectedStartDate}
             selectedEndDate={selectedEndDate}
+            currentUserId={user?.id}
+            onTransfer={handleTransferClick}
           />
           {showCreateFromCalendar && selectedStartDate && selectedEndDate && (
             <CreateVacationModal
@@ -751,6 +776,7 @@ export function Vacation() {
           onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && user?.id === String(detailRequest?.departmentManagerId) ? handleReject : undefined}
           loading={loading}
           intersectionWarnings={intersectionWarnings}
+          onTransfer={detailRequest && user?.id === detailRequest?.userId && detailRequest?.status === VacationRequestStatus.APPROVED ? handleTransferClick : undefined}
         />
       )}
 
@@ -796,6 +822,25 @@ export function Vacation() {
           onCreateRestriction={handleCreateRestriction}
           onDeleteRestriction={handleDeleteRestriction}
           onClose={() => setShowRestrictionModal(false)}
+        />
+      )}
+
+      {showTransferModal && transferRequest && (
+        <VacationTransferModal
+          isOpen={showTransferModal}
+          request={transferRequest}
+          onClose={() => {
+            setShowTransferModal(false)
+            setTransferRequest(null)
+          }}
+          onSubmit={async (data) => {
+            await vacationApi.requestTransfer(transferRequest.id, data)
+            if (user) {
+              fetchUserRequests(user.id)
+              fetchBalance(user.id, year).then(setBalance)
+            }
+          }}
+          loading={loading}
         />
       )}
     </div>

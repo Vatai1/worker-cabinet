@@ -11,6 +11,8 @@ interface YearCalendarProps {
   onDateRangeSelect?: (startDate: string | null, endDate: string | null) => void
   selectedStartDate?: string | null
   selectedEndDate?: string | null
+  currentUserId?: string
+  onTransfer?: (request: VacationRequest) => void
 }
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -50,7 +52,7 @@ function getUserColor(userId: string): string {
   return COLORS[Math.abs(hash) % COLORS.length]
 }
 
-export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartDate, selectedEndDate }: YearCalendarProps) {
+export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartDate, selectedEndDate, currentUserId, onTransfer }: YearCalendarProps) {
   const [hoverDate, setHoverDate] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -157,6 +159,11 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
   const handleViewDetails = (request: VacationRequest) => {
     setContextMenu(null)
     onDateRangeSelect?.(`vr-${request.id}`, null)
+  }
+
+  const handleTransferRequest = (request: VacationRequest) => {
+    setContextMenu(null)
+    onTransfer?.(request)
   }
 
   const hasSelection = selectedStartDate || selectedEndDate
@@ -369,23 +376,43 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
               {getVacationsForDay(contextMenu.date).length > 0 ? (
                 <div className="space-y-1">
                   {getVacationsForDay(contextMenu.date).map((request) => (
-                    <button
-                      key={request.id}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                        console.log('View details button clicked', request.id)
-                        handleViewDetails(request)
-                      }}
-                      onMouseDown={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                      }}
-                      className="w-full text-left px-2 py-2 text-sm hover:bg-blue-50 rounded flex items-center gap-2"
-                    >
-                      <div className={`w-2 h-2 rounded-full ${getUserColor(request.userId)}`} />
-                      <span>{request.userLastName} {request.userFirstName}</span>
-                    </button>
+                    <div key={request.id} className="space-y-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          e.preventDefault()
+                          console.log('View details button clicked', request.id)
+                          handleViewDetails(request)
+                        }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation()
+                          e.preventDefault()
+                        }}
+                        className="w-full text-left px-2 py-2 text-sm hover:bg-blue-50 rounded flex items-center gap-2"
+                      >
+                        <div className={`w-2 h-2 rounded-full ${getUserColor(request.userId)}`} />
+                        <span>{request.userLastName} {request.userFirstName}</span>
+                      </button>
+                      {request.userId === currentUserId && request.status === VacationRequestStatus.APPROVED && onTransfer && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            e.preventDefault()
+                            handleTransferRequest(request)
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation()
+                            e.preventDefault()
+                          }}
+                          className="w-full text-left px-2 py-2 text-sm hover:bg-muted rounded flex items-center gap-2 text-blue-600"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                          </svg>
+                          <span>Перенести</span>
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : (

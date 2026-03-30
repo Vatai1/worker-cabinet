@@ -14,9 +14,10 @@ interface VacationDetailModalProps {
   onReject?: (requestId: string, reason: string) => Promise<void>
   loading?: boolean
   intersectionWarnings?: {message: string; employeeName: string; dates: string}[]
+  onTransfer?: (request: VacationRequest) => void
 }
 
-export function VacationDetailModal({ isOpen, request, onClose, onApprove, onReject, loading, intersectionWarnings = [] }: VacationDetailModalProps) {
+export function VacationDetailModal({ isOpen, request, onClose, onApprove, onReject, loading, intersectionWarnings = [], onTransfer }: VacationDetailModalProps) {
   const [showRejectInput, setShowRejectInput] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
 
@@ -225,13 +226,27 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
               </div>
             )}
             {!canManage && (
-              <Button
-                variant="secondary"
-                onClick={onClose}
-                className="flex-1"
-              >
-                Закрыть
-              </Button>
+              <div className="flex gap-3 w-full">
+                <Button
+                  variant="secondary"
+                  onClick={onClose}
+                  className="flex-1"
+                >
+                  Закрыть
+                </Button>
+                {!canManage && request.status === 'approved' && onTransfer && (
+                  <Button
+                    onClick={() => {
+                      onTransfer(request)
+                      onClose()
+                    }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    disabled={loading}
+                  >
+                    Перенести
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </div>

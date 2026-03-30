@@ -85,6 +85,9 @@ const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
   rejectionReason: dbRequest.rejection_reason,
   cancellationReason: dbRequest.cancellation_reason,
   referenceDocument: dbRequest.reference_document,
+  transferRequestedAt: dbRequest.transfer_requested_at,
+  transferReason: dbRequest.transfer_reason,
+  transferredFromId: dbRequest.transferred_from_id?.toString(),
   reviewedAt: dbRequest.reviewed_at,
   reviewedBy: dbRequest.reviewed_by?.toString(),
   createdAt: dbRequest.created_at,
@@ -120,16 +123,17 @@ export const vacationApi = {
     return data.map(mapDbRequestToApi)
   },
 
-  async getBalance(userId: string): Promise<VacationBalance> {
-    const response = await fetch(`${API_BASE_URL}/vacation/balance/${userId}`, {
+  async getBalance(userId: string, year: number): Promise<VacationBalance> {
+    const response = await fetch(`${API_BASE_URL}/vacation/balance/${userId}?year=${year}`, {
       headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
     return {
       userId: data.user_id?.toString() || userId,
-      totalDays: data.total_days ?? 28,
+      year: data.year ?? year,
+      totalDays: data.total_days ?? 47,
       usedDays: data.used_days ?? 0,
-      availableDays: data.available_days ?? 28,
+      availableDays: data.available_days ?? 47,
       reservedDays: data.reserved_days ?? 0,
       lastAccrualDate: data.last_accrual_date,
       travelAvailable: data.travel_available ?? false,
@@ -275,6 +279,58 @@ export const vacationApi = {
       body: JSON.stringify({ comment }),
     })
     return handleResponse(response)
+  },
+
+  async requestTransfer(
+    requestId: string,
+    data: { newStartDate: string; newEndDate: string; reason: string }
+  ): Promise<VacationRequest> {
+    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/transfer`, {
+      method: 'POST',
+      headers: getAuthHeadersWithContentType(),
+      body: JSON.stringify(data),
+    })
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
+  },
+
+  async approveTransfer(requestId: string): Promise<VacationRequest> {
+    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/transfer/approve`, {
+      method: 'POST',
+      headers: getAuthHeadersWithContentType(),
+    })
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
+  },
+
+  async rejectTransfer(requestId: string, reason: string): Promise<VacationRequest> {
+    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/transfer/reject`, {
+      method: 'POST',
+      headers: getAuthHeadersWithContentType(),
+      body: JSON.stringify({ reason }),
+    })
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
+  },
+
+  async cancelTransfer(requestId: string): Promise<VacationRequest> {
+    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/transfer/cancel`, {
+      method: 'POST',
+      headers: getAuthHeadersWithContentType(),
+    })
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
+  },
+
+  async getTransferRequests(filters?: { departmentId?: string }): Promise<VacationRequest[]> {
+    const params = new URLSearchParams()
+    params.set('transferPending', 'true')
+    if (filters?.departmentId) params.set('departmentId', filters.departmentId)
+    const response = await fetch(`${API_BASE_URL}/vacation/requests?${params.toString()}`, {
+      headers: getAuthHeadersWithContentType(),
+    })
+    const data = await handleResponse(response)
+    return data.map(mapDbRequestToApi)
   },
 }
 

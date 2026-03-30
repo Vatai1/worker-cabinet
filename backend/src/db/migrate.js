@@ -454,7 +454,7 @@ async function runMigrations() {
       CREATE OR REPLACE FUNCTION update_available_days()
       RETURNS TRIGGER AS $$
       BEGIN
-        NEW.available_days := NEW.total_days - NEW.used_days;
+        NEW.available_days := NEW.total_days - NEW.used_days - NEW.reserved_days;
         RETURN NEW;
       END;
       $$ language 'plpgsql'
@@ -1048,6 +1048,67 @@ async function runMigrations() {
         console.log('  - vacation_requests_blocked:', e.message)
       }
     }
+
+    
+    try {
+      await db.query(`ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS transfer_requested_at TIMESTAMP`)
+      console.log('  ✓ transfer_requested_at column added to vacation_requests')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ transfer_requested_at (already exists)')
+      } else {
+        console.log('  - transfer_requested_at:', e.message)
+      }
+    }
+
+    try {
+      await db.query(`ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS transfer_reason TEXT`)
+      console.log('  ✓ transfer_reason column added to vacation_requests')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ transfer_reason (already exists)')
+      } else {
+        console.log('  - transfer_reason:', e.message)
+      }
+    }
+
+    try {
+      await db.query(`ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS transferred_from_id INTEGER REFERENCES vacation_requests(id)`)
+      console.log('  ✓ transferred_from_id column added to vacation_requests')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ transferred_from_id (already exists)')
+      } else {
+        console.log('  - transferred_from_id:', e.message)
+      }
+    }
+
+    try {
+      await db.query(`ALTER TABLE vacation_balances ADD COLUMN IF NOT EXISTS year INTEGER`)
+      console.log('  ✓ year column added to vacation_balances')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ year column (already exists)')
+      } else {
+        console.log('  - year column:', e.message)
+      }
+    }
+
+    await db.query(`UPDATE vacation_balances SET year = EXTRACT(YEAR FROM CURRENT_DATE) WHERE year IS NULL`)
+    console.log('  ✓ vacation_balances year populated')
+
+    try {
+      await db.query(`ALTER TABLE vacation_balances ALTER COLUMN year SET DEFAULT EXTRACT(YEAR FROM CURRENT_DATE)`)
+      await db.query(`ALTER TABLE vacation_balances ALTER COLUMN year SET NOT NULL`)
+      console.log('  ✓ vacation_balances year NOT NULL + DEFAULT')
+    } catch (e) {
+      console.log('  - year constraints:', e.message)
+    }
+
+    await db.query(`ALTER TABLE vacation_balances DROP CONSTRAINT IF EXISTS vacation_balances_user_id_key`)
+    await db.query(`ALTER TABLE vacation_balances DROP CONSTRAINT IF EXISTS vacation_balances_user_id_year_key`)
+    await db.query(`ALTER TABLE vacation_balances ADD CONSTRAINT vacation_balances_user_id_year_key UNIQUE (user_id, year)`)
+    console.log('  ✓ vacation_balances UNIQUE(user_id, year)')
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
