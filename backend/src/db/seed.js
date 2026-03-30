@@ -285,7 +285,7 @@ async function seed() {
       const existing = await query('SELECT 1 FROM vacation_balances WHERE user_id = $1', [user.id])
       if (existing.rows.length > 0) continue
       
-      const totalDays = randomInt(28, 35)
+      const totalDays = 47
       const usedDays = randomInt(0, 14)
       await query(
         `INSERT INTO vacation_balances (user_id, total_days, used_days, available_days, reserved_days, travel_available)

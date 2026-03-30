@@ -38,6 +38,7 @@ import { SurveyPage } from '@/pages/SurveyPage'
 import { Onboarding } from '@/pages/Onboarding'
 import { HROnboarding } from '@/pages/HROnboarding'
 import { HRVacationCalendar } from '@/pages/HRVacationCalendar'
+import { HRDictionaries } from '@/pages/HRDictionaries'
 const HRHierarchy = lazy(() => import('@/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -145,6 +146,7 @@ function App() {
           <Route path="hr/onboarding/:id" element={<HRRoute><HROnboarding /></HRRoute>} />
           <Route path="hr/vacation-calendar" element={<HRRoute><HRVacationCalendar /></HRRoute>} />
           <Route path="hr/hierarchy" element={<HRRoute><PageErrorBoundary><Suspense fallback={<div className="p-8 text-muted-foreground">Загрузка...</div>}><HRHierarchy /></Suspense></PageErrorBoundary></HRRoute>} />
+          <Route path="hr/dictionaries" element={<HRRoute><HRDictionaries /></HRRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
