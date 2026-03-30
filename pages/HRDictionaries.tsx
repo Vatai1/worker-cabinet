@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Building2, Wrench, Palmtree, Briefcase, Plus, Pencil, Trash2, X, Check, Search, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -9,10 +9,10 @@ import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 
 const TABS = [
-  { value: 'departments', label: 'Отделы', icon: Building2, color: 'text-blue-500' },
-  { value: 'skills', label: 'Навыки', icon: Wrench, color: 'text-violet-500' },
-  { value: 'vacation-types', label: 'Типы отпусков', icon: Palmtree, color: 'text-emerald-500' },
-  { value: 'positions', label: 'Должности', icon: Briefcase, color: 'text-amber-500' },
+  { value: 'departments', label: 'Отделы', icon: Building2, color: 'text-blue-500', bgColor: 'bg-blue-50 dark:bg-blue-950/30' },
+  { value: 'skills', label: 'Навыки', icon: Wrench, color: 'text-violet-500', bgColor: 'bg-violet-50 dark:bg-violet-950/30' },
+  { value: 'vacation-types', label: 'Типы отпусков', icon: Palmtree, color: 'text-emerald-500', bgColor: 'bg-emerald-50 dark:bg-emerald-950/30' },
+  { value: 'positions', label: 'Должности', icon: Briefcase, color: 'text-amber-500', bgColor: 'bg-amber-50 dark:bg-amber-950/30' },
 ]
 
 interface DictItem {
@@ -24,7 +24,10 @@ interface DictItem {
   request_count?: number
   manager_name?: string
   vacation_requests_blocked?: boolean
+  _type?: string
 }
+
+type AllData = Record<string, DictItem[]>
 
 export function HRDictionaries() {
   const [tab, setTab] = useState('departments')
@@ -32,6 +35,9 @@ export function HRDictionaries() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [allData, setAllData] = useState<AllData>({})
+  const [allDataLoading, setAllDataLoading] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
   const [newName, setNewName] = useState('')
   const [newCode, setNewCode] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
@@ -62,6 +68,49 @@ export function HRDictionaries() {
     setSearch('')
     fetchItems()
   }, [fetchItems])
+
+  useEffect(() => {
+    if (!search.trim()) return
+    let cancelled = false
+    setAllDataLoading(true)
+    Promise.all(
+      TABS.map(async (t) => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/dictionaries/${t.value}`, { headers: getAuthHeaders() })
+          if (!res.ok) return { type: t.value, items: [] }
+          return { type: t.value, items: await res.json() }
+        } catch {
+          return { type: t.value, items: [] }
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return
+      const data: AllData = {}
+      for (const r of results) data[r.type] = r.items
+      setAllData(data)
+      setAllDataLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [search])
+
+  const isSearchActive = search.trim().length > 0
+
+  const searchResults = (() => {
+    if (!isSearchActive) return []
+    const q = search.toLowerCase()
+    const grouped: { type: string; tab: typeof TABS[number]; items: DictItem[] }[] = []
+    for (const t of TABS) {
+      const typeItems = (allData[t.value] || []).filter(
+        (item) => item.name.toLowerCase().includes(q) || (item.code && item.code.toLowerCase().includes(q))
+      )
+      if (typeItems.length > 0) {
+        grouped.push({ type: t.value, tab: t, items: typeItems })
+      }
+    }
+    return grouped
+  })()
+
+  const totalSearchResults = searchResults.reduce((sum, g) => sum + g.items.length, 0)
 
   const handleAdd = async () => {
     setAddError(null)
@@ -142,8 +191,8 @@ export function HRDictionaries() {
   const canEdit = tab !== 'positions'
   const canDelete = tab !== 'positions'
 
-  const getColumns = () => {
-    switch (tab) {
+  const getColumns = (t: string) => {
+    switch (t) {
       case 'departments':
         return [
           { key: 'name', label: 'Название' },
@@ -171,7 +220,7 @@ export function HRDictionaries() {
     }
   }
 
-  const columns = getColumns()
+  const columns = getColumns(tab)
 
   const renderCellValue = (item: DictItem, key: string) => {
     switch (key) {
@@ -212,6 +261,24 @@ export function HRDictionaries() {
 
   const activeTab = TABS.find((t) => t.value === tab)!
 
+  const goToItem = (type: string) => {
+    setSearch('')
+    setTab(type)
+  }
+
+  const highlightMatch = (text: string, query: string) => {
+    if (!query) return text
+    const idx = text.toLowerCase().indexOf(query.toLowerCase())
+    if (idx === -1) return text
+    return (
+      <>
+        {text.slice(0, idx)}
+        <mark className="bg-yellow-200 dark:bg-yellow-800/60 rounded px-0.5">{text.slice(idx, idx + query.length)}</mark>
+        {text.slice(idx + query.length)}
+      </>
+    )
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -224,200 +291,276 @@ export function HRDictionaries() {
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
+            ref={searchRef}
             className="pl-9"
-            placeholder="Поиск..."
+            placeholder="Поиск по всем справочникам..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-        </div>
-      </div>
-
-      <div className="flex gap-1 rounded-xl bg-muted/50 p-1">
-        {TABS.map((t) => {
-          const Icon = t.icon
-          return (
+          {search && (
             <button
-              key={t.value}
-              onClick={() => setTab(t.value)}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                tab === t.value
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
-              }`}
+              onClick={() => { setSearch(''); searchRef.current?.focus() }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-muted text-muted-foreground"
             >
-              <Icon className={`h-4 w-4 ${tab === t.value ? t.color : ''}`} />
-              {t.label}
+              <X className="h-3.5 w-3.5" />
             </button>
-          )
-        })}
+          )}
+        </div>
       </div>
 
-      {error && (
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {canAdd && (
-        <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-sm font-medium text-muted-foreground mr-1">
-              <Plus className="h-4 w-4 inline mr-1" />
-              Добавить:
-            </span>
-            {tab === 'vacation-types' && (
-              <Input
-                placeholder="Код (например, sick_leave)"
-                value={newCode}
-                onChange={(e) => setNewCode(e.target.value)}
-                className="w-48"
-                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              />
-            )}
-            <Input
-              placeholder="Название"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="w-64"
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-            />
-            <Button onClick={handleAdd} size="sm">
-              Добавить
+      {isSearchActive ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {allDataLoading ? 'Поиск...' : `Найдено ${totalSearchResults} ${totalSearchResults === 1 ? 'запись' : totalSearchResults < 5 ? 'записи' : 'записей'} по запросу «${search}»`}
+            </p>
+            <Button variant="ghost" size="sm" onClick={() => setSearch('')}>
+              Сбросить поиск
             </Button>
-            {addError && (
-              <span className="text-sm text-destructive">{addError}</span>
-            )}
           </div>
-        </div>
-      )}
 
-      <div className="rounded-2xl border border-border/60 bg-card shadow-lg shadow-black/5 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border/50 bg-muted/30">
-                <th className="text-left py-3.5 px-5 font-semibold text-muted-foreground w-10">#</th>
-                {columns.map((col) => (
-                  <th key={col.key} className="text-left py-3.5 px-5 font-semibold text-muted-foreground">
-                    {col.label}
-                  </th>
-                ))}
-                {(canEdit || canDelete) && (
-                  <th className="text-right py-3.5 px-5 font-semibold text-muted-foreground w-24">
-                    Действия
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/30">
-              {loading ? (
-                <tr>
-                  <td colSpan={columns.length + 2} className="text-center py-16 text-muted-foreground">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      Загрузка...
+          {searchResults.length === 0 && !allDataLoading && (
+            <div className="rounded-2xl border border-border/60 bg-card p-16 text-center">
+              <Search className="h-10 w-10 mx-auto text-muted-foreground/40" />
+              <p className="mt-3 text-muted-foreground">Ничего не найдено по запросу «{search}»</p>
+            </div>
+          )}
+
+          {searchResults.map((group) => {
+            const Icon = group.tab.icon
+            const groupCols = getColumns(group.type)
+            return (
+              <div key={group.type} className="rounded-2xl border border-border/60 bg-card shadow-lg shadow-black/5 overflow-hidden">
+                <button
+                  onClick={() => goToItem(group.type)}
+                  className="w-full flex items-center justify-between px-5 py-3.5 border-b border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${group.tab.bgColor}`}>
+                      <Icon className={`h-4 w-4 ${group.tab.color}`} />
                     </div>
-                  </td>
-                </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length + 2} className="text-center py-16 text-muted-foreground">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted">
-                        <activeTab.icon className={`h-6 w-6 ${activeTab.color}`} />
-                      </div>
-                      <p>{search ? 'Ничего не найдено' : 'Список пуст'}</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((item, idx) => (
-                  <tr
-                    key={item.id ?? item.name}
-                    className="group transition-colors hover:bg-muted/30"
-                  >
-                    <td className="py-3.5 px-5 text-muted-foreground/50 font-mono text-xs">
-                      {idx + 1}
-                    </td>
-                    {editingId === item.id ? (
-                      <>
-                        <td className="py-2.5 px-5" colSpan={columns.length}>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {tab === 'vacation-types' && (
-                              <Input
-                                value={editCode}
-                                onChange={(e) => setEditCode(e.target.value)}
-                                className="w-40"
-                                placeholder="Код"
-                              />
-                            )}
-                            <Input
-                              value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                              className="w-56"
-                              placeholder="Название"
-                              onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                              autoFocus
-                            />
-                            <Button onClick={handleSaveEdit} size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:text-emerald-700">
-                              <Check className="h-4 w-4" />
-                            </Button>
-                            <Button onClick={() => setEditingId(null)} size="icon" variant="ghost" className="h-8 w-8">
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-5" />
-                      </>
-                    ) : (
-                      <>
-                        {columns.map((col) => (
-                          <td key={col.key} className="py-3.5 px-5">
-                            {renderCellValue(item, col.key)}
+                    <span className="font-semibold">{group.tab.label}</span>
+                    <Badge variant="secondary">{group.items.length}</Badge>
+                  </div>
+                  <span className="text-xs text-muted-foreground">Перейти →</span>
+                </button>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/30 bg-muted/10">
+                      {groupCols.map((col) => (
+                        <th key={col.key} className="text-left py-2.5 px-5 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {group.items.map((item) => (
+                      <tr key={item.id ?? item.name} className="hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => goToItem(group.type)}>
+                        {groupCols.map((col) => (
+                          <td key={col.key} className="py-2.5 px-5">
+                            {col.key === 'name' ? highlightMatch(item.name, search) :
+                             col.key === 'code' ? (item.code ? <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">{highlightMatch(item.code, search) as any}</code> : '—') :
+                             renderCellValue(item, col.key)}
                           </td>
                         ))}
-                        <td className="py-3.5 px-5">
-                          <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {canEdit && (
-                              <Button
-                                onClick={() => handleEdit(item)}
-                                size="icon"
-                                variant="ghost"
-                                className="h-8 w-8"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                            {canDelete && (
-                              <Button
-                                onClick={() => setDeleteTarget(item)}
-                                size="icon"
-                                variant="ghost"
-                                className="h-8 w-8 text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-1 rounded-xl bg-muted/50 p-1">
+            {TABS.map((t) => {
+              const Icon = t.icon
+              return (
+                <button
+                  key={t.value}
+                  onClick={() => setTab(t.value)}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+                    tab === t.value
+                      ? 'bg-card text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${tab === t.value ? t.color : ''}`} />
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {error && (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          {canAdd && (
+            <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm font-medium text-muted-foreground mr-1">
+                  <Plus className="h-4 w-4 inline mr-1" />
+                  Добавить:
+                </span>
+                {tab === 'vacation-types' && (
+                  <Input
+                    placeholder="Код (например, sick_leave)"
+                    value={newCode}
+                    onChange={(e) => setNewCode(e.target.value)}
+                    className="w-48"
+                    onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                  />
+                )}
+                <Input
+                  placeholder="Название"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="w-64"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                />
+                <Button onClick={handleAdd} size="sm">
+                  Добавить
+                </Button>
+                {addError && (
+                  <span className="text-sm text-destructive">{addError}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-border/60 bg-card shadow-lg shadow-black/5 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/50 bg-muted/30">
+                    <th className="text-left py-3.5 px-5 font-semibold text-muted-foreground w-10">#</th>
+                    {columns.map((col) => (
+                      <th key={col.key} className="text-left py-3.5 px-5 font-semibold text-muted-foreground">
+                        {col.label}
+                      </th>
+                    ))}
+                    {(canEdit || canDelete) && (
+                      <th className="text-right py-3.5 px-5 font-semibold text-muted-foreground w-24">
+                        Действия
+                      </th>
                     )}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={columns.length + 2} className="text-center py-16 text-muted-foreground">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                          Загрузка...
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={columns.length + 2} className="text-center py-16 text-muted-foreground">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted">
+                            <activeTab.icon className={`h-6 w-6 ${activeTab.color}`} />
+                          </div>
+                          <p>Список пуст</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filtered.map((item, idx) => (
+                      <tr
+                        key={item.id ?? item.name}
+                        className="group transition-colors hover:bg-muted/30"
+                      >
+                        <td className="py-3.5 px-5 text-muted-foreground/50 font-mono text-xs">
+                          {idx + 1}
+                        </td>
+                        {editingId === item.id ? (
+                          <>
+                            <td className="py-2.5 px-5" colSpan={columns.length}>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {tab === 'vacation-types' && (
+                                  <Input
+                                    value={editCode}
+                                    onChange={(e) => setEditCode(e.target.value)}
+                                    className="w-40"
+                                    placeholder="Код"
+                                  />
+                                )}
+                                <Input
+                                  value={editName}
+                                  onChange={(e) => setEditName(e.target.value)}
+                                  className="w-56"
+                                  placeholder="Название"
+                                  onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                                  autoFocus
+                                />
+                                <Button onClick={handleSaveEdit} size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:text-emerald-700">
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button onClick={() => setEditingId(null)} size="icon" variant="ghost" className="h-8 w-8">
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-5" />
+                          </>
+                        ) : (
+                          <>
+                            {columns.map((col) => (
+                              <td key={col.key} className="py-3.5 px-5">
+                                {renderCellValue(item, col.key)}
+                              </td>
+                            ))}
+                            <td className="py-3.5 px-5">
+                              <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {canEdit && (
+                                  <Button
+                                    onClick={() => handleEdit(item)}
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                {canDelete && (
+                                  <Button
+                                    onClick={() => setDeleteTarget(item)}
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-        {filtered.length > 0 && (
-          <div className="border-t border-border/30 bg-muted/20 px-5 py-3">
-            <p className="text-xs text-muted-foreground">
-              Всего: {filtered.length} {filtered.length === 1 ? 'запись' : filtered.length < 5 ? 'записи' : 'записей'}
-              {search && items.length !== filtered.length && ` (из ${items.length})`}
-            </p>
+            {filtered.length > 0 && (
+              <div className="border-t border-border/30 bg-muted/20 px-5 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Всего: {filtered.length} {filtered.length === 1 ? 'запись' : filtered.length < 5 ? 'записи' : 'записей'}
+                </p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {deleteTarget && (
         <ConfirmModal
