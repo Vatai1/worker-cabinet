@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { ConfirmModal } from '@/components/modals/ConfirmModal'
+import { AddDictItemModal } from '@/components/modals/AddDictItemModal'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
@@ -38,9 +39,7 @@ export function HRDictionaries() {
   const [allData, setAllData] = useState<AllData>({})
   const [allDataLoading, setAllDataLoading] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
-  const [newName, setNewName] = useState('')
-  const [newCode, setNewCode] = useState('')
-  const [addError, setAddError] = useState<string | null>(null)
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editCode, setEditCode] = useState('')
@@ -61,9 +60,6 @@ export function HRDictionaries() {
   }, [tab])
 
   useEffect(() => {
-    setNewName('')
-    setNewCode('')
-    setAddError('')
     setEditingId(null)
     setSearch('')
     fetchItems()
@@ -111,36 +107,6 @@ export function HRDictionaries() {
   })()
 
   const totalSearchResults = searchResults.reduce((sum, g) => sum + g.items.length, 0)
-
-  const handleAdd = async () => {
-    setAddError(null)
-    try {
-      const body: Record<string, string> = { name: newName }
-      if (tab === 'vacation-types') {
-        body.code = newCode
-        if (!newCode.trim()) {
-          setAddError('Код обязателен')
-          return
-        }
-      }
-      if (!newName.trim()) {
-        setAddError('Название обязательно')
-        return
-      }
-
-      const res = await fetch(`${API_BASE_URL}/dictionaries/${tab}`, {
-        method: 'POST',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка')
-      setNewName('')
-      setNewCode('')
-      fetchItems()
-    } catch (err: unknown) {
-      setAddError(getErrorMessage(err))
-    }
-  }
 
   const handleEdit = (item: DictItem) => {
     setEditingId(item.id!)
@@ -401,36 +367,10 @@ export function HRDictionaries() {
           )}
 
           {canAdd && (
-            <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-4">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-sm font-medium text-muted-foreground mr-1">
-                  <Plus className="h-4 w-4 inline mr-1" />
-                  Добавить:
-                </span>
-                {tab === 'vacation-types' && (
-                  <Input
-                    placeholder="Код (например, sick_leave)"
-                    value={newCode}
-                    onChange={(e) => setNewCode(e.target.value)}
-                    className="w-48"
-                    onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                  />
-                )}
-                <Input
-                  placeholder="Название"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-64"
-                  onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                />
-                <Button onClick={handleAdd} size="sm">
-                  Добавить
-                </Button>
-                {addError && (
-                  <span className="text-sm text-destructive">{addError}</span>
-                )}
-              </div>
-            </div>
+            <Button onClick={() => setIsAddModalOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Добавить {activeTab.label.toLowerCase().replace('отделы', 'отдел').replace('навыки', 'навык').replace('типы отпусков', 'тип отпуска')}
+            </Button>
           )}
 
           <div className="rounded-2xl border border-border/60 bg-card shadow-lg shadow-black/5 overflow-hidden">
@@ -570,6 +510,15 @@ export function HRDictionaries() {
           confirmText="Удалить"
           onConfirm={() => handleDelete(deleteTarget)}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {isAddModalOpen && canAdd && (
+        <AddDictItemModal
+          open={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onAdded={fetchItems}
+          tab={tab as 'departments' | 'skills' | 'vacation-types'}
         />
       )}
     </div>
