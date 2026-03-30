@@ -1,40 +1,95 @@
-import { useState } from 'react'
-import { Building2, Wrench, Palmtree, Plus, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Building2, Wrench, Palmtree, FileText, Plus, X, Upload, Paperclip } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
-import { getAuthHeadersWithContentType } from '@/lib/authHeaders'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 
-type DictTab = 'departments' | 'skills' | 'vacation-types'
+type DictTab = 'departments' | 'skills' | 'vacation-types' | 'doc-templates'
+
+interface Manager {
+  id: number
+  first_name: string
+  last_name: string
+  middle_name?: string
+  position?: string
+}
+
+interface EditItem {
+  id?: number
+  name: string
+  code?: string
+  description?: string
+  purpose?: string
+}
 
 interface Props {
   open: boolean
   onClose: () => void
   onAdded: () => void
   tab: DictTab
+  editItem?: EditItem | null
 }
 
 const TAB_CONFIG: Record<DictTab, { label: string; icon: typeof Building2; showCode: boolean }> = {
   departments: { label: 'отдел', icon: Building2, showCode: false },
   skills: { label: 'навык', icon: Wrench, showCode: false },
   'vacation-types': { label: 'тип отпуска', icon: Palmtree, showCode: true },
+  'doc-templates': { label: 'шаблон документа', icon: FileText, showCode: false },
 }
 
-export function AddDictItemModal({ open, onClose, onAdded, tab }: Props) {
+const PURPOSE_OPTIONS = [
+  { value: 'vacation_template', label: 'Шаблон отпуска' },
+  { value: 'vacation_transfer_template', label: 'Шаблон переноса отпуска' },
+]
+
+export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Props) {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
+  const [description, setDescription] = useState('')
+  const [managerId, setManagerId] = useState('')
+  const [managers, setManagers] = useState<Manager[]>([])
+  const [purpose, setPurpose] = useState('')
+  const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const config = TAB_CONFIG[tab]
   const Icon = config.icon
+  const isDepartment = tab === 'departments'
+  const isDocTemplate = tab === 'doc-templates'
+  const isEdit = !!editItem
+
+  useEffect(() => {
+    if (open && isDepartment) {
+      fetch(`${API_BASE_URL}/dictionaries/managers`, { headers: getAuthHeaders() })
+        .then(res => res.ok ? res.json() : [])
+        .then(data => setManagers(data))
+        .catch(() => setManagers([]))
+    }
+  }, [open, isDepartment])
+
+  useEffect(() => {
+    if (open && editItem) {
+      setName(editItem.name)
+      setCode(editItem.code || '')
+      setDescription(editItem.description || '')
+      setPurpose(editItem.purpose || '')
+    }
+  }, [open, editItem])
 
   const reset = () => {
     setName('')
     setCode('')
+    setDescription('')
+    setManagerId('')
+    setPurpose('')
+    setFile(null)
     setError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleClose = () => { reset(); onClose() }
@@ -50,14 +105,42 @@ export function AddDictItemModal({ open, onClose, onAdded, tab }: Props) {
     setSaving(true)
     setError(null)
     try {
-      const body: Record<string, string> = { name: name.trim() }
+      const body: Record<string, unknown> = { name: name.trim() }
       if (config.showCode) body.code = code.trim()
+      if (isDepartment) {
+        body.manager_id = managerId ? Number(managerId) : null
+        body.description = description.trim() || null
+      }
+      if (isDocTemplate) {
+        body.description = description.trim() || null
+        body.purpose = purpose.trim() || null
+      }
 
-      const res = await fetch(`${API_BASE_URL}/dictionaries/${tab}`, {
-        method: 'POST',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify(body),
-      })
+      const url = isEdit
+        ? `${API_BASE_URL}/dictionaries/${tab}/${editItem!.id}`
+        : `${API_BASE_URL}/dictionaries/${tab}`
+      const method = isEdit ? 'PUT' : 'POST'
+
+      let res: Response
+      if (isDocTemplate) {
+        const formData = new FormData()
+        formData.append('name', name.trim())
+        if (description.trim()) formData.append('description', description.trim())
+        if (purpose.trim()) formData.append('purpose', purpose.trim())
+        if (file) formData.append('file', file)
+
+        res = await fetch(url, {
+          method,
+          headers: getAuthHeaders(),
+          body: formData,
+        })
+      } else {
+        res = await fetch(url, {
+          method,
+          headers: getAuthHeadersWithContentType(),
+          body: JSON.stringify(body),
+        })
+      }
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error || 'Ошибка')
@@ -76,18 +159,18 @@ export function AddDictItemModal({ open, onClose, onAdded, tab }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-1">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl gradient-primary">
               <Icon className="h-5 w-5 text-white" />
             </div>
             <h2 className="text-xl font-semibold">
-              Добавить {config.label}
+              {isEdit ? 'Редактировать' : 'Добавить'} {config.label}
             </h2>
           </div>
           <p className="text-sm text-muted-foreground mb-6 ml-12">
-            Введите данные для нового элемента справочника
+            {isEdit ? 'Измените данные элемента справочника' : 'Введите данные для нового элемента справочника'}
           </p>
 
           {error && (
@@ -97,6 +180,119 @@ export function AddDictItemModal({ open, onClose, onAdded, tab }: Props) {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="dict-name">Название *</Label>
+              <Input
+                id="dict-name"
+                placeholder="Название"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus
+                autoComplete="off"
+              />
+            </div>
+
+            {isDepartment && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="dict-manager">Руководитель</Label>
+                  <select
+                    id="dict-manager"
+                    className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={managerId}
+                    onChange={(e) => setManagerId(e.target.value)}
+                  >
+                    <option value="">Не назначен</option>
+                    {managers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.last_name} {m.first_name}{m.middle_name ? ` ${m.middle_name}` : ''}{m.position ? ` — ${m.position}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dict-description">Описание</Label>
+                  <textarea
+                    id="dict-description"
+                    rows={3}
+                    placeholder="Описание отдела"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            {isDocTemplate && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="dict-purpose">Назначение</Label>
+                  <select
+                    id="dict-purpose"
+                    className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={purpose}
+                    onChange={(e) => setPurpose(e.target.value)}
+                  >
+                    <option value="">Не указано</option>
+                    {PURPOSE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Файл шаблона</Label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  />
+                  {file ? (
+                    <div className="flex items-center gap-2 p-3 rounded-lg border border-input bg-muted/30">
+                      <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm truncate flex-1">{file.name}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {(file.size / 1024).toFixed(0)} КБ
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                        className="p-1 rounded hover:bg-muted"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full flex flex-col items-center justify-center gap-2 p-6 rounded-lg border-2 border-dashed border-input hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
+                    >
+                      <Upload className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Нажмите для выбора файла</span>
+                      <span className="text-xs text-muted-foreground/60">PDF, DOC, DOCX, XLS, XLSX, TXT, JPG, PNG</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="dict-desc-tmpl">Описание</Label>
+                  <textarea
+                    id="dict-desc-tmpl"
+                    rows={3}
+                    placeholder="Описание шаблона документа"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
             {config.showCode && (
               <div className="space-y-2">
                 <Label htmlFor="dict-code">Код *</Label>
@@ -110,18 +306,6 @@ export function AddDictItemModal({ open, onClose, onAdded, tab }: Props) {
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="dict-name">Название *</Label>
-              <Input
-                id="dict-name"
-                placeholder="Название"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-                autoComplete="off"
-              />
-            </div>
-
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={handleClose}>
                 <X className="h-4 w-4 mr-2" />
@@ -131,12 +315,12 @@ export function AddDictItemModal({ open, onClose, onAdded, tab }: Props) {
                 {saving ? (
                   <span className="flex items-center gap-2">
                     <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Добавление…
+                    {isEdit ? 'Сохранение…' : 'Добавление…'}
                   </span>
                 ) : (
                   <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Добавить
+                    {isEdit ? null : <Plus className="h-4 w-4 mr-2" />}
+                    {isEdit ? 'Сохранить' : 'Добавить'}
                   </>
                 )}
               </Button>

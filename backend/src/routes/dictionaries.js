@@ -2,12 +2,36 @@ import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../middleware/errors.js'
+import { uploadToS3, deleteFromS3 } from '../config/s3.js'
+import multer from 'multer'
+
+const uploadDocTemplate = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain',
+      'image/jpeg',
+      'image/png',
+    ]
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Недопустимый тип файла'))
+    }
+  },
+})
 
 const router = express.Router()
 
 router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
-    `SELECT d.id, d.name, d.manager_id, d.vacation_requests_blocked,
+    `SELECT d.id, d.name, d.manager_id, d.description, d.vacation_requests_blocked,
             m.first_name || ' ' || m.last_name as manager_name,
             (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
      FROM departments d
@@ -18,22 +42,22 @@ router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asy
 }))
 
 router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
-  const { name } = req.body
+  const { name, manager_id, description } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
 
   const existing = await query('SELECT id FROM departments WHERE name = $1', [name.trim()])
   if (existing.rows.length > 0) throw new ConflictError('Отдел с таким названием уже существует')
 
   const result = await query(
-    'INSERT INTO departments (name) VALUES ($1) RETURNING id, name',
-    [name.trim()]
+    'INSERT INTO departments (name, manager_id, description) VALUES ($1, $2, $3) RETURNING id, name, manager_id, description',
+    [name.trim(), manager_id || null, description?.trim() || null]
   )
   res.status(201).json(result.rows[0])
 }))
 
 router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
-  const { name } = req.body
+  const { name, manager_id, description } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
 
   const existing = await query('SELECT id FROM departments WHERE id = $1', [id])
@@ -43,8 +67,8 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
   if (duplicate.rows.length > 0) throw new ConflictError('Отдел с таким названием уже существует')
 
   const result = await query(
-    'UPDATE departments SET name = $1 WHERE id = $2 RETURNING id, name',
-    [name.trim(), id]
+    'UPDATE departments SET name = $1, manager_id = $2, description = $3 WHERE id = $4 RETURNING id, name, manager_id, description',
+    [name.trim(), manager_id || null, description?.trim() || null, id]
   )
   res.json(result.rows[0])
 }))
@@ -193,6 +217,96 @@ router.get('/positions', authenticateToken, authorizeRoles('hr', 'admin'), async
      WHERE position IS NOT NULL AND position != ''
      GROUP BY position
      ORDER BY position`
+  )
+  res.json(result.rows)
+}))
+
+router.get('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const result = await query(
+    `SELECT id, name, description, category, purpose, file_key, mime_type, size, created_at, download_count
+     FROM document_templates
+     ORDER BY name`
+  )
+  res.json(result.rows)
+}))
+
+router.post('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), uploadDocTemplate.single('file'), asyncHandler(async (req, res) => {
+  const { name, description, purpose } = req.body
+  if (!name?.trim()) throw new ValidationError('Название шаблона обязательно')
+
+  if (purpose?.trim()) {
+    const existing = await query('SELECT id FROM document_templates WHERE purpose = $1', [purpose.trim()])
+    if (existing.rows.length > 0) throw new ConflictError('Шаблон с таким назначением уже существует')
+  }
+
+  let fileKey = null
+  let mimeType = null
+  let fileSize = null
+  if (req.file) {
+    fileKey = `doc-templates/${Date.now()}-${req.file.originalname}`
+    await uploadToS3(req.file, fileKey)
+    mimeType = req.file.mimetype
+    fileSize = req.file.size
+  }
+
+  const result = await query(
+    `INSERT INTO document_templates (name, description, category, purpose, file_key, mime_type, size) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, description, category, purpose, file_key, mime_type, size, created_at, download_count`,
+    [name.trim(), description?.trim() || null, 'general', purpose?.trim() || null, fileKey, mimeType, fileSize]
+  )
+  res.status(201).json(result.rows[0])
+}))
+
+router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), uploadDocTemplate.single('file'), asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const { name, description, purpose } = req.body
+  if (!name?.trim()) throw new ValidationError('Название шаблона обязательно')
+
+  const existing = await query('SELECT id, file_key FROM document_templates WHERE id = $1', [id])
+  if (existing.rows.length === 0) throw new NotFoundError('Шаблон не найден')
+
+  if (purpose?.trim()) {
+    const duplicate = await query('SELECT id FROM document_templates WHERE purpose = $1 AND id != $2', [purpose.trim(), id])
+    if (duplicate.rows.length > 0) throw new ConflictError('Шаблон с таким назначением уже существует')
+  }
+
+  let fileKey = existing.rows[0].file_key
+  let mimeType = null
+  let fileSize = null
+  if (req.file) {
+    if (fileKey) await deleteFromS3(fileKey).catch(() => {})
+    fileKey = `doc-templates/${Date.now()}-${req.file.originalname}`
+    await uploadToS3(req.file, fileKey)
+    mimeType = req.file.mimetype
+    fileSize = req.file.size
+  }
+
+  const result = await query(
+    `UPDATE document_templates SET name = $1, description = $2, category = $3, purpose = $4, file_key = $5, mime_type = $6, size = $7 WHERE id = $8 RETURNING id, name, description, category, purpose, file_key, mime_type, size, created_at, download_count`,
+    [name.trim(), description?.trim() || null, 'general', purpose?.trim() || null, fileKey, mimeType, fileSize, id]
+  )
+  res.json(result.rows[0])
+}))
+
+router.delete('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const { id } = req.params
+
+  const existing = await query('SELECT id, file_key FROM document_templates WHERE id = $1', [id])
+  if (existing.rows.length === 0) throw new NotFoundError('Шаблон не найден')
+
+  if (existing.rows[0].file_key) {
+    await deleteFromS3(existing.rows[0].file_key).catch(() => {})
+  }
+
+  await query('DELETE FROM document_templates WHERE id = $1', [id])
+  res.json({ success: true })
+}))
+
+router.get('/managers', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const result = await query(
+    `SELECT id, first_name, last_name, middle_name, position
+     FROM users
+     WHERE role IN ('manager', 'admin')
+     ORDER BY last_name, first_name`
   )
   res.json(result.rows)
 }))
