@@ -1,8 +1,9 @@
 import express from 'express'
+import jwt from 'jsonwebtoken'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../middleware/errors.js'
-import { uploadToS3, deleteFromS3 } from '../config/s3.js'
+import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
 import multer from 'multer'
 
 const uploadDocTemplate = multer({
@@ -299,6 +300,48 @@ router.delete('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'adm
 
   await query('DELETE FROM document_templates WHERE id = $1', [id])
   res.json({ success: true })
+}))
+
+function getPublicApiUrl() {
+  return process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || 'http://host.docker.internal:5000/api'
+}
+
+router.get('/doc-templates/:id/preview-token', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const tmpl = await query('SELECT id FROM document_templates WHERE id = $1', [id])
+  if (tmpl.rows.length === 0) throw new NotFoundError('Шаблон не найден')
+
+  const token = jwt.sign(
+    { templateId: id, userId: String(req.user.id), type: 'template_preview', exp: Math.floor(Date.now() / 1000) + 1800 },
+    process.env.JWT_SECRET
+  )
+  const publicUrl = `${getPublicApiUrl()}/dictionaries/doc-templates/${id}/public/${token}`
+  res.json({ token, publicUrl })
+}))
+
+router.get('/doc-templates/:id/public/:token', asyncHandler(async (req, res) => {
+  const { id, token } = req.params
+  let decoded
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET)
+  } catch {
+    return res.status(401).json({ error: 'Недействительный токен' })
+  }
+  if (decoded.type !== 'template_preview' || String(decoded.templateId) !== String(id)) {
+    return res.status(403).json({ error: 'Токен не соответствует шаблону' })
+  }
+
+  const result = await query('SELECT name, file_key, mime_type FROM document_templates WHERE id = $1', [id])
+  if (result.rows.length === 0) throw new NotFoundError('Шаблон не найден')
+
+  const { name, file_key, mime_type } = result.rows[0]
+  if (!file_key) return res.status(404).json({ error: 'Файл не прикреплён' })
+
+  const { Body, ContentType } = await getFromS3(file_key)
+  res.setHeader('Content-Type', ContentType || mime_type || 'application/octet-stream')
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(name)}"`)
+  res.setHeader('Cache-Control', 'public, max-age=300')
+  Body.pipe(res)
 }))
 
 router.get('/managers', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {

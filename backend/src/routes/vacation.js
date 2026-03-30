@@ -3,6 +3,9 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { TelegramService } from '../services/telegramService.js'
 import { createNotification } from '../services/notificationService.js'
+import { getFromS3 } from '../config/s3.js'
+import Docxtemplater from 'docxtemplater'
+import PizZip from 'pizzip'
 
 const router = express.Router()
 
@@ -1710,6 +1713,99 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
     res.status(500).json({ error: 'Failed to cancel vacation transfer' })
   } finally {
     client.release()
+  }
+})
+
+// POST /api/vacation/generate-application
+// Body: { year, templateId }
+router.post('/generate-application', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { year, templateId } = req.body
+
+    if (!year || !templateId) {
+      return res.status(400).json({ error: 'Необходимо указать год и шаблон' })
+    }
+
+    const [userResult, tmplResult, vacResult] = await Promise.all([
+      query(
+        `SELECT u.first_name, u.last_name, u.middle_name, u.position, d.name as department_name
+         FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
+        [userId]
+      ),
+      query(
+        `SELECT name, file_key, mime_type FROM document_templates WHERE id = $1 AND purpose = 'vacation_template'`,
+        [templateId]
+      ),
+      query(
+        `SELECT vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name, rs.code as status
+         FROM vacation_requests vr
+         JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+         JOIN request_statuses rs ON vr.status_id = rs.id
+         WHERE vr.user_id = $1 AND EXTRACT(YEAR FROM vr.start_date) = $2
+         ORDER BY vr.start_date`,
+        [userId, year]
+      ),
+    ])
+
+    if (userResult.rows.length === 0) return res.status(404).json({ error: 'Пользователь не найден' })
+    if (tmplResult.rows.length === 0) return res.status(404).json({ error: 'Шаблон не найден' })
+
+    const u = userResult.rows[0]
+    const tmpl = tmplResult.rows[0]
+
+    if (!tmpl.file_key) return res.status(400).json({ error: 'Файл шаблона не прикреплён' })
+
+    const fullName = [u.last_name, u.first_name, u.middle_name].filter(Boolean).join(' ')
+    const initials = [u.first_name?.[0], u.middle_name?.[0]].filter(Boolean).map(c => c + '.').join('')
+    const shortName = [u.last_name, initials].filter(Boolean).join(' ')
+
+    const formatDate = (d) => {
+      if (!d) return ''
+      const dt = new Date(d)
+      return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    }
+
+    const vacations = vacResult.rows.map((v, i) => ({
+      num: String(i + 1),
+      type: v.vacation_type_name,
+      start: formatDate(v.start_date),
+      end: formatDate(v.end_date),
+      days: String(v.duration),
+      status: { on_approval: 'На согласовании', approved: 'Согласовано', rejected: 'Отклонено', cancelled_by_employee: 'Отменено', cancelled_by_manager: 'Отменено' }[v.status] || v.status,
+    }))
+
+    const today = new Date()
+    const data = {
+      full_name: fullName,
+      short_name: shortName,
+      last_name: u.last_name || '',
+      first_name: u.first_name || '',
+      middle_name: u.middle_name || '',
+      position: u.position || '',
+      department: u.department_name || '',
+      year: String(year),
+      date_today: formatDate(today),
+      vacations,
+      vacations_count: String(vacations.length),
+      total_days: String(vacations.reduce((s, v) => s + Number(v.days), 0)),
+    }
+
+    const s3Response = await getFromS3(tmpl.file_key)
+    const buffer = Buffer.from(await s3Response.Body.transformToByteArray())
+
+    const zip = new PizZip(buffer)
+    const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true })
+    doc.render(data)
+    const output = doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' })
+
+    const filename = encodeURIComponent(`Заявление_${u.last_name}_${year}.docx`)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`)
+    res.send(output)
+  } catch (error) {
+    console.error('Error generating vacation application:', error)
+    res.status(500).json({ error: 'Ошибка генерации документа' })
   }
 })
 
