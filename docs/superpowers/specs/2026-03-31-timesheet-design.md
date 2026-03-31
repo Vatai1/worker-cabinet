@@ -11,10 +11,23 @@
 
 | Роль | Возможности |
 |------|-------------|
-| `manager` | Создание, просмотр и редактирование табеля своего отдела |
-| `hr` / `admin` | Создание, просмотр и редактирование табелей любого отдела; выбор отдела из списка |
+| `manager` | Создание, просмотр и редактирование табеля своего отдела; может переводить статус `draft→submitted` |
+| `hr` / `admin` | Создание, просмотр и редактирование табелей любого отдела; может переводить статус `submitted→approved` и откатывать `approved→submitted` |
+| `employee`, `onboarding` | Доступ отсутствует; маршруты защищены через `BlockOnboardingRoute` и `authorizeRoles` |
+
+## Статусы табеля и переходы
+
+| Статус | Кто устанавливает | Редактирование записей |
+|--------|-------------------|------------------------|
+| `draft` | Создаётся автоматически | Менеджер и HR/admin |
+| `submitted` | Менеджер (свой отдел) | Только HR/admin |
+| `approved` | HR/admin | Заблокировано для всех |
+
+Бэкенд обязан отклонять изменения записей (`PUT /:id/entries`) и недопустимые переходы статуса, если табель в состоянии `approved`.
 
 ## База данных
+
+Изменения добавляются в `backend/src/db/migrate.js`.
 
 ### Таблица `timesheets`
 
@@ -26,6 +39,8 @@ CREATE TABLE timesheets (
   month         INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
   status        VARCHAR(20) NOT NULL DEFAULT 'draft', -- draft | submitted | approved
   created_by    INTEGER REFERENCES users(id),
+  updated_by    INTEGER REFERENCES users(id),
+  updated_at    TIMESTAMP,
   created_at    TIMESTAMP DEFAULT NOW(),
   UNIQUE(department_id, year, month)
 );
@@ -40,19 +55,19 @@ CREATE TABLE timesheet_entries (
   employee_id  INTEGER NOT NULL REFERENCES users(id),
   date         DATE NOT NULL,
   code         VARCHAR(10),
-  hours        NUMERIC(4,1),
+  hours        NUMERIC(4,1) CHECK (hours IS NULL OR (hours >= 0 AND hours <= 24)),
   UNIQUE(timesheet_id, employee_id, date)
 );
 ```
 
 ### Автозаполнение при создании табеля
 
-При `POST /api/timesheet` бэкенд автоматически генерирует записи:
+При `POST /api/timesheet` бэкенд автоматически генерирует записи для всех сотрудников отдела:
 1. Суббота и воскресенье → код `В`, часы `null`
-2. Одобренные отпуска сотрудников отдела за период → код `ОТ`, часы `null`
+2. Одобренные отпуска сотрудников отдела, актуальные на момент создания → код `ОТ`, часы `null`
 3. Остальные рабочие дни → код `Я`, часы `8`
 
-Менеджер или HR может переопределить любую ячейку.
+Пересинхронизация отпусков после создания табеля не выполняется — менеджер корректирует вручную. Сотрудники, переведённые в отдел после создания табеля, добавляются с пустыми ячейками.
 
 ## API
 
@@ -61,10 +76,10 @@ CREATE TABLE timesheet_entries (
 | Метод | Путь | Описание | Доступ |
 |-------|------|----------|--------|
 | GET | `/` | Список табелей | manager (свой отдел), hr/admin (все) |
-| POST | `/` | Создать табель с автозаполнением | manager, hr/admin |
+| POST | `/` | Создать табель с автозаполнением | manager (свой отдел), hr/admin |
 | GET | `/:id` | Получить табель со всеми записями | manager (свой), hr/admin (любой) |
-| PUT | `/:id/entries` | Batch-обновление ячеек | manager (свой), hr/admin (любой) |
-| PUT | `/:id/status` | Изменить статус (draft→submitted→approved) | manager (свой), hr/admin (любой) |
+| PUT | `/:id/entries` | Batch-обновление ячеек | manager (свой, только `draft`), hr/admin (любой, `draft`/`submitted`) |
+| PUT | `/:id/status` | Изменить статус | manager: `draft→submitted`; hr/admin: `submitted→approved`, `approved→submitted` |
 | GET | `/:id/export/excel` | Скачать Excel | manager (свой), hr/admin (любой) |
 | GET | `/:id/export/pdf` | Скачать PDF (форма Т-13) | manager (свой), hr/admin (любой) |
 
@@ -77,63 +92,84 @@ CREATE TABLE timesheet_entries (
 ]
 ```
 
-Используется `INSERT ... ON CONFLICT DO UPDATE` для upsert каждой ячейки.
+- Дата каждой записи должна входить в диапазон `year`/`month` табеля — иначе `400 Bad Request`.
+- Используется `INSERT ... ON CONFLICT DO UPDATE` для upsert.
+- Поля `updated_by` и `updated_at` таблицы `timesheets` обновляются при каждом изменении записей.
+
+### Экспорт (скачивание файлов с авторизацией)
+
+Фронтенд запрашивает экспорт через `fetch` с `getAuthHeaders()`, получает `blob` и инициирует скачивание через `URL.createObjectURL`. Прямые ссылки `<a href>` не используются, так как требуется JWT.
 
 ## Фронтенд
 
 ### Маршруты
 
-- `/manager/timesheet` — табель менеджера (только его отдел)
+- `/leader/timesheet` — табель менеджера (только его отдел)
 - `/hr/timesheet` — HR-страница с выбором отдела и месяца
 
 ### Компонент `TimesheetGrid` (общий)
 
-Принимает пропсы: `timesheetId`, `entries`, `employees`, `month`, `year`, `readonly?`, `onSave`.
+Файл: `components/timesheet/TimesheetGrid.tsx`
+
+Пропсы: `timesheetId`, `entries`, `employees`, `month`, `year`, `readonly: boolean`, `onSave`.
+
+- `readonly = true` когда статус `approved`, или когда пользователь — менеджер и статус `submitted`
+- `readonly = false` для HR/admin при статусах `draft` и `submitted`
 
 Отображение:
-- Строки — сотрудники
-- Столбцы — дни месяца (1–31)
+- Строки — сотрудники; столбцы — дни месяца (1–31)
 - Каждая ячейка: верхняя строка — код (select из словаря), нижняя — часы (number input 0–24)
-- Выходные (В) — серый фон
-- Отпуск (ОТ) — синий фон
-- Больничный (Б) — жёлтый фон
-- Прогул (П) / НН — красный фон
-- Итоговый столбец: сумма рабочих часов за месяц
+- Выходные (`В`) — серый фон
+- Отпуск (`ОТ`) — синий фон
+- Больничный (`Б`) — жёлтый фон
+- Прогул (`П`) / `НН` — красный фон
+- Итоговый столбец: сумма часов за месяц по сотруднику
 - Кнопка "Сохранить" — batch-запрос только изменённых ячеек
-- Кнопки "Экспорт Excel" и "Экспорт PDF"
+- Кнопки "Экспорт Excel" и "Экспорт PDF" — через `fetch` + blob
 
-### Словарь кодов Т-13 (константы фронтенда)
+### Страницы
 
+**`pages/ManagerTimesheet.tsx`** (маршрут `/leader/timesheet`):
+- Показывает табель отдела менеджера
+- Selector месяца/года; кнопка "Создать табель" если ещё нет
+- Кнопка "Отправить на утверждение" (`draft→submitted`)
+- `TimesheetGrid` с `readonly` в зависимости от статуса
+
+**`pages/HRTimesheet.tsx`** (маршрут `/hr/timesheet`):
+- Selector отдела (из списка всех отделов)
+- Selector месяца/года
+- `TimesheetGrid` с возможностью редактирования при `draft`/`submitted`
+- Кнопка "Утвердить" (`submitted→approved`) и "Вернуть на доработку" (`approved→submitted`)
+
+### Сайдбар (`components/layout/Sidebar.tsx`)
+
+- `getManagerNavigation`: добавить `{ name: 'Табель', href: '/leader/timesheet', icon: TableIcon }`
+- `getHRNavigation`: в группу "HR" добавить `{ name: 'Табель', href: '/hr/timesheet' }`
+
+## Словарь кодов Т-13
+
+```typescript
+// lib/timesheetCodes.ts
+export const TIMESHEET_CODES = [
+  { code: 'Я',  label: 'Явка' },
+  { code: 'ОТ', label: 'Ежегодный отпуск' },
+  { code: 'ОС', label: 'Отпуск без сохранения ЗП' },
+  { code: 'УО', label: 'Учебный отпуск' },
+  { code: 'Б',  label: 'Больничный' },
+  { code: 'Т',  label: 'Нетрудоспособность без пособия' },
+  { code: 'К',  label: 'Командировка' },
+  { code: 'НН', label: 'Неявка (невыясненная причина)' },
+  { code: 'В',  label: 'Выходной / праздник' },
+  { code: 'ПР', label: 'Прогул' },
+  { code: 'ДО', label: 'Дополнительный отпуск' },
+  { code: 'ОЖ', label: 'Отпуск по уходу за ребёнком' },
+  { code: 'Р',  label: 'Отпуск по беременности и родам' },
+  { code: 'ОЗ', label: 'Отпуск (гос. обязанности)' },
+  { code: 'УВ', label: 'Сокращённый рабочий день' },
+]
 ```
-Я   — Явка
-ОТ  — Ежегодный отпуск
-ОС  — Отпуск без сохранения ЗП
-УО  — Учебный отпуск
-Б   — Больничный
-Т   — Временная нетрудоспособность без пособия
-К   — Командировка
-НН  — Неявка по невыясненной причине
-В   — Выходной/праздник
-ПР  — Прогул
-ДО  — Дополнительный отпуск
-ОЖ  — Отпуск по уходу за ребёнком
-Р   — Отпуск по беременности и родам
-ОЗ  — Отпуск без сохранения ЗП (гос. обязанности)
-УВ  — Сокращённый рабочий день
-```
 
-### Сайдбар
+## NPM-зависимости (бэкенд)
 
-- Менеджер: добавить пункт "Табель" → `/manager/timesheet`
-- HR (группа "HR"): добавить подпункт "Табель" → `/hr/timesheet`
-
-## Зависимости
-
-- Бэкенд: `exceljs` для Excel, `pdfkit` для PDF
-- Фронтенд: новые страницы `pages/ManagerTimesheet.tsx`, `pages/HRTimesheet.tsx`; компонент `components/timesheet/TimesheetGrid.tsx`
-
-## Статусы табеля
-
-- `draft` — в работе, редактирование разрешено
-- `submitted` — отправлен менеджером, HR может редактировать
-- `approved` — утверждён HR, редактирование заблокировано
+- `exceljs` — генерация Excel
+- `pdfkit` — генерация PDF (форма Т-13)
