@@ -39,6 +39,8 @@ import { Onboarding } from '@/pages/Onboarding'
 import { HROnboarding } from '@/pages/HROnboarding'
 import { HRVacationCalendar } from '@/pages/HRVacationCalendar'
 import { HRDictionaries } from '@/pages/HRDictionaries'
+import { ManagerTimesheet } from '@/pages/ManagerTimesheet'
+import { HRTimesheet } from '@/pages/HRTimesheet'
 const HRHierarchy = lazy(() => import('@/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -67,6 +69,14 @@ function HRRoute({ children }: { children: React.ReactNode }) {
   if (loading) return null
   if (!['hr', 'admin'].includes(user?.role ?? ''))
     return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
+function ManagerRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((state) => state.user)
+  const loading = useAuthStore((state) => state.loading)
+  if (loading) return null
+  if (user?.role !== 'manager') return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -147,6 +157,8 @@ function App() {
           <Route path="hr/vacation-calendar" element={<HRRoute><HRVacationCalendar /></HRRoute>} />
           <Route path="hr/hierarchy" element={<HRRoute><PageErrorBoundary><Suspense fallback={<div className="p-8 text-muted-foreground">Загрузка...</div>}><HRHierarchy /></Suspense></PageErrorBoundary></HRRoute>} />
           <Route path="hr/dictionaries" element={<HRRoute><HRDictionaries /></HRRoute>} />
+          <Route path="leader/timesheet" element={<ManagerRoute><ManagerTimesheet /></ManagerRoute>} />
+          <Route path="hr/timesheet" element={<HRRoute><HRTimesheet /></HRRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
