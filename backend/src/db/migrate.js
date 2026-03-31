@@ -1095,6 +1095,17 @@ async function runMigrations() {
     }
 
     try {
+      await db.query(`ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS transfer_note TEXT`)
+      console.log('  ✓ transfer_note column added to vacation_requests')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ transfer_note (already exists)')
+      } else {
+        console.log('  - transfer_note:', e.message)
+      }
+    }
+
+    try {
       await db.query(`ALTER TABLE vacation_balances ADD COLUMN IF NOT EXISTS year INTEGER`)
       console.log('  ✓ year column added to vacation_balances')
     } catch (e) {

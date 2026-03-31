@@ -1135,7 +1135,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
   
   try {
     const { id } = req.params
-    const { newStartDate, newEndDate, reason } = req.body
+    const { newStartDate, newEndDate, reason, note } = req.body
     const userId = req.user.id
 
     if (!newStartDate || !newEndDate || !reason?.trim()) {
@@ -1198,11 +1198,6 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
 
     const newDuration = Math.floor((newEnd - newStart) / (1000 * 60 * 60 * 24)) + 1
 
-    if (newDuration > originalRequest.duration) {
-      await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'Новая продолжительность не может превышать исходную' })
-    }
-
     const overlapResult = await client.query(
       `SELECT vr.id FROM vacation_requests vr
         JOIN request_statuses rs ON vr.status_id = rs.id
@@ -1240,11 +1235,11 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     }
 
     const newRequestResult = await client.query(
-      `INSERT INTO vacation_requests 
-        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, 
-         reference_document, status_id, transferred_from_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 
-                (SELECT id FROM request_statuses WHERE code = 'on_approval'), $10)
+      `INSERT INTO vacation_requests
+        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination,
+         reference_document, status_id, transferred_from_id, transfer_note)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                (SELECT id FROM request_statuses WHERE code = 'on_approval'), $10, $11)
         RETURNING *`,
       [
         userId,
@@ -1256,7 +1251,8 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
         originalRequest.has_travel,
         originalRequest.travel_destination,
         originalRequest.reference_document,
-        id
+        id,
+        note || null
       ]
     )
 
@@ -1716,6 +1712,64 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
   }
 })
 
+// GET /api/vacation/my-transferable — approved upcoming vacations that can be transferred
+router.get('/my-transferable', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const result = await query(
+      `SELECT vr.id, vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name
+       FROM vacation_requests vr
+       JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       WHERE vr.user_id = $1
+         AND rs.code = 'approved'
+         AND vr.start_date >= CURRENT_DATE
+         AND NOT EXISTS (
+           SELECT 1 FROM vacation_requests tr
+           JOIN request_statuses trs ON tr.status_id = trs.id
+           WHERE tr.transferred_from_id = vr.id
+             AND trs.code NOT IN ('rejected', 'cancelled_by_employee', 'cancelled_by_manager')
+         )
+       ORDER BY vr.start_date`,
+      [userId]
+    )
+    res.json(result.rows)
+  } catch (error) {
+    console.error('Error fetching transferable vacations:', error)
+    res.status(500).json({ error: 'Ошибка загрузки данных' })
+  }
+})
+
+// GET /api/vacation/my-transfer-requests — my transfer requests with original + new data
+router.get('/my-transfer-requests', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const result = await query(
+      `SELECT
+         nr.id,
+         nr.start_date as new_start,
+         nr.end_date as new_end,
+         nr.duration as new_days,
+         nr.transfer_note as note,
+         orig.id as original_id,
+         orig.start_date as original_start,
+         orig.end_date as original_end,
+         orig.duration as original_days,
+         rs.code as status
+       FROM vacation_requests nr
+       JOIN vacation_requests orig ON nr.transferred_from_id = orig.id
+       JOIN request_statuses rs ON nr.status_id = rs.id
+       WHERE nr.user_id = $1
+       ORDER BY nr.created_at DESC`,
+      [userId]
+    )
+    res.json(result.rows)
+  } catch (error) {
+    console.error('Error fetching transfer requests:', error)
+    res.status(500).json({ error: 'Ошибка загрузки данных' })
+  }
+})
+
 // POST /api/vacation/generate-application
 // Body: { year, templateId }
 router.post('/generate-application', authenticateToken, async (req, res) => {
@@ -1805,6 +1859,102 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
     res.send(output)
   } catch (error) {
     console.error('Error generating vacation application:', error)
+    res.status(500).json({ error: 'Ошибка генерации документа' })
+  }
+})
+
+// POST /api/vacation/generate-transfer-application
+// Body: { templateId, transferIds: number[] }
+router.post('/generate-transfer-application', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { templateId, transferIds } = req.body
+
+    if (!templateId || !Array.isArray(transferIds) || transferIds.length === 0) {
+      return res.status(400).json({ error: 'Необходимо указать шаблон и переносы' })
+    }
+
+    const [userResult, tmplResult, transfersResult] = await Promise.all([
+      query(
+        `SELECT u.first_name, u.last_name, u.middle_name, u.position, d.name as department_name
+         FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
+        [userId]
+      ),
+      query(
+        `SELECT name, file_key FROM document_templates WHERE id = $1 AND purpose = 'vacation_transfer_template'`,
+        [templateId]
+      ),
+      query(
+        `SELECT nr.id, nr.start_date as new_start, nr.duration as new_days, nr.transfer_note as note,
+                orig.start_date as original_start, orig.duration as original_days,
+                rs.code as status
+         FROM vacation_requests nr
+         JOIN vacation_requests orig ON nr.transferred_from_id = orig.id
+         JOIN request_statuses rs ON nr.status_id = rs.id
+         WHERE nr.id = ANY($1) AND nr.user_id = $2 AND rs.code = 'approved'
+         ORDER BY orig.start_date`,
+        [transferIds, userId]
+      ),
+    ])
+
+    if (userResult.rows.length === 0) return res.status(404).json({ error: 'Пользователь не найден' })
+    if (tmplResult.rows.length === 0) return res.status(404).json({ error: 'Шаблон не найден' })
+    if (transfersResult.rows.length === 0) return res.status(400).json({ error: 'Нет подтверждённых переносов' })
+
+    const u = userResult.rows[0]
+    const tmpl = tmplResult.rows[0]
+
+    if (!tmpl.file_key) return res.status(400).json({ error: 'Файл шаблона не прикреплён' })
+
+    const fullName = [u.last_name, u.first_name, u.middle_name].filter(Boolean).join(' ')
+    const initials = [u.first_name?.[0], u.middle_name?.[0]].filter(Boolean).map(c => c + '.').join('')
+    const shortName = [u.last_name, initials].filter(Boolean).join(' ')
+
+    const formatDate = (d) => {
+      if (!d) return ''
+      const dt = new Date(d)
+      return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    }
+
+    const today = new Date()
+    const data = {
+      full_name: fullName,
+      short_name: shortName,
+      last_name: u.last_name || '',
+      first_name: u.first_name || '',
+      middle_name: u.middle_name || '',
+      position: u.position || '',
+      department: u.department_name || '',
+      date_today: formatDate(today),
+      year: String(today.getFullYear()),
+      transfers: transfersResult.rows.map(t => {
+        const delta = t.new_days - t.original_days
+        return {
+          original_start: formatDate(t.original_start),
+          original_days: String(t.original_days),
+          new_start: formatDate(t.new_start),
+          new_days: String(t.new_days),
+          delta_direction: delta >= 0 ? 'увеличив' : 'сократив',
+          delta_days: String(Math.abs(delta)),
+          note: t.note ? ` ${t.note}` : '',
+        }
+      }),
+    }
+
+    const s3Response = await getFromS3(tmpl.file_key)
+    const buffer = Buffer.from(await s3Response.Body.transformToByteArray())
+
+    const zip = new PizZip(buffer)
+    const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true })
+    doc.render(data)
+    const output = doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' })
+
+    const filename = encodeURIComponent(`Заявление_перенос_${u.last_name}.docx`)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`)
+    res.send(output)
+  } catch (error) {
+    console.error('Error generating transfer application:', error)
     res.status(500).json({ error: 'Ошибка генерации документа' })
   }
 })
