@@ -9,6 +9,13 @@ const router = express.Router()
 router.use(authenticateToken)
 router.use(authorizeRoles('manager', 'hr', 'admin'))
 
+function toLocalDateStr(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 async function canAccessDepartment(user, departmentId) {
   if (['hr', 'admin'].includes(user.role)) return true
   const result = await query(
@@ -61,6 +68,12 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Необходимо указать department_id, year, month' })
   }
 
+  const yearNum = parseInt(year, 10)
+  const monthNum = parseInt(month, 10)
+  if (isNaN(yearNum) || yearNum < 2000 || yearNum > 2100 || isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+    return res.status(400).json({ error: 'Некорректный год или месяц' })
+  }
+
   if (!(await canAccessDepartment(req.user, department_id))) {
     return res.status(403).json({ error: 'Нет доступа к данному отделу' })
   }
@@ -73,18 +86,18 @@ router.post('/', async (req, res) => {
       `INSERT INTO timesheets (department_id, year, month, created_by)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [department_id, year, month, req.user.id]
+      [department_id, yearNum, monthNum, req.user.id]
     )
     const timesheet = tsResult.rows[0]
 
     const empResult = await client.query(
-      `SELECT id FROM users WHERE department_id = $1`,
+      `SELECT id FROM users WHERE department_id = $1 AND role IN ('employee', 'manager')`,
       [department_id]
     )
     const employees = empResult.rows
 
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
-    const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+    const startDate = `${yearNum}-${String(monthNum).padStart(2, '0')}-01`
+    const endDate = toLocalDateStr(new Date(yearNum, monthNum, 0))
 
     const vacResult = await client.query(
       `SELECT vr.user_id, vr.start_date, vr.end_date
@@ -97,13 +110,6 @@ router.post('/', async (req, res) => {
       [employees.map(e => e.id), endDate, startDate]
     )
 
-    function toLocalDateStr(d) {
-      const y = d.getFullYear()
-      const m = String(d.getMonth() + 1).padStart(2, '0')
-      const day = String(d.getDate()).padStart(2, '0')
-      return `${y}-${m}-${day}`
-    }
-
     const vacationDays = new Set()
     for (const vac of vacResult.rows) {
       const startParts = String(vac.start_date).split('T')[0].split('-').map(Number)
@@ -115,11 +121,11 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const daysInMonth = new Date(year, month, 0).getDate()
+    const daysInMonth = new Date(yearNum, monthNum, 0).getDate()
     const entries = []
     for (const emp of employees) {
       for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(year, month - 1, day)
+        const date = new Date(yearNum, monthNum - 1, day)
         const dateStr = toLocalDateStr(date)
         const dow = date.getDay()
         let code, hours
@@ -231,15 +237,17 @@ router.put('/:id/entries', async (req, res) => {
     const client = await getClient()
     try {
       await client.query('BEGIN')
-      for (const e of entries) {
-        await client.query(
-          `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, hours)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
-             SET code = EXCLUDED.code, hours = EXCLUDED.hours`,
-          [id, e.employee_id, e.date, e.code ?? null, e.hours ?? null]
-        )
-      }
+      const placeholders = entries.map((_, i) => {
+        const base = i * 5
+        return `($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5})`
+      }).join(', ')
+      await client.query(
+        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, hours)
+         VALUES ${placeholders}
+         ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
+           SET code = EXCLUDED.code, hours = EXCLUDED.hours`,
+        entries.flatMap(e => [id, e.employee_id, e.date, e.code ?? null, e.hours ?? null])
+      )
       await client.query(
         `UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2`,
         [req.user.id, id]
@@ -366,7 +374,6 @@ router.get('/:id/export/excel', async (req, res) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', `attachment; filename="timesheet-${timesheet.year}-${timesheet.month}.xlsx"`)
     await workbook.xlsx.write(res)
-    res.end()
   } catch (error) {
     console.error('Error exporting Excel:', error)
     res.status(500).json({ error: 'Ошибка при экспорте Excel' })
