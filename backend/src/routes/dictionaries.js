@@ -344,6 +344,80 @@ router.get('/doc-templates/:id/public/:token', asyncHandler(async (req, res) => 
   Body.pipe(res)
 }))
 
+// POST /api/dictionaries/doc-templates/:id/save-from-url — save file from OnlyOffice downloadAs URL
+router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const { url, fileType } = req.body
+
+  if (!url) return res.status(400).json({ error: 'URL файла обязателен' })
+
+  const tmplResult = await query('SELECT file_key, mime_type FROM document_templates WHERE id = $1', [id])
+  if (tmplResult.rows.length === 0) throw new NotFoundError('Шаблон не найден')
+
+  const tmpl = tmplResult.rows[0]
+
+  const response = await fetch(url)
+  if (!response.ok) return res.status(502).json({ error: 'Не удалось скачать файл из OnlyOffice' })
+
+  const arrayBuffer = await response.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+
+  const ext = fileType || tmpl.file_key?.split('.').pop() || 'docx'
+  const mimeType = tmpl.mime_type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  const newFileKey = `doc-templates/${id}/${Date.now()}.${ext}`
+
+  await uploadToS3({ buffer, mimetype: mimeType }, newFileKey)
+
+  if (tmpl.file_key && tmpl.file_key !== newFileKey) {
+    await deleteFromS3(tmpl.file_key).catch(() => {})
+  }
+
+  await query('UPDATE document_templates SET file_key = $1 WHERE id = $2', [newFileKey, id])
+
+  res.json({ ok: true })
+}))
+
+// POST /api/dictionaries/doc-templates/:id/callback — OnlyOffice save callback
+router.post('/doc-templates/:id/callback', asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const { status, url } = req.body
+
+  // status 2 = ready for saving, status 6 = force save
+  if (status !== 2 && status !== 6) {
+    return res.json({ error: 0 })
+  }
+
+  const result = await query(
+    'SELECT file_key, mime_type, name FROM document_templates WHERE id = $1',
+    [id]
+  )
+  if (result.rows.length === 0) return res.status(404).json({ error: 1 })
+
+  const tmpl = result.rows[0]
+
+  const response = await fetch(url)
+  if (!response.ok) return res.status(502).json({ error: 1 })
+
+  const arrayBuffer = await response.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+
+  const ext = tmpl.file_key?.split('.').pop() || 'docx'
+  const newFileKey = `doc-templates/${id}/${Date.now()}.${ext}`
+
+  await uploadToS3({ buffer, mimetype: tmpl.mime_type || 'application/octet-stream', originalname: tmpl.name }, newFileKey)
+
+  if (tmpl.file_key && tmpl.file_key !== newFileKey) {
+    await deleteFromS3(tmpl.file_key).catch(() => {})
+  }
+
+  await query(
+    'UPDATE document_templates SET file_key = $1 WHERE id = $2',
+    [newFileKey, id]
+  )
+
+  res.json({ error: 0 })
+}))
+
 router.get('/managers', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT id, first_name, last_name, middle_name, position

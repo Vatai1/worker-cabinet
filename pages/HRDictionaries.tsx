@@ -7,7 +7,7 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { AddDictItemModal } from '@/components/modals/AddDictItemModal'
 import { OnlyOfficePreviewModal } from '@/components/modals/OnlyOfficePreviewModal'
 import { getAuthHeaders } from '@/lib/authHeaders'
-import { PLACEHOLDERS_BY_PURPOSE, getAllPlaceholders } from '@/lib/docPlaceholders'
+import { PLACEHOLDERS_BY_PURPOSE, getAllGroups } from '@/lib/docPlaceholders'
 import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 
@@ -578,7 +578,16 @@ export function HRDictionaries() {
             },
           }}
           editable={true}
-          placeholders={onlyOfficeItem.purpose ? (PLACEHOLDERS_BY_PURPOSE[onlyOfficeItem.purpose] ?? getAllPlaceholders()) : getAllPlaceholders()}
+          callbackUrl={`${import.meta.env.VITE_PUBLIC_API_URL || 'http://host.docker.internal:5000/api'}/dictionaries/doc-templates/${onlyOfficeItem.id}/callback`}
+          onSave={async (downloadUrl, fileType) => {
+            const res = await fetch(`${API_BASE_URL}/dictionaries/doc-templates/${onlyOfficeItem.id}/save-from-url`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+              body: JSON.stringify({ url: downloadUrl, fileType }),
+            })
+            if (!res.ok) throw new Error('Ошибка сохранения')
+          }}
+          placeholders={onlyOfficeItem.purpose ? (PLACEHOLDERS_BY_PURPOSE[onlyOfficeItem.purpose] ?? getAllGroups()) : getAllGroups()}
         />
       )}
 
