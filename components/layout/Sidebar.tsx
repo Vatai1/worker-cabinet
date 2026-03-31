@@ -22,6 +22,7 @@ import {
   FileStack,
   Building2,
   ClipboardList,
+  Table2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -67,6 +68,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
   { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Табель', href: '/leader/timesheet', icon: Table2 },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList },
   {
     name: 'Документы',
@@ -90,6 +92,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
       { name: 'Отпуск', href: '/hr/vacation-calendar' },
       { name: 'Иерархия', href: '/hr/hierarchy' },
       { name: 'Справочники', href: '/hr/dictionaries' },
+      { name: 'Табель', href: '/hr/timesheet' },
     ],
   },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
