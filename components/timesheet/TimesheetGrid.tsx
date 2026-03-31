@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { TIMESHEET_CODES, CODE_COLORS } from '@/lib/timesheetCodes'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
@@ -46,6 +46,11 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    setChanges({})
+    setError(null)
+  }, [timesheetId])
+
   const entryMap = useMemo(() => {
     const map: Record<string, TimesheetEntry> = {}
     for (const e of entries) map[`${e.employee_id}:${e.date}`] = e
@@ -79,7 +84,9 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
     setError(null)
     try {
       const body = Object.entries(changes).map(([key, val]) => {
-        const [empId, date] = key.split(':')
+        const colonIdx = key.indexOf(':')
+        const empId = key.slice(0, colonIdx)
+        const date = key.slice(colonIdx + 1)
         return { employee_id: Number(empId), date, code: val.code, hours: val.hours }
       })
       const res = await fetch(`${API_BASE_URL}/timesheet/${timesheetId}/entries`, {
@@ -111,8 +118,10 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
       const a = document.createElement('a')
       a.href = url
       a.download = `timesheet-${year}-${month}.${format === 'excel' ? 'xlsx' : 'pdf'}`
+      document.body.appendChild(a)
       a.click()
-      URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 100)
     } catch (err: unknown) {
       setError(getErrorMessage(err))
     }

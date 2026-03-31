@@ -60,6 +60,7 @@ export function ManagerTimesheet() {
     setError(null)
     try {
       const deptRes = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
+      if (!deptRes.ok) throw new Error('Ошибка загрузки отделов')
       const depts = await deptRes.json()
       const myDept = depts.find((d: { manager_id: number }) => String(d.manager_id) === user?.id)
       if (!myDept) throw new Error('Вы не являетесь руководителем ни одного отдела')

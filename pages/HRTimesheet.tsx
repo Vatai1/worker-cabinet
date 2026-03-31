@@ -32,11 +32,15 @@ export function HRTimesheet() {
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('Ошибка загрузки отделов')
+        return r.json()
+      })
       .then((data: Department[]) => {
         setDepartments(data)
         if (data.length > 0) setSelectedDept(data[0].id)
       })
+      .catch(err => setError(getErrorMessage(err)))
   }, [])
 
   async function loadTimesheet() {
