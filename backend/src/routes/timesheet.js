@@ -1,0 +1,462 @@
+import express from 'express'
+import ExcelJS from 'exceljs'
+import PDFDocument from 'pdfkit'
+import { query, getClient } from '../config/database.js'
+import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+
+const router = express.Router()
+
+router.use(authenticateToken)
+router.use(authorizeRoles('manager', 'hr', 'admin'))
+
+async function canAccessDepartment(user, departmentId) {
+  if (['hr', 'admin'].includes(user.role)) return true
+  const result = await query(
+    `SELECT id FROM departments WHERE id = $1 AND manager_id = $2`,
+    [departmentId, user.id]
+  )
+  return result.rows.length > 0
+}
+
+async function canAccessTimesheet(user, timesheetId) {
+  const result = await query(`SELECT department_id FROM timesheets WHERE id = $1`, [timesheetId])
+  if (result.rows.length === 0) return false
+  return canAccessDepartment(user, result.rows[0].department_id)
+}
+
+// GET /api/timesheet — список табелей
+router.get('/', async (req, res) => {
+  try {
+    let rows
+    if (['hr', 'admin'].includes(req.user.role)) {
+      const result = await query(`
+        SELECT t.*, d.name as department_name
+        FROM timesheets t
+        JOIN departments d ON t.department_id = d.id
+        ORDER BY t.year DESC, t.month DESC, d.name
+      `)
+      rows = result.rows
+    } else {
+      const result = await query(`
+        SELECT t.*, d.name as department_name
+        FROM timesheets t
+        JOIN departments d ON t.department_id = d.id
+        WHERE d.manager_id = $1
+        ORDER BY t.year DESC, t.month DESC
+      `, [req.user.id])
+      rows = result.rows
+    }
+    res.json(rows)
+  } catch (error) {
+    console.error('Error fetching timesheets:', error)
+    res.status(500).json({ error: 'Ошибка при получении табелей' })
+  }
+})
+
+// POST /api/timesheet — создать табель с автозаполнением
+router.post('/', async (req, res) => {
+  const { department_id, year, month } = req.body
+
+  if (!department_id || !year || !month) {
+    return res.status(400).json({ error: 'Необходимо указать department_id, year, month' })
+  }
+
+  if (!(await canAccessDepartment(req.user, department_id))) {
+    return res.status(403).json({ error: 'Нет доступа к данному отделу' })
+  }
+
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+
+    const tsResult = await client.query(
+      `INSERT INTO timesheets (department_id, year, month, created_by)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [department_id, year, month, req.user.id]
+    )
+    const timesheet = tsResult.rows[0]
+
+    const empResult = await client.query(
+      `SELECT id FROM users WHERE department_id = $1`,
+      [department_id]
+    )
+    const employees = empResult.rows
+
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+    const endDate = new Date(year, month, 0).toISOString().split('T')[0]
+
+    const vacResult = await client.query(
+      `SELECT vr.user_id, vr.start_date, vr.end_date
+       FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       WHERE vr.user_id = ANY($1)
+         AND rs.code = 'approved'
+         AND vr.start_date <= $2
+         AND vr.end_date >= $3`,
+      [employees.map(e => e.id), endDate, startDate]
+    )
+
+    function toLocalDateStr(d) {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
+
+    const vacationDays = new Set()
+    for (const vac of vacResult.rows) {
+      const startParts = String(vac.start_date).split('T')[0].split('-').map(Number)
+      const endParts = String(vac.end_date).split('T')[0].split('-').map(Number)
+      const start = new Date(startParts[0], startParts[1] - 1, startParts[2])
+      const end = new Date(endParts[0], endParts[1] - 1, endParts[2])
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        vacationDays.add(`${vac.user_id}:${toLocalDateStr(d)}`)
+      }
+    }
+
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const entries = []
+    for (const emp of employees) {
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month - 1, day)
+        const dateStr = toLocalDateStr(date)
+        const dow = date.getDay()
+        let code, hours
+
+        if (dow === 0 || dow === 6) {
+          code = 'В'; hours = null
+        } else if (vacationDays.has(`${emp.id}:${dateStr}`)) {
+          code = 'ОТ'; hours = null
+        } else {
+          code = 'Я'; hours = 8
+        }
+        entries.push([timesheet.id, emp.id, dateStr, code, hours])
+      }
+    }
+
+    if (entries.length > 0) {
+      const placeholders = entries.map((_, i) => {
+        const base = i * 5
+        return `($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5})`
+      }).join(', ')
+      await client.query(
+        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, hours) VALUES ${placeholders}`,
+        entries.flat()
+      )
+    }
+
+    await client.query('COMMIT')
+    res.status(201).json(timesheet)
+  } catch (error) {
+    await client.query('ROLLBACK')
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Табель за этот месяц уже существует' })
+    }
+    console.error('Error creating timesheet:', error)
+    res.status(500).json({ error: 'Ошибка при создании табеля' })
+  } finally {
+    client.release()
+  }
+})
+
+// GET /api/timesheet/:id — табель со всеми записями
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!(await canAccessTimesheet(req.user, id))) {
+      return res.status(403).json({ error: 'Нет доступа к этому табелю' })
+    }
+
+    const tsResult = await query(
+      `SELECT t.*, d.name as department_name
+       FROM timesheets t JOIN departments d ON t.department_id = d.id
+       WHERE t.id = $1`,
+      [id]
+    )
+    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
+
+    const entriesResult = await query(
+      `SELECT te.*, u.first_name, u.last_name
+       FROM timesheet_entries te
+       JOIN users u ON te.employee_id = u.id
+       WHERE te.timesheet_id = $1
+       ORDER BY u.last_name, u.first_name, te.date`,
+      [id]
+    )
+
+    res.json({ ...tsResult.rows[0], entries: entriesResult.rows })
+  } catch (error) {
+    console.error('Error fetching timesheet:', error)
+    res.status(500).json({ error: 'Ошибка при получении табеля' })
+  }
+})
+
+// PUT /api/timesheet/:id/entries — batch-обновление ячеек
+router.put('/:id/entries', async (req, res) => {
+  const { id } = req.params
+  const entries = req.body
+
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return res.status(400).json({ error: 'Ожидается непустой массив записей' })
+  }
+
+  try {
+    const tsResult = await query(`SELECT * FROM timesheets WHERE id = $1`, [id])
+    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
+    const timesheet = tsResult.rows[0]
+
+    if (!(await canAccessDepartment(req.user, timesheet.department_id))) {
+      return res.status(403).json({ error: 'Нет доступа к этому табелю' })
+    }
+
+    if (timesheet.status === 'approved') {
+      return res.status(403).json({ error: 'Нельзя редактировать утверждённый табель' })
+    }
+
+    if (timesheet.status === 'submitted' && req.user.role === 'manager') {
+      return res.status(403).json({ error: 'Табель передан на утверждение, редактирование недоступно' })
+    }
+
+    const mm = String(timesheet.month).padStart(2, '0')
+    const daysInTs = new Date(timesheet.year, timesheet.month, 0).getDate()
+    const rangeStart = `${timesheet.year}-${mm}-01`
+    const rangeEnd = `${timesheet.year}-${mm}-${String(daysInTs).padStart(2, '0')}`
+    for (const e of entries) {
+      if (e.date < rangeStart || e.date > rangeEnd) {
+        return res.status(400).json({ error: `Дата ${e.date} не входит в диапазон табеля` })
+      }
+    }
+
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+      for (const e of entries) {
+        await client.query(
+          `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, hours)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
+             SET code = EXCLUDED.code, hours = EXCLUDED.hours`,
+          [id, e.employee_id, e.date, e.code ?? null, e.hours ?? null]
+        )
+      }
+      await client.query(
+        `UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2`,
+        [req.user.id, id]
+      )
+      await client.query('COMMIT')
+      res.json({ success: true })
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  } catch (error) {
+    console.error('Error updating entries:', error)
+    res.status(500).json({ error: 'Ошибка при обновлении записей' })
+  }
+})
+
+// PUT /api/timesheet/:id/status — сменить статус
+router.put('/:id/status', async (req, res) => {
+  const { id } = req.params
+  const { status } = req.body
+
+  const allowedStatuses = ['draft', 'submitted', 'approved']
+  if (!allowedStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Недопустимый статус' })
+  }
+
+  try {
+    const tsResult = await query(`SELECT * FROM timesheets WHERE id = $1`, [id])
+    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
+    const timesheet = tsResult.rows[0]
+
+    if (!(await canAccessDepartment(req.user, timesheet.department_id))) {
+      return res.status(403).json({ error: 'Нет доступа к этому табелю' })
+    }
+
+    const current = timesheet.status
+    const isHR = ['hr', 'admin'].includes(req.user.role)
+
+    const allowed =
+      (req.user.role === 'manager' && current === 'draft' && status === 'submitted') ||
+      (isHR && current === 'submitted' && status === 'approved') ||
+      (isHR && current === 'approved' && status === 'submitted')
+
+    if (!allowed) {
+      return res.status(403).json({ error: `Переход ${current}→${status} недопустим для вашей роли` })
+    }
+
+    const result = await query(
+      `UPDATE timesheets SET status = $1, updated_by = $2, updated_at = NOW()
+       WHERE id = $3 RETURNING *`,
+      [status, req.user.id, id]
+    )
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Error updating timesheet status:', error)
+    res.status(500).json({ error: 'Ошибка при изменении статуса' })
+  }
+})
+
+// GET /api/timesheet/:id/export/excel
+router.get('/:id/export/excel', async (req, res) => {
+  const { id } = req.params
+  try {
+    if (!(await canAccessTimesheet(req.user, id))) {
+      return res.status(403).json({ error: 'Нет доступа' })
+    }
+    const tsResult = await query(
+      `SELECT t.*, d.name as department_name FROM timesheets t
+       JOIN departments d ON t.department_id = d.id WHERE t.id = $1`,
+      [id]
+    )
+    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
+    const timesheet = tsResult.rows[0]
+
+    const entriesResult = await query(
+      `SELECT te.employee_id, te.date, te.code, te.hours,
+              u.first_name, u.last_name
+       FROM timesheet_entries te
+       JOIN users u ON te.employee_id = u.id
+       WHERE te.timesheet_id = $1
+       ORDER BY u.last_name, u.first_name, te.date`,
+      [id]
+    )
+
+    const daysInMonth = new Date(timesheet.year, timesheet.month, 0).getDate()
+
+    const byEmployee = {}
+    for (const e of entriesResult.rows) {
+      const key = e.employee_id
+      if (!byEmployee[key]) {
+        byEmployee[key] = { name: `${e.last_name} ${e.first_name}`, days: {} }
+      }
+      byEmployee[key].days[e.date] = { code: e.code, hours: e.hours }
+    }
+
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet('Табель')
+
+    const header = ['Сотрудник']
+    for (let d = 1; d <= daysInMonth; d++) header.push(String(d))
+    header.push('Итого ч.')
+    sheet.addRow(header)
+    sheet.getRow(1).font = { bold: true }
+
+    for (const emp of Object.values(byEmployee)) {
+      const codeRow = [emp.name]
+      const hoursRow = ['']
+      let total = 0
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = `${timesheet.year}-${String(timesheet.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+        const cell = emp.days[date]
+        codeRow.push(cell?.code ?? '')
+        hoursRow.push(cell?.hours != null ? cell.hours : '')
+        if (cell?.hours) total += Number(cell.hours)
+      }
+      codeRow.push(total)
+      hoursRow.push('')
+      sheet.addRow(codeRow)
+      sheet.addRow(hoursRow)
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="timesheet-${timesheet.year}-${timesheet.month}.xlsx"`)
+    await workbook.xlsx.write(res)
+    res.end()
+  } catch (error) {
+    console.error('Error exporting Excel:', error)
+    res.status(500).json({ error: 'Ошибка при экспорте Excel' })
+  }
+})
+
+// GET /api/timesheet/:id/export/pdf
+router.get('/:id/export/pdf', async (req, res) => {
+  const { id } = req.params
+  try {
+    if (!(await canAccessTimesheet(req.user, id))) {
+      return res.status(403).json({ error: 'Нет доступа' })
+    }
+    const tsResult = await query(
+      `SELECT t.*, d.name as department_name FROM timesheets t
+       JOIN departments d ON t.department_id = d.id WHERE t.id = $1`,
+      [id]
+    )
+    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
+    const timesheet = tsResult.rows[0]
+
+    const entriesResult = await query(
+      `SELECT te.employee_id, te.date, te.code, te.hours,
+              u.first_name, u.last_name
+       FROM timesheet_entries te
+       JOIN users u ON te.employee_id = u.id
+       WHERE te.timesheet_id = $1
+       ORDER BY u.last_name, u.first_name, te.date`,
+      [id]
+    )
+
+    const daysInMonth = new Date(timesheet.year, timesheet.month, 0).getDate()
+    const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
+
+    const byEmployee = {}
+    for (const e of entriesResult.rows) {
+      if (!byEmployee[e.employee_id]) {
+        byEmployee[e.employee_id] = { name: `${e.last_name} ${e.first_name}`, days: {} }
+      }
+      byEmployee[e.employee_id].days[e.date] = { code: e.code, hours: e.hours }
+    }
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="timesheet-${timesheet.year}-${timesheet.month}.pdf"`)
+
+    const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' })
+    doc.pipe(res)
+
+    doc.fontSize(14).text(
+      `Табель учёта рабочего времени — ${timesheet.department_name} — ${monthNames[timesheet.month - 1]} ${timesheet.year}`,
+      { align: 'center' }
+    )
+    doc.moveDown(0.5)
+
+    const colWidth = 20
+    const nameWidth = 120
+    const rowHeight = 16
+    let y = doc.y
+    const startX = 30
+
+    doc.fontSize(7).text('Сотрудник', startX, y, { width: nameWidth, continued: false })
+    for (let d = 1; d <= daysInMonth; d++) {
+      doc.text(String(d), startX + nameWidth + (d - 1) * colWidth, y, { width: colWidth, align: 'center' })
+    }
+    doc.text('Итого', startX + nameWidth + daysInMonth * colWidth, y, { width: 35, align: 'center' })
+    y += rowHeight
+
+    for (const emp of Object.values(byEmployee)) {
+      let total = 0
+      doc.text(emp.name, startX, y, { width: nameWidth })
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = `${timesheet.year}-${String(timesheet.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+        const cell = emp.days[date]
+        const codeText = cell?.code ?? ''
+        const hoursText = cell?.hours != null ? String(cell.hours) : ''
+        if (cell?.hours) total += Number(cell.hours)
+        const cx = startX + nameWidth + (d - 1) * colWidth
+        doc.text(codeText, cx, y, { width: colWidth, align: 'center' })
+        doc.text(hoursText, cx, y + 8, { width: colWidth, align: 'center' })
+      }
+      doc.text(String(total), startX + nameWidth + daysInMonth * colWidth, y, { width: 35, align: 'center' })
+      y += rowHeight * 2
+      if (y > 500) { doc.addPage(); y = 30 }
+    }
+
+    doc.end()
+  } catch (error) {
+    console.error('Error exporting PDF:', error)
+    res.status(500).json({ error: 'Ошибка при экспорте PDF' })
+  }
+})
+
+export default router
