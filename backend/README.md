@@ -1,13 +1,15 @@
-# Worker Cabinet Backend
+# Worker Cabinet — Backend
 
-Backend API для системы управления отпусками сотрудников.
+Backend API для HR-системы управления сотрудниками.
 
 ## Технологии
 
 - Node.js + Express
 - PostgreSQL
 - JWT аутентификация
-- REST API
+- MinIO (S3-совместимое хранилище файлов)
+- Multer (загрузка файлов)
+- Telegram Bot API (опционально)
 
 ## Установка и настройка
 
@@ -18,21 +20,9 @@ cd backend
 npm install
 ```
 
-### 2. Настройте PostgreSQL
+### 2. Настройте переменные окружения
 
-Убедитесь, что PostgreSQL установлен и работает.
-
-Создайте базу данных (опционально - миграции создадут её автоматически):
-
-```bash
-psql -U postgres
-CREATE DATABASE worker_cabinet;
-\q
-```
-
-### 3. Настройте переменные окружения
-
-Отредактируйте файл `.env`:
+Скопируйте `deploy/.env.example` в `backend/.env` и заполните значения:
 
 ```env
 PORT=5000
@@ -48,35 +38,37 @@ JWT_SECRET=your-secret-key-change-in-production
 JWT_EXPIRES_IN=7d
 
 FRONTEND_URL=http://localhost:3000
+
+# MinIO (хранилище файлов)
+S3_ENDPOINT=localhost
+S3_PORT=9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+S3_BUCKET=worker-cabinet
+
+# Telegram (опционально)
+TELEGRAM_BOT_TOKEN=
 ```
 
-### 4. Запустите миграции
+### 3. Запустите миграции
 
 ```bash
 npm run migrate
 ```
 
-Это создаст все необходимые таблицы в базе данных.
-
-### 5. Заполните данными (опционально)
+### 4. Заполните тестовыми данными (опционально)
 
 ```bash
 npm run seed
 ```
 
-Это создаст тестовых пользователей и заявки на отпуск.
-
 ## Запуск
 
-### Режим разработки
-
 ```bash
+# Режим разработки (hot reload)
 npm run dev
-```
 
-### Продакшн
-
-```bash
+# Продакшн
 npm start
 ```
 
@@ -84,32 +76,107 @@ npm start
 
 ## API endpoints
 
-### Аутентификация (/api/auth)
+### Аутентификация (`/api/auth`)
 
-- `POST /register` - Регистрация пользователя
-- `POST /login` - Вход в систему
-- `GET /me` - Получить данные текущего пользователя
+- `POST /register` — Регистрация пользователя
+- `POST /login` — Вход в систему
+- `GET /me` — Данные текущего пользователя
 
-### Отпуска (/api/vacation)
+### Пользователи (`/api/users`)
 
-- `GET /requests` - Получить список заявок (с фильтрами)
-- `GET /requests/:id` - Получить заявку по ID
-- `POST /requests` - Создать заявку
-- `PUT /requests/:id` - Обновить заявку
-- `POST /requests/:id/approve` - Согласовать заявку
-- `POST /requests/:id/reject` - Отклонить заявку
-- `POST /requests/:id/cancel` - Отменить заявку
-- `GET /balance/:userId` - Получить баланс пользователя
-- `GET /calendar` - Получить календарь отпусков
+- `GET /` — Список пользователей
+- `GET /:id` — Пользователь по ID
+- `PUT /:id` — Обновить профиль
+- `PUT /:id/avatar` — Загрузить фото
+- `PUT /:id/role` — Изменить роль (hr/admin)
+- `GET /:id/documents` — Документы пользователя
 
-### Пользователи (/api/users)
+### Отпуска (`/api/vacation`)
 
-- `GET /` - Получить список пользователей
-- `GET /:id` - Получить пользователя по ID
+- `GET /requests` — Список заявок (с фильтрами)
+- `POST /requests` — Создать заявку
+- `PUT /requests/:id` — Обновить заявку
+- `POST /requests/:id/approve` — Согласовать
+- `POST /requests/:id/reject` — Отклонить
+- `POST /requests/:id/cancel` — Отменить
+- `GET /balance/:userId` — Баланс пользователя
+- `PUT /balance/:userId` — Обновить баланс (hr/admin)
+- `GET /calendar` — Календарь отпусков
+- `GET /block-all` — Статус блокировки всех отпусков
+- `POST /block-all` — Установить блокировку (manager)
+
+### Отделы (`/api/departments`)
+
+- `GET /` — Список отделов
+- `POST /` — Создать отдел (hr/admin)
+- `PUT /:id` — Обновить отдел
+- `DELETE /:id` — Удалить отдел
+- `PUT /:id/manager` — Назначить руководителя
+
+### Проекты (`/api/projects`)
+
+- `GET /` — Список проектов
+- `POST /` — Создать проект
+- `GET /:id` — Проект по ID
+- `PUT /:id` — Обновить проект
+- `DELETE /:id` — Удалить проект
+- `GET /:id/documents` — Документы проекта
+- `POST /:id/documents` — Загрузить документ в проект
+
+### Документы (`/api/documents`)
+
+- `GET /` — Список документов
+- `POST /` — Загрузить документ
+- `DELETE /:id` — Удалить документ
+
+### Опросы (`/api/surveys`)
+
+- `GET /` — Список опросов
+- `POST /` — Создать опрос (hr/admin)
+- `GET /:id` — Опрос по ID
+- `PUT /:id` — Обновить опрос
+- `DELETE /:id` — Удалить опрос
+- `POST /:id/submit` — Отправить ответы
+- `GET /:id/results` — Результаты опроса (hr/admin)
+
+### Онбординг (`/api/onboarding`)
+
+- `GET /templates` — Шаблоны документов
+- `POST /templates` — Создать шаблон
+- `DELETE /templates/:id` — Удалить шаблон
+- `GET /me` — Онбординг текущего пользователя
+- `POST /me/documents/:id/acknowledge` — Подтвердить документ
+- `GET /` — Список онбординг-пользователей (hr/admin)
+- `POST /` — Создать онбординг для пользователя
+- `GET /:id` — Онбординг пользователя по ID
+
+### Уведомления (`/api/notifications`)
+
+- `GET /` — Список уведомлений
+- `PUT /:id/read` — Отметить как прочитанное
+- `PUT /read-all` — Отметить все как прочитанные
+
+### Иерархия (`/api/hierarchy`)
+
+- `GET /` — Получить данные иерархии
+- `PUT /` — Сохранить данные иерархии (hr/admin)
+
+### Справочники (`/api/dictionaries`)
+
+- `GET /` — Все справочники
+- `GET /:type` — Значения справочника по типу
+- `POST /:type` — Добавить значение
+- `PUT /:type/:id` — Обновить значение
+- `DELETE /:type/:id` — Удалить значение
+
+Типы справочников: `position`, `contract_type`, `department_type`, `grade`, `skill`, `education`, `language`, `doc_type`
+
+### Telegram (`/api/telegram`)
+
+- `POST /webhook` — Webhook для Telegram-бота
+- `GET /status` — Статус бота
 
 ## Тестовые пользователи
-
-После запуска `seed` будут доступны следующие пользователи:
 
 | Email | Пароль | Роль |
 |-------|--------|------|
@@ -125,18 +192,33 @@ npm start
 backend/
 ├── src/
 │   ├── config/
-│   │   └── database.js       # Конфигурация БД
-│   ├── routes/
-│   │   ├── auth.js           # Маршруты авторизации
-│   │   ├── vacation.js       # Маршруты отпусков
-│   │   └── users.js          # Маршруты пользователей
+│   │   ├── database.js       # Конфигурация PostgreSQL (pg Pool)
+│   │   └── s3.js             # MinIO клиент
+│   ├── routes/               # Маршруты API
+│   │   ├── auth.js
+│   │   ├── vacation.js
+│   │   ├── users.js
+│   │   ├── departments.js
+│   │   ├── projects.js
+│   │   ├── documents.js
+│   │   ├── userDocuments.js
+│   │   ├── surveys.js
+│   │   ├── onboarding.js
+│   │   ├── notifications.js
+│   │   ├── hierarchy.js
+│   │   ├── dictionaries.js
+│   │   └── telegram.js
 │   ├── middleware/
-│   │   └── auth.js           # Middleware для JWT
+│   │   ├── auth.js           # JWT middleware
+│   │   ├── upload.js         # Multer (MinIO)
+│   │   ├── errors.js
+│   │   └── rateLimiter.js
+│   ├── services/             # Бизнес-логика
 │   ├── db/
-│   │   ├── schema.sql        # SQL схема БД
+│   │   ├── schema.sql        # SQL-схема БД
 │   │   ├── migrate.js        # Скрипт миграций
-│   │   └── seed.js           # Скрипт начальных данных
-│   └── server.js             # Точка входа
+│   │   └── seed.js           # Тестовые данные
+│   └── server.js             # Точка входа Express
 ├── package.json
-└── .env                      # Переменные окружения
+└── .env
 ```
