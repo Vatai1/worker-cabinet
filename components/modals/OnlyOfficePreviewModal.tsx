@@ -1,8 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Edit, Loader2, CheckCircle2 } from 'lucide-react'
+import { X, Edit, Loader2, CheckCircle2, Copy, Check as CheckIcon, ChevronDown, ChevronUp, Save } from 'lucide-react'
 import { formatFileSize } from '@/lib/documentUtils'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+
+interface Placeholder {
+  tag: string
+  desc: string
+}
+
+interface PlaceholderGroup {
+  label: string
+  items: Placeholder[]
+}
 
 interface OnlyOfficePreviewModalProps {
   open: boolean
@@ -16,8 +26,10 @@ interface OnlyOfficePreviewModalProps {
   }
   editable?: boolean
   callbackUrl?: string
+  onSave?: (downloadUrl: string, fileType: string) => Promise<void>
   onAcknowledge?: () => Promise<void>
   acknowledged?: boolean
+  placeholders?: PlaceholderGroup[]
 }
 
 const ONLYOFFICE_URL = import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'
@@ -25,14 +37,54 @@ const ONLYOFFICE_API_URL = `${ONLYOFFICE_URL}/web-apps/apps/api/documents/api.js
 
 let editorCounter = 0
 
-export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, callbackUrl, onAcknowledge, acknowledged }: OnlyOfficePreviewModalProps) {
+export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, callbackUrl, onSave, onAcknowledge, acknowledged, placeholders }: OnlyOfficePreviewModalProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showPlaceholders, setShowPlaceholders] = useState(true)
+  const [copiedTag, setCopiedTag] = useState<string | null>(null)
+
+  const handleCopy = (tag: string) => {
+    navigator.clipboard.writeText(tag).then(() => {
+      setCopiedTag(tag)
+      setTimeout(() => setCopiedTag(null), 1500)
+    })
+  }
   const [editorId] = useState(() => `onlyoffice-editor-${++editorCounter}`)
   const editorRef = useRef<any>(null)
   const isInitializedRef = useRef(false)
+  const keyRef = useRef<string>('')
+  const fileTypeRef = useRef<string>('docx')
+  const downloadResolveRef = useRef<((url: string) => void) | null>(null)
   const [acknowledging, setAcknowledging] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [savedOk, setSavedOk] = useState(false)
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false)
+
+  const handleForceSave = async () => {
+    setShowSaveConfirm(false)
+    if (!onSave || !editorRef.current) return
+    setSaving(true)
+    setSavedOk(false)
+    try {
+      const downloadUrl = await new Promise<string>((resolve, reject) => {
+        downloadResolveRef.current = resolve
+        setTimeout(() => {
+          if (downloadResolveRef.current) {
+            downloadResolveRef.current = null
+            reject(new Error('Timeout'))
+          }
+        }, 15000)
+        editorRef.current.downloadAs(fileTypeRef.current)
+      })
+      await onSave(downloadUrl, fileTypeRef.current)
+      onClose()
+    } catch {
+      // ignore
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const destroyEditor = useCallback(() => {
     if (editorRef.current) {
@@ -121,6 +173,8 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
         const DocsAPI = (window as any).DocsAPI
         const fileType = getFileType(doc.mimeType, doc.name)
         const key = `${doc.id}-${Date.now()}`
+        keyRef.current = key
+        fileTypeRef.current = fileType
 
         console.log('⚙️ Creating editor configuration...')
         console.log('📋 File type:', fileType, 'Key:', key)
@@ -149,6 +203,14 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           height: '100%',
           width: '100%',
           type: 'desktop',
+          events: {
+            onDownloadAs: (event: any) => {
+              if (downloadResolveRef.current) {
+                downloadResolveRef.current(event.data.url)
+                downloadResolveRef.current = null
+              }
+            },
+          },
         }
 
         console.log('🎨 Initializing editor in:', editorId)
@@ -269,6 +331,26 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           />
         </div>
 
+        {showSaveConfirm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+              <h3 className="text-lg font-semibold">Сохранить изменения</h3>
+              <p className="text-muted-foreground">
+                Сохранить текущую версию документа «{doc.name}»?
+              </p>
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setShowSaveConfirm(false)} disabled={saving}>
+                  Отмена
+                </Button>
+                <Button onClick={handleForceSave} disabled={saving}>
+                  {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  Сохранить
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showConfirmModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
             <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
@@ -289,10 +371,60 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           </div>
         )}
 
+        {placeholders && placeholders.length > 0 && (
+          <div className="border-t border-border/60 shrink-0">
+            <button
+              onClick={() => setShowPlaceholders(v => !v)}
+              className="flex items-center justify-between w-full px-4 py-2 text-sm font-medium hover:bg-muted/40 transition-colors"
+            >
+              <span>Плейсхолдеры шаблона</span>
+              {showPlaceholders ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronUp className="h-4 w-4 text-muted-foreground" />}
+            </button>
+            {showPlaceholders && (
+              <div className="max-h-40 overflow-y-auto">
+                {placeholders.map((group, gi) => (
+                  <div key={group.label}>
+                    <div className={`px-4 py-1 bg-muted/40 ${gi > 0 ? 'border-t border-border/40' : ''}`}>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 px-4 py-2">
+                      {group.items.map(p => (
+                        <button
+                          key={p.tag}
+                          onClick={() => handleCopy(p.tag)}
+                          title={p.desc}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/60 bg-muted/30 hover:bg-muted/60 transition-colors text-xs"
+                        >
+                          <code className="font-mono text-primary">{p.tag}</code>
+                          <span className="text-muted-foreground hidden sm:inline">— {p.desc}</span>
+                          {copiedTag === p.tag
+                            ? <CheckIcon className="h-3 w-3 text-emerald-500 shrink-0" />
+                            : <Copy className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                          }
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between p-4 border-t border-border/60 shrink-0">
           <p className="text-sm text-muted-foreground">Powered by OnlyOffice</p>
           <div className="flex gap-3">
             <Button variant="outline" onClick={onClose}>Закрыть</Button>
+            {editable && onSave && (
+              <Button onClick={() => setShowSaveConfirm(true)} disabled={saving || loading}>
+                {saving
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Сохранение...</>
+                  : savedOk
+                  ? <><CheckIcon className="h-4 w-4 mr-2 text-emerald-500" />Сохранено</>
+                  : <><Save className="h-4 w-4 mr-2" />Сохранить</>
+                }
+              </Button>
+            )}
             {!editable && onAcknowledge && !acknowledged && (
               <Button onClick={handleAcknowledgeClick} disabled={acknowledging}>
                 {acknowledging && <Loader2 className="h-4 w-4 animate-spin mr-2" />}

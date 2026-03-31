@@ -1,8 +1,9 @@
 import express from 'express'
+import jwt from 'jsonwebtoken'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../middleware/errors.js'
-import { uploadToS3, deleteFromS3 } from '../config/s3.js'
+import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
 import multer from 'multer'
 
 const uploadDocTemplate = multer({
@@ -299,6 +300,122 @@ router.delete('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'adm
 
   await query('DELETE FROM document_templates WHERE id = $1', [id])
   res.json({ success: true })
+}))
+
+function getPublicApiUrl() {
+  return process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || 'http://host.docker.internal:5000/api'
+}
+
+router.get('/doc-templates/:id/preview-token', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const tmpl = await query('SELECT id FROM document_templates WHERE id = $1', [id])
+  if (tmpl.rows.length === 0) throw new NotFoundError('Шаблон не найден')
+
+  const token = jwt.sign(
+    { templateId: id, userId: String(req.user.id), type: 'template_preview', exp: Math.floor(Date.now() / 1000) + 1800 },
+    process.env.JWT_SECRET
+  )
+  const publicUrl = `${getPublicApiUrl()}/dictionaries/doc-templates/${id}/public/${token}`
+  res.json({ token, publicUrl })
+}))
+
+router.get('/doc-templates/:id/public/:token', asyncHandler(async (req, res) => {
+  const { id, token } = req.params
+  let decoded
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET)
+  } catch {
+    return res.status(401).json({ error: 'Недействительный токен' })
+  }
+  if (decoded.type !== 'template_preview' || String(decoded.templateId) !== String(id)) {
+    return res.status(403).json({ error: 'Токен не соответствует шаблону' })
+  }
+
+  const result = await query('SELECT name, file_key, mime_type FROM document_templates WHERE id = $1', [id])
+  if (result.rows.length === 0) throw new NotFoundError('Шаблон не найден')
+
+  const { name, file_key, mime_type } = result.rows[0]
+  if (!file_key) return res.status(404).json({ error: 'Файл не прикреплён' })
+
+  const { Body, ContentType } = await getFromS3(file_key)
+  res.setHeader('Content-Type', ContentType || mime_type || 'application/octet-stream')
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(name)}"`)
+  res.setHeader('Cache-Control', 'public, max-age=300')
+  Body.pipe(res)
+}))
+
+// POST /api/dictionaries/doc-templates/:id/save-from-url — save file from OnlyOffice downloadAs URL
+router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const { url, fileType } = req.body
+
+  if (!url) return res.status(400).json({ error: 'URL файла обязателен' })
+
+  const tmplResult = await query('SELECT file_key, mime_type FROM document_templates WHERE id = $1', [id])
+  if (tmplResult.rows.length === 0) throw new NotFoundError('Шаблон не найден')
+
+  const tmpl = tmplResult.rows[0]
+
+  const response = await fetch(url)
+  if (!response.ok) return res.status(502).json({ error: 'Не удалось скачать файл из OnlyOffice' })
+
+  const arrayBuffer = await response.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+
+  const ext = fileType || tmpl.file_key?.split('.').pop() || 'docx'
+  const mimeType = tmpl.mime_type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  const newFileKey = `doc-templates/${id}/${Date.now()}.${ext}`
+
+  await uploadToS3({ buffer, mimetype: mimeType }, newFileKey)
+
+  if (tmpl.file_key && tmpl.file_key !== newFileKey) {
+    await deleteFromS3(tmpl.file_key).catch(() => {})
+  }
+
+  await query('UPDATE document_templates SET file_key = $1 WHERE id = $2', [newFileKey, id])
+
+  res.json({ ok: true })
+}))
+
+// POST /api/dictionaries/doc-templates/:id/callback — OnlyOffice save callback
+router.post('/doc-templates/:id/callback', asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const { status, url } = req.body
+
+  // status 2 = ready for saving, status 6 = force save
+  if (status !== 2 && status !== 6) {
+    return res.json({ error: 0 })
+  }
+
+  const result = await query(
+    'SELECT file_key, mime_type, name FROM document_templates WHERE id = $1',
+    [id]
+  )
+  if (result.rows.length === 0) return res.status(404).json({ error: 1 })
+
+  const tmpl = result.rows[0]
+
+  const response = await fetch(url)
+  if (!response.ok) return res.status(502).json({ error: 1 })
+
+  const arrayBuffer = await response.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+
+  const ext = tmpl.file_key?.split('.').pop() || 'docx'
+  const newFileKey = `doc-templates/${id}/${Date.now()}.${ext}`
+
+  await uploadToS3({ buffer, mimetype: tmpl.mime_type || 'application/octet-stream', originalname: tmpl.name }, newFileKey)
+
+  if (tmpl.file_key && tmpl.file_key !== newFileKey) {
+    await deleteFromS3(tmpl.file_key).catch(() => {})
+  }
+
+  await query(
+    'UPDATE document_templates SET file_key = $1 WHERE id = $2',
+    [newFileKey, id]
+  )
+
+  res.json({ error: 0 })
 }))
 
 router.get('/managers', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
