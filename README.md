@@ -1,11 +1,11 @@
 # Worker Cabinet
 
-Система управления отпусками сотрудников с календарём, учётом балансов и workflow согласования.
+Полнофункциональная HR-система для управления сотрудниками, отпусками, онбордингом, опросами, документами, проектами и отделами.
 
-## 🚀 Быстрый старт
+## Быстрый старт
 
 ```bash
-# Установка
+# Установка зависимостей
 npm install
 npm run backend:install
 
@@ -13,10 +13,7 @@ npm run backend:install
 npm run backend:migrate
 npm run backend:seed
 
-# Запуск (рекомендуемый способ)
-./scripts/manage-server.sh start
-
-# Или стандартный способ
+# Запуск
 npm run dev
 ```
 
@@ -24,35 +21,7 @@ npm run dev
 - **Frontend**: http://localhost:3000
 - **Backend**: http://localhost:5000
 
-### Управление сервером
-
-Для удобного управления сервером используйте скрипт:
-
-```bash
-# Запуск
-./scripts/manage-server.sh start
-
-# Остановка
-./scripts/manage-server.sh stop
-
-# Статус
-./scripts/manage-server.sh status
-
-# Перезапуск
-./scripts/manage-server.sh restart
-
-# Просмотр логов
-./scripts/manage-server.sh logs
-./scripts/manage-server.sh logs frontend
-./scripts/manage-server.sh logs backend
-
-# Мониторинг логов в реальном времени
-./scripts/manage-server.sh tail
-```
-
-Подробнее см. [SERVER_MANAGEMENT.md](./SERVER_MANAGEMENT.md)
-
-## 🐳 Деплой
+## Деплой
 
 ### Dev окружение (локально + Docker для сервисов)
 
@@ -84,31 +53,49 @@ Copy-Item .env.example .env
 
 Подробнее в [deploy/README.md](./deploy/README.md)
 
-## 📝 Документация
+## Документация
 
 Полная инструкция по установке и настройке в [SETUP.md](./SETUP.md)
 
-## ✨ Возможности
+## Возможности
 
 ### Для сотрудников
 - Создание заявок на отпуск через интерактивный календарь
-- Просмотр баланса отпускных дней
-- Календарь отпусков всего отдела
+- Просмотр баланса отпускных дней (с переносом по годам)
 - 7 типов отпусков (ежегодный, учебный, без сохранения ЗП и др.)
-- Опция проезда к месту проведения отпуска
+- Прохождение опросов
+- Загрузка и просмотр личных документов
+- Профиль с фото и персональными данными
+- Уведомления о статусе заявок
+- Онбординг: ознакомление с документами при первом входе
 
 ### Для руководителей
 - Согласование/отклонение заявок подчинённых
 - Отмена уже согласованных отпусков
-- Просмотр загрузки отдела
-- Управление ограничениями на пересечение отпусков
+- Просмотр загрузки отдела на календаре
+- Управление ограничениями на пересечение отпусков (блокировка всех)
+- Дашборд с текущими заявками
 
-### Для HR
-- Управление балансами отпускных дней
-- Полный обзор по всем сотрудникам
-- Формирование отчётности
+### Для HR / администраторов
+- Управление балансами отпускных дней по годам
+- Онбординг новых сотрудников: создание, назначение шаблонов документов
+- Создание и проведение опросов
+- Шаблоны документов (PDF/DOCX) для онбординга
+- Визуальная иерархия организации (React Flow)
+- HR-справочники: должности, типы договоров, отделы, грейды, навыки и др.
+- Полный обзор отпусков по всем сотрудникам
 
-## 🎯 Технологии
+## Роли пользователей
+
+| Роль | Описание |
+|------|----------|
+| `employee` | Обычный сотрудник |
+| `manager` | Руководитель отдела, согласует заявки |
+| `hr` | HR-специалист, управляет справочниками и онбордингом |
+| `admin` | Полный доступ |
+| `onboarding` | Новый сотрудник, роль автоматически меняется на `employee` после завершения онбординга |
+
+## Технологии
 
 **Frontend:**
 - React 18 + TypeScript
@@ -116,46 +103,59 @@ Copy-Item .env.example .env
 - React Router v6
 - Zustand (state management)
 - Tailwind CSS
+- React Flow (`@xyflow/react`) — для HR-иерархии
 - date-fns
 
 **Backend:**
 - Node.js + Express
 - PostgreSQL
-- JWT authentication
-- REST API
+- JWT аутентификация
+- MinIO (S3-совместимое хранилище файлов)
+- Multer (загрузка файлов)
+- Telegram Bot API (опционально)
 
-## 📸 Скриншоты
+## Тестовые пользователи
 
-> TODO: Добавить скриншоты интерфейса
-
-## 🔐 Тестовые пользователи
+После запуска `seed` будут доступны следующие пользователи:
 
 | Email | Пароль | Роль |
 |-------|--------|------|
 | ivanov@example.com | password123 | Сотрудник |
 | petrov@example.com | password123 | Руководитель |
+| sidorov@example.com | password123 | Сотрудник |
+| ivanova@example.com | password123 | Сотрудник |
+| petrova@example.com | password123 | Сотрудник |
 
-## 📖 API Documentation
+## API
 
 API endpoints описаны в [backend/README.md](./backend/README.md)
 
-## 🗂️ Структура проекта
+## Структура проекта
 
 ```
 worker-cabinet/
-├── backend/           # Backend API
-├── components/        # React компоненты
-│   ├── calendar/      # Календарь
-│   ├── layout/        # Layout компоненты
-│   ├── modals/        # Модальные окна
-│   └── ui/            # UI компоненты
-├── pages/             # Страницы
-├── services/          # API клиенты
-├── store/             # State management
-├── types/             # TypeScript типы
-└── specs/             # Спецификации функций
+├── backend/                  # Backend API (Node.js + Express)
+│   └── src/
+│       ├── routes/           # auth, vacation, users, departments, projects,
+│       │                     # surveys, onboarding, documents, notifications,
+│       │                     # hierarchy, dictionaries, telegram
+│       ├── middleware/       # JWT auth, multer upload, rate limiter
+│       ├── services/         # Бизнес-логика
+│       ├── config/           # database.js, s3.js (MinIO)
+│       └── db/               # migrate.js, seed.js, schema.sql
+├── components/
+│   ├── calendar/             # Компоненты календаря
+│   ├── layout/               # Header, Sidebar, Layout
+│   ├── modals/               # Модальные окна
+│   ├── forms/                # Формы
+│   └── ui/                   # Переиспользуемые примитивы
+├── pages/                    # По одному файлу на маршрут
+├── services/                 # API-клиенты
+├── store/                    # Zustand stores
+├── types/                    # TypeScript интерфейсы
+└── lib/                      # Утилиты: cn(), formatDate(), authHeaders, api.ts
 ```
 
-## 📄 Лицензия
+## Лицензия
 
 MIT
