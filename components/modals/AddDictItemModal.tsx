@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/Label'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
-import { PLACEHOLDERS_BY_PURPOSE, getAllPlaceholders } from '@/lib/docPlaceholders'
+import { PLACEHOLDERS_BY_PURPOSE, getAllGroups } from '@/lib/docPlaceholders'
+import type { PlaceholderGroup } from '@/lib/docPlaceholders'
 
 type DictTab = 'departments' | 'skills' | 'vacation-types' | 'doc-templates'
 
@@ -55,7 +56,7 @@ function PlaceholdersSection({ purpose, show, onToggle, copiedTag, onCopy }: {
   copiedTag: string | null
   onCopy: (tag: string) => void
 }) {
-  const list = PLACEHOLDERS_BY_PURPOSE[purpose] ?? getAllPlaceholders()
+  const groups: PlaceholderGroup[] = PLACEHOLDERS_BY_PURPOSE[purpose] ?? getAllGroups()
 
   return (
     <div>
@@ -66,30 +67,34 @@ function PlaceholdersSection({ purpose, show, onToggle, copiedTag, onCopy }: {
         </button>
       </div>
       {show && (
-        <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
-          <div className="px-3 py-2 border-b border-border/40 bg-muted/40">
-            <p className="text-xs text-muted-foreground">
-              Нажмите на плейсхолдер, чтобы скопировать
-              {!purpose && <span className="ml-1 opacity-70">· выберите назначение для фильтрации</span>}
+        <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden max-h-64 overflow-y-auto">
+          {!purpose && (
+            <p className="px-3 py-2 text-xs text-muted-foreground border-b border-border/30 bg-muted/40">
+              Выберите назначение для фильтрации плейсхолдеров
             </p>
-          </div>
-          <div className="divide-y divide-border/20 max-h-52 overflow-y-auto">
-            {list.map(p => (
-              <button
-                key={p.tag}
-                type="button"
-                onClick={() => onCopy(p.tag)}
-                className="flex items-center gap-3 w-full px-3 py-1.5 hover:bg-muted/40 transition-colors text-left"
-              >
-                <code className="text-xs font-mono text-primary shrink-0">{p.tag}</code>
-                <span className="text-xs text-muted-foreground flex-1">{p.desc}</span>
-                {copiedTag === p.tag
-                  ? <CheckIcon className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  : <Copy className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                }
-              </button>
-            ))}
-          </div>
+          )}
+          {groups.map((group, gi) => (
+            <div key={group.label}>
+              <div className={`px-3 py-1.5 bg-muted/40 ${gi > 0 ? 'border-t border-border/40' : ''}`}>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</p>
+              </div>
+              {group.items.map(p => (
+                <button
+                  key={p.tag}
+                  type="button"
+                  onClick={() => onCopy(p.tag)}
+                  className="flex items-center gap-3 w-full px-3 py-1.5 hover:bg-muted/40 transition-colors text-left border-t border-border/10"
+                >
+                  <code className="text-xs font-mono text-primary shrink-0">{p.tag}</code>
+                  <span className="text-xs text-muted-foreground flex-1">{p.desc}</span>
+                  {copiedTag === p.tag
+                    ? <CheckIcon className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    : <Copy className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  }
+                </button>
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </div>

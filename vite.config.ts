@@ -39,6 +39,7 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       'import.meta.env.VITE_ONLYOFFICE_URL': JSON.stringify(env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'),
+      'import.meta.env.VITE_PUBLIC_API_URL': JSON.stringify(env.VITE_PUBLIC_API_URL || 'http://host.docker.internal:5000/api'),
     },
     optimizeDeps: {
       include: ['react-pdf', '@xyflow/react'],
