@@ -24,6 +24,7 @@ interface Employee {
 interface Props {
   timesheetId: number
   entries: TimesheetEntry[]
+  employees: Employee[]
   year: number
   month: number
   readonly: boolean
@@ -38,24 +39,12 @@ function dateStr(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-export function TimesheetGrid({ timesheetId, entries, year, month, readonly, onSave }: Props) {
+export function TimesheetGrid({ timesheetId, entries, employees, year, month, readonly, onSave }: Props) {
   const totalDays = daysInMonth(year, month)
 
   const [changes, setChanges] = useState<Record<string, { code: string | null; hours: number | null }>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const employees = useMemo<Employee[]>(() => {
-    const seen = new Set<number>()
-    const result: Employee[] = []
-    for (const e of entries) {
-      if (!seen.has(e.employee_id)) {
-        seen.add(e.employee_id)
-        result.push({ id: e.employee_id, first_name: e.first_name, last_name: e.last_name })
-      }
-    }
-    return result
-  }, [entries])
 
   const entryMap = useMemo(() => {
     const map: Record<string, TimesheetEntry> = {}

@@ -24,7 +24,7 @@ export function HRTimesheet() {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [timesheet, setTimesheet] = useState<Timesheet | null>(null)
-  const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[] } | null>(null)
+  const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[]; employees: { id: number; first_name: string; last_name: string }[] } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -185,6 +185,7 @@ export function HRTimesheet() {
             <TimesheetGrid
               timesheetId={timesheet.id}
               entries={timesheetData.entries}
+              employees={timesheetData.employees}
               year={year}
               month={month}
               readonly={readonly}
