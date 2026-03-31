@@ -19,6 +19,7 @@ import { getAuthHeaders } from '@/lib/authHeaders'
 import { API_BASE_URL } from '@/lib/api'
 import { ChevronLeft, ChevronRight, FileText } from 'lucide-react'
 import { VacationApplicationModal } from '@/components/modals/VacationApplicationModal'
+import { VacationTransferApplicationModal } from '@/components/modals/VacationTransferApplicationModal'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -54,6 +55,8 @@ export function Vacation() {
   const [transferRequest, setTransferRequest] = useState<VacationRequest | null>(null)
   const [showRestrictionModal, setShowRestrictionModal] = useState(false)
   const [showApplicationModal, setShowApplicationModal] = useState(false)
+  const [showTransferApplicationModal, setShowTransferApplicationModal] = useState(false)
+  const [calendarView, setCalendarView] = useState<'department' | 'personal'>('department')
   const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<any[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
@@ -345,14 +348,13 @@ export function Vacation() {
 
 
   const calendarRequests = useMemo(() => {
+    if (calendarView === 'personal') return currentUserRequests
     const merged = [...departmentRequests]
     currentUserRequests.forEach(r => {
-      if (!merged.some(m => m.id === r.id)) {
-        merged.push(r)
-      }
+      if (!merged.some(m => m.id === r.id)) merged.push(r)
     })
     return merged
-  }, [departmentRequests, currentUserRequests])
+  }, [departmentRequests, currentUserRequests, calendarView])
 
   const handlePrevYear = () => setYear((y) => y - 1)
   const handleNextYear = () => setYear((y) => y + 1)
@@ -392,6 +394,14 @@ export function Vacation() {
           >
             <FileText className="w-4 h-4 mr-2" />
             Заявление на отпуск
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowTransferApplicationModal(true)}
+            size="default"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Заявление о переносе
           </Button>
           <Button
             variant="outline"
@@ -473,6 +483,32 @@ export function Vacation() {
             <Button variant="outline" size="icon" onClick={handleNextYear}>
               <ChevronRight className="w-4 h-4" />
             </Button>
+          </div>
+          <div className="flex items-center justify-center mb-4">
+            <div className="inline-flex items-center rounded-lg border border-border bg-muted/30 p-0.5 gap-0.5">
+              <button
+                type="button"
+                onClick={() => setCalendarView('department')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  calendarView === 'department'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Отдел
+              </button>
+              <button
+                type="button"
+                onClick={() => setCalendarView('personal')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  calendarView === 'personal'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Мои отпуска
+              </button>
+            </div>
           </div>
           <YearCalendar
             year={year}
@@ -840,6 +876,12 @@ export function Vacation() {
           open={showApplicationModal}
           onClose={() => setShowApplicationModal(false)}
           defaultYear={year}
+        />
+      )}
+      {showTransferApplicationModal && (
+        <VacationTransferApplicationModal
+          open={showTransferApplicationModal}
+          onClose={() => setShowTransferApplicationModal(false)}
         />
       )}
 
