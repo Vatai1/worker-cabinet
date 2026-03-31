@@ -23,7 +23,7 @@ export function ManagerTimesheet() {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [timesheet, setTimesheet] = useState<Timesheet | null>(null)
-  const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[] } | null>(null)
+  const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[]; employees: { id: number; first_name: string; last_name: string }[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -61,7 +61,7 @@ export function ManagerTimesheet() {
     try {
       const deptRes = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
       const depts = await deptRes.json()
-      const myDept = depts.find((d: { manager_id: number }) => d.manager_id === user?.id)
+      const myDept = depts.find((d: { manager_id: number }) => String(d.manager_id) === user?.id)
       if (!myDept) throw new Error('Вы не являетесь руководителем ни одного отдела')
 
       const res = await fetch(`${API_BASE_URL}/timesheet`, {
@@ -167,6 +167,7 @@ export function ManagerTimesheet() {
             <TimesheetGrid
               timesheetId={timesheet.id}
               entries={timesheetData.entries}
+              employees={timesheetData.employees}
               year={year}
               month={month}
               readonly={readonly}

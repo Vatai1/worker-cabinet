@@ -191,7 +191,14 @@ router.get('/:id', async (req, res) => {
       [id]
     )
 
-    res.json({ ...tsResult.rows[0], entries: entriesResult.rows })
+    const empResult = await query(
+      `SELECT id, first_name, last_name FROM users
+       WHERE department_id = $1 AND role IN ('employee', 'manager')
+       ORDER BY last_name, first_name`,
+      [tsResult.rows[0].department_id]
+    )
+
+    res.json({ ...tsResult.rows[0], entries: entriesResult.rows, employees: empResult.rows })
   } catch (error) {
     console.error('Error fetching timesheet:', error)
     res.status(500).json({ error: 'Ошибка при получении табеля' })
