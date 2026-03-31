@@ -1062,6 +1062,17 @@ async function runMigrations() {
 
     
     try {
+      await db.query(`ALTER TABLE departments ADD CONSTRAINT IF NOT EXISTS departments_manager_id_fkey FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL`)
+      console.log('  ✓ departments.manager_id FK to users added')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ departments.manager_id FK (already exists)')
+      } else {
+        console.log('  - departments.manager_id FK:', e.message)
+      }
+    }
+
+    try {
       await db.query(`ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS transfer_requested_at TIMESTAMP`)
       console.log('  ✓ transfer_requested_at column added to vacation_requests')
     } catch (e) {

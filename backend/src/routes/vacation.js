@@ -73,7 +73,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
         whereClause += ' AND vr.user_id = $' + (params.length + 1)
         params.push(user.id)
       } else if (user.role === 'manager') {
-        whereClause += ' AND (vr.user_id = $' + (params.length + 1) + ' OR u.manager_id = $' + (params.length + 1) + ')'
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR u.manager_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE manager_id = $${params.length + 1}))`
         params.push(user.id)
       }
     }
