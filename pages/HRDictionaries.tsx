@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Building2, Wrench, Palmtree, Briefcase, FileText, Plus, Pencil, Trash2, X, Check, Search, Users } from 'lucide-react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { Building2, Wrench, Palmtree, Briefcase, FileText, Plus, Pencil, Trash2, X, Search, Users, MoreHorizontal, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { ConfirmModal } from '@/components/modals/ConfirmModal'
 import { AddDictItemModal } from '@/components/modals/AddDictItemModal'
-import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
+import { OnlyOfficePreviewModal } from '@/components/modals/OnlyOfficePreviewModal'
+import { getAuthHeaders } from '@/lib/authHeaders'
+import { PLACEHOLDERS_BY_PURPOSE, getAllGroups } from '@/lib/docPlaceholders'
 import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 
@@ -24,11 +26,15 @@ interface DictItem {
   employee_count?: number
   user_count?: number
   request_count?: number
+  manager_id?: number | null
   manager_name?: string
   vacation_requests_blocked?: boolean
   description?: string
   purpose?: string
   download_count?: number
+  file_key?: string | null
+  mime_type?: string | null
+  size?: number | null
   created_at?: string
   _type?: string
 }
@@ -45,11 +51,22 @@ export function HRDictionaries() {
   const [allDataLoading, setAllDataLoading] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editCode, setEditCode] = useState('')
+  const [editItem, setEditItem] = useState<DictItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DictItem | null>(null)
-  const [editDocTemplate, setEditDocTemplate] = useState<DictItem | null>(null)
+  const [onlyOfficeItem, setOnlyOfficeItem] = useState<DictItem | null>(null)
+  const [contextMenuId, setContextMenuId] = useState<number | null>(null)
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+
+  const openContextMenu = (item: DictItem, x: number, y: number) => {
+    setContextMenuId(item.id!)
+    setContextMenuPos({ x, y })
+  }
+
+  const closeContextMenu = () => {
+    setContextMenuId(null)
+    setContextMenuPos(null)
+  }
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -66,10 +83,32 @@ export function HRDictionaries() {
   }, [tab])
 
   useEffect(() => {
-    setEditingId(null)
+    setEditItem(null)
     setSearch('')
+    setContextMenuId(null)
     fetchItems()
   }, [fetchItems])
+
+  useEffect(() => {
+    if (contextMenuId === null) return
+    const handler = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        closeContextMenu()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [contextMenuId])
+
+  useLayoutEffect(() => {
+    if (!contextMenuPos || !contextMenuRef.current) return
+    const menu = contextMenuRef.current
+    const { width, height } = menu.getBoundingClientRect()
+    let { x, y } = contextMenuPos
+    if (x + width > window.innerWidth) x = window.innerWidth - width - 8
+    if (y + height > window.innerHeight) y = window.innerHeight - height - 8
+    if (x !== contextMenuPos.x || y !== contextMenuPos.y) setContextMenuPos({ x, y })
+  }, [contextMenuPos])
 
   useEffect(() => {
     if (!search.trim()) return
@@ -115,32 +154,7 @@ export function HRDictionaries() {
   const totalSearchResults = searchResults.reduce((sum, g) => sum + g.items.length, 0)
 
   const handleEdit = (item: DictItem) => {
-    if (tab === 'doc-templates') {
-      setEditDocTemplate(item)
-    } else {
-      setEditingId(item.id!)
-      setEditName(item.name)
-      setEditCode(item.code || '')
-    }
-  }
-
-  const handleSaveEdit = async () => {
-    if (!editingId) return
-    try {
-      const body: Record<string, string> = { name: editName }
-      if (tab === 'vacation-types') body.code = editCode
-
-      const res = await fetch(`${API_BASE_URL}/dictionaries/${tab}/${editingId}`, {
-        method: 'PUT',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка')
-      setEditingId(null)
-      fetchItems()
-    } catch (err: unknown) {
-      setError(getErrorMessage(err))
-    }
+    setEditItem(item)
   }
 
   const handleDelete = async (item: DictItem) => {
@@ -196,7 +210,6 @@ export function HRDictionaries() {
         return [
           { key: 'name', label: 'Название' },
           { key: 'purpose', label: 'Назначение' },
-          { key: 'download_count', label: 'Скачиваний' },
         ]
       default:
         return []
@@ -412,9 +425,7 @@ export function HRDictionaries() {
                       </th>
                     ))}
                     {(canEdit || canDelete) && (
-                      <th className="text-right py-3.5 px-5 font-semibold text-muted-foreground w-24">
-                        Действия
-                      </th>
+                      <th className="w-12" />
                     )}
                   </tr>
                 </thead>
@@ -444,41 +455,15 @@ export function HRDictionaries() {
                       <tr
                         key={item.id ?? item.name}
                         className="group transition-colors hover:bg-muted/30"
+                        onContextMenu={(e) => {
+                          if (!(canEdit || canDelete)) return
+                          e.preventDefault()
+                          openContextMenu(item, e.clientX, e.clientY)
+                        }}
                       >
                         <td className="py-3.5 px-5 text-muted-foreground/50 font-mono text-xs">
                           {idx + 1}
                         </td>
-                        {editingId === item.id ? (
-                          <>
-                            <td className="py-2.5 px-5" colSpan={columns.length}>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {tab === 'vacation-types' && (
-                                  <Input
-                                    value={editCode}
-                                    onChange={(e) => setEditCode(e.target.value)}
-                                    className="w-40"
-                                    placeholder="Код"
-                                  />
-                                )}
-                                <Input
-                                  value={editName}
-                                  onChange={(e) => setEditName(e.target.value)}
-                                  className="w-56"
-                                  placeholder="Название"
-                                  onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                                  autoFocus
-                                />
-                                <Button onClick={handleSaveEdit} size="icon" variant="ghost" className="h-8 w-8 text-emerald-600 hover:text-emerald-700">
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                                <Button onClick={() => setEditingId(null)} size="icon" variant="ghost" className="h-8 w-8">
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                            <td className="py-2.5 px-5" />
-                          </>
-                        ) : (
                           <>
                             {columns.map((col) => (
                               <td key={col.key} className="py-3.5 px-5">
@@ -486,31 +471,24 @@ export function HRDictionaries() {
                               </td>
                             ))}
                             <td className="py-3.5 px-5">
-                              <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {canEdit && (
+                              {(canEdit || canDelete) && (
+                                <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                                   <Button
-                                    onClick={() => handleEdit(item)}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+                                      openContextMenu(item, rect.right, rect.bottom + 4)
+                                    }}
                                     size="icon"
                                     variant="ghost"
                                     className="h-8 w-8"
                                   >
-                                    <Pencil className="h-3.5 w-3.5" />
+                                    <MoreHorizontal className="h-4 w-4" />
                                   </Button>
-                                )}
-                                {canDelete && (
-                                  <Button
-                                    onClick={() => setDeleteTarget(item)}
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-8 w-8 text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-                              </div>
+                                </div>
+                              )}
                             </td>
                           </>
-                        )}
                       </tr>
                     ))
                   )}
@@ -529,6 +507,49 @@ export function HRDictionaries() {
         </>
       )}
 
+      {contextMenuId !== null && contextMenuPos && (() => {
+        const item = filtered.find((i) => i.id === contextMenuId)
+        if (!item) return null
+        return (
+          <div
+            ref={contextMenuRef}
+            className="fixed z-50 min-w-[160px] rounded-lg border border-border/60 bg-card shadow-lg shadow-black/10 py-1"
+            style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
+          >
+            {tab === 'doc-templates' && item.file_key && (
+              <button
+                onClick={() => { closeContextMenu(); setOnlyOfficeItem(item) }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                Открыть в OnlyOffice
+              </button>
+            )}
+            {(tab === 'doc-templates' && item.file_key) && (canEdit || canDelete) && (
+              <div className="my-1 border-t border-border/30" />
+            )}
+            {canEdit && (
+              <button
+                onClick={() => { closeContextMenu(); handleEdit(item) }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                Редактировать
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => { closeContextMenu(); setDeleteTarget(item) }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Удалить
+              </button>
+            )}
+          </div>
+        )
+      })()}
+
       {deleteTarget && (
         <ConfirmModal
           isOpen={true}
@@ -540,22 +561,43 @@ export function HRDictionaries() {
         />
       )}
 
-      {isAddModalOpen && canAdd && (
-        <AddDictItemModal
-          open={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          onAdded={fetchItems}
-          tab={tab as 'departments' | 'skills' | 'vacation-types' | 'doc-templates'}
+      {onlyOfficeItem && (
+        <OnlyOfficePreviewModal
+          open={true}
+          onClose={() => setOnlyOfficeItem(null)}
+          document={{
+            id: onlyOfficeItem.id!,
+            name: onlyOfficeItem.name,
+            mimeType: onlyOfficeItem.mime_type || 'application/octet-stream',
+            size: onlyOfficeItem.size ?? undefined,
+            url: async () => {
+              const res = await fetch(`${API_BASE_URL}/dictionaries/doc-templates/${onlyOfficeItem.id}/preview-token`, { headers: getAuthHeaders() })
+              if (!res.ok) throw new Error('Не удалось получить токен')
+              const data = await res.json()
+              return data.publicUrl
+            },
+          }}
+          editable={true}
+          callbackUrl={`${import.meta.env.VITE_PUBLIC_API_URL || 'http://host.docker.internal:5000/api'}/dictionaries/doc-templates/${onlyOfficeItem.id}/callback`}
+          onSave={async (downloadUrl, fileType) => {
+            const res = await fetch(`${API_BASE_URL}/dictionaries/doc-templates/${onlyOfficeItem.id}/save-from-url`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+              body: JSON.stringify({ url: downloadUrl, fileType }),
+            })
+            if (!res.ok) throw new Error('Ошибка сохранения')
+          }}
+          placeholders={onlyOfficeItem.purpose ? (PLACEHOLDERS_BY_PURPOSE[onlyOfficeItem.purpose] ?? getAllGroups()) : getAllGroups()}
         />
       )}
 
-      {editDocTemplate && (
+      {(isAddModalOpen || editItem) && canAdd && (
         <AddDictItemModal
           open={true}
-          onClose={() => setEditDocTemplate(null)}
-          onAdded={() => { setEditDocTemplate(null); fetchItems() }}
-          tab="doc-templates"
-          editItem={editDocTemplate}
+          onClose={() => { setIsAddModalOpen(false); setEditItem(null) }}
+          onAdded={() => { setIsAddModalOpen(false); setEditItem(null); fetchItems() }}
+          tab={tab as 'departments' | 'skills' | 'vacation-types' | 'doc-templates'}
+          editItem={editItem}
         />
       )}
     </div>

@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { Building2, Wrench, Palmtree, FileText, Plus, X, Upload, Paperclip } from 'lucide-react'
+import { Building2, Wrench, Palmtree, FileText, Plus, X, Upload, Paperclip, Copy, Check as CheckIcon } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
+import { PLACEHOLDERS_BY_PURPOSE, getAllGroups } from '@/lib/docPlaceholders'
+import type { PlaceholderGroup } from '@/lib/docPlaceholders'
 
 type DictTab = 'departments' | 'skills' | 'vacation-types' | 'doc-templates'
 
@@ -23,6 +25,7 @@ interface EditItem {
   code?: string
   description?: string
   purpose?: string
+  manager_id?: number | null
 }
 
 interface Props {
@@ -45,6 +48,59 @@ const PURPOSE_OPTIONS = [
   { value: 'vacation_transfer_template', label: 'Шаблон переноса отпуска' },
 ]
 
+
+function PlaceholdersSection({ purpose, show, onToggle, copiedTag, onCopy }: {
+  purpose: string
+  show: boolean
+  onToggle: () => void
+  copiedTag: string | null
+  onCopy: (tag: string) => void
+}) {
+  const groups: PlaceholderGroup[] = PLACEHOLDERS_BY_PURPOSE[purpose] ?? getAllGroups()
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <Label>Плейсхолдеры DOCX</Label>
+        <button type="button" onClick={onToggle} className="text-xs text-primary hover:underline">
+          {show ? 'Скрыть' : 'Показать'}
+        </button>
+      </div>
+      {show && (
+        <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden max-h-64 overflow-y-auto">
+          {!purpose && (
+            <p className="px-3 py-2 text-xs text-muted-foreground border-b border-border/30 bg-muted/40">
+              Выберите назначение для фильтрации плейсхолдеров
+            </p>
+          )}
+          {groups.map((group, gi) => (
+            <div key={group.label}>
+              <div className={`px-3 py-1.5 bg-muted/40 ${gi > 0 ? 'border-t border-border/40' : ''}`}>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</p>
+              </div>
+              {group.items.map(p => (
+                <button
+                  key={p.tag}
+                  type="button"
+                  onClick={() => onCopy(p.tag)}
+                  className="flex items-center gap-3 w-full px-3 py-1.5 hover:bg-muted/40 transition-colors text-left border-t border-border/10"
+                >
+                  <code className="text-xs font-mono text-primary shrink-0">{p.tag}</code>
+                  <span className="text-xs text-muted-foreground flex-1">{p.desc}</span>
+                  {copiedTag === p.tag
+                    ? <CheckIcon className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    : <Copy className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  }
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Props) {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
@@ -55,7 +111,16 @@ export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Prop
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPlaceholders, setShowPlaceholders] = useState(true)
+  const [copiedTag, setCopiedTag] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleCopy = (tag: string) => {
+    navigator.clipboard.writeText(tag).then(() => {
+      setCopiedTag(tag)
+      setTimeout(() => setCopiedTag(null), 1500)
+    })
+  }
 
   const config = TAB_CONFIG[tab]
   const Icon = config.icon
@@ -78,6 +143,7 @@ export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Prop
       setCode(editItem.code || '')
       setDescription(editItem.description || '')
       setPurpose(editItem.purpose || '')
+      setManagerId(editItem.manager_id ? String(editItem.manager_id) : '')
     }
   }, [open, editItem])
 
@@ -290,6 +356,14 @@ export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Prop
                     onChange={(e) => setDescription(e.target.value)}
                   />
                 </div>
+
+                <PlaceholdersSection
+                  purpose={purpose}
+                  show={showPlaceholders}
+                  onToggle={() => setShowPlaceholders(v => !v)}
+                  copiedTag={copiedTag}
+                  onCopy={handleCopy}
+                />
               </>
             )}
 

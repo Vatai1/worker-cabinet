@@ -92,6 +92,7 @@ const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
   reviewedBy: dbRequest.reviewed_by?.toString(),
   createdAt: dbRequest.created_at,
   statusHistory: dbRequest.statusHistory || [],
+  departmentManagerId: (dbRequest.department_manager_id ?? dbRequest.departmentManagerId)?.toString(),
 })
 
 export const vacationApi = {
