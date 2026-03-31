@@ -1143,6 +1143,33 @@ async function runMigrations() {
     await db.query(`ALTER TABLE vacation_balances ADD CONSTRAINT vacation_balances_user_id_year_key UNIQUE (user_id, year)`)
     console.log('  ✓ vacation_balances UNIQUE(user_id, year)')
 
+    await db.query(`
+  CREATE TABLE IF NOT EXISTS timesheets (
+    id            SERIAL PRIMARY KEY,
+    department_id INTEGER NOT NULL REFERENCES departments(id),
+    year          INTEGER NOT NULL,
+    month         INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+    status        VARCHAR(20) NOT NULL DEFAULT 'draft',
+    created_by    INTEGER REFERENCES users(id),
+    updated_by    INTEGER REFERENCES users(id),
+    updated_at    TIMESTAMP,
+    created_at    TIMESTAMP DEFAULT NOW(),
+    UNIQUE(department_id, year, month)
+  )
+`)
+
+    await db.query(`
+  CREATE TABLE IF NOT EXISTS timesheet_entries (
+    id           SERIAL PRIMARY KEY,
+    timesheet_id INTEGER NOT NULL REFERENCES timesheets(id) ON DELETE CASCADE,
+    employee_id  INTEGER NOT NULL REFERENCES users(id),
+    date         DATE NOT NULL,
+    code         VARCHAR(10),
+    hours        NUMERIC(4,1) CHECK (hours IS NULL OR (hours >= 0 AND hours <= 24)),
+    UNIQUE(timesheet_id, employee_id, date)
+  )
+`)
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     
