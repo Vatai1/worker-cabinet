@@ -78,8 +78,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
         editorRef.current.downloadAs(fileTypeRef.current)
       })
       await onSave(downloadUrl, fileTypeRef.current)
-      setSavedOk(true)
-      setTimeout(() => setSavedOk(false), 3000)
+      onClose()
     } catch {
       // ignore
     } finally {

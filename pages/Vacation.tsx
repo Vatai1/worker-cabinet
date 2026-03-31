@@ -360,7 +360,7 @@ export function Vacation() {
   const handleNextYear = () => setYear((y) => y + 1)
 
   const isManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin'
-  const isDepartmentManager = departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
+  const isDepartmentManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin' || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
 
   return (
     <div className="space-y-6 animate-fade-in">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { FileText, X, Download, Loader2, Plus, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -7,6 +7,7 @@ import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders
 import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
+import { useAuthStore } from '@/store/authStore'
 
 interface Template {
   id: number
@@ -35,6 +36,14 @@ interface TransferRequest {
   status: 'on_approval' | 'approved' | 'rejected' | 'cancelled_by_employee' | 'cancelled_by_manager'
 }
 
+interface Balance {
+  total_days: number
+  used_days: number
+  reserved_days: number
+  available_days: number
+  year: number
+}
+
 interface AddForm {
   vacationId: string
   newStartDate: string
@@ -59,6 +68,7 @@ const STATUS_LABEL: Record<string, { label: string; className: string }> = {
 const emptyForm = (): AddForm => ({ vacationId: '', newStartDate: '', newDays: '', reason: '', note: '' })
 
 export function VacationTransferApplicationModal({ open, onClose }: Props) {
+  const user = useAuthStore(s => s.user)
   const [templates, setTemplates] = useState<Template[]>([])
   const [templateId, setTemplateId] = useState<string>('')
   const [transferable, setTransferable] = useState<TransferableVacation[]>([])
@@ -66,12 +76,14 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [showAddForm, setShowAddForm] = useState(false)
   const [form, setForm] = useState<AddForm>(emptyForm())
+  const [balance, setBalance] = useState<Balance | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [dataLoading, setDataLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const balanceFetchRef = useRef<string | null>(null)
 
   const load = () => {
     setDataLoading(true)
@@ -104,6 +116,18 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
   }, [open])
 
   const selectedVacation = transferable.find(v => String(v.id) === form.vacationId)
+
+  useEffect(() => {
+    if (!selectedVacation || !user?.id) { setBalance(null); return }
+    const year = new Date(selectedVacation.start_date).getFullYear()
+    const key = `${user.id}-${year}`
+    if (balanceFetchRef.current === key) return
+    balanceFetchRef.current = key
+    fetch(`${API_BASE_URL}/vacation/balance/${user.id}?year=${year}`, { headers: getAuthHeaders() })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setBalance(data))
+      .catch(() => setBalance(null))
+  }, [selectedVacation?.id, user?.id])
 
   const computedNewDays = () => {
     const n = Number(form.newDays)
@@ -296,10 +320,23 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
                 </div>
 
                 {selectedVacation && (
-                  <div className="flex gap-4 text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
-                    <span>Начало: <strong>{formatDate(selectedVacation.start_date)}</strong></span>
-                    <span>Конец: <strong>{formatDate(selectedVacation.end_date)}</strong></span>
-                    <span>Дней: <strong>{selectedVacation.duration}</strong></span>
+                  <div className="space-y-1.5">
+                    <div className="flex gap-4 text-xs text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
+                      <span>Начало: <strong>{formatDate(selectedVacation.start_date)}</strong></span>
+                      <span>Конец: <strong>{formatDate(selectedVacation.end_date)}</strong></span>
+                      <span>Дней: <strong>{selectedVacation.duration}</strong></span>
+                    </div>
+                    {balance && (
+                      <div className="flex gap-3 text-xs bg-primary/5 border border-primary/20 rounded-md px-3 py-2 flex-wrap">
+                        <span className="text-muted-foreground">Баланс {balance.year}:</span>
+                        <span>Всего: <strong>{balance.total_days}</strong></span>
+                        <span>Использовано: <strong>{balance.used_days}</strong></span>
+                        <span>Зарезервировано: <strong>{balance.reserved_days}</strong></span>
+                        <span className={balance.available_days > 0 ? 'text-emerald-600 font-semibold' : 'text-destructive font-semibold'}>
+                          Доступно: {balance.available_days} дн.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 
