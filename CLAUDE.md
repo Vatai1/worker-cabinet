@@ -164,8 +164,8 @@ try {
 Each role has its own navigation function (`getEmployeeNavigation`, `getManagerNavigation`, `getHRNavigation`). When adding items to one role, verify all other roles also have the equivalent items where appropriate. The current expected items per role:
 
 - **employee**: Дашборд, Отпуск, Опросы, Сотрудники, Отделы, Проекты, Профиль, Заявления, Документы, Уведомления
-- **manager**: Дашборд, Профиль, Сотрудники, Отделы, Проекты, Рассмотреть заявки, Отпуск, Опросы, Документы, Уведомления
-- **hr/admin**: Дашборд, Профиль, HR (Опросы, Онбординг, Шаблоны документов, Иерархия), Мои опросы, Отпуск, Сотрудники, Отделы, Проекты, Документы, Уведомления
+- **manager**: Дашборд, Профиль, Сотрудники, Отделы, Проекты, Рассмотреть заявки, Отпуск, Табель, Опросы, Документы, Уведомления
+- **hr/admin**: Дашборд, Профиль, HR (Опросы, Онбординг, Отпуск, Иерархия, Справочники, Табель), Мои опросы, Отпуск, Сотрудники, Отделы, Проекты, Документы, Уведомления
 - **onboarding**: Онбординг, Сотрудники, Отделы
 
 ## Key Subsystems
@@ -175,6 +175,17 @@ HR creates a user with role `onboarding` and assigns document templates in one r
 
 ### File Uploads
 `backend/src/middleware/upload.js` exports multer instances: `uploadDocument` (user docs), `uploadTemplate` (HR document templates, PDF/DOCX ≤ 20 MB). MinIO helpers in `backend/src/config/s3.js`: `uploadToS3`, `getS3FileUrl`, `deleteFromS3`. Key format for onboarding templates: `onboarding-templates/{templateId}/{timestamp}.{ext}`.
+
+### Timesheet / Табель (`/leader/timesheet`, `/hr/timesheet`)
+Accessible to `manager`, `hr`, `admin`. Tables: `timesheets` (one per department/month) and `timesheet_entries` (one per employee/day). Statuses: `draft` → `submitted` → `approved`; only `hr`/`admin` can approve or revert. Managers can only transition `draft→submitted`.
+
+On creation (`POST /api/timesheet`), entries are auto-filled for the entire month: weekends → `В`, approved vacations → `ОТ`, weekdays → `Я`/8h. Future dates cannot be edited. Approved timesheets are locked.
+
+Bulk update via `PUT /api/timesheet/:id/entries` (upsert by `timesheet_id + employee_id + date`). Export endpoints: `GET /api/timesheet/:id/export/excel` (ExcelJS) and `/export/pdf` (PDFKit, landscape A4).
+
+Manager access is scoped to their department (`getManagerDepartmentId` checks `departments.manager_id` then `users.department_id`). HR/admin see all departments.
+
+Frontend: `pages/ManagerTimesheet.tsx` for manager, `components/timesheet/TimesheetGrid.tsx` for the editable grid (tracks unsaved changes locally, batch-saves on explicit save). Attendance codes and colors defined in `@/lib/timesheetCodes`.
 
 ### HR Hierarchy (`/hr/hierarchy`)
 React Flow (`@xyflow/react`) canvas stored in `localStorage` key `hr-hierarchy-v1`. Lazy-loaded via `React.lazy`. Nodes: `department`, `employee`, `text`. All handles are `type="source"` with `ConnectionMode.Loose` to allow connections from any point. Custom `EditableEdge`: smoothstep rendering by default, switches to polyline when `data.waypoints` array is populated. Waypoints are materialized from smoothstep corners on first click to preserve route shape.

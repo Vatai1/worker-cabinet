@@ -10,7 +10,6 @@ export interface TimesheetEntry {
   employee_id: number
   date: string
   code: string | null
-  hours: number | null
   first_name: string
   last_name: string
 }
@@ -31,6 +30,8 @@ interface Props {
   onSave: () => void
 }
 
+const WEEKDAY_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+
 function daysInMonth(year: number, month: number) {
   return new Date(year, month, 0).getDate()
 }
@@ -39,10 +40,15 @@ function dateStr(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
+function isWeekend(year: number, month: number, day: number) {
+  const dow = new Date(year, month - 1, day).getDay()
+  return dow === 0 || dow === 6
+}
+
 export function TimesheetGrid({ timesheetId, entries, employees, year, month, readonly, onSave }: Props) {
   const totalDays = daysInMonth(year, month)
 
-  const [changes, setChanges] = useState<Record<string, { code: string | null; hours: number | null }>>({})
+  const [changes, setChanges] = useState<Record<string, { code: string | null }>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,26 +63,76 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
     return map
   }, [entries])
 
+  const today = useMemo(() => {
+    const d = new Date()
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  }, [])
+
+  function isFutureDay(day: number) {
+    return new Date(year, month - 1, day) > today
+  }
+
+  function isToday(day: number) {
+    const d = new Date(year, month - 1, day)
+    return d.getTime() === today.getTime()
+  }
+
   function getCell(empId: number, day: number) {
+    if (isWeekend(year, month, day)) return { code: 'В' }
     const date = dateStr(year, month, day)
     const key = `${empId}:${date}`
     if (changes[key] !== undefined) return changes[key]
     const e = entryMap[key]
-    return e ? { code: e.code, hours: e.hours } : { code: null, hours: null }
+    return e ? { code: e.code } : { code: null }
   }
 
-  function setCell(empId: number, day: number, code: string | null, hours: number | null) {
+  function setCell(empId: number, day: number, code: string | null) {
     const date = dateStr(year, month, day)
-    setChanges(prev => ({ ...prev, [`${empId}:${date}`]: { code, hours } }))
+    setChanges(prev => ({ ...prev, [`${empId}:${date}`]: { code } }))
   }
 
-  function totalHours(empId: number) {
-    let total = 0
+  function fillEmployeeAttendance(empId: number) {
+    setChanges(prev => {
+      const next = { ...prev }
+      for (let d = 1; d <= totalDays; d++) {
+        if (isFutureDay(d)) continue
+        if (isWeekend(year, month, d)) {
+          next[`${empId}:${dateStr(year, month, d)}`] = { code: 'В' }
+          continue
+        }
+        const cell = getCell(empId, d)
+        if (cell.code === 'ОТ') continue
+        next[`${empId}:${dateStr(year, month, d)}`] = { code: 'Я' }
+      }
+      return next
+    })
+  }
+
+  function fillAllAttendance() {
+    setChanges(prev => {
+      const next = { ...prev }
+      for (const emp of employees) {
+        for (let d = 1; d <= totalDays; d++) {
+          if (isFutureDay(d)) continue
+          if (isWeekend(year, month, d)) {
+            next[`${emp.id}:${dateStr(year, month, d)}`] = { code: 'В' }
+            continue
+          }
+          const cell = getCell(emp.id, d)
+          if (cell.code === 'ОТ') continue
+          next[`${emp.id}:${dateStr(year, month, d)}`] = { code: 'Я' }
+        }
+      }
+      return next
+    })
+  }
+
+  function countCode(empId: number, code: string) {
+    let n = 0
     for (let d = 1; d <= totalDays; d++) {
-      const h = getCell(empId, d).hours
-      if (h != null) total += h
+      if (getCell(empId, d).code === code) n++
     }
-    return total
+    return n
   }
 
   async function handleSave() {
@@ -87,7 +143,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
         const colonIdx = key.indexOf(':')
         const empId = key.slice(0, colonIdx)
         const date = key.slice(colonIdx + 1)
-        return { employee_id: Number(empId), date, code: val.code, hours: val.hours }
+        return { employee_id: Number(empId), date, code: val.code, hours: null }
       })
       const res = await fetch(`${API_BASE_URL}/timesheet/${timesheetId}/entries`, {
         method: 'PUT',
@@ -131,81 +187,145 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
   const hasChanges = Object.keys(changes).length > 0
 
   return (
-    <div className="space-y-4">
-      {error && <div className="text-sm text-destructive">{error}</div>}
+    <div className="space-y-3">
+      {error && <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">{error}</div>}
 
-      <div className="flex items-center gap-2 justify-end flex-wrap">
-        {!readonly && hasChanges && (
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Сохранение...' : 'Сохранить'}
-          </Button>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {!readonly && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-muted-foreground font-medium">Массовые действия:</span>
+            <Button variant="outline" size="sm" onClick={fillAllAttendance}>
+              Явка всем
+            </Button>
+          </div>
         )}
-        <Button variant="outline" onClick={() => handleExport('excel')}>Экспорт Excel</Button>
-        <Button variant="outline" onClick={() => handleExport('pdf')}>Экспорт PDF</Button>
+        <div className="flex items-center gap-2 flex-wrap ml-auto">
+          {!readonly && hasChanges && (
+            <Button onClick={handleSave} disabled={saving} size="sm">
+              {saving ? 'Сохранение...' : `Сохранить изменения`}
+            </Button>
+          )}
+          {!readonly && hasChanges && (
+            <Button variant="outline" size="sm" onClick={() => setChanges({})}>
+              Сбросить
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => handleExport('excel')}>Excel</Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}>PDF</Button>
+        </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="text-xs border-collapse w-full">
+      {hasChanges && (
+        <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 rounded-lg">
+          Есть несохранённые изменения — {Object.keys(changes).length} ячеек
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
+        <table className="text-xs border-collapse" style={{ minWidth: 'max-content', width: '100%' }}>
           <thead>
-            <tr className="bg-muted/50">
-              <th className="sticky left-0 bg-muted/80 border border-border px-2 py-1 text-left min-w-[140px] z-10">
+            <tr>
+              <th className="sticky left-0 z-20 bg-muted border-b border-r border-border px-3 py-2 text-left font-semibold min-w-[180px] text-sm">
                 Сотрудник
               </th>
-              {days.map(d => (
-                <th key={d} className="border border-border px-1 py-1 text-center min-w-[36px]">
-                  {d}
+              {days.map(d => {
+                const weekend = isWeekend(year, month, d)
+                const todayDay = isToday(d)
+                return (
+                  <th
+                    key={d}
+                    className={[
+                      'border-b border-r border-border px-0 py-1 text-center min-w-[42px] select-none',
+                      weekend ? 'bg-red-50 dark:bg-red-950/40' : 'bg-muted',
+                      todayDay ? 'ring-2 ring-inset ring-primary' : '',
+                    ].join(' ')}
+                  >
+                    <div className="font-bold text-sm leading-tight">{d}</div>
+                    <div className={`text-[10px] font-normal leading-tight ${weekend ? 'text-red-500 dark:text-red-400' : 'text-muted-foreground'}`}>
+                      {WEEKDAY_SHORT[new Date(year, month - 1, d).getDay()]}
+                    </div>
+                  </th>
+                )
+              })}
+              <th className="border-b border-r border-border px-2 py-2 text-center bg-muted font-semibold min-w-[52px] text-xs">
+                Я
+              </th>
+              <th className="border-b border-border px-2 py-2 text-center bg-muted font-semibold min-w-[52px] text-xs">
+                ОТ
+              </th>
+              {!readonly && (
+                <th className="sticky right-0 z-20 border-b border-l border-border px-2 py-2 text-center bg-muted font-semibold min-w-[64px] text-xs">
+                  Действия
                 </th>
-              ))}
-              <th className="border border-border px-2 py-1 text-center min-w-[48px]">Итого ч.</th>
+              )}
             </tr>
           </thead>
           <tbody>
-            {employees.map(emp => (
-              <tr key={emp.id} className="hover:bg-muted/20">
-                <td className="sticky left-0 bg-card border border-border px-2 py-1 font-medium z-10">
+            {employees.map((emp, idx) => (
+              <tr
+                key={emp.id}
+                className={[
+                  'group transition-colors',
+                  idx % 2 === 0 ? 'bg-card' : 'bg-muted/20',
+                  'hover:bg-primary/5',
+                ].join(' ')}
+              >
+                <td className="sticky left-0 z-10 border-r border-b border-border px-3 py-2 font-medium bg-inherit whitespace-nowrap">
                   {emp.last_name} {emp.first_name}
                 </td>
                 {days.map(day => {
                   const cell = getCell(emp.id, day)
                   const colorClass = cell.code ? (CODE_COLORS[cell.code] ?? '') : ''
+                  const weekend = isWeekend(year, month, day)
+                  const future = isFutureDay(day)
+                  const todayDay = isToday(day)
+                  const cellReadonly = readonly || future || weekend
                   return (
-                    <td key={day} className={`border border-border p-0 ${colorClass}`}>
-                      <div className="flex flex-col items-center">
-                        {readonly ? (
-                          <>
-                            <span className="py-0.5 text-center w-full font-medium">{cell.code ?? ''}</span>
-                            <span className="py-0.5 text-center w-full text-muted-foreground">{cell.hours ?? ''}</span>
-                          </>
-                        ) : (
-                          <>
-                            <select
-                              value={cell.code ?? ''}
-                              onChange={e => setCell(emp.id, day, e.target.value || null, cell.hours)}
-                              className="w-full bg-transparent text-center text-xs border-b border-border/40 focus:outline-none cursor-pointer py-0.5"
-                            >
-                              <option value=""></option>
-                              {TIMESHEET_CODES.map(c => (
-                                <option key={c.code} value={c.code}>{c.code}</option>
-                              ))}
-                            </select>
-                            <input
-                              type="number"
-                              min={0}
-                              max={24}
-                              step={0.5}
-                              value={cell.hours ?? ''}
-                              onChange={e => setCell(emp.id, day, cell.code, e.target.value === '' ? null : Number(e.target.value))}
-                              className="w-full bg-transparent text-center text-xs focus:outline-none py-0.5"
-                            />
-                          </>
-                        )}
-                      </div>
+                    <td
+                      key={day}
+                      className={[
+                        'border-r border-b border-border p-0 text-center transition-colors',
+                        colorClass || (weekend && !cell.code ? 'bg-red-50/60 dark:bg-red-950/20' : ''),
+                        future ? 'opacity-35' : '',
+                        todayDay && !colorClass ? 'ring-2 ring-inset ring-primary/40' : '',
+                      ].join(' ')}
+                    >
+                      {cellReadonly ? (
+                        <span className="block py-2 px-1 font-semibold text-center leading-none">
+                          {cell.code ?? ''}
+                        </span>
+                      ) : (
+                        <select
+                          value={cell.code ?? ''}
+                          onChange={e => setCell(emp.id, day, e.target.value || null)}
+                          className="w-full h-full bg-transparent text-center text-xs focus:outline-none cursor-pointer py-2 px-0 font-medium"
+                        >
+                          <option value=""></option>
+                          {TIMESHEET_CODES.map(c => (
+                            <option key={c.code} value={c.code}>{c.code}</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                   )
                 })}
-                <td className="border border-border px-2 py-1 text-center font-semibold">
-                  {totalHours(emp.id)}
+                <td className="border-r border-b border-border px-2 py-2 text-center font-bold text-blue-600 dark:text-blue-400">
+                  {countCode(emp.id, 'Я') || ''}
                 </td>
+                <td className="border-b border-border px-2 py-2 text-center font-bold text-blue-400 dark:text-blue-300">
+                  {countCode(emp.id, 'ОТ') || ''}
+                </td>
+                {!readonly && (
+                  <td className="sticky right-0 z-10 border-l border-b border-border px-2 py-1.5 text-center bg-inherit">
+                    <button
+                      onClick={() => fillEmployeeAttendance(emp.id)}
+                      className="text-[10px] px-2 py-1 rounded bg-muted hover:bg-primary hover:text-primary-foreground transition-colors font-medium whitespace-nowrap"
+                      title="Заполнить явкой"
+                    >
+                      Явка
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
