@@ -16,13 +16,26 @@ function toLocalDateStr(d) {
   return `${y}-${m}-${day}`
 }
 
+async function getManagerDepartmentId(userId) {
+  const byManagerId = await query(
+    `SELECT id FROM departments WHERE manager_id = $1 LIMIT 1`,
+    [userId]
+  )
+  if (byManagerId.rows.length > 0) return byManagerId.rows[0].id
+
+  const byDeptId = await query(
+    `SELECT department_id FROM users WHERE id = $1 AND role = 'manager' AND department_id IS NOT NULL LIMIT 1`,
+    [userId]
+  )
+  if (byDeptId.rows.length > 0) return byDeptId.rows[0].department_id
+
+  return null
+}
+
 async function canAccessDepartment(user, departmentId) {
   if (['hr', 'admin'].includes(user.role)) return true
-  const result = await query(
-    `SELECT id FROM departments WHERE id = $1 AND manager_id = $2`,
-    [departmentId, user.id]
-  )
-  return result.rows.length > 0
+  const managedDeptId = await getManagerDepartmentId(user.id)
+  return managedDeptId !== null && managedDeptId === departmentId
 }
 
 async function canAccessTimesheet(user, timesheetId) {
@@ -44,14 +57,19 @@ router.get('/', async (req, res) => {
       `)
       rows = result.rows
     } else {
-      const result = await query(`
-        SELECT t.*, d.name as department_name
-        FROM timesheets t
-        JOIN departments d ON t.department_id = d.id
-        WHERE d.manager_id = $1
-        ORDER BY t.year DESC, t.month DESC
-      `, [req.user.id])
-      rows = result.rows
+      const deptId = await getManagerDepartmentId(req.user.id)
+      if (!deptId) {
+        rows = []
+      } else {
+        const result = await query(`
+          SELECT t.*, d.name as department_name
+          FROM timesheets t
+          JOIN departments d ON t.department_id = d.id
+          WHERE t.department_id = $1
+          ORDER BY t.year DESC, t.month DESC
+        `, [deptId])
+        rows = result.rows
+      }
     }
     res.json(rows)
   } catch (error) {
@@ -62,7 +80,15 @@ router.get('/', async (req, res) => {
 
 // POST /api/timesheet — создать табель с автозаполнением
 router.post('/', async (req, res) => {
-  const { department_id, year, month } = req.body
+  let { department_id, year, month } = req.body
+
+  if (!department_id && req.user.role === 'manager') {
+    const deptId = await getManagerDepartmentId(req.user.id)
+    if (!deptId) {
+      return res.status(400).json({ error: 'Вы не являетесь руководителем ни одного отдела' })
+    }
+    department_id = deptId
+  }
 
   if (!department_id || !year || !month) {
     return res.status(400).json({ error: 'Необходимо указать department_id, year, month' })
@@ -89,68 +115,6 @@ router.post('/', async (req, res) => {
       [department_id, yearNum, monthNum, req.user.id]
     )
     const timesheet = tsResult.rows[0]
-
-    const empResult = await client.query(
-      `SELECT id FROM users WHERE department_id = $1 AND role IN ('employee', 'manager')`,
-      [department_id]
-    )
-    const employees = empResult.rows
-
-    const startDate = `${yearNum}-${String(monthNum).padStart(2, '0')}-01`
-    const endDate = toLocalDateStr(new Date(yearNum, monthNum, 0))
-
-    const vacResult = await client.query(
-      `SELECT vr.user_id, vr.start_date, vr.end_date
-       FROM vacation_requests vr
-       JOIN request_statuses rs ON vr.status_id = rs.id
-       WHERE vr.user_id = ANY($1)
-         AND rs.code = 'approved'
-         AND vr.start_date <= $2
-         AND vr.end_date >= $3`,
-      [employees.map(e => e.id), endDate, startDate]
-    )
-
-    const vacationDays = new Set()
-    for (const vac of vacResult.rows) {
-      const startParts = String(vac.start_date).split('T')[0].split('-').map(Number)
-      const endParts = String(vac.end_date).split('T')[0].split('-').map(Number)
-      const start = new Date(startParts[0], startParts[1] - 1, startParts[2])
-      const end = new Date(endParts[0], endParts[1] - 1, endParts[2])
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        vacationDays.add(`${vac.user_id}:${toLocalDateStr(d)}`)
-      }
-    }
-
-    const daysInMonth = new Date(yearNum, monthNum, 0).getDate()
-    const entries = []
-    for (const emp of employees) {
-      for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(yearNum, monthNum - 1, day)
-        const dateStr = toLocalDateStr(date)
-        const dow = date.getDay()
-        let code, hours
-
-        if (dow === 0 || dow === 6) {
-          code = 'В'; hours = null
-        } else if (vacationDays.has(`${emp.id}:${dateStr}`)) {
-          code = 'ОТ'; hours = null
-        } else {
-          code = 'Я'; hours = 8
-        }
-        entries.push([timesheet.id, emp.id, dateStr, code, hours])
-      }
-    }
-
-    if (entries.length > 0) {
-      const placeholders = entries.map((_, i) => {
-        const base = i * 5
-        return `($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5})`
-      }).join(', ')
-      await client.query(
-        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, hours) VALUES ${placeholders}`,
-        entries.flat()
-      )
-    }
 
     await client.query('COMMIT')
     res.status(201).json(timesheet)
@@ -235,25 +199,34 @@ router.put('/:id/entries', async (req, res) => {
     const daysInTs = new Date(timesheet.year, timesheet.month, 0).getDate()
     const rangeStart = `${timesheet.year}-${mm}-01`
     const rangeEnd = `${timesheet.year}-${mm}-${String(daysInTs).padStart(2, '0')}`
+    const today = toLocalDateStr(new Date())
     for (const e of entries) {
       if (e.date < rangeStart || e.date > rangeEnd) {
         return res.status(400).json({ error: `Дата ${e.date} не входит в диапазон табеля` })
       }
+      if (e.date > today) {
+        return res.status(400).json({ error: `Нельзя редактировать будущие даты (${e.date})` })
+      }
     }
+
+    const normalizedEntries = entries.map(e => {
+      const dow = new Date(e.date).getDay()
+      return { ...e, code: (dow === 0 || dow === 6) ? 'В' : (e.code ?? null) }
+    })
 
     const client = await getClient()
     try {
       await client.query('BEGIN')
-      const placeholders = entries.map((_, i) => {
-        const base = i * 5
-        return `($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5})`
+      const placeholders = normalizedEntries.map((_, i) => {
+        const base = i * 4
+        return `($${base+1}, $${base+2}, $${base+3}, $${base+4})`
       }).join(', ')
       await client.query(
-        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, hours)
+        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code)
          VALUES ${placeholders}
          ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
-           SET code = EXCLUDED.code, hours = EXCLUDED.hours`,
-        entries.flatMap(e => [id, e.employee_id, e.date, e.code ?? null, e.hours ?? null])
+           SET code = EXCLUDED.code`,
+        normalizedEntries.flatMap(e => [id, e.employee_id, e.date, e.code])
       )
       await client.query(
         `UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2`,
@@ -332,7 +305,7 @@ router.get('/:id/export/excel', async (req, res) => {
     const timesheet = tsResult.rows[0]
 
     const entriesResult = await query(
-      `SELECT te.employee_id, te.date, te.code, te.hours,
+      `SELECT te.employee_id, te.date, te.code,
               u.first_name, u.last_name
        FROM timesheet_entries te
        JOIN users u ON te.employee_id = u.id
@@ -349,7 +322,7 @@ router.get('/:id/export/excel', async (req, res) => {
       if (!byEmployee[key]) {
         byEmployee[key] = { name: `${e.last_name} ${e.first_name}`, days: {} }
       }
-      byEmployee[key].days[e.date] = { code: e.code, hours: e.hours }
+      byEmployee[key].days[e.date] = e.code
     }
 
     const workbook = new ExcelJS.Workbook()
@@ -357,25 +330,16 @@ router.get('/:id/export/excel', async (req, res) => {
 
     const header = ['Сотрудник']
     for (let d = 1; d <= daysInMonth; d++) header.push(String(d))
-    header.push('Итого ч.')
     sheet.addRow(header)
     sheet.getRow(1).font = { bold: true }
 
     for (const emp of Object.values(byEmployee)) {
-      const codeRow = [emp.name]
-      const hoursRow = ['']
-      let total = 0
+      const row = [emp.name]
       for (let d = 1; d <= daysInMonth; d++) {
         const date = `${timesheet.year}-${String(timesheet.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-        const cell = emp.days[date]
-        codeRow.push(cell?.code ?? '')
-        hoursRow.push(cell?.hours != null ? cell.hours : '')
-        if (cell?.hours) total += Number(cell.hours)
+        row.push(emp.days[date] ?? '')
       }
-      codeRow.push(total)
-      hoursRow.push('')
-      sheet.addRow(codeRow)
-      sheet.addRow(hoursRow)
+      sheet.addRow(row)
     }
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -403,7 +367,7 @@ router.get('/:id/export/pdf', async (req, res) => {
     const timesheet = tsResult.rows[0]
 
     const entriesResult = await query(
-      `SELECT te.employee_id, te.date, te.code, te.hours,
+      `SELECT te.employee_id, te.date, te.code,
               u.first_name, u.last_name
        FROM timesheet_entries te
        JOIN users u ON te.employee_id = u.id
@@ -420,7 +384,7 @@ router.get('/:id/export/pdf', async (req, res) => {
       if (!byEmployee[e.employee_id]) {
         byEmployee[e.employee_id] = { name: `${e.last_name} ${e.first_name}`, days: {} }
       }
-      byEmployee[e.employee_id].days[e.date] = { code: e.code, hours: e.hours }
+      byEmployee[e.employee_id].days[e.date] = e.code
     }
 
     res.setHeader('Content-Type', 'application/pdf')
@@ -445,24 +409,16 @@ router.get('/:id/export/pdf', async (req, res) => {
     for (let d = 1; d <= daysInMonth; d++) {
       doc.text(String(d), startX + nameWidth + (d - 1) * colWidth, y, { width: colWidth, align: 'center' })
     }
-    doc.text('Итого', startX + nameWidth + daysInMonth * colWidth, y, { width: 35, align: 'center' })
     y += rowHeight
 
     for (const emp of Object.values(byEmployee)) {
-      let total = 0
       doc.text(emp.name, startX, y, { width: nameWidth })
       for (let d = 1; d <= daysInMonth; d++) {
         const date = `${timesheet.year}-${String(timesheet.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-        const cell = emp.days[date]
-        const codeText = cell?.code ?? ''
-        const hoursText = cell?.hours != null ? String(cell.hours) : ''
-        if (cell?.hours) total += Number(cell.hours)
         const cx = startX + nameWidth + (d - 1) * colWidth
-        doc.text(codeText, cx, y, { width: colWidth, align: 'center' })
-        doc.text(hoursText, cx, y + 8, { width: colWidth, align: 'center' })
+        doc.text(emp.days[date] ?? '', cx, y, { width: colWidth, align: 'center' })
       }
-      doc.text(String(total), startX + nameWidth + daysInMonth * colWidth, y, { width: 35, align: 'center' })
-      y += rowHeight * 2
+      y += rowHeight
       if (y > 500) { doc.addPage(); y = 30 }
     }
 

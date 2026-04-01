@@ -29,6 +29,62 @@ const VACATION_TYPE_NAMES = {
 
 const VALID_VACATION_TYPES = ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran']
 
+async function vacationDatesByMonth(startDate, endDate) {
+  const byMonth = {}
+  const [sy, sm, sd] = startDate.split('-').map(Number)
+  const [ey, em, ed] = endDate.split('-').map(Number)
+  const endMs = new Date(ey, em - 1, ed).getTime()
+  for (let d = new Date(sy, sm - 1, sd); d.getTime() <= endMs; d.setDate(d.getDate() + 1)) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const key = ds.slice(0, 7)
+    if (!byMonth[key]) byMonth[key] = { year: Number(ds.slice(0, 4)), month: Number(ds.slice(5, 7)), dates: [] }
+    byMonth[key].dates.push(ds)
+  }
+  return byMonth
+}
+
+async function fillVacationTimesheetEntries(client, userId, startDate, endDate) {
+  const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
+  const deptId = deptResult.rows[0]?.department_id
+  if (!deptId) return
+  const byMonth = await vacationDatesByMonth(startDate, endDate)
+  for (const { year, month, dates } of Object.values(byMonth)) {
+    const tsResult = await client.query(
+      `SELECT id FROM timesheets WHERE department_id = $1 AND year = $2 AND month = $3 AND status != 'approved'`,
+      [deptId, year, month]
+    )
+    if (tsResult.rows.length === 0) continue
+    const tsId = tsResult.rows[0].id
+    const placeholders = dates.map((_, i) => `($1, $2, $${i + 3}, 'ОТ')`).join(', ')
+    await client.query(
+      `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code)
+       VALUES ${placeholders}
+       ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE SET code = 'ОТ'`,
+      [tsId, userId, ...dates]
+    )
+  }
+}
+
+async function clearVacationTimesheetEntries(client, userId, startDate, endDate) {
+  const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
+  const deptId = deptResult.rows[0]?.department_id
+  if (!deptId) return
+  const byMonth = await vacationDatesByMonth(startDate, endDate)
+  for (const { year, month, dates } of Object.values(byMonth)) {
+    const tsResult = await client.query(
+      `SELECT id FROM timesheets WHERE department_id = $1 AND year = $2 AND month = $3 AND status != 'approved'`,
+      [deptId, year, month]
+    )
+    if (tsResult.rows.length === 0) continue
+    const tsId = tsResult.rows[0].id
+    await client.query(
+      `DELETE FROM timesheet_entries
+       WHERE timesheet_id = $1 AND employee_id = $2 AND date = ANY($3) AND code = 'ОТ'`,
+      [tsId, userId, dates]
+    )
+  }
+}
+
 function extractYear(date) {
   if (!date) return new Date().getFullYear()
   if (typeof date === 'string') return parseInt(date.substring(0, 4))
@@ -519,6 +575,8 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
       [id, managerId]
     )
 
+    await fillVacationTimesheetEntries(client, request.user_id, request.start_date, request.end_date)
+
     await client.query('COMMIT')
 
     const userResult = await client.query(
@@ -750,6 +808,10 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
       [id, userId]
     )
 
+    if (request.status === 'approved') {
+      await clearVacationTimesheetEntries(client, userId, request.start_date, request.end_date)
+    }
+
     await client.query('COMMIT')
 
     const userResult = await client.query(
@@ -843,6 +905,8 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_manager'), $2, $3)`,
       [id, managerId, reason]
     )
+
+    await clearVacationTimesheetEntries(client, request.user_id, request.start_date, request.end_date)
 
     await client.query('COMMIT')
 

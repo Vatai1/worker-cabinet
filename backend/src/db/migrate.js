@@ -1165,9 +1165,12 @@ async function runMigrations() {
     employee_id  INTEGER NOT NULL REFERENCES users(id),
     date         DATE NOT NULL,
     code         VARCHAR(10),
-    hours        NUMERIC(4,1) CHECK (hours IS NULL OR (hours >= 0 AND hours <= 24)),
     UNIQUE(timesheet_id, employee_id, date)
   )
+`)
+
+    await db.query(`
+  ALTER TABLE timesheet_entries DROP COLUMN IF EXISTS hours
 `)
 
     console.log('✅ Migrations completed successfully')
