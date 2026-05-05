@@ -95,7 +95,9 @@ describe('Timesheet API', () => {
     })
     const ts = await tsRes.json()
     assert.ok(ts.entries.length > 0, 'Need entries to update')
-    const entry = ts.entries[0]
+    const vacationCodes = ['ОТ', 'ОС', 'ДО']
+    const entry = ts.entries.find(e => !vacationCodes.includes(e.code))
+    assert.ok(entry, 'Need non-vacation entry to update')
 
     const res = await fetch(`${BASE}/timesheet/${timesheetId}/entries`, {
       method: 'PUT',
@@ -110,7 +112,10 @@ describe('Timesheet API', () => {
       headers: { Authorization: `Bearer ${hrToken}` },
     })
     const ts = await tsRes.json()
-    const entry = ts.entries[0]
+    assert.ok(ts.entries.length > 0, 'Need entries to update')
+    const vacationCodes = ['ОТ', 'ОС', 'ДО']
+    const entry = ts.entries.find(e => !vacationCodes.includes(e.code))
+    assert.ok(entry, 'Need non-vacation entry to update')
 
     const res = await fetch(`${BASE}/timesheet/${timesheetId}/entries`, {
       method: 'PUT',

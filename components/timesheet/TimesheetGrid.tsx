@@ -98,7 +98,6 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
     setChanges(prev => {
       const next = { ...prev }
       for (let d = 1; d <= totalDays; d++) {
-        if (isFutureDay(d)) continue
         if (isWeekend(year, month, d)) {
           next[`${empId}:${dateStr(year, month, d)}`] = { code: 'В' }
           continue
@@ -116,7 +115,6 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
       const next = { ...prev }
       for (const emp of employees) {
         for (let d = 1; d <= totalDays; d++) {
-          if (isFutureDay(d)) continue
           if (isWeekend(year, month, d)) {
             next[`${emp.id}:${dateStr(year, month, d)}`] = { code: 'В' }
             continue
