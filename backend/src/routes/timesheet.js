@@ -200,12 +200,25 @@ router.put('/:id/entries', async (req, res) => {
     const rangeStart = `${timesheet.year}-${mm}-01`
     const rangeEnd = `${timesheet.year}-${mm}-${String(daysInTs).padStart(2, '0')}`
     const today = toLocalDateStr(new Date())
+    const vacationCodes = ['ОТ', 'ОС', 'ДО']
+
     for (const e of entries) {
       if (e.date < rangeStart || e.date > rangeEnd) {
         return res.status(400).json({ error: `Дата ${e.date} не входит в диапазон табеля` })
       }
       if (e.date > today) {
         return res.status(400).json({ error: `Нельзя редактировать будущие даты (${e.date})` })
+      }
+
+      const existingEntryResult = await query(
+        `SELECT code FROM timesheet_entries WHERE timesheet_id = $1 AND employee_id = $2 AND date = $3`,
+        [id, e.employee_id, e.date]
+      )
+      if (existingEntryResult.rows.length > 0) {
+        const existingCode = existingEntryResult.rows[0].code
+        if (existingCode && vacationCodes.includes(existingCode)) {
+          return res.status(403).json({ error: `Нельзя редактировать записи отпуска (${e.date})` })
+        }
       }
     }
 
