@@ -363,6 +363,8 @@ router.post('/requests', authenticateToken, async (req, res) => {
       [request.id, userId]
     )
 
+    await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date)
+
     await client.query('COMMIT')
 
     const managerResult = await client.query(
@@ -680,9 +682,9 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
 
     await client.query(
       `UPDATE vacation_balances
-       SET reserved_days = reserved_days - $1
-       WHERE user_id = $2 AND year = $3`,
-      [request.duration, request.user_id, requestYear]
+        SET reserved_days = reserved_days - $1
+        WHERE user_id = $2 AND year = $3`,
+       [request.duration, request.user_id, requestYear]
     )
 
     await client.query(
@@ -691,6 +693,8 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
       [id, managerId, reason]
     )
+
+    await clearVacationTimesheetEntries(client, request.user_id, request.start_date, request.end_date)
 
     await client.query('COMMIT')
 
@@ -1355,6 +1359,8 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       [newRequest.id, userId, `Перенос из заявки #${id}: ${reason}`]
     )
 
+    await fillVacationTimesheetEntries(client, userId, newRequest.start_date, newRequest.end_date)
+
     await client.query('COMMIT')
 
     const managerResult = await client.query(
@@ -1505,6 +1511,9 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, 'Перенос одобрен')`,
       [id, managerId]
     )
+
+    await clearVacationTimesheetEntries(client, originalRequest.user_id, originalRequest.start_date, originalRequest.end_date)
+    await fillVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date)
 
     await client.query('COMMIT')
 
@@ -1751,9 +1760,11 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
     await client.query(
       `INSERT INTO vacation_request_status_history
         (request_id, status_id, changed_by, comment)
-        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2, 'Отмена переноса')`,
-      [id, userId]
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
+      [id, managerId, reason]
     )
+
+    await clearVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date)
 
     await client.query('COMMIT')
 
