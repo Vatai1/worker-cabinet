@@ -95,34 +95,36 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
   }
 
   function fillEmployeeAttendance(empId: number) {
+    const todayDay = today.getDate()
+    const todayMonth = today.getMonth() + 1
+    const todayYear = today.getFullYear()
+    
+    if (todayYear !== year || todayMonth !== month) return
+    
     setChanges(prev => {
       const next = { ...prev }
-      for (let d = 1; d <= totalDays; d++) {
-        if (isWeekend(year, month, d)) {
-          next[`${empId}:${dateStr(year, month, d)}`] = { code: 'В' }
-          continue
-        }
-        const cell = getCell(empId, d)
-        if (['ОТ', 'ОС', 'ДО'].includes(cell.code ?? '')) continue
-        next[`${empId}:${dateStr(year, month, d)}`] = { code: 'Я' }
-      }
+      const date = dateStr(year, month, todayDay)
+      const cell = getCell(empId, todayDay)
+      if (['ОТ', 'ОС', 'ДО'].includes(cell.code ?? '')) return prev
+      next[`${empId}:${date}`] = { code: 'Я' }
       return next
     })
   }
 
   function fillAllAttendance() {
+    const todayDay = today.getDate()
+    const todayMonth = today.getMonth() + 1
+    const todayYear = today.getFullYear()
+    
+    if (todayYear !== year || todayMonth !== month) return
+    
     setChanges(prev => {
       const next = { ...prev }
+      const date = dateStr(year, month, todayDay)
       for (const emp of employees) {
-        for (let d = 1; d <= totalDays; d++) {
-          if (isWeekend(year, month, d)) {
-            next[`${emp.id}:${dateStr(year, month, d)}`] = { code: 'В' }
-            continue
-          }
-          const cell = getCell(emp.id, d)
-          if (['ОТ', 'ОС', 'ДО'].includes(cell.code ?? '')) continue
-          next[`${emp.id}:${dateStr(year, month, d)}`] = { code: 'Я' }
-        }
+        const cell = getCell(emp.id, todayDay)
+        if (['ОТ', 'ОС', 'ДО'].includes(cell.code ?? '')) continue
+        next[`${emp.id}:${date}`] = { code: 'Я' }
       }
       return next
     })
