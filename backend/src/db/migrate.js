@@ -1171,7 +1171,19 @@ async function runMigrations() {
 
     await db.query(`
   ALTER TABLE timesheet_entries DROP COLUMN IF EXISTS hours
-`)
+ `)
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS outlook_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `).catch(e => console.log('  - outlook_tokens:', e.message))
+    console.log('  ✓ outlook_tokens')
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')

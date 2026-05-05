@@ -15,6 +15,8 @@ import onboardingRoutes from './routes/onboarding.js'
 import hierarchyRoutes from './routes/hierarchy.js'
 import dictionariesRoutes from './routes/dictionaries.js'
 import timesheetRoutes from './routes/timesheet.js'
+import calendarRoutes from './routes/calendar.js'
+import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { errorHandler } from './middleware/errors.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 
@@ -70,6 +72,7 @@ app.use('/api/onboarding', onboardingRoutes)
 app.use('/api/hierarchy', hierarchyRoutes)
 app.use('/api/dictionaries', dictionariesRoutes)
 app.use('/api/timesheet', timesheetRoutes)
+app.use('/api/calendar', calendarRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
@@ -84,4 +87,5 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
   console.log(`Environment: ${process.env.NODE_ENV}`)
+  scheduleTimesheetCron()
 })

@@ -41,6 +41,7 @@ import { HRVacationCalendar } from '@/pages/HRVacationCalendar'
 import { HRDictionaries } from '@/pages/HRDictionaries'
 import { ManagerTimesheet } from '@/pages/ManagerTimesheet'
 import { HRTimesheet } from '@/pages/HRTimesheet'
+import { CalendarPage } from '@/pages/CalendarPage'
 const HRHierarchy = lazy(() => import('@/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -143,6 +144,7 @@ function App() {
           <Route path="requests" element={<BlockOnboardingRoute><Requests /></BlockOnboardingRoute>} />
           <Route path="documents" element={<BlockOnboardingRoute><Documents /></BlockOnboardingRoute>} />
           <Route path="notifications" element={<BlockOnboardingRoute><Notifications /></BlockOnboardingRoute>} />
+          <Route path="calendar" element={<BlockOnboardingRoute><CalendarPage /></BlockOnboardingRoute>} />
           <Route path="employees/:id" element={<EmployeeProfile />} />
           <Route path="projects" element={<BlockOnboardingRoute><Projects /></BlockOnboardingRoute>} />
           <Route path="projects/:id" element={<BlockOnboardingRoute><ProjectDetail /></BlockOnboardingRoute>} />
