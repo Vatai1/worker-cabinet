@@ -159,6 +159,28 @@ export function ManagerTimesheet() {
               onSave={loadTimesheet}
             />
           )}
+
+          <div className="mt-6 p-4 bg-muted/30 rounded-xl border border-border/50">
+            <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Легенда классификатора</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold text-sm">Я</span>
+                <span className="text-sm text-muted-foreground">Явка</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 font-mono font-bold text-sm">В</span>
+                <span className="text-sm text-muted-foreground">Выходной</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 font-mono font-bold text-sm">ОТ</span>
+                <span className="text-sm text-muted-foreground">Отпуск</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300 font-mono font-bold text-sm">Б</span>
+                <span className="text-sm text-muted-foreground">Болезнь</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
