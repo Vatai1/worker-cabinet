@@ -87,6 +87,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
   }
 
   function setCell(empId: number, day: number, code: string | null) {
+    if (!isToday(day)) return
     const date = dateStr(year, month, day)
     const cell = getCell(empId, day)
     const vacationCodes = ['ОТ', 'ОС', 'ДО']
@@ -292,7 +293,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
                   const todayDay = isToday(day)
                   const vacationCodes = ['ОТ', 'ОС', 'ДО']
                   const isVacation = cell.code && vacationCodes.includes(cell.code)
-                  const cellReadonly = readonly || future || weekend || isVacation
+                  const cellReadonly = readonly || !todayDay || weekend || isVacation
                   return (
                     <td
                       key={day}
