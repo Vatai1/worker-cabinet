@@ -22,7 +22,6 @@ import {
   FileStack,
   Building2,
   ClipboardList,
-  Table2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -43,7 +42,14 @@ const getOnboardingNavigation = (): NavItem[] => [
 
 const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Отпуск', href: '/vacation', icon: Plane },
+  {
+    name: 'Отдел',
+    icon: Building2,
+    children: [
+      { name: 'Табель', href: '/timesheet' },
+      { name: 'Отпуск', href: '/vacation' },
+    ],
+  },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
@@ -63,12 +69,18 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
 const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/leader', icon: Users },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
+  {
+    name: 'Отдел',
+    icon: Building2,
+    children: [
+      { name: 'Табель', href: '/leader/timesheet' },
+      { name: 'Отпуск', href: '/vacation' },
+    ],
+  },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
-  { name: 'Отпуск', href: '/vacation', icon: Plane },
-  { name: 'Табель', href: '/leader/timesheet', icon: Table2 },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList },
   {
     name: 'Документы',
