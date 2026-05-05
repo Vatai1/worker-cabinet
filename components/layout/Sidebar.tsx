@@ -48,10 +48,10 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
     children: [
       { name: 'Табель', href: '/timesheet' },
       { name: 'Отпуск', href: '/vacation' },
+      { name: 'Сотрудники', href: '/employees' },
     ],
   },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList },
-  { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
@@ -75,9 +75,9 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
     children: [
       { name: 'Табель', href: '/leader/timesheet' },
       { name: 'Отпуск', href: '/vacation' },
+      { name: 'Сотрудники', href: '/employees' },
     ],
   },
-  { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
