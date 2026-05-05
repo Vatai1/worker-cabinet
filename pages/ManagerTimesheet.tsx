@@ -162,23 +162,29 @@ export function ManagerTimesheet() {
 
           <div className="mt-6 p-4 bg-muted/30 rounded-xl border border-border/50">
             <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Легенда классификатора</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold text-sm">Я</span>
-                <span className="text-sm text-muted-foreground">Явка</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 font-mono font-bold text-sm">В</span>
-                <span className="text-sm text-muted-foreground">Выходной</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 font-mono font-bold text-sm">ОТ</span>
-                <span className="text-sm text-muted-foreground">Отпуск</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300 font-mono font-bold text-sm">Б</span>
-                <span className="text-sm text-muted-foreground">Болезнь</span>
-              </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {[
+                { code: 'Я', label: 'Явка', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+                { code: 'ОТ', label: 'Ежегодный отпуск', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+                { code: 'ОС', label: 'Отпуск без сохранения ЗП', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+                { code: 'УО', label: 'Учебный отпуск', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+                { code: 'ДО', label: 'Дополнительный отпуск', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+                { code: 'ОЖ', label: 'Отпуск по уходу за ребёнком', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+                { code: 'Р', label: 'Отпуск по беременности и родам', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+                { code: 'ОЗ', label: 'Отпуск (гос. обязанности)', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+                { code: 'Б', label: 'Больничный', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300' },
+                { code: 'Т', label: 'Нетрудоспособность без пособия', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300' },
+                { code: 'К', label: 'Командировка', color: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' },
+                { code: 'В', label: 'Выходной / праздник', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
+                { code: 'ПР', label: 'Прогул', color: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' },
+                { code: 'НН', label: 'Неявка (невыясненная причина)', color: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' },
+                { code: 'УВ', label: 'Сокращённый рабочий день', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' },
+              ].map(({ code, label, color }) => (
+                <div key={code} className="flex items-center gap-2">
+                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-md ${color} font-mono font-bold text-sm`}>{code}</span>
+                  <span className="text-sm text-muted-foreground">{label}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
