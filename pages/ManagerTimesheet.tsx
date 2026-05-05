@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useAuthStore } from '@/store/authStore'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
@@ -18,7 +17,6 @@ interface Timesheet {
 const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
 
 export function ManagerTimesheet() {
-  const user = useAuthStore(s => s.user)
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -26,7 +24,6 @@ export function ManagerTimesheet() {
   const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[]; employees: { id: number; first_name: string; last_name: string }[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   async function loadTimesheet() {
@@ -54,33 +51,6 @@ export function ManagerTimesheet() {
   }
 
   useEffect(() => { loadTimesheet() }, [year, month])
-
-  async function handleCreate() {
-    setCreating(true)
-    setError(null)
-    try {
-      const deptRes = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
-      if (!deptRes.ok) throw new Error('Ошибка загрузки отделов')
-      const depts = await deptRes.json()
-      const myDept = depts.find((d: { manager_id: number }) => String(d.manager_id) === user?.id)
-      if (!myDept) throw new Error('Вы не являетесь руководителем ни одного отдела')
-
-      const res = await fetch(`${API_BASE_URL}/timesheet`, {
-        method: 'POST',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ department_id: myDept.id, year, month }),
-      })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Ошибка создания')
-      }
-      await loadTimesheet()
-    } catch (err: unknown) {
-      setError(getErrorMessage(err))
-    } finally {
-      setCreating(false)
-    }
-  }
 
   async function handleSubmit() {
     if (!timesheet) return
@@ -138,10 +108,7 @@ export function ManagerTimesheet() {
         <div className="text-muted-foreground">Загрузка...</div>
       ) : !timesheet ? (
         <div className="flex flex-col items-center gap-4 py-16 text-center">
-          <p className="text-muted-foreground">Табель за {MONTH_NAMES[month - 1]} {year} не создан</p>
-          <Button onClick={handleCreate} disabled={creating}>
-            {creating ? 'Создание...' : 'Создать табель'}
-          </Button>
+          <p className="text-muted-foreground">Табель за {MONTH_NAMES[month - 1]} {year} не найден</p>
         </div>
       ) : (
         <div className="space-y-4">

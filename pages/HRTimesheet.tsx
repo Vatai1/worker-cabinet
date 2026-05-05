@@ -27,7 +27,6 @@ export function HRTimesheet() {
   const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[]; employees: { id: number; first_name: string; last_name: string }[] } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
   const [statusLoading, setStatusLoading] = useState(false)
 
   useEffect(() => {
@@ -68,28 +67,6 @@ export function HRTimesheet() {
   }
 
   useEffect(() => { loadTimesheet() }, [selectedDept, year, month])
-
-  async function handleCreate() {
-    if (!selectedDept) return
-    setCreating(true)
-    setError(null)
-    try {
-      const res = await fetch(`${API_BASE_URL}/timesheet`, {
-        method: 'POST',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ department_id: selectedDept, year, month }),
-      })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Ошибка создания')
-      }
-      await loadTimesheet()
-    } catch (err: unknown) {
-      setError(getErrorMessage(err))
-    } finally {
-      setCreating(false)
-    }
-  }
 
   async function handleStatusChange(status: string) {
     if (!timesheet) return
@@ -155,10 +132,7 @@ export function HRTimesheet() {
         <div className="text-muted-foreground">Загрузка...</div>
       ) : !timesheet ? (
         <div className="flex flex-col items-center gap-4 py-16 text-center">
-          <p className="text-muted-foreground">Табель не создан</p>
-          <Button onClick={handleCreate} disabled={creating}>
-            {creating ? 'Создание...' : 'Создать табель'}
-          </Button>
+          <p className="text-muted-foreground">Табель не найден</p>
         </div>
       ) : (
         <div className="space-y-4">
