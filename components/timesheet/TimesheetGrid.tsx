@@ -88,6 +88,9 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
 
   function setCell(empId: number, day: number, code: string | null) {
     const date = dateStr(year, month, day)
+    const cell = getCell(empId, day)
+    const vacationCodes = ['ОТ', 'ОС', 'ДО']
+    if (cell.code && vacationCodes.includes(cell.code)) return
     setChanges(prev => ({ ...prev, [`${empId}:${date}`]: { code } }))
   }
 
@@ -101,7 +104,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
           continue
         }
         const cell = getCell(empId, d)
-        if (cell.code === 'ОТ') continue
+        if (['ОТ', 'ОС', 'ДО'].includes(cell.code ?? '')) continue
         next[`${empId}:${dateStr(year, month, d)}`] = { code: 'Я' }
       }
       return next
@@ -119,7 +122,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
             continue
           }
           const cell = getCell(emp.id, d)
-          if (cell.code === 'ОТ') continue
+          if (['ОТ', 'ОС', 'ДО'].includes(cell.code ?? '')) continue
           next[`${emp.id}:${dateStr(year, month, d)}`] = { code: 'Я' }
         }
       }
@@ -139,12 +142,20 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
     setSaving(true)
     setError(null)
     try {
-      const body = Object.entries(changes).map(([key, val]) => {
-        const colonIdx = key.indexOf(':')
-        const empId = key.slice(0, colonIdx)
-        const date = key.slice(colonIdx + 1)
-        return { employee_id: Number(empId), date, code: val.code, hours: null }
-      })
+      const vacationCodes = ['ОТ', 'ОС', 'ДО']
+      const body = Object.entries(changes)
+        .map(([key, val]) => {
+          const colonIdx = key.indexOf(':')
+          const empId = key.slice(0, colonIdx)
+          const date = key.slice(colonIdx + 1)
+          return { employee_id: Number(empId), date, code: val.code, hours: null }
+        })
+        .filter(entry => {
+          const cell = entryMap[`${entry.employee_id}:${entry.date}`]
+          if (!cell) return true
+          if (cell.code && vacationCodes.includes(cell.code)) return false
+          return true
+        })
       const res = await fetch(`${API_BASE_URL}/timesheet/${timesheetId}/entries`, {
         method: 'PUT',
         headers: getAuthHeadersWithContentType(),
@@ -279,7 +290,9 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
                   const weekend = isWeekend(year, month, day)
                   const future = isFutureDay(day)
                   const todayDay = isToday(day)
-                  const cellReadonly = readonly || future || weekend
+                  const vacationCodes = ['ОТ', 'ОС', 'ДО']
+                  const isVacation = cell.code && vacationCodes.includes(cell.code)
+                  const cellReadonly = readonly || future || weekend || isVacation
                   return (
                     <td
                       key={day}
