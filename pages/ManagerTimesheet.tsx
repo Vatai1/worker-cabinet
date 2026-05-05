@@ -34,14 +34,14 @@ export function ManagerTimesheet() {
       if (!res.ok) throw new Error('Ошибка загрузки')
       const list: Timesheet[] = await res.json()
       const found = list.find(t => t.year === year && t.month === month) ?? null
-      setTimesheet(found)
 
       if (found) {
+        setTimesheet(found)
         const res2 = await fetch(`${API_BASE_URL}/timesheet/${found.id}`, { headers: getAuthHeaders() })
         if (!res2.ok) throw new Error('Ошибка загрузки данных')
         setTimesheetData(await res2.json())
       } else {
-        setTimesheetData(null)
+        await handleCreate()
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err))
@@ -51,6 +51,27 @@ export function ManagerTimesheet() {
   }
 
   useEffect(() => { loadTimesheet() }, [year, month])
+
+  async function handleCreate() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/timesheet`, {
+        method: 'POST',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ year, month }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Ошибка создания')
+      }
+      const created = await res.json()
+      setTimesheet(created)
+      const res2 = await fetch(`${API_BASE_URL}/timesheet/${created.id}`, { headers: getAuthHeaders() })
+      if (!res2.ok) throw new Error('Ошибка загрузки данных')
+      setTimesheetData(await res2.json())
+    } catch (err: unknown) {
+      setError(getErrorMessage(err))
+    }
+  }
 
   async function handleSubmit() {
     if (!timesheet) return
@@ -106,11 +127,7 @@ export function ManagerTimesheet() {
 
       {loading ? (
         <div className="text-muted-foreground">Загрузка...</div>
-      ) : !timesheet ? (
-        <div className="flex flex-col items-center gap-4 py-16 text-center">
-          <p className="text-muted-foreground">Табель за {MONTH_NAMES[month - 1]} {year} не найден</p>
-        </div>
-      ) : (
+      ) : timesheet && (
         <div className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
