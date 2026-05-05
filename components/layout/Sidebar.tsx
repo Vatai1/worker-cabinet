@@ -22,6 +22,7 @@ import {
   FileStack,
   Building2,
   ClipboardList,
+  Calendar,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -54,6 +55,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Опросы', href: '/surveys', icon: ClipboardList },
   { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
+  { name: 'Календарь', href: '/calendar', icon: Calendar },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Заявления', href: '/requests', icon: FileText },
   {
@@ -82,6 +84,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList },
+  { name: 'Календарь', href: '/calendar', icon: Calendar },
   {
     name: 'Документы',
     icon: FolderOpen,
@@ -112,6 +115,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
   { name: 'Проекты', href: '/projects', icon: FolderKanban },
+  { name: 'Календарь', href: '/calendar', icon: Calendar },
   {
     name: 'Документы',
     icon: FolderOpen,
