@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Worker Cabinet — API Documentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0D1117;--bg-panel:#161B22;--bg-hover:#1F242C;--bg-active:#1C2333;
+  --border:#30363D;--border-light:#21262D;
+  --text:#C9D1D9;--text-dim:#8B949E;--text-bright:#F0F6FC;
+  --accent:#58A6FF;--accent-dim:rgba(88,166,255,.15);
+  --get:#3FB950;--post:#58A6FF;--put:#D29922;--delete:#F85149;--patch:#8957E5;
+  --json-str:#79C0FF;--json-key:#FF7B72;--json-num:#D2A8FF;--json-bool:#3FB950;--json-null:#8B949E;
+  --radius:8px;--radius-sm:4px;--mono:'JetBrains Mono',monospace;--sans:'Inter',system-ui,sans-serif;
+  --sidebar-w:300px;--header-h:56px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;overflow:hidden}
+a{color:var(--accent);text-decoration:none}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#30363D;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#484F58}
+
+/* HEADER */
+.header{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:var(--bg-panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;z-index:100}
+.header-logo{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.header-logo .logo-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--accent),#8957E5);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff}
+.header-logo h1{font-size:16px;font-weight:600;color:var(--text-bright);white-space:nowrap}
+.header-logo .version{font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:10px;font-weight:500}
+.header-search{flex:1;max-width:400px;position:relative}
+.header-search input{width:100%;height:34px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0 12px 0 34px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:border .2s}
+.header-search input:focus{border-color:var(--accent)}
+.header-search input::placeholder{color:var(--text-dim)}
+.header-search .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);font-size:13px;pointer-events:none}
+.header-search .search-hint{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);font-size:11px;background:var(--bg-panel);border:1px solid var(--border);padding:1px 6px;border-radius:3px;font-family:var(--mono)}
+.header-actions{display:flex;align-items:center;gap:10px;margin-left:auto}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--bg-panel);color:var(--text);transition:all .15s;font-family:var(--sans);white-space:nowrap}
+.btn:hover{background:var(--bg-hover);border-color:#484F58}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:#79C0FF;border-color:#79C0FF}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:var(--radius-sm)}
+.btn-icon{padding:6px;background:transparent;border:1px solid var(--border)}
+.btn-icon:hover{background:var(--bg-hover)}
+.server-select{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim)}
+.server-select select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:var(--radius-sm);font-size:12px;font-family:var(--mono);outline:none;cursor:pointer}
+.auth-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim)}
+.auth-dot{width:8px;height:8px;border-radius:50%;background:var(--delete)}
+.auth-dot.active{background:var(--get)}
+.hamburger{display:none;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px}
+
+/* LAYOUT */
+.layout{display:flex;height:100vh;padding-top:var(--header-h)}
+.sidebar{width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--bg-panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:transform .25s}
+.sidebar-search{padding:12px;position:sticky;top:0;background:var(--bg-panel);z-index:2;border-bottom:1px solid var(--border-light)}
+.sidebar-search input{width:100%;height:32px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;color:var(--text);font-size:12px;outline:none}
+.sidebar-search input:focus{border-color:var(--accent)}
+.sidebar-search input::placeholder{color:var(--text-dim)}
+.sidebar-nav{flex:1;overflow-y:auto;padding:8px 0}
+.tag-group{margin-bottom:2px}
+.tag-header{display:flex;align-items:center;padding:8px 16px;cursor:pointer;color:var(--text);font-size:13px;font-weight:600;gap:8px;transition:background .1s;user-select:none}
+.tag-header:hover{background:var(--bg-hover)}
+.tag-header .arrow{font-size:10px;color:var(--text-dim);transition:transform .2s;width:12px;text-align:center}
+.tag-header.open .arrow{transform:rotate(90deg)}
+.tag-header .count{margin-left:auto;font-size:11px;background:var(--bg);color:var(--text-dim);padding:1px 7px;border-radius:10px;font-weight:400}
+.tag-items{display:none}
+.tag-items.open{display:block}
+.ep-item{display:flex;align-items:center;padding:6px 16px 6px 28px;cursor:pointer;gap:8px;transition:background .1s;font-size:12px;border-left:2px solid transparent}
+.ep-item:hover{background:var(--bg-hover)}
+.ep-item.active{background:var(--bg-active);border-left-color:var(--accent)}
+.ep-item .method-badge{font-family:var(--mono);font-size:10px;font-weight:600;text-transform:uppercase;padding:2px 6px;border-radius:3px;min-width:44px;text-align:center;flex-shrink:0}
+.ep-item .ep-path{color:var(--text-dim);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.ep-item.active .ep-path{color:var(--text)}
+.method-get{background:rgba(63,185,80,.15);color:var(--get)}
+.method-post{background:rgba(88,166,255,.15);color:var(--post)}
+.method-put{background:rgba(210,153,34,.15);color:var(--put)}
+.method-delete{background:rgba(248,81,73,.15);color:var(--delete)}
+.method-patch{background:rgba(137,87,229,.15);color:var(--patch)}
+
+/* MAIN CONTENT */
+.main{flex:1;overflow-y:auto;padding:24px 32px 80px}
+.main-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-dim);gap:16px}
+.main-empty .icon{font-size:48px;opacity:.3}
+.main-empty p{font-size:15px}
+
+/* ENDPOINT VIEW */
+.ep-header{margin-bottom:24px}
+.ep-title-row{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.ep-method{font-family:var(--mono);font-size:13px;font-weight:700;text-transform:uppercase;padding:4px 12px;border-radius:var(--radius-sm)}
+.ep-path{font-family:var(--mono);font-size:18px;font-weight:500;color:var(--text-bright);word-break:break-all}
+.ep-summary{font-size:14px;color:var(--text-dim);margin-bottom:12px}
+.ep-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* SECTIONS */
+.section{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;overflow:hidden}
+.section-header{display:flex;align-items:center;padding:12px 16px;cursor:pointer;gap:8px;font-weight:600;font-size:13px;color:var(--text);border-bottom:1px solid var(--border-light);transition:background .1s;user-select:none}
+.section-header:hover{background:var(--bg-hover)}
+.section-header .arrow{font-size:10px;color:var(--text-dim);transition:transform .2s}
+.section-header.open .arrow{transform:rotate(90deg)}
+.section-body{padding:16px;display:none}
+.section-body.open{display:block}
+
+/* PARAMS TABLE */
+.params-table{width:100%;border-collapse:collapse;font-size:13px}
+.params-table th{text-align:left;padding:8px 12px;color:var(--text-dim);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.params-table td{padding:8px 12px;border-bottom:1px solid var(--border-light);vertical-align:top}
+.params-table tr:last-child td{border-bottom:none}
+.params-table .param-name{font-family:var(--mono);color:var(--text-bright);font-weight:500}
+.params-table .param-required{color:var(--delete);margin-left:4px;font-weight:700}
+.params-table .param-in{font-size:11px;background:var(--bg);color:var(--text-dim);padding:2px 8px;border-radius:3px}
+.type-badge{font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:3px;font-weight:500}
+.type-string{background:rgba(121,192,255,.12);color:var(--json-str)}
+.type-integer{background:rgba(210,168,255,.12);color:var(--json-num)}
+.type-boolean{background:rgba(63,185,80,.12);color:var(--json-bool)}
+.type-object{background:rgba(255,123,114,.12);color:var(--json-key)}
+.type-array{background:rgba(210,168,255,.12);color:var(--json-num)}
+
+/* RESPONSES */
+.resp-item{border:1px solid var(--border-light);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden}
+.resp-header{display:flex;align-items:center;padding:10px 14px;cursor:pointer;gap:10px;font-size:13px}
+.resp-header:hover{background:var(--bg-hover)}
+.status-badge{font-family:var(--mono);font-size:12px;font-weight:600;padding:2px 8px;border-radius:3px}
+.status-2xx{background:rgba(63,185,80,.15);color:var(--get)}
+.status-3xx{background:rgba(88,166,255,.15);color:var(--post)}
+.status-4xx{background:rgba(210,153,34,.15);color:var(--put)}
+.status-5xx{background:rgba(248,81,73,.15);color:var(--delete)}
+.resp-body{padding:14px;display:none;border-top:1px solid var(--border-light)}
+.resp-body.open{display:block}
+
+/* JSON / CODE BLOCKS */
+.code-block{position:relative;background:var(--bg);border:1px solid var(--border-light);border-radius:var(--radius-sm);overflow:hidden}
+.code-block pre{padding:14px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6;tab-size:2}
+.code-block .copy-btn{position:absolute;top:8px;right:8px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim);padding:4px 8px;border-radius:var(--radius-sm);font-size:11px;cursor:pointer;opacity:0;transition:opacity .15s}
+.code-block:hover .copy-btn{opacity:1}
+.code-block .copy-btn:hover{background:var(--bg-hover);color:var(--text)}
+.json-key{color:var(--json-key)}.json-str{color:var(--json-str)}.json-num{color:var(--json-num)}.json-bool{color:var(--json-bool)}.json-null{color:var(--json-null)}
+
+/* TRY IT OUT */
+.try-panel{background:var(--bg-panel);border:1px solid var(--accent);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+.try-header{display:flex;align-items:center;padding:12px 16px;background:rgba(88,166,255,.08);border-bottom:1px solid var(--border);font-weight:600;font-size:13px;color:var(--accent);gap:8px}
+.try-body{padding:16px}
+.try-field{margin-bottom:12px}
+.try-field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:4px;font-weight:500}
+.try-field label .req{color:var(--delete)}
+.try-field input,.try-field textarea,.try-field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:border .2s}
+.try-field input:focus,.try-field textarea:focus{border-color:var(--accent)}
+.try-field textarea{min-height:120px;resize:vertical}
+.try-field input.invalid{border-color:var(--delete)}
+.try-params-grid{display:grid;grid-template-columns:1fr 2fr;gap:8px 12px;align-items:start}
+.try-params-grid .try-field{margin-bottom:0}
+.try-actions{display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border-light)}
+.try-response{margin-top:16px;border-top:1px solid var(--border-light);padding-top:16px}
+.try-response-meta{display:flex;gap:16px;margin-bottom:12px;font-size:12px;font-family:var(--mono)}
+.try-response-meta span{display:flex;align-items:center;gap:4px}
+
+/* TABS */
+.tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:16px;gap:0}
+.tab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* AUTH MODAL */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;width:480px;max-width:90vw;overflow:hidden}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.modal-header h3{font-size:15px;font-weight:600}
+.modal-close{background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer}
+.modal-body{padding:20px}
+.modal-footer{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+
+/* SCHEMA TREE */
+.schema-tree{font-family:var(--mono);font-size:13px;line-height:1.8}
+.schema-tree .s-key{color:var(--json-key)}.schema-tree .s-type{color:var(--json-num);font-size:11px}.schema-tree .s-desc{color:var(--text-dim);font-size:12px;margin-left:8px}
+.schema-tree .s-indent{padding-left:20px;border-left:1px solid var(--border-light);margin-left:8px}
+.schema-tree .s-toggle{cursor:pointer;color:var(--text-dim);user-select:none}
+.schema-tree .s-toggle:hover{color:var(--text)}
+
+/* RESPONSIVE */
+@media(max-width:1024px){
+  .hamburger{display:block}
+  .sidebar{position:fixed;top:var(--header-h);left:0;bottom:0;z-index:50;transform:translateX(-100%);box-shadow:4px 0 20px rgba(0,0,0,.3)}
+  .sidebar.open{transform:translateX(0)}
+  .main{padding:16px}
+}
+@media(max-width:640px){
+  .header-search{display:none}
+  .ep-path{font-size:14px}
+  .try-params-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <button class="hamburger" id="hamburgerBtn">☰</button>
+  <div class="header-logo">
+    <div class="logo-icon">WC</div>
+    <h1>API Docs</h1>
+    <span class="version" id="apiVersion">v1.0</span>
+  </div>
+  <div class="header-search">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="globalSearch" placeholder="Поиск endpoint'ов..." autocomplete="off">
+    <span class="search-hint">/</span>
+  </div>
+  <div class="header-actions">
+    <div class="server-select">
+      <select id="serverSelect"></select>
+    </div>
+    <div class="auth-status">
+      <span class="auth-dot" id="authDot"></span>
+      <span id="authLabel">Не авторизован</span>
+    </div>
+    <button class="btn btn-sm" id="authBtn">🔑 Авторизация</button>
+    <button class="btn btn-sm" id="exportBtn">⬇ JSON</button>
+  </div>
+</header>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>🔑 Авторизация</h3>
+      <button class="modal-close" id="authModalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="try-field">
+        <label>Bearer Token</label>
+        <input type="password" id="authTokenInput" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:8px">Токен будет отправлен в заголовке <code style="color:var(--accent)">Authorization: Bearer &lt;token&gt;</code></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="authClearBtn">Очистить</button>
+      <button class="btn btn-primary" id="authSaveBtn">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-search">
+      <input type="text" id="sidebarSearch" placeholder="Фильтр endpoint'ов...">
+    </div>
+    <nav class="sidebar-nav" id="sidebarNav"></nav>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main" id="mainContent">
+    <div class="main-empty" id="mainEmpty">
+      <div class="icon">📖</div>
+      <p>Выберите endpoint из навигации</p>
+    </div>
+    <div id="endpointView" style="display:none"></div>
+  </main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s)
+const $$ = s => document.querySelectorAll(s)
+const methodColors = {get:'var(--get)',post:'var(--post)',put:'var(--put)',delete:'var(--delete)',patch:'var(--patch)'}
+
+let spec = null
+let authToken = localStorage.getItem('api_docs_token') || ''
+let activeEp = null
+let tryMode = false
+
+async function init() {
+  try {
+    const res = await fetch('/api-docs.json')
+    spec = await res.json()
+  } catch(e) {
+    $('#mainEmpty').innerHTML = '<div class="icon">⚠️</div><p>Не удалось загрузить спецификацию API</p>'
+    return
+  }
+  $('#apiVersion').textContent = 'v' + (spec.info?.version || '1.0')
+  renderServers()
+  renderSidebar()
+  updateAuthUI()
+  bindGlobalEvents()
+  handleRoute()
+}
+
+function renderServers() {
+  const sel = $('#serverSelect')
+  const servers = spec.servers || [{url: window.location.origin + '/api'}]
+  sel.innerHTML = servers.map((s,i) => `<option value="${s.url}">${s.description || s.url}</option>`).join('')
+}
+
+function getAllEndpoints() {
+  const eps = []
+  const paths = spec.paths || {}
+  for (const [path, methods] of Object.entries(paths)) {
+    for (const [method, op] of Object.entries(methods)) {
+      if (['get','post','put','delete','patch'].includes(method)) {
+        eps.push({path, method, operation: op, id: `${method}_${path.replace(/[^a-zA-Z0-9]/g,'_')}`})
+      }
+    }
+  }
+  return eps
+}
+
+function getTagFor(ep) {
+  return (ep.operation.tags && ep.operation.tags[0]) || 'Other'
+}
+
+function renderSidebar(filter = '') {
+  const nav = $('#sidebarNav')
+  const eps = getAllEndpoints()
+  const tagOrder = (spec.tags || []).map(t => t.name)
+  const groups = {}
+  eps.forEach(ep => {
+    if (filter) {
+      const q = filter.toLowerCase()
+      const match = ep.path.toLowerCase().includes(q) || (ep.operation.summary||'').toLowerCase().includes(q) || getTagFor(ep).toLowerCase().includes(q)
+      if (!match) return
+    }
+    const tag = getTagFor(ep)
+    if (!groups[tag]) groups[tag] = []
+    groups[tag].push(ep)
+  })
+  const allTags = [...new Set([...tagOrder, ...Object.keys(groups)])]
+  let html = ''
+  for (const tag of allTags) {
+    if (!groups[tag]) continue
+    const tagDesc = (spec.tags||[]).find(t=>t.name===tag)
+    const isOpen = !filter || true
+    html += `<div class="tag-group">
+      <div class="tag-header${isOpen?' open':''}" data-tag="${tag}">
+        <span class="arrow">▶</span>
+        <span>${tag}</span>
+        <span class="count">${groups[tag].length}</span>
+      </div>
+      <div class="tag-items${isOpen?' open':''}" data-tag-items="${tag}">`
+    for (const ep of groups[tag]) {
+      html += `<div class="ep-item${activeEp===ep.id?' active':''}" data-ep="${ep.id}" data-method="${ep.method}" data-path="${ep.path}">
+        <span class="method-badge method-${ep.method}">${ep.method}</span>
+        <span class="ep-path" title="${ep.path}">${ep.path}</span>
+      </div>`
+    }
+    html += '</div></div>'
+  }
+  nav.innerHTML = html || '<div style="padding:16px;color:var(--text-dim);text-align:center">Ничего не найдено</div>'
+  nav.querySelectorAll('.tag-header').forEach(h => {
+    h.addEventListener('click', () => {
+      h.classList.toggle('open')
+      nav.querySelector(`[data-tag-items="${h.dataset.tag}"]`).classList.toggle('open')
+    })
+  })
+  nav.querySelectorAll('.ep-item').forEach(el => {
+    el.addEventListener('click', () => {
+      activeEp = el.dataset.ep
+      window.location.hash = el.dataset.ep
+      renderSidebar(filter)
+      renderEndpoint(el.dataset.method, el.dataset.path)
+      closeSidebar()
+    })
+  })
+}
+
+function renderEndpoint(method, path) {
+  const op = spec.paths[path]?.[method]
+  if (!op) return
+  $('#mainEmpty').style.display = 'none'
+  const view = $('#endpointView')
+  view.style.display = 'block'
+  tryMode = false
+  const params = (op.parameters || [])
+  const requestBody = op.requestBody
+  const responses = op.responses || {}
+  const securities = op.security || spec.security || []
+  const hasSecurity = securities.length > 0
+  view.innerHTML = `
+    <div class="ep-header">
+      <div class="ep-title-row">
+        <span class="ep-method method-${method}">${method.toUpperCase()}</span>
+        <span class="ep-path">${path}</span>
+      </div>
+      ${op.summary ? `<div class="ep-summary">${op.summary}</div>` : ''}
+      ${op.description ? `<div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">${op.description}</div>` : ''}
+      <div class="ep-actions">
+        <button class="btn btn-sm" onclick="copyText('${method.toUpperCase()} ${getServerUrl()}${path}')">📋 Скопировать URL</button>
+        <button class="btn btn-sm btn-primary" id="tryToggleBtn">🚀 Попробовать</button>
+        ${hasSecurity ? '<span style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px">🔒 Требуется авторизация</span>' : ''}
+      </div>
+    </div>
+    <div id="tryPanel" style="display:none"></div>
+    ${params.length ? renderParamsSection(params) : ''}
+    ${requestBody ? renderRequestBodySection(requestBody) : ''}
+    ${renderResponsesSection(responses)}
+  `
+  $('#tryToggleBtn')?.addEventListener('click', () => toggleTry(method, path, params, requestBody))
+}
+
+function renderParamsSection(params) {
+  const byIn = {}
+  params.forEach(p => { const i = p.in; if (!byIn[i]) byIn[i] = []; byIn[i].push(p) })
+  let html = ''
+  for (const [loc, items] of Object.entries(byIn)) {
+    html += `<div class="section">
+      <div class="section-header open"><span class="arrow">▶</span> Параметры (${loc === 'path' ? 'путь' : loc === 'query' ? 'запрос' : loc})</div>
+      <div class="section-body open"><table class="params-table">
+        <thead><tr><th>Имя</th><th>Тип</th><th>Обяз.</th><th>Описание</th></tr></thead>
+        <tbody>${items.map(p => `<tr>
+          <td><span class="param-name">${p.name}</span>${p.required ? '<span class="param-required">*</span>' : ''}</td>
+          <td>${typeBadge(p.schema?.type || 'string')}</td>
+          <td>${p.required ? '<span style="color:var(--get)">Да</span>' : '<span style="color:var(--text-dim)">Нет</span>'}</td>
+          <td style="color:var(--text-dim)">${p.description || ''}${p.schema?.example ? `<br><code style="color:var(--accent);font-size:11px">Пример: ${p.schema.example}</code>` : ''}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`
+  }
+  return html
+}
+
+function renderRequestBodySection(rb) {
+  const content = rb.content?.['application/json'] || rb.content?.['multipart/form-data']
+  if (!content) return ''
+  const schema = content.schema || {}
+  const example = content.example || schema.example
+  let exampleJson = ''
+  if (example) exampleJson = JSON.stringify(example, null, 2)
+  else if (schema.properties) {
+    const ex = {}
+    for (const [k,v] of Object.entries(schema.properties)) {
+      if (v.example) ex[k] = v.example
+      else if (v.type === 'string') ex[k] = ''
+      else if (v.type === 'integer') ex[k] = 0
+      else if (v.type === 'boolean') ex[k] = false
+      else if (v.type === 'array') ex[k] = []
+      else if (v.type === 'object') ex[k] = {}
+    }
+    exampleJson = JSON.stringify(ex, null, 2)
+  }
+  const required = schema.required || []
+  return `<div class="section">
+    <div class="section-header open"><span class="arrow">▶</span> Тело запроса${rb.required ? ' <span style="color:var(--delete);font-size:11px;margin-left:4px">Обязательное</span>' : ''}</div>
+    <div class="section-body open">
+      <div class="tabs">
+        <div class="tab active" data-tab="schema">Schema</div>
+        <div class="tab" data-tab="example">Example</div>
+      </div>
+      <div data-tab-content="schema">${renderSchemaTree(schema, required)}</div>
+      <div data-tab-content="example" style="display:none">
+        ${exampleJson ? `<div class="code-block"><button class="copy-btn" onclick="copyText(this.parentElement.querySelector('code').textContent)">Копировать</button><pre><code>${highlightJson(exampleJson)}</code></pre></div>` : '<p style="color:var(--text-dim)">Нет примера</p>'}
+      </div>
+    </div>
+  </div>`
+}
+
+function renderSchemaTree(schema, required = [], indent = 0) {
+  if (!schema) return '<span style="color:var(--text-dim)">—</span>'
+  const props = schema.properties || {}
+  const reqSet = new Set(required)
+  if (schema.allOf) {
+    let html = ''
+    for (const sub of schema.allOf) {
+      html += renderSchemaTree(sub, sub.required || [], indent)
+    }
+    return html
+  }
+  if (schema.$ref) {
+    const resolved = resolveRef(schema.$ref)
+    if (resolved) return renderSchemaTree(resolved, resolved.required || [], indent)
+  }
+  if (!Object.keys(props).length) {
+    return `<div class="schema-tree"><span class="s-type">{${schema.type || 'object'}}</span></div>`
+  }
+  let html = '<div class="schema-tree">'
+  for (const [name, prop] of Object.entries(props)) {
+    const isReq = reqSet.has(name)
+    const isObj = prop.type === 'object' || prop.properties || prop.$ref
+    const hasProps = prop.properties || (prop.$ref && resolveRef(prop.$ref)?.properties)
+    html += `<div style="padding-left:${indent*20}px">
+      <span class="s-toggle">${hasProps ? '▶ ' : '  '}</span>
+      <span class="s-key">"${name}"</span>
+      ${isReq ? '<span style="color:var(--delete);font-size:10px;margin-left:2px">*обяз.</span>' : ''}
+      <span class="s-type">${prop.type || (prop.$ref ? refName(prop.$ref) : 'any')}</span>
+      ${prop.description ? `<span class="s-desc">// ${prop.description}</span>` : ''}
+    </div>`
+    if (hasProps) {
+      const subReq = prop.required || []
+      const subSchema = prop.$ref ? resolveRef(prop.$ref) : prop
+      html += `<div class="s-indent" style="padding-left:${indent*20+20}px">${renderSchemaTreeInner(subSchema, subReq, indent+1)}</div>`
+    }
+    if (prop.items) {
+      const itemSchema = prop.items.$ref ? resolveRef(prop.items.$ref) : prop.items
+      if (itemSchema?.properties) {
+        html += `<div class="s-indent" style="padding-left:${indent*20+20}px">${renderSchemaTreeInner(itemSchema, itemSchema.required || [], indent+1)}</div>`
+      }
+    }
+  }
+  html += '</div>'
+  return html
+}
+
+function renderSchemaTreeInner(schema, required, indent) {
+  return renderSchemaTree(schema, required, indent).replace(/<div class="schema-tree">/,'').replace(/<\/div>$/,'')
+}
+
+function resolveRef(ref) {
+  if (!ref || !ref.startsWith('#/')) return null
+  const parts = ref.slice(2).split('/')
+  let obj = spec
+  for (const p of parts) { obj = obj?.[p] }
+  return obj
+}
+function refName(ref) { return ref?.split('/').pop() || '' }
+
+function renderResponsesSection(responses) {
+  if (!Object.keys(responses).length) return ''
+  let html = '<div class="section"><div class="section-header open"><span class="arrow">▶</span> Ответы</div><div class="section-body open">'
+  for (const [code, resp] of Object.entries(responses)) {
+    const codeNum = parseInt(code)
+    const statusClass = codeNum >= 200 && codeNum < 300 ? '2xx' : codeNum >= 300 && codeNum < 400 ? '3xx' : codeNum >= 400 && codeNum < 500 ? '4xx' : '5xx'
+    const content = resp.content?.['application/json']
+    const schema = content?.schema
+    let respJson = ''
+    if (schema) {
+      const ex = generateExample(schema)
+      if (ex) respJson = JSON.stringify(ex, null, 2)
+    }
+    html += `<div class="resp-item">
+      <div class="resp-header" onclick="this.nextElementSibling.classList.toggle('open')">
+        <span class="status-badge status-${statusClass}">${code}</span>
+        <span style="color:var(--text-dim)">${resp.description || ''}</span>
+      </div>
+      <div class="resp-body">${respJson ? `<div class="code-block"><button class="copy-btn" onclick="copyText(this.parentElement.querySelector('code').textContent)">Копировать</button><pre><code>${highlightJson(respJson)}</code></pre></div>` : ''}${schema ? `<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text-dim);font-size:12px">Schema</summary>${renderSchemaTree(schema, schema.required || [])}</details>` : ''}</div>
+    </div>`
+  }
+  html += '</div></div>'
+  return html
+}
+
+function generateExample(schema, depth = 0) {
+  if (!schema || depth > 4) return null
+  if (schema.example !== undefined) return schema.example
+  if (schema.$ref) { const r = resolveRef(schema.$ref); return r ? generateExample(r, depth) : null }
+  if (schema.allOf) {
+    const result = {}
+    for (const s of schema.allOf) { const ex = generateExample(s, depth+1); if (ex && typeof ex === 'object') Object.assign(result, ex) }
+    return result
+  }
+  if (schema.type === 'object' || schema.properties) {
+    const result = {}
+    for (const [k, v] of Object.entries(schema.properties || {})) {
+      const ex = generateExample(v, depth+1)
+      result[k] = ex !== null ? ex : (v.type === 'string' ? '' : v.type === 'integer' ? 0 : v.type === 'boolean' ? false : null)
+    }
+    return result
+  }
+  if (schema.type === 'array') {
+    const item = schema.items ? generateExample(schema.items, depth+1) : null
+    return item !== null ? [item] : []
+  }
+  if (schema.type === 'string') return ''
+  if (schema.type === 'integer') return 0
+  if (schema.type === 'boolean') return false
+  return null
+}
+
+function toggleTry(method, path, params, requestBody) {
+  const panel = $('#tryPanel')
+  if (tryMode) { panel.style.display = 'none'; tryMode = false; return }
+  tryMode = true
+  const pathParams = params.filter(p => p.in === 'path')
+  const queryParams = params.filter(p => p.in === 'query')
+  const hasBody = requestBody && ['post','put','patch'].includes(method)
+  const bodyContent = requestBody?.content?.['application/json']
+  const bodySchema = bodyContent?.schema
+  let bodyExample = ''
+  if (bodySchema) {
+    const ex = generateExample(bodySchema)
+    if (ex) bodyExample = JSON.stringify(ex, null, 2)
+  }
+  panel.style.display = 'block'
+  panel.innerHTML = `<div class="try-panel">
+    <div class="try-header">🚀 Попробовать запрос</div>
+    <div class="try-body">
+      ${pathParams.length || queryParams.length ? `<div class="try-params-grid">
+        ${pathParams.map(p => `<div class="try-field"><label>${p.name} ${p.required ? '<span class="req">*</span>' : ''}</label><input data-param="${p.name}" data-in="path" placeholder="${p.schema?.example || p.name}"></div>`).join('')}
+        ${queryParams.map(p => `<div class="try-field"><label>${p.name} ${p.required ? '<span class="req">*</span>' : ''}</label><input data-param="${p.name}" data-in="query" placeholder="${p.schema?.example || p.name}"></div>`).join('')}
+      </div>` : ''}
+      ${hasBody ? `<div class="try-field" style="margin-top:12px"><label>Request Body</label><textarea id="tryBody" placeholder="{}">${bodyExample}</textarea></div>` : ''}
+      <div class="try-actions">
+        <button class="btn btn-primary" id="trySendBtn">▶ Отправить запрос</button>
+        <button class="btn" id="tryCancelBtn">Отмена</button>
+      </div>
+      <div id="tryResult"></div>
+    </div>
+  </div>`
+  $('#trySendBtn').addEventListener('click', () => sendTryRequest(method, path, params))
+  $('#tryCancelBtn')?.addEventListener('click', () => { panel.style.display = 'none'; tryMode = false })
+}
+
+async function sendTryRequest(method, path, params) {
+  let url = getServerUrl() + path
+  const inputs = $$('.try-field input[data-param]')
+  inputs.forEach(inp => {
+    const inType = inp.dataset.in
+    const name = inp.dataset.param
+    if (inType === 'path') url = url.replace(`{${name}}`, encodeURIComponent(inp.value))
+    if (inType === 'query') {
+      if (inp.value) { url += (url.includes('?') ? '&' : '?') + `${name}=${encodeURIComponent(inp.value)}` }
+    }
+  })
+  const bodyEl = $('#tryBody')
+  const headers = {'Content-Type': 'application/json'}
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`
+  const result = $('#tryResult')
+  result.innerHTML = '<div style="color:var(--text-dim);padding:8px">⏳ Отправка...</div>'
+  const start = performance.now()
+  try {
+    const opts = {method: method.toUpperCase(), headers}
+    if (bodyEl && ['POST','PUT','PATCH'].includes(opts.method)) {
+      opts.body = bodyEl.value
+    }
+    const res = await fetch(url, opts)
+    const elapsed = Math.round(performance.now() - start)
+    const text = await res.text()
+    let json = null
+    try { json = JSON.parse(text) } catch {}
+    const size = new Blob([text]).size
+    const sizeStr = size > 1024 ? (size/1024).toFixed(1) + ' KB' : size + ' B'
+    result.innerHTML = `<div class="try-response">
+      <div class="try-response-meta">
+        <span class="status-badge status-${res.status < 300 ? '2xx' : res.status < 500 ? '4xx' : '5xx'}">${res.status} ${res.statusText}</span>
+        <span style="color:var(--text-dim)">⏱ ${elapsed}ms</span>
+        <span style="color:var(--text-dim)">📦 ${sizeStr}</span>
+      </div>
+      ${json ? `<div class="code-block"><button class="copy-btn" onclick="copyText(this.parentElement.querySelector('code').textContent)">Копировать</button><pre><code>${highlightJson(JSON.stringify(json, null, 2))}</code></pre></div>` : `<div class="code-block"><pre><code>${text.replace(/</g,'&lt;')}</code></pre></div>`}
+    </div>`
+  } catch(err) {
+    result.innerHTML = `<div class="try-response"><div style="color:var(--delete)">❌ ${err.message}</div></div>`
+  }
+}
+
+function highlightJson(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"([^"]+)"(\s*:)/g, '<span class="json-key">"$1"</span>$2')
+    .replace(/:\s*"([^"]*)"/g, ': <span class="json-str">"$1"</span>')
+    .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-num">$1</span>')
+    .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
+    .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>')
+}
+
+function typeBadge(type) {
+  if (!type) return ''
+  return `<span class="type-badge type-${type}">${type}</span>`
+}
+
+function getServerUrl() {
+  return $('#serverSelect').value || window.location.origin + '/api'
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).catch(() => {})
+}
+
+function updateAuthUI() {
+  const dot = $('#authDot')
+  const label = $('#authLabel')
+  const input = $('#authTokenInput')
+  if (authToken) {
+    dot.classList.add('active')
+    label.textContent = 'Авторизован'
+    if (input) input.value = authToken
+  } else {
+    dot.classList.remove('active')
+    label.textContent = 'Не авторизован'
+    if (input) input.value = ''
+  }
+}
+
+function bindGlobalEvents() {
+  $('#authBtn').addEventListener('click', () => $('#authModal').classList.add('open'))
+  $('#authModalClose').addEventListener('click', () => $('#authModal').classList.remove('open'))
+  $('#authModal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('open') })
+  $('#authSaveBtn').addEventListener('click', () => {
+    authToken = $('#authTokenInput').value.trim()
+    localStorage.setItem('api_docs_token', authToken)
+    updateAuthUI()
+    $('#authModal').classList.remove('open')
+  })
+  $('#authClearBtn').addEventListener('click', () => {
+    authToken = ''
+    localStorage.removeItem('api_docs_token')
+    updateAuthUI()
+  })
+  $('#exportBtn').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(spec, null, 2)], {type:'application/json'})
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'openapi-spec.json'
+    a.click()
+  })
+  let searchTimeout
+  $('#globalSearch').addEventListener('input', e => {
+    clearTimeout(searchTimeout)
+    searchTimeout = setTimeout(() => renderSidebar(e.target.value), 150)
+  })
+  $('#sidebarSearch').addEventListener('input', e => {
+    clearTimeout(searchTimeout)
+    searchTimeout = setTimeout(() => renderSidebar(e.target.value), 150)
+  })
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+      e.preventDefault()
+      $('#globalSearch').focus()
+    }
+    if (e.key === 'Escape') {
+      $('#authModal').classList.remove('open')
+      closeSidebar()
+    }
+  })
+  $('#hamburgerBtn')?.addEventListener('click', () => $('#sidebar').classList.toggle('open'))
+  document.addEventListener('click', e => {
+    if (window.innerWidth <= 1024 && $('#sidebar').classList.contains('open') && !$('#sidebar').contains(e.target) && e.target !== $('#hamburgerBtn')) {
+      closeSidebar()
+    }
+  })
+  window.addEventListener('hashchange', handleRoute)
+  document.addEventListener('click', e => {
+    const tab = e.target.closest('.tab')
+    if (tab && tab.parentElement.classList.contains('tabs')) {
+      const tabs = tab.parentElement
+      tabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+      tab.classList.add('active')
+      const tabName = tab.dataset.tab
+      const container = tabs.parentElement
+      container.querySelectorAll('[data-tab-content]').forEach(c => c.style.display = 'none')
+      const target = container.querySelector(`[data-tab-content="${tabName}"]`)
+      if (target) target.style.display = 'block'
+    }
+    const sectionHeader = e.target.closest('.section-header')
+    if (sectionHeader) {
+      sectionHeader.classList.toggle('open')
+      sectionHeader.nextElementSibling?.classList.toggle('open')
+    }
+  })
+}
+
+function closeSidebar() { $('#sidebar').classList.remove('open') }
+
+function handleRoute() {
+  const hash = window.location.hash.slice(1)
+  if (!hash) return
+  const eps = getAllEndpoints()
+  const ep = eps.find(e => e.id === hash)
+  if (ep) {
+    activeEp = ep.id
+    renderSidebar()
+    renderEndpoint(ep.method, ep.path)
+  }
+}
+
+init()
+</script>
+</body>
+</html>

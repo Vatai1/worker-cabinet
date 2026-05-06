@@ -1,7 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import swaggerUi from 'swagger-ui-express'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { swaggerSpec } from './config/swagger.js'
 import authRoutes from './routes/auth.js'
 import vacationRoutes from './routes/vacation.js'
@@ -23,6 +24,8 @@ import { errorHandler } from './middleware/errors.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 
 dotenv.config()
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL ERROR: JWT_SECRET is not defined in environment variables')
@@ -54,8 +57,10 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 if (process.env.NODE_ENV !== 'production') {
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
   app.get('/api-docs.json', (req, res) => res.json(swaggerSpec))
+  app.get('/api-docs', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'api-docs.html'))
+  })
 }
 
 app.use((req, res, next) => {
