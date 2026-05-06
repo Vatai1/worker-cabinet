@@ -20,6 +20,7 @@ npm run dev
 Приложение будет доступно по адресам:
 - **Frontend**: http://localhost:3000
 - **Backend**: http://localhost:5000
+- **API Docs**: http://localhost:5000/api-docs
 
 ## Деплой
 
@@ -110,9 +111,13 @@ Copy-Item .env.example .env
 - Node.js + Express
 - PostgreSQL
 - JWT аутентификация
+- Swagger/OpenAPI 3.0 документация
 - MinIO (S3-совместимое хранилище файлов)
 - Multer (загрузка файлов)
+- docxtemplater (генерация DOCX)
+- ExcelJS + PDFKit (экспорт табелей)
 - Telegram Bot API (опционально)
+- EWS/Outlook OAuth2 (интеграция с календарём)
 
 ## Тестовые пользователи
 
@@ -128,7 +133,17 @@ Copy-Item .env.example .env
 
 ## API
 
-API endpoints описаны в [backend/README.md](./backend/README.md)
+Интерактивная документация API с кастомным тёмным интерфейсом доступна по адресу http://localhost:5000/api-docs (только в dev-режиме).
+
+Возможности:
+- Навигация по 111 endpoint'ам с группировкой по тегам
+- Интерактивная панель «Попробовать» для отправки реальных запросов
+- Авторизация через Bearer Token
+- JSON syntax highlighting
+- Экспорт OpenAPI спецификации
+- Поиск endpoint'ов с hotkey `/`
+
+Спецификация OpenAPI 3.0 также доступна в формате JSON: http://localhost:5000/api-docs.json
 
 ## Структура проекта
 
@@ -138,11 +153,14 @@ worker-cabinet/
 │   └── src/
 │       ├── routes/           # auth, vacation, users, departments, projects,
 │       │                     # surveys, onboarding, documents, notifications,
-│       │                     # hierarchy, dictionaries, telegram
+│       │                     # hierarchy, dictionaries, telegram,
+│       │                     # timesheet, calendar
 │       ├── middleware/       # JWT auth, multer upload, rate limiter
 │       ├── services/         # Бизнес-логика
-│       ├── config/           # database.js, s3.js (MinIO)
-│       └── db/               # migrate.js, seed.js, schema.sql
+│       ├── config/           # database.js, s3.js (MinIO), swagger.js
+│       └── db/               # migrate.js, seed.js
+│       ├── public/           # Кастомный Swagger UI (api-docs.html)
+│       └── cron/             # Cron-задачи (автозаполнение табеля)
 ├── components/
 │   ├── calendar/             # Компоненты календаря
 │   ├── layout/               # Header, Sidebar, Layout
