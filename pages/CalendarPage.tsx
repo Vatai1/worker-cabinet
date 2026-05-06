@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { ChevronLeft, ChevronRight, ChevronDown, RefreshCw, Link2, Unlink } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, RefreshCw, Link2, Unlink, X, MapPin, Clock, User, Tag } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { vacationApi } from '@/services/vacationApi'
 import { getAuthHeaders } from '@/lib/authHeaders'
@@ -81,6 +81,8 @@ export function CalendarPage() {
   const [slideDir, setSlideDir] = useState(0)
   const [animKey, setAnimKey] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [ctxMenu, setCtxMenu] = useState<{x:number,y:number,event:OutlookEvent|{key:string,label:string,bg:string,vacation?:VacationRequest}}|null>(null)
+  const [detailEvent, setDetailEvent] = useState<{type:'event'|'vacation',data:any}|null>(null)
 
   const activeVac = useMemo(() => vacations.filter(v => v.status===VacationRequestStatus.APPROVED||v.status===VacationRequestStatus.ON_APPROVAL), [vacations])
 
@@ -186,14 +188,29 @@ export function CalendarPage() {
       : focus.getDate()+' '+MONTHS_GEN[focus.getMonth()]+' '+focus.getFullYear()+', '+WD_FULL[(focus.getDay()+6)%7]
 
   const items = (dk:string) => [
-    ...(showVac ? (vacByDate[dk]||[]).filter(v=>v.status===VacationRequestStatus.APPROVED).map(v=>({key:v.id,label:VACATION_TYPES[v.vacationType]?.name?.split(' ').slice(0,2).join(' ')||'Отпуск',bg:GREEN})) : []),
-    ...(showPend ? (vacByDate[dk]||[]).filter(v=>v.status===VacationRequestStatus.ON_APPROVAL).map(v=>({key:v.id,label:VACATION_TYPES[v.vacationType]?.name?.split(' ').slice(0,2).join(' ')||'Отпуск',bg:AMBER})) : []),
+    ...(showVac ? (vacByDate[dk]||[]).filter(v=>v.status===VacationRequestStatus.APPROVED).map(v=>({key:v.id,label:VACATION_TYPES[v.vacationType]?.name?.split(' ').slice(0,2).join(' ')||'Отпуск',bg:GREEN,vacation:v})) : []),
+    ...(showPend ? (vacByDate[dk]||[]).filter(v=>v.status===VacationRequestStatus.ON_APPROVAL).map(v=>({key:v.id,label:VACATION_TYPES[v.vacationType]?.name?.split(' ').slice(0,2).join(' ')||'Отпуск',bg:AMBER,vacation:v})) : []),
     ...(showOL ? (olByDate[dk]||[]).filter(e=>e.isAllDay).map(ev=>({key:ev.id,label:ev.subject,bg:BLUE})) : []),
   ]
 
   const timed = (dk:string) => showOL ? (olTimed[dk]||[]) : []
 
   const animName = slideDir===0?'calFade':slideDir>0?'calSlideL':'calSlideR'
+
+  useEffect(()=>{
+    if(!ctxMenu) return
+    const close=()=>setCtxMenu(null)
+    window.addEventListener('click',close)
+    window.addEventListener('contextmenu',close)
+    return ()=>{window.removeEventListener('click',close);window.removeEventListener('contextmenu',close)}
+  },[ctxMenu])
+
+  const fmtEvTime = (iso:string) => {
+    try { return new Date(iso).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}) } catch { return iso }
+  }
+  const fmtEvDate = (iso:string) => {
+    try { return new Date(iso).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}) } catch { return iso }
+  }
 
   const mini = () => {
     const y=miniMonth.getFullYear(), m=miniMonth.getMonth(), dim=new Date(y,m+1,0).getDate()
@@ -304,7 +321,7 @@ export function CalendarPage() {
                   <span style={{fontSize:14,fontWeight:isT?700:500,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?RED:'transparent',color:isT?'#fff':isS?BLUE:TX,boxShadow:isS&&!isT?'0 0 0 2px '+BLUE:'none'}}>{day}</span>
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:1}}>
-                  {it.slice(0,3).map(i=><div key={i.key} className="cp" style={{background:i.bg}}>{i.label}</div>)}
+                  {it.slice(0,3).map(i=><div key={i.key} className="cp" style={{background:i.bg}} onContextMenu={e=>{e.preventDefault();e.stopPropagation();setCtxMenu({x:e.clientX,y:e.clientY,event:i})}}>{i.label}</div>)}
                   {it.length>3&&<div style={{fontSize:10,color:TX2,paddingLeft:4}}>+{it.length-3}</div>}
                 </div>
               </div>
@@ -340,7 +357,7 @@ export function CalendarPage() {
               const dk=fk(day), dow=(day.getDay()+6)%7, we=dow>=5, it=items(dk)
               return (
                 <div key={dk} style={{flex:1,borderLeft:'1px solid '+BL,padding:'2px 4px 4px',display:'flex',flexDirection:'column',gap:1,background:we?WE_BG:undefined}}>
-                  {it.slice(0,3).map(i=><div key={i.key} className="cp" style={{background:i.bg}}>{i.label}</div>)}
+                  {it.slice(0,3).map(i=><div key={i.key} className="cp" style={{background:i.bg}} onContextMenu={e=>{e.preventDefault();e.stopPropagation();setCtxMenu({x:e.clientX,y:e.clientY,event:i})}}>{i.label}</div>)}
                   {it.length>3&&<div style={{fontSize:9,color:TX2}}>+{it.length-3}</div>}
                 </div>
               )
@@ -363,7 +380,7 @@ export function CalendarPage() {
                     const sm=toMins(ev.start.dateTime), em=toMins(ev.end.dateTime)
                     const top=(sm/60)*HH, height=Math.max(((em-sm)/60)*HH,22)
                     return (
-                      <div key={ev.id} className="cte" style={{top,height,background:BLUE}}>
+                      <div key={ev.id} className="cte" style={{top,height,background:BLUE}} onContextMenu={e=>{e.preventDefault();setCtxMenu({x:e.clientX,y:e.clientY,event:ev})}}>
                         <div style={{fontSize:11,fontWeight:500,lineHeight:'16px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.subject}</div>
                         {height>30&&<div style={{fontSize:9,opacity:0.7,marginTop:2}}>
                           {new Date(ev.start.dateTime).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} — {new Date(ev.end.dateTime).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}
@@ -456,6 +473,83 @@ export function CalendarPage() {
                 {ewsSaving?'Подключение...':'Подключить'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {ctxMenu && (
+        <div style={{position:'fixed',top:ctxMenu.y,left:ctxMenu.x,zIndex:200,minWidth:160}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:'var(--cal-surface)',border:'1px solid var(--cal-bd)',borderRadius:8,padding:4,boxShadow:'0 8px 32px rgba(0,0,0,0.25)'}}>
+            <button onClick={()=>{const e=ctxMenu.event;if('subject' in e) setDetailEvent({type:'event',data:e});else if(e.vacation) setDetailEvent({type:'vacation',data:e.vacation});setCtxMenu(null)}} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'7px 10px',borderRadius:5,border:'none',background:'transparent',color:TX,fontSize:12,cursor:'pointer',textAlign:'left'}}>
+              <Clock size={13} style={{color:TX2}}/> Подробнее
+            </button>
+          </div>
+        </div>
+      )}
+
+      {detailEvent && (
+        <div style={{position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.5)'}} onClick={()=>setDetailEvent(null)}>
+          <div style={{width:480,maxWidth:'90vw',background:'var(--cal-surface)',borderRadius:12,border:'1px solid var(--cal-bd)',padding:24,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',maxHeight:'80vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+              <h2 style={{fontSize:16,fontWeight:700,color:TX,paddingRight:24}}>{detailEvent.type==='event'?(detailEvent.data as OutlookEvent).subject:VACATION_TYPES[(detailEvent.data as VacationRequest).vacationType]?.name||'Отпуск'}</h2>
+              <button onClick={()=>setDetailEvent(null)} style={{background:'transparent',border:'none',cursor:'pointer',color:TX2,padding:4}}><X size={18}/></button>
+            </div>
+
+            {detailEvent.type==='event' && (() => {
+              const ev=detailEvent.data as OutlookEvent
+              return (
+                <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
+                    <Clock size={15} style={{color:TX2,flexShrink:0}}/>
+                    <div>
+                      {ev.isAllDay
+                        ? fmtEvDate(ev.start.dateTime)+' — '+fmtEvDate(ev.end.dateTime)+' (весь день)'
+                        : fmtEvTime(ev.start.dateTime)+' — '+fmtEvTime(ev.end.dateTime)}
+                    </div>
+                  </div>
+                  {ev.location?.displayName && (
+                    <div style={{display:'flex',alignItems:'flex-start',gap:8,fontSize:13,color:TX}}>
+                      <MapPin size={15} style={{color:TX2,flexShrink:0,marginTop:2}}/>
+                      {ev.location.displayName}
+                    </div>
+                  )}
+                  {ev.organizer?.emailAddress?.name && (
+                    <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
+                      <User size={15} style={{color:TX2,flexShrink:0}}/>
+                      {ev.organizer.emailAddress.name}
+                    </div>
+                  )}
+                  {ev.categories && ev.categories.length>0 && (
+                    <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
+                      <Tag size={15} style={{color:TX2,flexShrink:0}}/>
+                      {ev.categories.join(', ')}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {detailEvent.type==='vacation' && (() => {
+              const v=detailEvent.data as VacationRequest
+              return (
+                <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
+                    <Clock size={15} style={{color:TX2,flexShrink:0}}/>
+                    {v.startDate} — {v.endDate} ({v.duration} дн.)
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
+                    <User size={15} style={{color:TX2,flexShrink:0}}/>
+                    {v.userFirstName} {v.userLastName}
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13}}>
+                    <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,color:'#fff',background:v.status===VacationRequestStatus.APPROVED?GREEN:v.status===VacationRequestStatus.ON_APPROVAL?AMBER:TX3}}>
+                      {v.status===VacationRequestStatus.APPROVED?'Согласовано':v.status===VacationRequestStatus.ON_APPROVAL?'На согласовании':'Отклонено'}
+                    </span>
+                  </div>
+                  {v.comment && <div style={{fontSize:12,color:TX2,padding:'8px 10px',borderRadius:6,background:'var(--cal-bg)',marginTop:4}}>{v.comment}</div>}
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
