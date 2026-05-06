@@ -1,4 +1,6 @@
 import crypto from 'crypto'
+import httpntlm from 'httpntlm'
+import { URL } from 'url'
 
 const ALGO = 'aes-256-gcm'
 const KEY = crypto.scryptSync(process.env.JWT_SECRET || 'fallback-secret-key', 'exchange-salt', 32)
@@ -26,29 +28,24 @@ export function decrypt(encryptedText) {
 }
 
 function buildSoapEnvelope(body) {
-  return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header>
-    <t:RequestServerVersion Version="Exchange2016" />
-  </soap:Header>
-  <soap:Body>
-    ${body}
-  </soap:Body>
-</soap:Envelope>`
+  return '<?xml version="1.0" encoding="utf-8"?>' +
+    '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' +
+    ' xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"' +
+    ' xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"' +
+    ' xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">' +
+    '<soap:Header><t:RequestServerVersion Version="Exchange2016"/></soap:Header>' +
+    '<soap:Body>' + body + '</soap:Body></soap:Envelope>'
 }
 
 function extractTag(xml, tagName, scope) {
   const source = scope || xml
-  const re = new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`)
+  const re = new RegExp('<' + tagName + '[^>]*>([^<]*)</' + tagName + '>')
   const m = source.match(re)
   return m ? m[1].trim() : ''
 }
 
 function extractAttr(xml, tagName, attr) {
-  const re = new RegExp(`<${tagName}[^>]*${attr}="([^"]*)"`)
+  const re = new RegExp('<' + tagName + '[^>]*' + attr + '="([^"]*)"')
   const m = xml.match(re)
   return m ? m[1] : ''
 }
@@ -74,7 +71,7 @@ function parseEwsEvents(xml) {
       : []
 
     events.push({
-      id: itemId || `ews-${events.length}`,
+      id: itemId || 'ews-' + events.length,
       subject: subject || '(Без темы)',
       start: { dateTime: startVal || '' },
       end: { dateTime: endVal || '' },
@@ -88,66 +85,67 @@ function parseEwsEvents(xml) {
   return events
 }
 
+function ntlmRequest(ewsUrl, username, password, domain, envelope) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(ewsUrl)
+
+    httpntlm.post({
+      url: ewsUrl,
+      username: username,
+      password: password,
+      domain: domain || '',
+      workstation: '',
+      body: envelope,
+      headers: {
+        'Content-Type': 'text/xml; charset=utf-8',
+        'User-Agent': 'WorkerCabinet/1.0',
+        'Accept': 'text/xml',
+      },
+      ca: parsed.protocol === 'https:' ? undefined : undefined,
+      rejectUnauthorized: false,
+    }, (err, res) => {
+      if (err) return reject(err)
+      if (res.statusCode === 401) {
+        return reject(new Error('Неверный логин или пароль. Проверьте домен, логин и пароль.'))
+      }
+      if (res.statusCode >= 400) {
+        return reject(new Error('EWS HTTP ' + res.statusCode + ': ' + (res.body || '').substring(0, 200)))
+      }
+      resolve(res.body)
+    })
+  })
+}
+
 export async function fetchEwsEvents(ewsUrl, username, password, domain, startIso, endIso) {
-  const soapBody = `
-    <m:FindItem Traversal="Shallow">
-      <m:ItemShape>
-        <t:BaseShape>Default</t:BaseShape>
-        <t:AdditionalProperties>
-          <t:FieldURI FieldURI="item:Subject"/>
-          <t:FieldURI FieldURI="calendar:Start"/>
-          <t:FieldURI FieldURI="calendar:End"/>
-          <t:FieldURI FieldURI="calendar:IsAllDayEvent"/>
-          <t:FieldURI FieldURI="calendar:Location"/>
-          <t:FieldURI FieldURI="calendar:Organizer"/>
-          <t:FieldURI FieldURI="item:Categories"/>
-        </t:AdditionalProperties>
-      </m:ItemShape>
-      <m:CalendarView StartDate="${startIso}" EndDate="${endIso}" MaxEntriesReturned="200"/>
-      <m:ParentFolderIds>
-        <t:DistinguishedFolderId Id="calendar"/>
-      </m:ParentFolderIds>
-    </m:FindItem>
-  `
+  const soapBody =
+    '<m:FindItem Traversal="Shallow">' +
+      '<m:ItemShape>' +
+        '<t:BaseShape>Default</t:BaseShape>' +
+        '<t:AdditionalProperties>' +
+          '<t:FieldURI FieldURI="item:Subject"/>' +
+          '<t:FieldURI FieldURI="calendar:Start"/>' +
+          '<t:FieldURI FieldURI="calendar:End"/>' +
+          '<t:FieldURI FieldURI="calendar:IsAllDayEvent"/>' +
+          '<t:FieldURI FieldURI="calendar:Location"/>' +
+          '<t:FieldURI FieldURI="calendar:Organizer"/>' +
+          '<t:FieldURI FieldURI="item:Categories"/>' +
+        '</t:AdditionalProperties>' +
+      '</m:ItemShape>' +
+      '<m:CalendarView StartDate="' + startIso + '" EndDate="' + endIso + '" MaxEntriesReturned="200"/>' +
+      '<m:ParentFolderIds>' +
+        '<t:DistinguishedFolderId Id="calendar"/>' +
+      '</m:ParentFolderIds>' +
+    '</m:FindItem>'
 
   const envelope = buildSoapEnvelope(soapBody)
 
-  let user = username
-  if (domain && !username.includes('\\') && !username.includes('@')) {
-    user = domain + '\\' + username
-  }
+  console.log('[EWS] NTLM auth to:', ewsUrl, 'user:', username, 'domain:', domain || '(none)')
 
-  const token = Buffer.from(user + ':' + password).toString('base64')
-
-  console.log('[EWS] Connecting to:', ewsUrl)
-  console.log('[EWS] User:', user)
-
-  const res = await fetch(ewsUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/xml; charset=utf-8',
-      'Authorization': 'Basic ' + token,
-      'User-Agent': 'WorkerCabinet/1.0',
-      'Accept': 'text/xml',
-    },
-    body: envelope,
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    const authHeaders = res.headers.get('www-authenticate') || ''
-    console.error('[EWS] HTTP', res.status, 'Auth headers:', authHeaders, 'Body:', text.substring(0, 300))
-    if (res.status === 401) {
-      throw new Error('Неверный логин или пароль. Проверьте учётные данные.' + (authHeaders ? ' Поддерживаемые методы: ' + authHeaders : ''))
-    }
-    throw new Error('EWS HTTP ' + res.status + ': ' + text.substring(0, 200))
-  }
-
-  const responseXml = await res.text()
+  const responseXml = await ntlmRequest(ewsUrl, username, password, domain, envelope)
 
   const faultMatch = responseXml.match(/<faultstring>([^<]*)<\/faultstring>/)
   if (faultMatch) {
-    throw new Error(`EWS: ${faultMatch[1]}`)
+    throw new Error('EWS: ' + faultMatch[1])
   }
 
   return parseEwsEvents(responseXml)
