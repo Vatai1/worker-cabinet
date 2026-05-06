@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { ChevronLeft, ChevronRight, ChevronDown, RefreshCw, Link2, Unlink, X, MapPin, Clock, User, Tag } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, RefreshCw, Link2, Unlink, X, MapPin, Clock, User, Tag, Users, Globe, Lock, Eye, ExternalLink, Calendar, AlertCircle } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { vacationApi } from '@/services/vacationApi'
 import { getAuthHeaders } from '@/lib/authHeaders'
@@ -10,13 +10,45 @@ import type { VacationRequest } from '@/types'
 
 interface OutlookEvent {
   id: string
+  _changeKey?: string
   subject: string
   start: { dateTime: string; timeZone?: string }
   end: { dateTime: string; timeZone?: string }
   isAllDay: boolean
-  location?: { displayName?: string }
-  organizer?: { emailAddress?: { name?: string } }
+  location?: { displayName?: string; address?: string }
+  organizer?: { emailAddress?: { name?: string; address?: string } }
   categories?: string[]
+  body?: { content?: string; contentType?: string }
+  bodyPreview?: string
+  attendees?: Array<{ emailAddress?: { name?: string; address?: string }; type?: string; status?: { response?: string } }>
+  webLink?: string
+  sensitivity?: string
+  importance?: string
+  responseStatus?: { response?: string }
+  recurrence?: { pattern?: { type?: string; daysOfWeek?: string; interval?: number; month?: number; dayOfMonth?: number; firstDayOfWeek?: string }; range?: { type?: string; startDate?: string; endDate?: string; numberOfOccurrences?: number } }
+  source?: 'graph' | 'ews'
+  createdDateTime?: string
+  lastModifiedDateTime?: string
+  isCancelled?: boolean
+  isOrganizer?: boolean
+  onlineMeetingUrl?: string
+  onlineMeeting?: { joinUrl?: string; conferenceId?: string; tollNumber?: string; quickDial?: string; phones?: Array<{ number?: string; type?: string }> }
+  reminderMinutesBeforeStart?: number
+  isReminderOn?: boolean
+  responseRequested?: boolean
+  showAs?: string
+  type?: string
+  hasAttachments?: boolean
+  attachments?: Array<{ name?: string; size?: number; contentType?: string; isInline?: boolean }>
+  iCalUId?: string
+  seriesMasterId?: string
+  transactionId?: string
+  calendar?: { name?: string }
+  isMeeting?: boolean
+  duration?: string
+  meetingRequestWasSent?: boolean
+  allowNewTimeProposal?: boolean
+  isResponseRequested?: boolean
 }
 
 type ViewMode = 'month' | 'week' | 'day'
@@ -83,6 +115,25 @@ export function CalendarPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [ctxMenu, setCtxMenu] = useState<{x:number,y:number,event:OutlookEvent|{key:string,label:string,bg:string,vacation?:VacationRequest}}|null>(null)
   const [detailEvent, setDetailEvent] = useState<{type:'event'|'vacation',data:any}|null>(null)
+  const [ewsBodyLoading, setEwsBodyLoading] = useState(false)
+  const [showMeta, setShowMeta] = useState(false)
+
+  useEffect(() => {
+    if (!detailEvent || detailEvent.type !== 'event') return
+    const ev = detailEvent.data as OutlookEvent
+    if (ev.source !== 'ews' || !ev.id) return
+    if (ev.body?.content) return
+    setEwsBodyLoading(true)
+    fetch(API_BASE_URL + '/calendar/ews/event-body/' + encodeURIComponent(ev.id) + (ev._changeKey ? '?ck=' + encodeURIComponent(ev._changeKey) : ''), { headers: getAuthHeaders() })
+      .then(r => r.ok ? r.json() : ({} as Record<string, unknown>))
+      .then((data: Record<string, unknown>) => {
+        if (data.body || data.attendees) {
+          setDetailEvent(prev => prev ? { ...prev, data: { ...prev.data, body: data.body || prev.data.body, attendees: data.attendees || prev.data.attendees } } : null)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setEwsBodyLoading(false))
+  }, [detailEvent?.type, (detailEvent?.data as OutlookEvent | undefined)?.id, (detailEvent?.data as OutlookEvent | undefined)?.source])
 
   const activeVac = useMemo(() => vacations.filter(v => v.status===VacationRequestStatus.APPROVED||v.status===VacationRequestStatus.ON_APPROVAL), [vacations])
 
@@ -199,10 +250,11 @@ export function CalendarPage() {
 
   useEffect(()=>{
     if(!ctxMenu) return
-    const close=()=>setCtxMenu(null)
-    window.addEventListener('click',close)
-    window.addEventListener('contextmenu',close)
-    return ()=>{window.removeEventListener('click',close);window.removeEventListener('contextmenu',close)}
+    const close=(e:MouseEvent)=>{if(!(e.target as HTMLElement)?.closest?.('.cctx'))setCtxMenu(null)}
+    const closeKey=(e:KeyboardEvent)=>{if(e.key==='Escape')setCtxMenu(null)}
+    document.addEventListener('click',close)
+    document.addEventListener('keydown',closeKey)
+    return ()=>{document.removeEventListener('click',close);document.removeEventListener('keydown',closeKey)}
   },[ctxMenu])
 
   const fmtEvTime = (iso:string) => {
@@ -478,7 +530,7 @@ export function CalendarPage() {
       )}
 
       {ctxMenu && (
-        <div style={{position:'fixed',top:ctxMenu.y,left:ctxMenu.x,zIndex:200,minWidth:160}} onClick={e=>e.stopPropagation()}>
+        <div className="cctx" style={{position:'fixed',top:ctxMenu.y,left:ctxMenu.x,zIndex:200,minWidth:160}} onClick={e=>e.stopPropagation()}>
           <div style={{background:'var(--cal-surface)',border:'1px solid var(--cal-bd)',borderRadius:8,padding:4,boxShadow:'0 8px 32px rgba(0,0,0,0.25)'}}>
             <button onClick={()=>{const e=ctxMenu.event;if('subject' in e) setDetailEvent({type:'event',data:e});else if(e.vacation) setDetailEvent({type:'vacation',data:e.vacation});setCtxMenu(null)}} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'7px 10px',borderRadius:5,border:'none',background:'transparent',color:TX,fontSize:12,cursor:'pointer',textAlign:'left'}}>
               <Clock size={13} style={{color:TX2}}/> Подробнее
@@ -488,66 +540,385 @@ export function CalendarPage() {
       )}
 
       {detailEvent && (
-        <div style={{position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.5)'}} onClick={()=>setDetailEvent(null)}>
-          <div style={{width:480,maxWidth:'90vw',background:'var(--cal-surface)',borderRadius:12,border:'1px solid var(--cal-bd)',padding:24,boxShadow:'0 8px 32px rgba(0,0,0,0.4)',maxHeight:'80vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
-              <h2 style={{fontSize:16,fontWeight:700,color:TX,paddingRight:24}}>{detailEvent.type==='event'?(detailEvent.data as OutlookEvent).subject:VACATION_TYPES[(detailEvent.data as VacationRequest).vacationType]?.name||'Отпуск'}</h2>
-              <button onClick={()=>setDetailEvent(null)} style={{background:'transparent',border:'none',cursor:'pointer',color:TX2,padding:4}}><X size={18}/></button>
-            </div>
+        <div style={{position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.5)',backdropFilter:'blur(4px)'}} onClick={()=>setDetailEvent(null)}>
+          <div style={{width:620,maxWidth:'94vw',background:'var(--cal-surface)',borderRadius:16,border:'1px solid var(--cal-bd)',boxShadow:'0 24px 80px rgba(0,0,0,0.4)',maxHeight:'88vh',overflow:'hidden',display:'flex',flexDirection:'column',animation:'cfi .2s ease-out'}} onClick={e=>e.stopPropagation()}>
 
             {detailEvent.type==='event' && (() => {
               const ev=detailEvent.data as OutlookEvent
+              const catColor = ev.categories?.length ? BLUE : ev.source==='ews' ? PURPLE : BLUE
+              const rsvpMap: Record<string,string> = { none:'Не отвечено', organized:'Организатор', tentativelyAccepted:'Предварительно', accepted:'Принято', declined:'Отклонено', notResponded:'Не отвечено' }
+              const sensMap: Record<string,{lbl:string,icon:typeof Lock}> = { Normal:{lbl:'Обычное',icon:Eye}, Private:{lbl:'Личное',icon:Lock}, Confidential:{lbl:'Конфиденциальное',icon:AlertCircle} }
+              const impMap: Record<string,string> = { Low:'Низкая', Normal:'Обычная', High:'Высокая' }
+              const showAsMap: Record<string,{lbl:string;color:string}> = { Free:{lbl:'Свободен',color:GREEN}, Tentative:{lbl:'Под вопросом',color:AMBER}, Busy:{lbl:'Занят',color:RED}, OOF:{lbl:'Отсутствую',color:PURPLE}, WorkingElsewhere:{lbl:'Работаю в другом месте',color:BLUE}, Unknown:{lbl:'Неизвестно',color:TX3} }
+              const typeMap: Record<string,string> = { SingleInstance:'Разовое', Occurrence:'Повторение', Exception:'Исключение', SeriesMaster:'Основная серия' }
+              const sens = ev.sensitivity ? sensMap[ev.sensitivity] : undefined
+              const SensIcon = sens ? sens.icon : Eye
+              const showAsInfo = ev.showAs ? showAsMap[ev.showAs] : undefined
+              const onlineUrl = ev.onlineMeeting?.joinUrl || ev.onlineMeetingUrl
+              const reqAttendees = ev.attendees?.filter(a=>a.type==='required') || []
+              const optAttendees = ev.attendees?.filter(a=>a.type==='optional') || []
+              const resAttendees = ev.attendees?.filter(a=>a.type==='resource') || []
+              const plainBody = (() => {
+                if (!ev.body?.content) return ''
+                return ev.body.contentType === 'HTML'
+                  ? ev.body.content.replace(/<br\s*\/?>/gi,'\n').replace(/<\/p>/gi,'\n').replace(/<\/div>/gi,'\n').replace(/<\/li>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n))).trim()
+                  : ev.body.content.trim()
+              })()
+              const fmtIso = (iso:string) => { try { return new Date(iso).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}) } catch { return iso } }
+
               return (
-                <div style={{display:'flex',flexDirection:'column',gap:12}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
-                    <Clock size={15} style={{color:TX2,flexShrink:0}}/>
-                    <div>
-                      {ev.isAllDay
-                        ? fmtEvDate(ev.start.dateTime)+' — '+fmtEvDate(ev.end.dateTime)+' (весь день)'
-                        : fmtEvTime(ev.start.dateTime)+' — '+fmtEvTime(ev.end.dateTime)}
+                <>
+                  <div style={{height:4,borderRadius:'16px 16px 0 0',background:ev.isCancelled?'#AEAEB2':catColor,flexShrink:0}} />
+                  <div style={{padding:'20px 24px 0',flexShrink:0}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+                          {ev.source && (
+                            <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:ev.source==='ews'?'rgba(175,82,222,0.15)':'rgba(0,122,255,0.15)',color:ev.source==='ews'?PURPLE:BLUE,letterSpacing:'0.03em'}}>
+                              {ev.source==='ews'?'EXCHANGE':'OUTLOOK'}
+                            </span>
+                          )}
+                          {ev.isCancelled && (
+                            <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'rgba(174,174,178,0.15)',color:'#AEAEB2'}}>ОТМЕНЕНО</span>
+                          )}
+                          {ev.importance && ev.importance!=='Normal' && (
+                            <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:ev.importance==='High'?'rgba(255,59,48,0.15)':'rgba(110,110,115,0.15)',color:ev.importance==='High'?RED:TX2}}>
+                              {impMap[ev.importance]||ev.importance}
+                            </span>
+                          )}
+                          {sens && ev.sensitivity!=='Normal' && (
+                            <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'rgba(110,110,115,0.1)',color:TX2,display:'flex',alignItems:'center',gap:3}}>
+                              <SensIcon size={10} /> {sens.lbl}
+                            </span>
+                          )}
+                          {showAsInfo && (
+                            <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'rgba(110,110,115,0.08)',color:showAsInfo.color}}>
+                              {showAsInfo.lbl}
+                            </span>
+                          )}
+                          {ev.isAllDay && (
+                            <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'rgba(0,122,255,0.12)',color:BLUE}}>ВЕСЬ ДЕНЬ</span>
+                          )}
+                          {ev.type && ev.type!=='SingleInstance' && (
+                            <span style={{fontSize:10,fontWeight:500,padding:'2px 7px',borderRadius:4,background:'rgba(175,82,222,0.1)',color:PURPLE}}>{typeMap[ev.type]||ev.type}</span>
+                          )}
+                          {ev.isMeeting && (
+                            <span style={{fontSize:10,fontWeight:500,padding:'2px 7px',borderRadius:4,background:'rgba(0,122,255,0.08)',color:BLUE}}>Собрание</span>
+                          )}
+                        </div>
+                        <h2 style={{fontSize:18,fontWeight:700,color:TX,letterSpacing:'-0.02em',lineHeight:1.3}}>{ev.subject}</h2>
+                      </div>
+                      <button onClick={()=>setDetailEvent(null)} style={{background:'transparent',border:'none',cursor:'pointer',color:TX2,padding:4,marginLeft:12,flexShrink:0}}><X size={18}/></button>
                     </div>
                   </div>
-                  {ev.location?.displayName && (
-                    <div style={{display:'flex',alignItems:'flex-start',gap:8,fontSize:13,color:TX}}>
-                      <MapPin size={15} style={{color:TX2,flexShrink:0,marginTop:2}}/>
-                      {ev.location.displayName}
+
+                  <div style={{padding:'16px 24px 20px',overflowY:'auto',flex:1}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+
+                      <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                        <Clock size={16} style={{color:TX2,flexShrink:0,marginTop:1}}/>
+                        <div style={{fontSize:13,color:TX,lineHeight:1.5}}>
+                          {ev.isAllDay
+                            ? fmtEvDate(ev.start.dateTime)+' — '+fmtEvDate(ev.end.dateTime)
+                            : <>{fmtEvTime(ev.start.dateTime)}<br/>{fmtEvTime(ev.end.dateTime)}</>}
+                          {(ev.start.timeZone || ev.end.timeZone) && ev.start.timeZone !== 'UTC' && (
+                            <span style={{display:'flex',alignItems:'center',gap:4,marginTop:2,fontSize:11,color:TX2}}><Globe size={11}/>{ev.start.timeZone}</span>
+                          )}
+                          {ev.duration && <span style={{display:'block',fontSize:11,color:TX2,marginTop:2}}>Длительность: {ev.duration}</span>}
+                        </div>
+                      </div>
+
+                      {ev.location?.displayName && (
+                        <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                          <MapPin size={16} style={{color:TX2,flexShrink:0,marginTop:1}}/>
+                          <div style={{fontSize:13,color:TX}}>
+                            {ev.location.displayName}
+                            {ev.location.address && <span style={{display:'block',fontSize:11,color:TX2,marginTop:2}}>{ev.location.address}</span>}
+                          </div>
+                        </div>
+                      )}
+
+                      {onlineUrl && (
+                        <div style={{display:'flex',alignItems:'center',gap:10}}>
+                          <Link2 size={16} style={{color:TX2,flexShrink:0}}/>
+                          <a href={onlineUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:13,color:BLUE,textDecoration:'none',wordBreak:'break-all'}}>{onlineUrl}</a>
+                        </div>
+                      )}
+
+                      {ev.organizer?.emailAddress && (
+                        <div style={{display:'flex',alignItems:'center',gap:10}}>
+                          <User size={16} style={{color:TX2,flexShrink:0}}/>
+                          <div style={{fontSize:13,color:TX}}>
+                            {ev.organizer.emailAddress.name || ev.organizer.emailAddress.address}
+                            {ev.organizer.emailAddress.address && ev.organizer.emailAddress.name && (
+                              <span style={{display:'block',fontSize:11,color:TX2}}>{ev.organizer.emailAddress.address}</span>
+                            )}
+                            {ev.isOrganizer && <span style={{display:'block',fontSize:10,color:TX3,marginTop:1}}>Вы организатор</span>}
+                          </div>
+                        </div>
+                      )}
+
+                      {ev.responseStatus?.response && ev.responseStatus.response !== 'none' && ev.responseStatus.response !== 'organized' && (
+                        <div style={{display:'flex',alignItems:'center',gap:10}}>
+                          <span style={{fontSize:12,fontWeight:600,padding:'3px 8px',borderRadius:4,background:ev.responseStatus.response==='accepted'?'rgba(52,199,89,0.12)':ev.responseStatus.response==='declined'?'rgba(255,59,48,0.12)':'rgba(255,159,10,0.12)',color:ev.responseStatus.response==='accepted'?GREEN:ev.responseStatus.response==='declined'?RED:AMBER}}>
+                            Ваш ответ: {rsvpMap[ev.responseStatus.response]||ev.responseStatus.response}
+                          </span>
+                        </div>
+                      )}
+
+                      {reqAttendees.length > 0 && (
+                        <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                          <Users size={16} style={{color:TX2,flexShrink:0,marginTop:1}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:600,color:TX2,marginBottom:4,letterSpacing:'0.04em'}}>ОБЯЗАТЕЛЬНЫЕ УЧАСТНИКИ ({reqAttendees.length})</div>
+                            <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                              {reqAttendees.map((a,i) => {
+                                const resp = a.status?.response
+                                const respColor = resp==='accepted'?GREEN:resp==='declined'?RED:resp==='tentativelyAccepted'?AMBER:TX3
+                                return (
+                                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 8px',borderRadius:6,background:'var(--cal-bg)'}}>
+                                    <span style={{fontSize:12,color:TX,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.emailAddress?.name || a.emailAddress?.address}</span>
+                                    {resp && resp!=='none' && <span style={{fontSize:10,fontWeight:600,color:respColor,marginLeft:8,flexShrink:0}}>{rsvpMap[resp]||resp}</span>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {optAttendees.length > 0 && (
+                        <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                          <Users size={16} style={{color:TX3,flexShrink:0,marginTop:1}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:600,color:TX3,marginBottom:4,letterSpacing:'0.04em'}}>ДОПОЛНИТЕЛЬНЫЕ УЧАСТНИКИ ({optAttendees.length})</div>
+                            <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                              {optAttendees.map((a,i) => {
+                                const resp = a.status?.response
+                                const respColor = resp==='accepted'?GREEN:resp==='declined'?RED:resp==='tentativelyAccepted'?AMBER:TX3
+                                return (
+                                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 8px',borderRadius:6,background:'var(--cal-bg)'}}>
+                                    <span style={{fontSize:12,color:TX,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.emailAddress?.name || a.emailAddress?.address}</span>
+                                    {resp && resp!=='none' && <span style={{fontSize:10,fontWeight:600,color:respColor,marginLeft:8,flexShrink:0}}>{rsvpMap[resp]||resp}</span>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {resAttendees.length > 0 && (
+                        <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                          <MapPin size={16} style={{color:TX3,flexShrink:0,marginTop:1}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:600,color:TX3,marginBottom:4,letterSpacing:'0.04em'}}>РЕСУРСЫ ({resAttendees.length})</div>
+                            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                              {resAttendees.map((a,i) => (
+                                <span key={i} style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:'var(--cal-bg)',color:TX}}>{a.emailAddress?.name || a.emailAddress?.address}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {ev.categories && ev.categories.length > 0 && (
+                        <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                          <Tag size={16} style={{color:TX2,flexShrink:0,marginTop:1}}/>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                            {ev.categories.map((c,i) => (
+                              <span key={i} style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:'rgba(0,122,255,0.12)',color:BLUE,fontWeight:500}}>{c}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {ewsBodyLoading && (
+                        <div style={{borderTop:'1px solid var(--cal-bd)',paddingTop:14,textAlign:'center'}}>
+                          <span style={{fontSize:12,color:TX2}}>⏳ Загрузка описания...</span>
+                        </div>
+                      )}
+
+                      {plainBody && (
+                        <div style={{borderTop:'1px solid var(--cal-bd)',paddingTop:14}}>
+                          <div style={{fontSize:11,fontWeight:600,color:TX2,marginBottom:8,letterSpacing:'0.04em'}}>ОПИСАНИЕ</div>
+                          <div style={{fontSize:13,color:TX,lineHeight:1.6,whiteSpace:'pre-wrap',wordBreak:'break-word',maxHeight:240,overflowY:'auto',padding:'10px 12px',borderRadius:8,background:'var(--cal-bg)'}}>
+                            {plainBody}
+                          </div>
+                        </div>
+                      )}
+
+                      {ev.onlineMeeting && (
+                        <div style={{borderTop:'1px solid var(--cal-bd)',paddingTop:14}}>
+                          <div style={{fontSize:11,fontWeight:600,color:TX2,marginBottom:8,letterSpacing:'0.04em'}}>ОНЛАЙН-СОБРАНИЕ</div>
+                          <div style={{display:'flex',flexDirection:'column',gap:6,padding:'10px 12px',borderRadius:8,background:'var(--cal-bg)'}}>
+                            {ev.onlineMeeting.joinUrl && (
+                              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                <Link2 size={13} style={{color:TX2,flexShrink:0}}/>
+                                <a href={ev.onlineMeeting.joinUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:BLUE,textDecoration:'none',wordBreak:'break-all'}}>Присоединиться</a>
+                              </div>
+                            )}
+                            {ev.onlineMeeting.conferenceId && (
+                              <div style={{fontSize:12,color:TX}}>ID конференции: <span style={{color:TX2,fontFamily:'monospace'}}>{ev.onlineMeeting.conferenceId}</span></div>
+                            )}
+                            {ev.onlineMeeting.tollNumber && (
+                              <div style={{fontSize:12,color:TX}}>Телефон: <span style={{color:TX2,fontFamily:'monospace'}}>{ev.onlineMeeting.tollNumber}</span></div>
+                            )}
+                            {ev.onlineMeeting.quickDial && (
+                              <div style={{fontSize:12,color:TX}}>Быстрый набор: <span style={{color:TX2,fontFamily:'monospace'}}>{ev.onlineMeeting.quickDial}</span></div>
+                            )}
+                            {ev.onlineMeeting.phones?.map((p,i) => (
+                              <div key={i} style={{fontSize:12,color:TX}}>{p.type}: <span style={{color:TX2,fontFamily:'monospace'}}>{p.number}</span></div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {ev.recurrence && (
+                        <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                          <Calendar size={16} style={{color:TX2,flexShrink:0,marginTop:1}}/>
+                          <div style={{fontSize:13,color:TX}}>
+                            <span style={{fontWeight:600}}>Повторяющееся событие</span>
+                            {ev.recurrence.pattern?.type && <span style={{display:'block',fontSize:12,color:TX2,marginTop:2}}>Тип: {ev.recurrence.pattern.type}{ev.recurrence.pattern.interval ? `, каждые ${ev.recurrence.pattern.interval}` : ''}{ev.recurrence.pattern.daysOfWeek ? `, ${ev.recurrence.pattern.daysOfWeek}` : ''}</span>}
+                            {ev.recurrence.range?.type && <span style={{display:'block',fontSize:12,color:TX2}}>Диапазон: {ev.recurrence.range.type}{ev.recurrence.range.startDate ? `, с ${ev.recurrence.range.startDate}` : ''}{ev.recurrence.range.endDate ? `, по ${ev.recurrence.range.endDate}` : ''}{ev.recurrence.range.numberOfOccurrences ? `, ${ev.recurrence.range.numberOfOccurrences} повторений` : ''}</span>}
+                          </div>
+                        </div>
+                      )}
+
+                      {ev.hasAttachments && ev.attachments && ev.attachments.length > 0 && (
+                        <div style={{borderTop:'1px solid var(--cal-bd)',paddingTop:14}}>
+                          <div style={{fontSize:11,fontWeight:600,color:TX2,marginBottom:8,letterSpacing:'0.04em'}}>ВЛОЖЕНИЯ ({ev.attachments.length})</div>
+                          <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                            {ev.attachments.map((att,i) => (
+                              <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 10px',borderRadius:6,background:'var(--cal-bg)'}}>
+                                <span style={{fontSize:12,color:TX}}>{att.name}</span>
+                                <span style={{fontSize:10,color:TX2,marginLeft:8}}>{att.size ? (att.size/1024).toFixed(1)+' КБ' : ''} {att.contentType||''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{borderTop:'1px solid var(--cal-bd)',paddingTop:14}}>
+                        <button onClick={()=>setShowMeta(!showMeta)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,marginBottom:showMeta?8:0}}>
+                          <ChevronDown size={13} style={{color:TX3,transition:'transform .2s',transform:showMeta?'rotate(0deg)':'rotate(-90deg)'}}/>
+                          <span style={{fontSize:11,fontWeight:600,color:TX3,letterSpacing:'0.04em'}}>СЛУЖЕБНАЯ ИНФОРМАЦИЯ</span>
+                        </button>
+                        {showMeta && (
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',columnGap:16,rowGap:6,padding:'10px 12px',borderRadius:8,background:'var(--cal-bg)'}}>
+                          {ev.createdDateTime && (
+                            <div style={{fontSize:11,color:TX2}}>Создано: <span style={{color:TX}}>{fmtIso(ev.createdDateTime)}</span></div>
+                          )}
+                          {ev.lastModifiedDateTime && (
+                            <div style={{fontSize:11,color:TX2}}>Изменено: <span style={{color:TX}}>{fmtIso(ev.lastModifiedDateTime)}</span></div>
+                          )}
+                          {ev.calendar?.name && (
+                            <div style={{fontSize:11,color:TX2}}>Календарь: <span style={{color:TX}}>{ev.calendar.name}</span></div>
+                          )}
+                          {ev.iCalUId && (
+                            <div style={{fontSize:11,color:TX2}}>iCal UID: <span style={{color:TX,fontFamily:'monospace',fontSize:10,wordBreak:'break-all'}}>{ev.iCalUId.substring(0,40)}...</span></div>
+                          )}
+                          {ev.id && (
+                            <div style={{fontSize:11,color:TX2,gridColumn:'1/-1'}}>ID: <span style={{color:TX,fontFamily:'monospace',fontSize:10,wordBreak:'break-all'}}>{ev.id.substring(0,80)}{ev.id.length>80?'...':''}</span></div>
+                          )}
+                          {ev.seriesMasterId && (
+                            <div style={{fontSize:11,color:TX2,gridColumn:'1/-1'}}>Series ID: <span style={{color:TX,fontFamily:'monospace',fontSize:10,wordBreak:'break-all'}}>{ev.seriesMasterId.substring(0,60)}...</span></div>
+                          )}
+                          {ev.reminderMinutesBeforeStart !== undefined && (
+                            <div style={{fontSize:11,color:TX2}}>Напоминание: <span style={{color:TX}}>{ev.isReminderOn===false?'Выключено':ev.reminderMinutesBeforeStart+' мин. до начала'}</span></div>
+                          )}
+                          {ev.responseRequested !== undefined && (
+                            <div style={{fontSize:11,color:TX2}}>Ответ запрошен: <span style={{color:TX}}>{ev.responseRequested?'Да':'Нет'}</span></div>
+                          )}
+                          {ev.meetingRequestWasSent !== undefined && (
+                            <div style={{fontSize:11,color:TX2}}>Приглашения отправлены: <span style={{color:TX}}>{ev.meetingRequestWasSent?'Да':'Нет'}</span></div>
+                          )}
+                          {ev.allowNewTimeProposal !== undefined && (
+                            <div style={{fontSize:11,color:TX2}}>Предложение нового времени: <span style={{color:TX}}>{ev.allowNewTimeProposal?'Разрешено':'Запрещено'}</span></div>
+                          )}
+                          {ev.isResponseRequested !== undefined && (
+                            <div style={{fontSize:11,color:TX2}}>Требуется ответ: <span style={{color:TX}}>{ev.isResponseRequested?'Да':'Нет'}</span></div>
+                          )}
+                          {ev.type && (
+                            <div style={{fontSize:11,color:TX2}}>Тип события: <span style={{color:TX}}>{typeMap[ev.type]||ev.type}</span></div>
+                          )}
+                          {ev.showAs && (
+                            <div style={{fontSize:11,color:TX2}}>Показать как: <span style={{color:showAsInfo?.color||TX}}>{showAsInfo?.lbl||ev.showAs}</span></div>
+                          )}
+                          {ev.sensitivity && (
+                            <div style={{fontSize:11,color:TX2}}>Доступность: <span style={{color:TX}}>{sens?.lbl||ev.sensitivity}</span></div>
+                          )}
+                          {ev.importance && (
+                            <div style={{fontSize:11,color:TX2}}>Важность: <span style={{color:TX}}>{impMap[ev.importance]||ev.importance}</span></div>
+                          )}
+                          {ev.transactionId && (
+                            <div style={{fontSize:11,color:TX2,gridColumn:'1/-1'}}>Transaction ID: <span style={{color:TX,fontFamily:'monospace',fontSize:10}}>{ev.transactionId}</span></div>
+                          )}
+                        </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {ev.organizer?.emailAddress?.name && (
-                    <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
-                      <User size={15} style={{color:TX2,flexShrink:0}}/>
-                      {ev.organizer.emailAddress.name}
-                    </div>
-                  )}
-                  {ev.categories && ev.categories.length>0 && (
-                    <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
-                      <Tag size={15} style={{color:TX2,flexShrink:0}}/>
-                      {ev.categories.join(', ')}
-                    </div>
-                  )}
-                </div>
+                  </div>
+
+                  <div style={{padding:'12px 24px 16px',borderTop:'1px solid var(--cal-bd)',display:'flex',gap:8,flexShrink:0}}>
+                    {ev.webLink && (
+                      <a href={ev.webLink} target="_blank" rel="noopener noreferrer" style={{display:'inline-flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:8,background:BLUE,color:'#fff',fontSize:12,fontWeight:600,textDecoration:'none',transition:'opacity .15s'}}>
+                        <ExternalLink size={13}/> Открыть в Outlook
+                      </a>
+                    )}
+                    <button onClick={()=>setDetailEvent(null)} style={{padding:'7px 14px',borderRadius:8,background:'transparent',border:'1px solid var(--cal-bd)',color:TX2,fontSize:12,fontWeight:500,cursor:'pointer'}}>
+                      Закрыть
+                    </button>
+                  </div>
+                </>
               )
             })()}
 
             {detailEvent.type==='vacation' && (() => {
               const v=detailEvent.data as VacationRequest
               return (
-                <div style={{display:'flex',flexDirection:'column',gap:12}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
-                    <Clock size={15} style={{color:TX2,flexShrink:0}}/>
-                    {v.startDate} — {v.endDate} ({v.duration} дн.)
+                <>
+                  <div style={{height:4,borderRadius:'16px 16px 0 0',background:v.status===VacationRequestStatus.APPROVED?GREEN:v.status===VacationRequestStatus.ON_APPROVAL?AMBER:RED,flexShrink:0}} />
+                  <div style={{padding:'20px 24px 0'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                      <div>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                          <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:v.status===VacationRequestStatus.APPROVED?'rgba(52,199,89,0.15)':v.status===VacationRequestStatus.ON_APPROVAL?'rgba(255,159,10,0.15)':'rgba(255,59,48,0.15)',color:v.status===VacationRequestStatus.APPROVED?GREEN:v.status===VacationRequestStatus.ON_APPROVAL?AMBER:RED,letterSpacing:'0.03em'}}>
+                            {v.status===VacationRequestStatus.APPROVED?'СОГЛАСОВАНО':v.status===VacationRequestStatus.ON_APPROVAL?'НА СОГЛАСОВАНИИ':'ОТКЛОНЕНО'}
+                          </span>
+                        </div>
+                        <h2 style={{fontSize:18,fontWeight:700,color:TX,letterSpacing:'-0.02em'}}>{VACATION_TYPES[v.vacationType]?.name||'Отпуск'}</h2>
+                      </div>
+                      <button onClick={()=>setDetailEvent(null)} style={{background:'transparent',border:'none',cursor:'pointer',color:TX2,padding:4,marginLeft:12}}><X size={18}/></button>
+                    </div>
                   </div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:TX}}>
-                    <User size={15} style={{color:TX2,flexShrink:0}}/>
-                    {v.userFirstName} {v.userLastName}
+                  <div style={{padding:'16px 24px 20px',overflowY:'auto',flex:1}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                      <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                        <Clock size={16} style={{color:TX2,flexShrink:0,marginTop:1}}/>
+                        <div style={{fontSize:13,color:TX,lineHeight:1.5}}>
+                          {v.startDate} — {v.endDate}
+                          <span style={{display:'block',fontSize:12,color:TX2,marginTop:2}}>{v.duration} дн.</span>
+                        </div>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:10}}>
+                        <User size={16} style={{color:TX2,flexShrink:0}}/>
+                        <span style={{fontSize:13,color:TX}}>{v.userFirstName} {v.userLastName}</span>
+                      </div>
+                      {v.comment && (
+                        <div style={{marginTop:4,borderTop:'1px solid var(--cal-bd)',paddingTop:14}}>
+                          <div style={{fontSize:11,fontWeight:600,color:TX2,marginBottom:8,letterSpacing:'0.04em'}}>КОММЕНТАРИЙ</div>
+                          <div style={{fontSize:13,color:TX,lineHeight:1.6,whiteSpace:'pre-wrap',padding:'10px 12px',borderRadius:8,background:'var(--cal-bg)'}}>{v.comment}</div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,fontSize:13}}>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:4,fontSize:11,fontWeight:600,color:'#fff',background:v.status===VacationRequestStatus.APPROVED?GREEN:v.status===VacationRequestStatus.ON_APPROVAL?AMBER:TX3}}>
-                      {v.status===VacationRequestStatus.APPROVED?'Согласовано':v.status===VacationRequestStatus.ON_APPROVAL?'На согласовании':'Отклонено'}
-                    </span>
+                  <div style={{padding:'12px 24px 16px',borderTop:'1px solid var(--cal-bd)',flexShrink:0}}>
+                    <button onClick={()=>setDetailEvent(null)} style={{padding:'7px 14px',borderRadius:8,background:'transparent',border:'1px solid var(--cal-bd)',color:TX2,fontSize:12,fontWeight:500,cursor:'pointer'}}>
+                      Закрыть
+                    </button>
                   </div>
-                  {v.comment && <div style={{fontSize:12,color:TX2,padding:'8px 10px',borderRadius:6,background:'var(--cal-bg)',marginTop:4}}>{v.comment}</div>}
-                </div>
+                </>
               )
             })()}
           </div>
