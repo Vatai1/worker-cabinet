@@ -559,6 +559,13 @@ export function CalendarPage() {
               const optAttendees = ev.attendees?.filter(a=>a.type==='optional') || []
               const resAttendees = ev.attendees?.filter(a=>a.type==='resource') || []
               const hasHtmlBody = ev.body?.contentType === 'HTML' && ev.body.content
+              const cleanHtml = (() => {
+                if (!hasHtmlBody) return ''
+                const raw = ev.body!.content || ''
+                const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
+                const inner = bodyMatch ? bodyMatch[1] : raw.replace(/<head[\s\S]*?<\/head>/gi, '').replace(/<\/?html[^>]*>/gi, '')
+                return inner.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<o:p>/g, '').replace(/<\/o:p>/g, '').replace(/<!\-\-[\s\S]*?\-\->/g, '').replace(/xmlns[^=]*="[^"]*"/gi, '').trim()
+              })()
               const plainBody = (() => {
                 if (!ev.body?.content) return ''
                 if (ev.body.contentType === 'HTML') return ''
@@ -744,7 +751,7 @@ export function CalendarPage() {
                           <div style={{fontSize:11,fontWeight:600,color:TX2,marginBottom:8,letterSpacing:'0.04em'}}>ОПИСАНИЕ</div>
                           <div style={{fontSize:13,color:TX,lineHeight:1.6,wordBreak:'break-word',maxHeight:240,overflowY:'auto',padding:'10px 12px',borderRadius:8,background:'var(--cal-bg)'}}>
                             {hasHtmlBody ? (
-                              <div dangerouslySetInnerHTML={{__html: ev.body!.content || ''}} style={{lineHeight:1.6}}/>
+                              <div dangerouslySetInnerHTML={{__html: cleanHtml || ''}} style={{lineHeight:1.6}}/>
                             ) : (
                               <div style={{whiteSpace:'pre-wrap'}}>{plainBody}</div>
                             )}
