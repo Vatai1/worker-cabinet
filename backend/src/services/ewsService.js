@@ -111,20 +111,36 @@ export async function fetchEwsEvents(ewsUrl, username, password, domain, startIs
   `
 
   const envelope = buildSoapEnvelope(soapBody)
-  const token = Buffer.from(`${domain ? domain + '\\' : ''}${username}:${password}`).toString('base64')
+
+  let user = username
+  if (domain && !username.includes('\\') && !username.includes('@')) {
+    user = domain + '\\' + username
+  }
+
+  const token = Buffer.from(user + ':' + password).toString('base64')
+
+  console.log('[EWS] Connecting to:', ewsUrl)
+  console.log('[EWS] User:', user)
 
   const res = await fetch(ewsUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/xml; charset=utf-8',
-      'Authorization': `Basic ${token}`,
+      'Authorization': 'Basic ' + token,
+      'User-Agent': 'WorkerCabinet/1.0',
+      'Accept': 'text/xml',
     },
     body: envelope,
   })
 
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`EWS HTTP ${res.status}: ${text.substring(0, 200)}`)
+    const authHeaders = res.headers.get('www-authenticate') || ''
+    console.error('[EWS] HTTP', res.status, 'Auth headers:', authHeaders, 'Body:', text.substring(0, 300))
+    if (res.status === 401) {
+      throw new Error('Неверный логин или пароль. Проверьте учётные данные.' + (authHeaders ? ' Поддерживаемые методы: ' + authHeaders : ''))
+    }
+    throw new Error('EWS HTTP ' + res.status + ': ' + text.substring(0, 200))
   }
 
   const responseXml = await res.text()
