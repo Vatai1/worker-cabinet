@@ -67,6 +67,11 @@ export function CalendarPage() {
   const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [outlookConnected, setOutlookConnected] = useState(false)
+  const [ewsConnected, setEwsConnected] = useState(false)
+  const [showEwsModal, setShowEwsModal] = useState(false)
+  const [ewsForm, setEwsForm] = useState({ url: '', username: '', password: '', domain: '' })
+  const [ewsError, setEwsError] = useState<string | null>(null)
+  const [ewsSaving, setEwsSaving] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [selectedDate, setSelectedDate] = useState(fk(now))
   const [syncing, setSyncing] = useState(false)
@@ -106,7 +111,17 @@ export function CalendarPage() {
   }, [outlookEvents])
 
   const fetchVac = useCallback(async () => { if(!user) return; try { setVacations(await vacationApi.getUserRequests(user.id)) } catch(e:unknown) { setError(getErrorMessage(e)) } }, [user])
-  const fetchOLStatus = useCallback(async () => { try { const r=await fetch(API_BASE_URL+'/calendar/status',{headers:getAuthHeaders()}); if(r.ok) setOutlookConnected((await r.json()).connected) } catch{} }, [])
+  const fetchOLStatus = useCallback(async () => {
+    try {
+      const r = await fetch(API_BASE_URL+'/calendar/status',{headers:getAuthHeaders()})
+      if(r.ok) {
+        const data = await r.json()
+        setOutlookConnected(data.graphConnected || false)
+        setEwsConnected(data.ewsConnected || false)
+        if(data.ewsConfig) setEwsForm(f=>({...f, url:data.ewsConfig.url, username:data.ewsConfig.username, domain:data.ewsConfig.domain||''}))
+      }
+    } catch{}
+  }, [])
   const fetchOLEvents = useCallback(async () => {
     if(!outlookConnected) return
     try {
@@ -118,12 +133,32 @@ export function CalendarPage() {
   }, [focus,view,outlookConnected])
 
   useEffect(()=>{ setLoading(true); Promise.all([fetchVac(),fetchOLStatus()]).finally(()=>setLoading(false)) },[fetchVac,fetchOLStatus])
-  useEffect(()=>{ if(outlookConnected) fetchOLEvents() },[outlookConnected,fetchOLEvents])
+  useEffect(()=>{ if(outlookConnected||ewsConnected) fetchOLEvents() },[outlookConnected,ewsConnected,fetchOLEvents])
   useEffect(()=>{ if(scrollRef.current) scrollRef.current.scrollTop=7*HH-8 },[view,focus])
 
   const connectOL = async () => { try { const r=await fetch(API_BASE_URL+'/calendar/auth/url',{headers:getAuthHeaders()}); if(!r.ok) throw new Error('Ошибка'); window.location.href=(await r.json()).url } catch(e:unknown){setError(getErrorMessage(e))} }
   const disconnectOL = async () => { try { await fetch(API_BASE_URL+'/calendar/disconnect',{method:'DELETE',headers:getAuthHeaders()}); setOutlookConnected(false); setOutlookEvents([]) } catch{} }
   const doSync = async () => { setSyncing(true); await Promise.all([fetchVac(),fetchOLEvents()]); setSyncing(false) }
+
+  const connectEws = async () => {
+    setEwsSaving(true); setEwsError(null)
+    try {
+      const r = await fetch(API_BASE_URL+'/calendar/ews/connect',{
+        method:'POST',
+        headers:{...getAuthHeaders(),'Content-Type':'application/json'},
+        body:JSON.stringify(ewsForm),
+      })
+      const data = await r.json()
+      if(!r.ok) throw new Error(data.error||'Ошибка подключения')
+      setEwsConnected(true); setShowEwsModal(false)
+      fetchOLEvents()
+    } catch(e:unknown){setEwsError(getErrorMessage(e))}
+    finally{setEwsSaving(false)}
+  }
+
+  const disconnectEws = async () => {
+    try { await fetch(API_BASE_URL+'/calendar/ews/disconnect',{method:'DELETE',headers:getAuthHeaders()}); setEwsConnected(false); setEwsForm({url:'',username:'',password:'',domain:''}) } catch{}
+  }
 
   const nav = (dir: -1|1) => {
     setSlideDir(dir); setAnimKey(k=>k+1)
@@ -202,7 +237,7 @@ export function CalendarPage() {
             {[
               {on:showVac,set:()=>setShowVac(!showVac),col:GREEN,lbl:'Отпуска'},
               {on:showPend,set:()=>setShowPend(!showPend),col:PURPLE,lbl:'На согласовании'},
-              ...(outlookConnected?[{on:showOL,set:()=>setShowOL(!showOL),col:BLUE,lbl:'Outlook'}]:[]),
+              ...(outlookConnected||ewsConnected?[{on:showOL,set:()=>setShowOL(!showOL),col:BLUE,lbl:ewsConnected?'Exchange':'Outlook'}]:[]),
             ].map(t=>(
               <div key={t.lbl} className="ctr" onClick={t.set}>
                 <div className="ctt" style={{background:t.on?t.col:TX3}}>
@@ -215,13 +250,27 @@ export function CalendarPage() {
           </div>
         </div>
         <div className="css">
-          <div className="csl">OUTLOOK</div>
+          <div className="csl">ИНТЕГРАЦИЯ</div>
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:8}}>
+            <div style={{fontSize:11,fontWeight:600,color:TX}}>Exchange (EWS)</div>
+            {ewsConnected ? (
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:GREEN}}>
+                  <span style={{width:5,height:5,borderRadius:'50%',background:GREEN,display:'inline-block'}}/> {ewsForm.username}
+                </div>
+                <button onClick={disconnectEws} className="cob cob2"><Unlink size={12}/> Отключить</button>
+              </div>
+            ) : (
+              <button onClick={()=>setShowEwsModal(true)} className="coc"><Link2 size={14}/> Подключить</button>
+            )}
+          </div>
+          <div style={{fontSize:11,fontWeight:600,color:TX,marginBottom:4}}>Outlook Online</div>
           {outlookConnected ? (
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:GREEN}}>
-                <span style={{width:6,height:6,borderRadius:'50%',background:GREEN,display:'inline-block'}}/> Синхронизировано
+              <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:GREEN}}>
+                <span style={{width:5,height:5,borderRadius:'50%',background:GREEN,display:'inline-block'}}/> Синхронизировано
               </div>
-              <button onClick={doSync} className="cob">Синхронизировать сейчас</button>
+              <button onClick={doSync} className="cob">Синхронизировать</button>
               <button onClick={disconnectOL} className="cob cob2"><Unlink size={12}/> Отключить</button>
             </div>
           ) : (
@@ -373,6 +422,43 @@ export function CalendarPage() {
         {view==='week'&&timedGrid(weekDays)}
         {view==='day'&&timedGrid([focus])}
       </div>
+
+      {showEwsModal && (
+        <div style={{position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.5)'}} onClick={()=>setShowEwsModal(false)}>
+          <div style={{width:420,maxWidth:'90vw',background:'var(--cal-surface)',borderRadius:12,border:'1px solid var(--cal-bd)',padding:24,boxShadow:'0 8px 32px rgba(0,0,0,0.4)'}} onClick={e=>e.stopPropagation()}>
+            <h2 style={{fontSize:16,fontWeight:700,color:TX,marginBottom:4}}>Подключение Exchange</h2>
+            <p style={{fontSize:12,color:TX2,marginBottom:16}}>Введите данные вашего корпоративного аккаунта Exchange</p>
+
+            {ewsError && <div style={{marginBottom:12,padding:'8px 10px',borderRadius:6,background:'rgba(255,59,48,0.08)',border:'1px solid rgba(255,59,48,0.2)',fontSize:12,color:RED}}>{ewsError}</div>}
+
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:TX2,display:'block',marginBottom:3}}>URL Exchange</label>
+                <input value={ewsForm.url} onChange={e=>setEwsForm(f=>({...f,url:e.target.value}))} placeholder="https://mail.company.com/EWS/Exchange.asmx" style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid var(--cal-bd)',background:'var(--cal-bg)',color:TX,fontSize:12,outline:'none'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:TX2,display:'block',marginBottom:3}}>Логин</label>
+                <input value={ewsForm.username} onChange={e=>setEwsForm(f=>({...f,username:e.target.value}))} placeholder="ivanov@company.com" style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid var(--cal-bd)',background:'var(--cal-bg)',color:TX,fontSize:12,outline:'none'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:TX2,display:'block',marginBottom:3}}>Пароль</label>
+                <input type="password" value={ewsForm.password} onChange={e=>setEwsForm(f=>({...f,password:e.target.value}))} placeholder="••••••••" style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid var(--cal-bd)',background:'var(--cal-bg)',color:TX,fontSize:12,outline:'none'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:TX2,display:'block',marginBottom:3}}>Домен (необязательно)</label>
+                <input value={ewsForm.domain} onChange={e=>setEwsForm(f=>({...f,domain:e.target.value}))} placeholder="COMPANY" style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid var(--cal-bd)',background:'var(--cal-bg)',color:TX,fontSize:12,outline:'none'}}/>
+              </div>
+            </div>
+
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}>
+              <button onClick={()=>setShowEwsModal(false)} style={{padding:'7px 16px',borderRadius:6,border:'1px solid var(--cal-bd)',background:'transparent',color:TX2,fontSize:12,cursor:'pointer'}}>Отмена</button>
+              <button onClick={connectEws} disabled={ewsSaving} style={{padding:'7px 16px',borderRadius:6,border:'none',background:BLUE,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:ewsSaving?0.6:1}}>
+                {ewsSaving?'Подключение...':'Подключить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
