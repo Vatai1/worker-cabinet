@@ -9,7 +9,13 @@
       "Bash(npm install:*)",
       "Bash(npm run:*)",
       "Bash(ls:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(grep -rl \"onlyoffice\\\\|OnlyOffice\\\\|only-office\" /Users/vatai/worker-cabinet --include=*.tsx --include=*.ts --include=*.js)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(grep -rn VITE_ /Users/vatai/worker-cabinet/.env*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)"
     ]
   }
 }
