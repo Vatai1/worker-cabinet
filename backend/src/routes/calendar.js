@@ -37,7 +37,7 @@ router.get('/auth/url', asyncHandler(async (req, res) => {
 
 router.get('/auth/callback', asyncHandler(async (req, res) => {
   const { code, state } = req.query
-  const userId = parseInt(state as string)
+  const userId = parseInt(String(state))
 
   if (!code) {
     return res.redirect('/calendar?error=no_code')
@@ -57,7 +57,7 @@ router.get('/auth/callback', asyncHandler(async (req, res) => {
     body: new URLSearchParams({
       client_id: clientId,
       client_secret: clientSecret,
-      code: code as string,
+      code: String(code),
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
     }).toString(),
@@ -136,8 +136,8 @@ router.get('/events', asyncHandler(async (req, res) => {
     )
   }
 
-  const startIso = start ? new Date(start as string).toISOString() : new Date().toISOString()
-  const endIso = end ? new Date(end as string).toISOString() : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+  const startIso = start ? new Date(String(start)).toISOString() : new Date().toISOString()
+  const endIso = end ? new Date(String(end)).toISOString() : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
 
   const graphRes = await fetch(
     `https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=${encodeURIComponent(startIso)}&endDateTime=${encodeURIComponent(endIso)}&$top=100&$select=subject,start,end,isAllDay,location,body,organizer,categories`,
