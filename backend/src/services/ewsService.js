@@ -72,8 +72,11 @@ function parseEwsEvents(xml) {
       : []
 
     const bodyMatch = itemXml.match(/<t:Body[^>]*>([\s\S]*?)<\/t:Body>/)
-    const bodyContent = bodyMatch ? bodyMatch[1].trim() : ''
+    let bodyContent = bodyMatch ? bodyMatch[1].trim() : ''
     const bodyType = bodyMatch ? (bodyMatch[0].match(/BodyType="([^"]*)"/)?.[1] || 'Text') : 'Text'
+    if (bodyContent) {
+      bodyContent = bodyContent.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    }
 
     const attendees = []
     const attendeeSection = itemXml.match(/<t:RequiredAttendees>([\s\S]*?)<\/t:RequiredAttendees>/)
@@ -198,8 +201,11 @@ export async function fetchEwsEventBody(ewsUrl, username, password, domain, item
   if (faultMatch) throw new Error('EWS: ' + faultMatch[1])
 
   const bodyMatch = responseXml.match(/<t:Body[^>]*>([\s\S]*?)<\/t:Body>/)
-  const bodyContent = bodyMatch ? bodyMatch[1].trim() : ''
+  let bodyContent = bodyMatch ? bodyMatch[1].trim() : ''
   const bodyType = bodyMatch ? (bodyMatch[0].match(/BodyType="([^"]*)"/)?.[1] || 'Text') : 'Text'
+  if (bodyContent) {
+    bodyContent = bodyContent.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  }
 
   const attendees = []
   const reqSection = responseXml.match(/<t:RequiredAttendees>([\s\S]*?)<\/t:RequiredAttendees>/)
