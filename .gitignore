@@ -53,6 +53,18 @@ logs/
 *.save
 vite.config.d.ts
 
+# Tool artifacts
+.superpowers/
+.kilo/
+nul
+err.txt
+out.txt
+
+# Debug/test files
+test-onlyoffice.html
+.env.onlyoffice
+REFACTORING_SUMMARY.md
+
 # Uploads
 backend/uploads/
 .worktrees/
