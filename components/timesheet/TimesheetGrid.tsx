@@ -10,6 +10,7 @@ export interface TimesheetEntry {
   employee_id: number
   date: string
   code: string | null
+  is_submitted: boolean
   first_name: string
   last_name: string
 }
@@ -78,12 +79,12 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
   }
 
   function getCell(empId: number, day: number) {
-    if (isWeekend(year, month, day)) return { code: 'В' }
+    if (isWeekend(year, month, day)) return { code: 'В', submitted: true }
     const date = dateStr(year, month, day)
     const key = `${empId}:${date}`
-    if (changes[key] !== undefined) return changes[key]
+    if (changes[key] !== undefined) return { ...changes[key], submitted: false }
     const e = entryMap[key]
-    return e ? { code: e.code } : { code: null }
+    return e ? { code: e.code, submitted: e.is_submitted } : { code: null, submitted: false }
   }
 
   function setCell(empId: number, day: number, code: string | null) {
@@ -298,7 +299,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
                     <td
                       key={day}
                       className={[
-                        'border-r border-b border-border p-0 text-center transition-colors',
+                        'border-r border-b border-border p-0 text-center transition-colors relative',
                         colorClass || (weekend && !cell.code ? 'bg-red-50/60 dark:bg-red-950/20' : ''),
                         future ? 'opacity-35' : '',
                         todayDay && !colorClass ? 'ring-2 ring-inset ring-primary/40' : '',
@@ -307,18 +308,26 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
                       {cellReadonly ? (
                         <span className="block py-2 px-1 font-semibold text-center leading-none">
                           {cell.code ?? ''}
+                          {!cell.submitted && cell.code && !future && (
+                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" title="Не отправлено" />
+                          )}
                         </span>
                       ) : (
-                        <select
-                          value={cell.code ?? ''}
-                          onChange={e => setCell(emp.id, day, e.target.value || null)}
-                          className="w-full h-full bg-transparent text-center text-xs focus:outline-none cursor-pointer py-2 px-0 font-medium"
-                        >
-                          <option value=""></option>
-                          {TIMESHEET_CODES.map(c => (
-                            <option key={c.code} value={c.code}>{c.code}</option>
-                          ))}
-                        </select>
+                        <span className="relative">
+                          <select
+                            value={cell.code ?? ''}
+                            onChange={e => setCell(emp.id, day, e.target.value || null)}
+                            className="w-full h-full bg-transparent text-center text-xs focus:outline-none cursor-pointer py-2 px-0 font-medium"
+                          >
+                            <option value=""></option>
+                            {TIMESHEET_CODES.map(c => (
+                              <option key={c.code} value={c.code}>{c.code}</option>
+                            ))}
+                          </select>
+                          {!cell.submitted && cell.code && (
+                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" title="Не отправлено" />
+                          )}
+                        </span>
                       )}
                     </td>
                   )
