@@ -558,11 +558,11 @@ export function CalendarPage() {
               const reqAttendees = ev.attendees?.filter(a=>a.type==='required') || []
               const optAttendees = ev.attendees?.filter(a=>a.type==='optional') || []
               const resAttendees = ev.attendees?.filter(a=>a.type==='resource') || []
+              const hasHtmlBody = ev.body?.contentType === 'HTML' && ev.body.content
               const plainBody = (() => {
                 if (!ev.body?.content) return ''
-                return ev.body.contentType === 'HTML'
-                  ? ev.body.content.replace(/<br\s*\/?>/gi,'\n').replace(/<\/p>/gi,'\n').replace(/<\/div>/gi,'\n').replace(/<\/li>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n))).trim()
-                  : ev.body.content.trim()
+                if (ev.body.contentType === 'HTML') return ''
+                return ev.body.content.trim()
               })()
               const fmtIso = (iso:string) => { try { return new Date(iso).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}) } catch { return iso } }
 
@@ -739,11 +739,15 @@ export function CalendarPage() {
                         </div>
                       )}
 
-                      {plainBody && (
+                      {(hasHtmlBody || plainBody) && (
                         <div style={{borderTop:'1px solid var(--cal-bd)',paddingTop:14}}>
                           <div style={{fontSize:11,fontWeight:600,color:TX2,marginBottom:8,letterSpacing:'0.04em'}}>ОПИСАНИЕ</div>
-                          <div style={{fontSize:13,color:TX,lineHeight:1.6,whiteSpace:'pre-wrap',wordBreak:'break-word',maxHeight:240,overflowY:'auto',padding:'10px 12px',borderRadius:8,background:'var(--cal-bg)'}}>
-                            {plainBody}
+                          <div style={{fontSize:13,color:TX,lineHeight:1.6,wordBreak:'break-word',maxHeight:240,overflowY:'auto',padding:'10px 12px',borderRadius:8,background:'var(--cal-bg)'}}>
+                            {hasHtmlBody ? (
+                              <div dangerouslySetInnerHTML={{__html: ev.body!.content || ''}} style={{lineHeight:1.6}}/>
+                            ) : (
+                              <div style={{whiteSpace:'pre-wrap'}}>{plainBody}</div>
+                            )}
                           </div>
                         </div>
                       )}
