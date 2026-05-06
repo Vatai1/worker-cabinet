@@ -53,6 +53,30 @@ async function getProjectWithMembers(projectId) {
   }
 }
 
+/**
+ * @swagger
+ * /projects:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Получить список проектов
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [active, completed, on_hold, planning] }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Список проектов
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Project' }
+ */
 // GET /api/projects — list with lead & member preview
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -112,6 +136,31 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Получить проект по ID
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Проект с участниками
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Project' }
+ *       404:
+ *         description: Проект не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // GET /api/projects/:id — full detail
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
@@ -124,6 +173,36 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects:
+ *   post:
+ *     tags: [Projects]
+ *     summary: Создать проект
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               fullName: { type: string }
+ *               description: { type: string }
+ *               status: { type: string, enum: [active, completed, on_hold, planning], default: active }
+ *               startDate: { type: string, format: date }
+ *               endDate: { type: string, format: date }
+ *               memberIds: { type: array, items: { type: integer } }
+ *     responses:
+ *       201:
+ *         description: Проект создан
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Project' }
+ */
 // POST /api/projects — create
 router.post('/', authenticateToken, async (req, res) => {
   const client = await getClient()
@@ -182,6 +261,36 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Обновить проект
+ *     description: Доступно для lead, admin, hr
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               fullName: { type: string }
+ *               description: { type: string }
+ *               status: { type: string }
+ *               startDate: { type: string, format: date }
+ *               endDate: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Проект обновлён
+ */
 // PUT /api/projects/:id — update
 router.put('/:id', authenticateToken, async (req, res) => {
   const client = await getClient()
@@ -242,6 +351,33 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/members:
+ *   post:
+ *     tags: [Projects]
+ *     summary: Добавить участника в проект
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, role]
+ *             properties:
+ *               userId: { type: integer }
+ *               role: { type: string, enum: [lead, member] }
+ *     responses:
+ *       200:
+ *         description: Участник добавлен
+ */
 // POST /api/projects/:id/members — add member
 router.post('/:id/members', authenticateToken, async (req, res) => {
   try {
@@ -274,6 +410,34 @@ router.post('/:id/members', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/members/{userId}:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Обновить описание участника
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               description: { type: string }
+ *     responses:
+ *       200:
+ *         description: Участник обновлён
+ */
 // PUT /api/projects/:id/members/:userId — update member info
 router.put('/:id/members/:userId', authenticateToken, async (req, res) => {
   try {
@@ -306,6 +470,27 @@ router.put('/:id/members/:userId', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/members/{userId}:
+ *   delete:
+ *     tags: [Projects]
+ *     summary: Удалить участника из проекта
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Участник удалён
+ */
 // DELETE /api/projects/:id/members/:userId — remove member
 router.delete('/:id/members/:userId', authenticateToken, async (req, res) => {
   try {
@@ -335,6 +520,26 @@ router.delete('/:id/members/:userId', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/documents:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Получить документы проекта
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: folder
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Список документов
+ */
 // GET /api/projects/:id/documents — list documents (optionally filtered by folder_path)
 router.get('/:id/documents', authenticateToken, async (req, res) => {
   try {
@@ -372,6 +577,26 @@ router.get('/:id/documents', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/folders:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Получить папки проекта
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: parent
+ *         schema: { type: string, default: '/' }
+ *     responses:
+ *       200:
+ *         description: Список папок
+ */
 // GET /api/projects/:id/folders — list folders at a given parent_path
 router.get('/:id/folders', authenticateToken, async (req, res) => {
   try {
@@ -391,6 +616,33 @@ router.get('/:id/folders', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/folders:
+ *   post:
+ *     tags: [Projects]
+ *     summary: Создать папку в проекте
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               parentPath: { type: string, default: '/' }
+ *     responses:
+ *       201:
+ *         description: Папка создана
+ */
 // POST /api/projects/:id/folders — create folder
 router.post('/:id/folders', authenticateToken, async (req, res) => {
   try {
@@ -426,6 +678,36 @@ router.post('/:id/folders', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/folders/{folderId}:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Переименовать папку
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: folderId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *     responses:
+ *       200:
+ *         description: Папка переименована
+ */
 // PUT /api/projects/:id/folders/:folderId — rename folder
 router.put('/:id/folders/:folderId', authenticateToken, async (req, res) => {
   try {
@@ -467,6 +749,32 @@ router.put('/:id/folders/:folderId', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/folders:
+ *   delete:
+ *     tags: [Projects]
+ *     summary: Удалить папку
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [path]
+ *             properties:
+ *               path: { type: string }
+ *     responses:
+ *       200:
+ *         description: Папка удалена
+ */
 // DELETE /api/projects/:id/folders — delete folder (and its contents)
 router.delete('/:id/folders', authenticateToken, async (req, res) => {
   try {
@@ -500,6 +808,36 @@ router.delete('/:id/folders', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/documents:
+ *   post:
+ *     tags: [Projects]
+ *     summary: Загрузить документ в проект
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file: { type: string, format: binary }
+ *               name: { type: string }
+ *               tags: { type: string, description: 'JSON строка с массивом тегов' }
+ *               description: { type: string }
+ *               folderPath: { type: string }
+ *     responses:
+ *       201:
+ *         description: Документ загружен
+ */
 // POST /api/projects/:id/documents — upload document
 router.post('/:id/documents', authenticateToken, upload.single('file'), async (req, res) => {
   try {
@@ -553,6 +891,32 @@ router.post('/:id/documents', authenticateToken, upload.single('file'), async (r
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/documents/{documentId}/download:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Скачать документ проекта
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Файл документа
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
 // GET /api/projects/:id/documents/:documentId/download — download document
 router.get('/:id/documents/:documentId/download', authenticateToken, async (req, res) => {
   try {
@@ -580,6 +944,27 @@ router.get('/:id/documents/:documentId/download', authenticateToken, async (req,
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/documents/{documentId}/preview:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Предпросмотр документа
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Файл документа
+ */
 // GET /api/projects/:id/documents/:documentId/preview — preview document
 router.get('/:id/documents/:documentId/preview', authenticateToken, async (req, res) => {
   try {
@@ -634,6 +1019,35 @@ router.get('/:id/documents/:documentId/preview', authenticateToken, async (req, 
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/documents/{documentId}:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Обновить документ
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               description: { type: string }
+ *     responses:
+ *       200:
+ *         description: Документ обновлён
+ */
 // PUT /api/projects/:id/documents/:documentId — update document (rename)
 router.put('/:id/documents/:documentId', authenticateToken, async (req, res) => {
   try {
@@ -698,6 +1112,36 @@ router.put('/:id/documents/:documentId', authenticateToken, async (req, res) => 
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/documents/{documentId}/move:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Переместить документ в другую папку
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [folderPath]
+ *             properties:
+ *               folderPath: { type: string }
+ *     responses:
+ *       200:
+ *         description: Документ перемещён
+ */
 // PUT /api/projects/:id/documents/:documentId/move — move document to another folder
 router.put('/:id/documents/:documentId/move', authenticateToken, async (req, res) => {
   try {
@@ -742,6 +1186,36 @@ router.put('/:id/documents/:documentId/move', authenticateToken, async (req, res
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/folders/{folderId}/move:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Переместить папку
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: folderId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [parentPath]
+ *             properties:
+ *               parentPath: { type: string }
+ *     responses:
+ *       200:
+ *         description: Папка перемещена
+ */
 // PUT /api/projects/:id/folders/:folderId/move — move folder to another parent
 router.put('/:id/folders/:folderId/move', authenticateToken, async (req, res) => {
   try {
@@ -803,6 +1277,27 @@ router.put('/:id/folders/:folderId/move', authenticateToken, async (req, res) =>
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/documents/{documentId}:
+ *   delete:
+ *     tags: [Projects]
+ *     summary: Удалить документ
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Документ удалён
+ */
 // DELETE /api/projects/:id/documents/:documentId — delete document
 router.delete('/:id/documents/:documentId', authenticateToken, async (req, res) => {
   try {
@@ -841,6 +1336,23 @@ router.delete('/:id/documents/:documentId', authenticateToken, async (req, res) 
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}:
+ *   delete:
+ *     tags: [Projects]
+ *     summary: Удалить проект
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Проект удалён
+ */
 // DELETE /api/projects/:id — delete project
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
@@ -897,6 +1409,27 @@ function verifyPreviewToken(token) {
   }
 }
 
+/**
+ * @swagger
+ * /projects/{id}/documents/{documentId}/preview-token:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Получить токен для публичного предпросмотра
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Токен и публичный URL
+ */
 // GET /api/projects/:id/documents/:documentId/preview-token — Get temporary preview token
 router.get('/:id/documents/:documentId/preview-token', authenticateToken, async (req, res) => {
   try {
@@ -963,6 +1496,23 @@ router.get('/:id/documents/:documentId/public/:token', async (req, res) => {
 // ROADMAP ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Получить дорожную карту проекта
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Элементы дорожной карты
+ */
 // GET /api/projects/:id/roadmap — get roadmap items
 router.get('/:id/roadmap', authenticateToken, async (req, res) => {
   try {
@@ -980,6 +1530,34 @@ router.get('/:id/roadmap', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap:
+ *   post:
+ *     tags: [Projects]
+ *     summary: Создать элемент дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               due_date: { type: string, format: date }
+ *     responses:
+ *       201:
+ *         description: Элемент создан
+ */
 // POST /api/projects/:id/roadmap — create roadmap item
 router.post('/:id/roadmap', authenticateToken, async (req, res) => {
   try {
@@ -1022,6 +1600,37 @@ router.post('/:id/roadmap', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/{itemId}:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Обновить элемент дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               due_date: { type: string, format: date }
+ *               status: { type: string }
+ *     responses:
+ *       200:
+ *         description: Элемент обновлён
+ */
 // PUT /api/projects/:id/roadmap/:itemId — update roadmap item
 router.put('/:id/roadmap/:itemId', authenticateToken, async (req, res) => {
   try {
@@ -1086,6 +1695,32 @@ router.put('/:id/roadmap/:itemId', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/reorder:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Изменить порядок элементов дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [order]
+ *             properties:
+ *               order: { type: array, items: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Порядок обновлён
+ */
 // PUT /api/projects/:id/roadmap/reorder — reorder roadmap items
 router.put('/:id/roadmap/reorder', authenticateToken, async (req, res) => {
   try {
@@ -1124,6 +1759,27 @@ router.put('/:id/roadmap/reorder', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/{itemId}:
+ *   delete:
+ *     tags: [Projects]
+ *     summary: Удалить элемент дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Элемент удалён
+ */
 // DELETE /api/projects/:id/roadmap/:itemId — delete roadmap item
 router.delete('/:id/roadmap/:itemId', authenticateToken, async (req, res) => {
   try {
@@ -1162,6 +1818,23 @@ const checkRoadmapAccess = async (projectId, userId) => {
   return result.rows.length > 0
 }
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/rows:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Получить ряды дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Список рядов
+ */
 // GET /api/projects/:id/roadmap/rows
 router.get('/:id/roadmap/rows', authenticateToken, async (req, res) => {
   try {
@@ -1177,6 +1850,33 @@ router.get('/:id/roadmap/rows', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/rows:
+ *   post:
+ *     tags: [Projects]
+ *     summary: Создать ряд дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string }
+ *               color: { type: string, default: '#6366f1' }
+ *     responses:
+ *       201:
+ *         description: Ряд создан
+ */
 // POST /api/projects/:id/roadmap/rows
 router.post('/:id/roadmap/rows', authenticateToken, async (req, res) => {
   try {
@@ -1209,6 +1909,36 @@ router.post('/:id/roadmap/rows', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/rows/{rowId}:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Обновить ряд дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: rowId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               color: { type: string }
+ *               order_index: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Ряд обновлён
+ */
 // PUT /api/projects/:id/roadmap/rows/:rowId
 router.put('/:id/roadmap/rows/:rowId', authenticateToken, async (req, res) => {
   try {
@@ -1242,6 +1972,27 @@ router.put('/:id/roadmap/rows/:rowId', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/rows/{rowId}:
+ *   delete:
+ *     tags: [Projects]
+ *     summary: Удалить ряд дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: rowId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Ряд удалён
+ */
 // DELETE /api/projects/:id/roadmap/rows/:rowId
 router.delete('/:id/roadmap/rows/:rowId', authenticateToken, async (req, res) => {
   try {
@@ -1264,6 +2015,23 @@ router.delete('/:id/roadmap/rows/:rowId', authenticateToken, async (req, res) =>
 // ROADMAP V2 — TASKS
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/tasks:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Получить задачи дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Список задач
+ */
 // GET /api/projects/:id/roadmap/tasks
 router.get('/:id/roadmap/tasks', authenticateToken, async (req, res) => {
   try {
@@ -1279,6 +2047,40 @@ router.get('/:id/roadmap/tasks', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/tasks:
+ *   post:
+ *     tags: [Projects]
+ *     summary: Создать задачу дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [row_id, title, start_month, end_month]
+ *             properties:
+ *               row_id: { type: integer }
+ *               title: { type: string }
+ *               start_month: { type: string, description: 'YYYY-MM' }
+ *               end_month: { type: string, description: 'YYYY-MM' }
+ *               description: { type: string }
+ *               status: { type: string }
+ *               color: { type: string }
+ *               priority: { type: string }
+ *               is_milestone: { type: boolean }
+ *     responses:
+ *       201:
+ *         description: Задача создана
+ */
 // POST /api/projects/:id/roadmap/tasks
 router.post('/:id/roadmap/tasks', authenticateToken, async (req, res) => {
   try {
@@ -1305,6 +2107,42 @@ router.post('/:id/roadmap/tasks', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/tasks/{taskId}:
+ *   put:
+ *     tags: [Projects]
+ *     summary: Обновить задачу дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               start_month: { type: string }
+ *               end_month: { type: string }
+ *               status: { type: string }
+ *               color: { type: string }
+ *               row_id: { type: integer }
+ *               priority: { type: string }
+ *               is_milestone: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Задача обновлена
+ */
 // PUT /api/projects/:id/roadmap/tasks/:taskId
 router.put('/:id/roadmap/tasks/:taskId', authenticateToken, async (req, res) => {
   try {
@@ -1344,6 +2182,27 @@ router.put('/:id/roadmap/tasks/:taskId', authenticateToken, async (req, res) => 
   }
 })
 
+/**
+ * @swagger
+ * /projects/{id}/roadmap/tasks/{taskId}:
+ *   delete:
+ *     tags: [Projects]
+ *     summary: Удалить задачу дорожной карты
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Задача удалена
+ */
 // DELETE /api/projects/:id/roadmap/tasks/:taskId
 router.delete('/:id/roadmap/tasks/:taskId', authenticateToken, async (req, res) => {
   try {

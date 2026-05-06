@@ -5,6 +5,23 @@ import { authenticateToken } from '../middleware/auth.js'
 const router = express.Router()
 
 // Получить все уведомления пользователя
+/**
+ * @swagger
+ * /notifications:
+ *   get:
+ *     tags: [Notifications]
+ *     summary: Получить все уведомления пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список уведомлений
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Notification' }
+ */
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
@@ -25,6 +42,24 @@ router.get('/', authenticateToken, async (req, res) => {
 })
 
 // Получить количество непрочитанных уведомлений
+/**
+ * @swagger
+ * /notifications/unread-count:
+ *   get:
+ *     tags: [Notifications]
+ *     summary: Получить количество непрочитанных уведомлений
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Количество непрочитанных
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 count: { type: integer }
+ */
 router.get('/unread-count', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
@@ -42,6 +77,26 @@ router.get('/unread-count', authenticateToken, async (req, res) => {
 })
 
 // Отметить уведомление как прочитанное
+/**
+ * @swagger
+ * /notifications/{id}/read:
+ *   patch:
+ *     tags: [Notifications]
+ *     summary: Отметить уведомление как прочитанное
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Уведомление обновлено
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Notification' }
+ */
 router.patch('/:id/read', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -64,6 +119,24 @@ router.patch('/:id/read', authenticateToken, async (req, res) => {
 })
 
 // Отметить все уведомления как прочитанные
+/**
+ * @swagger
+ * /notifications/read-all:
+ *   patch:
+ *     tags: [Notifications]
+ *     summary: Отметить все уведомления как прочитанные
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Все уведомления отмечены
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 updated: { type: integer }
+ */
 router.patch('/read-all', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
@@ -81,6 +154,23 @@ router.patch('/read-all', authenticateToken, async (req, res) => {
 })
 
 // Удалить уведомление
+/**
+ * @swagger
+ * /notifications/{id}:
+ *   delete:
+ *     tags: [Notifications]
+ *     summary: Удалить уведомление
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Уведомление удалено
+ */
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -103,6 +193,33 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 })
 
 // Создать уведомление (для использования внутри бэкенда)
+/**
+ * @swagger
+ * /notifications:
+ *   post:
+ *     tags: [Notifications]
+ *     summary: Создать уведомление
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, title, message, type]
+ *             properties:
+ *               userId: { type: integer }
+ *               title: { type: string }
+ *               message: { type: string }
+ *               type: { type: string, enum: [info, success, warning, error] }
+ *     responses:
+ *       201:
+ *         description: Уведомление создано
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Notification' }
+ */
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const { userId, title, message, type } = req.body

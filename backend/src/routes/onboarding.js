@@ -10,6 +10,25 @@ const router = express.Router()
 
 // ─── TEMPLATE ENDPOINTS (HR/admin) ────────────────────────────────────────────
 
+/**
+ * @swagger
+ * /onboarding/templates:
+ *   get:
+ *     tags: [Onboarding]
+ *     summary: Получить шаблоны адаптации (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: department_id
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: position
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Список шаблонов
+ */
 router.get('/templates', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { department_id, position } = req.query
@@ -37,6 +56,31 @@ router.get('/templates', authenticateToken, authorizeRoles('hr', 'admin'), async
   }
 })
 
+/**
+ * @swagger
+ * /onboarding/templates:
+ *   post:
+ *     tags: [Onboarding]
+ *     summary: Создать шаблон адаптации (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string }
+ *               content_text: { type: string }
+ *               department_id: { type: integer }
+ *               position: { type: string }
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       201:
+ *         description: Шаблон создан
+ */
 router.post('/templates', authenticateToken, authorizeRoles('hr', 'admin'), uploadTemplateMiddleware.single('file'), async (req, res) => {
   try {
     const { title, content_text, department_id, position } = req.body
@@ -80,6 +124,34 @@ router.post('/templates', authenticateToken, authorizeRoles('hr', 'admin'), uplo
   }
 })
 
+/**
+ * @swagger
+ * /onboarding/templates/{id}:
+ *   put:
+ *     tags: [Onboarding]
+ *     summary: Обновить шаблон адаптации (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               content_text: { type: string }
+ *               department_id: { type: integer }
+ *               position: { type: string }
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       200:
+ *         description: Шаблон обновлён
+ */
 router.put('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), uploadTemplateMiddleware.single('file'), async (req, res) => {
   try {
     const { id } = req.params
@@ -125,6 +197,23 @@ router.put('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), u
   }
 })
 
+/**
+ * @swagger
+ * /onboarding/templates/{id}:
+ *   delete:
+ *     tags: [Onboarding]
+ *     summary: Удалить шаблон адаптации (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Шаблон удалён
+ */
 router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params
@@ -158,6 +247,19 @@ router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin')
 
 // ─── EMPLOYEE ENDPOINTS ────────────────────────────────────────────────────────
 
+/**
+ * @swagger
+ * /onboarding/me:
+ *   get:
+ *     tags: [Onboarding]
+ *     summary: Получить адаптацию текущего пользователя
+ *     description: 'Доступно для роли: onboarding'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Данные адаптации
+ */
 // GET /me — MUST precede /:id
 router.get('/me', authenticateToken, authorizeRoles('onboarding'), async (req, res) => {
   try {
@@ -222,6 +324,23 @@ router.get('/me', authenticateToken, authorizeRoles('onboarding'), async (req, r
   }
 })
 
+/**
+ * @swagger
+ * /onboarding/documents/{id}/access-token:
+ *   post:
+ *     tags: [Onboarding]
+ *     summary: Получить токен доступа к документу
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Токен доступа
+ */
 router.post('/documents/:id/access-token', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -342,6 +461,23 @@ router.get('/documents/:id/file', async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /onboarding/me/documents/{id}/acknowledge:
+ *   post:
+ *     tags: [Onboarding]
+ *     summary: Подтвердить ознакомление с документом
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Документ подтверждён
+ */
 router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('onboarding'), async (req, res) => {
   try {
     const { id } = req.params
@@ -431,6 +567,18 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('
 
 // ─── HR ENDPOINTS ──────────────────────────────────────────────────────────────
 
+/**
+ * @swagger
+ * /onboarding:
+ *   get:
+ *     tags: [Onboarding]
+ *     summary: Получить список адаптаций (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список адаптаций
+ */
 router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const result = await query(
@@ -457,6 +605,33 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
   }
 })
 
+/**
+ * @swagger
+ * /onboarding:
+ *   post:
+ *     tags: [Onboarding]
+ *     summary: Создать адаптацию для сотрудника (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [first_name, last_name, email, password, position, template_ids]
+ *             properties:
+ *               first_name: { type: string }
+ *               last_name: { type: string }
+ *               email: { type: string }
+ *               password: { type: string }
+ *               position: { type: string }
+ *               department_id: { type: integer }
+ *               template_ids: { type: array, items: { type: integer }, description: 'Минимум 1 шаблон' }
+ *     responses:
+ *       201:
+ *         description: Адаптация создана
+ */
 router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { first_name, last_name, email, password, department_id, position, template_ids } = req.body
@@ -522,6 +697,23 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
   }
 })
 
+/**
+ * @swagger
+ * /onboarding/{id}:
+ *   get:
+ *     tags: [Onboarding]
+ *     summary: Получить адаптацию по ID (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Данные адаптации
+ */
 router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params
@@ -593,6 +785,23 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
   }
 })
 
+/**
+ * @swagger
+ * /onboarding/{id}:
+ *   delete:
+ *     tags: [Onboarding]
+ *     summary: Удалить адаптацию (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Адаптация удалена, роль сброшена на employee
+ */
 router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params

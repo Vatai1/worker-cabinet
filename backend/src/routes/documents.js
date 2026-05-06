@@ -4,6 +4,36 @@ import { authenticateToken } from '../middleware/auth.js'
 
 const router = express.Router()
 
+/**
+ * @swagger
+ * /documents:
+ *   get:
+ *     tags: [Documents]
+ *     summary: Получить все документы из проектов пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список документов
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: integer }
+ *                   name: { type: string }
+ *                   url: { type: string }
+ *                   size: { type: integer }
+ *                   mimeType: { type: string }
+ *                   projectId: { type: integer }
+ *                   projectName: { type: string }
+ *                   uploader: { type: string }
+ *                   uploadedAt: { type: string }
+ *                   description: { type: string }
+ *                   tags: { type: array, items: { type: string } }
+ */
 // GET /api/documents — list all documents from user's projects
 router.get('/', authenticateToken, async (req, res) => {
   try {

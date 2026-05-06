@@ -8,6 +8,18 @@ const router = express.Router()
 
 router.use(authenticateToken)
 
+/**
+ * @swagger
+ * /calendar/auth/url:
+ *   get:
+ *     tags: [Calendar]
+ *     summary: Получить URL авторизации Outlook
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: URL для OAuth2 авторизации
+ */
 router.get('/auth/url', asyncHandler(async (req, res) => {
   const clientId = process.env.OUTLOOK_CLIENT_ID
   const redirectUri = process.env.OUTLOOK_REDIRECT_URI || 'http://localhost:3000/calendar/callback'
@@ -61,6 +73,18 @@ router.get('/auth/callback', asyncHandler(async (req, res) => {
   res.redirect('/calendar?connected=1')
 }))
 
+/**
+ * @swagger
+ * /calendar/status:
+ *   get:
+ *     tags: [Calendar]
+ *     summary: Получить статус подключения календаря
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Статус подключения
+ */
 router.get('/status', asyncHandler(async (req, res) => {
   const graphResult = await query('SELECT 1 FROM outlook_tokens WHERE user_id = $1', [req.user.id])
   const graphConnected = graphResult.rows.length > 0
@@ -76,6 +100,30 @@ router.get('/status', asyncHandler(async (req, res) => {
   })
 }))
 
+/**
+ * @swagger
+ * /calendar/ews/connect:
+ *   post:
+ *     tags: [Calendar]
+ *     summary: Подключить Exchange (EWS)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [url, username, password]
+ *             properties:
+ *               url: { type: string }
+ *               username: { type: string }
+ *               password: { type: string }
+ *               domain: { type: string }
+ *     responses:
+ *       200:
+ *         description: EWS подключён
+ */
 router.post('/ews/connect', asyncHandler(async (req, res) => {
   const { url, username, password, domain } = req.body
 
@@ -100,11 +148,44 @@ router.post('/ews/connect', asyncHandler(async (req, res) => {
   res.json({ ok: true })
 }))
 
+/**
+ * @swagger
+ * /calendar/ews/disconnect:
+ *   delete:
+ *     tags: [Calendar]
+ *     summary: Отключить Exchange (EWS)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: EWS отключён
+ */
 router.delete('/ews/disconnect', asyncHandler(async (req, res) => {
   await query('DELETE FROM exchange_credentials WHERE user_id = $1', [req.user.id])
   res.json({ ok: true })
 }))
 
+/**
+ * @swagger
+ * /calendar/events:
+ *   get:
+ *     tags: [Calendar]
+ *     summary: Получить события календаря
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: start
+ *         required: true
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: end
+ *         required: true
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Список событий
+ */
 router.get('/events', asyncHandler(async (req, res) => {
   const { start, end } = req.query
   const startIso = start ? new Date(String(start)).toISOString() : new Date().toISOString()
@@ -135,6 +216,26 @@ router.get('/events', asyncHandler(async (req, res) => {
   res.json(allEvents)
 }))
 
+/**
+ * @swagger
+ * /calendar/ews/event-body/{id}:
+ *   get:
+ *     tags: [Calendar]
+ *     summary: Получить тело события EWS
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: ck
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Тело события
+ */
 router.get('/ews/event-body/:id', asyncHandler(async (req, res) => {
   const ewsResult = await query('SELECT ews_url, username, password_encrypted, domain FROM exchange_credentials WHERE user_id = $1', [req.user.id])
   if (ewsResult.rows.length === 0) return res.json({ body: undefined, attendees: undefined })
@@ -186,6 +287,18 @@ async function fetchGraphEvents(userId, tokenRow, startIso, endIso) {
   return (data.value || []).map(e => ({ ...e, source: 'graph' }))
 }
 
+/**
+ * @swagger
+ * /calendar/disconnect:
+ *   delete:
+ *     tags: [Calendar]
+ *     summary: Отключить календарь (Outlook)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Календарь отключён
+ */
 router.delete('/disconnect', asyncHandler(async (req, res) => {
   await query('DELETE FROM outlook_tokens WHERE user_id = $1', [req.user.id])
   res.json({ ok: true })
