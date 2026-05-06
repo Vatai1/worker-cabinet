@@ -598,11 +598,6 @@ export function CalendarPage() {
                               <SensIcon size={10} /> {sens.lbl}
                             </span>
                           )}
-                          {showAsInfo && (
-                            <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'rgba(110,110,115,0.08)',color:showAsInfo.color}}>
-                              {showAsInfo.lbl}
-                            </span>
-                          )}
                           {ev.isAllDay && (
                             <span style={{fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,background:'rgba(0,122,255,0.12)',color:BLUE}}>ВЕСЬ ДЕНЬ</span>
                           )}
