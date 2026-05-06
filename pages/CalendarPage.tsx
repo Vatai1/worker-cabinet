@@ -123,14 +123,14 @@ export function CalendarPage() {
     } catch{}
   }, [])
   const fetchOLEvents = useCallback(async () => {
-    if(!outlookConnected) return
+    if(!outlookConnected && !ewsConnected) return
     try {
       const rs=view==='month'?new Date(focus.getFullYear(),focus.getMonth(),1):getMonday(focus)
       const re=view==='month'?new Date(focus.getFullYear(),focus.getMonth()+1,0):(()=>{const d=new Date(rs);d.setDate(d.getDate()+6);return d})()
       const r=await fetch(API_BASE_URL+'/calendar/events?start='+encodeURIComponent(rs.toISOString())+'&end='+encodeURIComponent(re.toISOString()),{headers:getAuthHeaders()})
       if(r.ok) setOutlookEvents(await r.json())
     } catch{}
-  }, [focus,view,outlookConnected])
+  }, [focus,view,outlookConnected,ewsConnected])
 
   useEffect(()=>{ setLoading(true); Promise.all([fetchVac(),fetchOLStatus()]).finally(()=>setLoading(false)) },[fetchVac,fetchOLStatus])
   useEffect(()=>{ if(outlookConnected||ewsConnected) fetchOLEvents() },[outlookConnected,ewsConnected,fetchOLEvents])
