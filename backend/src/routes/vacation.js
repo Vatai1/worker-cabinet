@@ -92,7 +92,36 @@ function extractYear(date) {
   return new Date(date).getFullYear()
 }
 
-// Get all vacation requests (with filters)
+/**
+ * @swagger
+ * /vacation/requests:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Получить список заявок на отпуск
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, approved, rejected, cancelled] }
+ *       - in: query
+ *         name: departmentId
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Список заявок
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/VacationRequest' }
+ */
 router.get('/requests', authenticateToken, async (req, res) => {
   try {
     const { userId, status, departmentId, year } = req.query
@@ -202,7 +231,29 @@ router.get('/requests', authenticateToken, async (req, res) => {
   }
 })
 
-// Get vacation balance for user
+/**
+ * @swagger
+ * /vacation/balance/{userId}:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Получить баланс отпусков
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Баланс отпусков
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/VacationBalance' }
+ */
 router.get('/balance/:userId', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.params
@@ -236,7 +287,41 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
   }
 })
 
-// Create vacation request
+/**
+ * @swagger
+ * /vacation/requests:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Создать заявку на отпуск
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [startDate, endDate, vacationType]
+ *             properties:
+ *               startDate: { type: string, format: date, example: '2026-06-01' }
+ *               endDate: { type: string, format: date, example: '2026-06-14' }
+ *               vacationType: { $ref: '#/components/schemas/VacationType' }
+ *               comment: { type: string }
+ *               hasTravel: { type: boolean, default: false }
+ *               travelDestination: { type: string }
+ *               referenceDocument: { type: string }
+ *     responses:
+ *       201:
+ *         description: Заявка создана
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/VacationRequest' }
+ *       400:
+ *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/requests', authenticateToken, async (req, res) => {
   const client = await getClient()
   
@@ -419,7 +504,39 @@ router.post('/requests', authenticateToken, async (req, res) => {
   }
 })
 
-// Update vacation request
+/**
+ * @swagger
+ * /vacation/requests/{id}:
+ *   put:
+ *     tags: [Vacation]
+ *     summary: Редактировать заявку на отпуск
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               startDate: { type: string, format: date }
+ *               endDate: { type: string, format: date }
+ *               vacationType: { $ref: '#/components/schemas/VacationType' }
+ *               comment: { type: string }
+ *               hasTravel: { type: boolean }
+ *               referenceDocument: { type: string }
+ *     responses:
+ *       200:
+ *         description: Заявка обновлена
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/VacationRequest' }
+ */
 router.put('/requests/:id', authenticateToken, async (req, res) => {
   const client = await getClient()
   
@@ -511,7 +628,32 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
   }
 })
 
-// Approve vacation request
+/**
+ * @swagger
+ * /vacation/requests/{id}/approve:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Одобрить заявку на отпуск
+ *     description: 'Доступно для ролей: manager, hr, admin'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Заявка одобрена
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/VacationRequest' }
+ *       403:
+ *         description: Доступ запрещён
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   const client = await getClient()
 
@@ -629,7 +771,35 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
   }
 })
 
-// Reject vacation request
+/**
+ * @swagger
+ * /vacation/requests/{id}/reject:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Отклонить заявку на отпуск
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string }
+ *     responses:
+ *       200:
+ *         description: Заявка отклонена
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/VacationRequest' }
+ */
 router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   const client = await getClient()
 
@@ -745,7 +915,26 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
   }
 })
 
-// Cancel vacation request (by employee)
+/**
+ * @swagger
+ * /vacation/requests/{id}/cancel:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Отменить заявку (сотрудник)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Заявка отменена
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/VacationRequest' }
+ */
 router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
   const client = await getClient()
   
@@ -865,7 +1054,36 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
   }
 })
 
-// Cancel vacation request (by manager)
+/**
+ * @swagger
+ * /vacation/requests/{id}/cancel-by-manager:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Отменить заявку (руководитель)
+ *     description: 'Доступно для ролей: manager, hr, admin'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string }
+ *     responses:
+ *       200:
+ *         description: Заявка отменена руководителем
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/VacationRequest' }
+ */
 router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   const client = await getClient()
 
@@ -961,7 +1179,42 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
   }
 })
 
-// Get department calendar
+/**
+ * @swagger
+ * /vacation/calendar:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Получить производственный календарь отпусков
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: departmentId
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Календарь отпусков
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   request_id: { type: integer }
+ *                   user_id: { type: integer }
+ *                   first_name: { type: string }
+ *                   last_name: { type: string }
+ *                   position: { type: string }
+ *                   start_date: { type: string, format: date }
+ *                   end_date: { type: string, format: date }
+ *                   vacation_type: { type: string }
+ *                   status: { type: string }
+ */
 router.get('/calendar', authenticateToken, async (req, res) => {
   try {
     const { departmentId, year } = req.query
@@ -1006,7 +1259,36 @@ router.get('/calendar', authenticateToken, async (req, res) => {
   }
 })
 
-// Get vacation restrictions for department
+/**
+ * @swagger
+ * /vacation/restrictions:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Получить ограничения на отпуска
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: departmentId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Список ограничений
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: integer }
+ *                   departmentId: { type: integer }
+ *                   type: { type: string, enum: [pair, group] }
+ *                   employeeIds: { type: array, items: { type: integer } }
+ *                   maxConcurrent: { type: integer }
+ *                   description: { type: string }
+ */
 router.get('/restrictions', authenticateToken, async (req, res) => {
   try {
     const { departmentId } = req.query
@@ -1043,7 +1325,31 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
   }
 })
 
-// Create vacation restriction
+/**
+ * @swagger
+ * /vacation/restrictions:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Создать ограничение на отпуска
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [departmentId, type]
+ *             properties:
+ *               departmentId: { type: integer }
+ *               type: { type: string, enum: [pair, group] }
+ *               employeeIds: { type: array, items: { type: integer } }
+ *               maxConcurrent: { type: integer }
+ *               description: { type: string }
+ *     responses:
+ *       201:
+ *         description: Ограничение создано
+ */
 router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   try {
     const { departmentId, type, employeeIds, maxConcurrent, description } = req.body
@@ -1091,7 +1397,29 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
   }
 })
 
-// Delete vacation restriction
+/**
+ * @swagger
+ * /vacation/restrictions/{id}:
+ *   delete:
+ *     tags: [Vacation]
+ *     summary: Удалить ограничение
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Ограничение удалено
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ */
 router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params
@@ -1105,7 +1433,39 @@ router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 
   }
 })
 
-// Check restrictions for dates
+/**
+ * @swagger
+ * /vacation/check-restrictions:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Проверить ограничения для дат отпуска
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, startDate, endDate]
+ *             properties:
+ *               userId: { type: integer }
+ *               startDate: { type: string, format: date }
+ *               endDate: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Результат проверки
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   field: { type: string }
+ *                   message: { type: string }
+ *                   details: { type: object }
+ */
 router.post('/check-restrictions', authenticateToken, async (req, res) => {
   try {
     const { userId, startDate, endDate } = req.body
@@ -1198,6 +1558,35 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /vacation/requests/{id}/transfer:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Создать запрос на перенос отпуска
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [newStartDate, newEndDate, reason]
+ *             properties:
+ *               newStartDate: { type: string, format: date }
+ *               newEndDate: { type: string, format: date }
+ *               reason: { type: string }
+ *               note: { type: string }
+ *     responses:
+ *       201:
+ *         description: Запрос на перенос создан
+ */
 router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
   const client = await getClient()
   
@@ -1425,6 +1814,23 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /vacation/requests/{id}/transfer/approve:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Одобрить перенос отпуска
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Перенос одобрен
+ */
 router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   const client = await getClient()
 
@@ -1565,6 +1971,32 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
   }
 })
 
+/**
+ * @swagger
+ * /vacation/requests/{id}/transfer/reject:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Отклонить перенос отпуска
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string }
+ *     responses:
+ *       200:
+ *         description: Перенос отклонён
+ */
 router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   const client = await getClient()
 
@@ -1694,6 +2126,23 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
   }
 })
 
+/**
+ * @swagger
+ * /vacation/requests/{id}/transfer/cancel:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Отменить запрос на перенос
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Запрос на перенос отменён
+ */
 router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res) => {
   const client = await getClient()
   
@@ -1787,6 +2236,30 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
   }
 })
 
+/**
+ * @swagger
+ * /vacation/my-transferable:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Получить переносимые отпуска текущего пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список переносимых отпусков
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: integer }
+ *                   start_date: { type: string, format: date }
+ *                   end_date: { type: string, format: date }
+ *                   duration: { type: integer }
+ *                   vacation_type_name: { type: string }
+ */
 // GET /api/vacation/my-transferable — approved upcoming vacations that can be transferred
 router.get('/my-transferable', authenticateToken, async (req, res) => {
   try {
@@ -1815,6 +2288,24 @@ router.get('/my-transferable', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /vacation/my-transfer-requests:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Получить запросы на перенос текущего пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список запросов на перенос
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ */
 // GET /api/vacation/my-transfer-requests — my transfer requests with original + new data
 router.get('/my-transfer-requests', authenticateToken, async (req, res) => {
   try {
@@ -1845,6 +2336,33 @@ router.get('/my-transfer-requests', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /vacation/generate-application:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Сгенерировать заявление на отпуск (DOCX)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [year]
+ *             properties:
+ *               year: { type: integer }
+ *               templateId: { type: integer }
+ *     responses:
+ *       200:
+ *         description: DOCX файл
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
 // POST /api/vacation/generate-application
 // Body: { year, templateId }
 router.post('/generate-application', authenticateToken, async (req, res) => {
@@ -1938,6 +2456,33 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /vacation/generate-transfer-application:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Сгенерировать заявление на перенос отпуска (DOCX)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [templateId, transferIds]
+ *             properties:
+ *               templateId: { type: integer }
+ *               transferIds: { type: array, items: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: DOCX файл
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
 // POST /api/vacation/generate-transfer-application
 // Body: { templateId, transferIds: number[] }
 router.post('/generate-transfer-application', authenticateToken, async (req, res) => {

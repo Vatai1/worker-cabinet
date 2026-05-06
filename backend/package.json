@@ -37,7 +37,9 @@
     "node-telegram-bot-api": "^0.67.0",
     "pdfkit": "^0.18.0",
     "pg": "^8.11.3",
-    "pizzip": "^3.2.0"
+    "pizzip": "^3.2.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

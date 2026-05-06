@@ -44,7 +44,24 @@ async function canAccessTimesheet(user, timesheetId) {
   return canAccessDepartment(user, result.rows[0].department_id)
 }
 
-// GET /api/timesheet — список табелей
+/**
+ * @swagger
+ * /timesheet:
+ *   get:
+ *     tags: [Timesheet]
+ *     summary: Получить список табелей
+ *     description: 'Доступно для ролей: manager, hr, admin. Менеджер видит только свой отдел.'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список табелей
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Timesheet' }
+ */
 router.get('/', async (req, res) => {
   try {
     let rows
@@ -78,7 +95,33 @@ router.get('/', async (req, res) => {
   }
 })
 
-// POST /api/timesheet — создать табель с автозаполнением
+/**
+ * @swagger
+ * /timesheet:
+ *   post:
+ *     tags: [Timesheet]
+ *     summary: Создать табель
+ *     description: 'Доступно для ролей: manager, hr, admin'
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [year, month]
+ *             properties:
+ *               department_id: { type: integer, description: 'Автоматически для менеджера' }
+ *               year: { type: integer }
+ *               month: { type: integer }
+ *     responses:
+ *       201:
+ *         description: Табель создан
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Timesheet' }
+ */
 router.post('/', async (req, res) => {
   let { department_id, year, month } = req.body
 
@@ -130,7 +173,32 @@ router.post('/', async (req, res) => {
   }
 })
 
-// GET /api/timesheet/:id — табель со всеми записями
+/**
+ * @swagger
+ * /timesheet/{id}:
+ *   get:
+ *     tags: [Timesheet]
+ *     summary: Получить табель с записями и сотрудниками
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Табель с записями
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/Timesheet'
+ *                 - type: object
+ *                   properties:
+ *                     entries: { type: array, items: { $ref: '#/components/schemas/TimesheetEntry' } }
+ *                     employees: { type: array, items: { $ref: '#/components/schemas/User' } }
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
@@ -169,7 +237,34 @@ router.get('/:id', async (req, res) => {
   }
 })
 
-// PUT /api/timesheet/:id/entries — batch-обновление ячеек
+/**
+ * @swagger
+ * /timesheet/{id}/entries:
+ *   put:
+ *     tags: [Timesheet]
+ *     summary: Сохранить записи табеля
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [entries]
+ *             properties:
+ *               entries:
+ *                 type: array
+ *                 items: { $ref: '#/components/schemas/TimesheetEntry' }
+ *     responses:
+ *       200:
+ *         description: Записи сохранены
+ */
 router.put('/:id/entries', async (req, res) => {
   const { id } = req.params
   const entries = req.body
@@ -259,7 +354,32 @@ router.put('/:id/entries', async (req, res) => {
   }
 })
 
-// PUT /api/timesheet/:id/status — сменить статус
+/**
+ * @swagger
+ * /timesheet/{id}/status:
+ *   put:
+ *     tags: [Timesheet]
+ *     summary: Изменить статус табеля
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, enum: [draft, submitted, approved] }
+ *     responses:
+ *       200:
+ *         description: Статус обновлён
+ */
 router.put('/:id/status', async (req, res) => {
   const { id } = req.params
   const { status } = req.body
@@ -302,7 +422,28 @@ router.put('/:id/status', async (req, res) => {
   }
 })
 
-// GET /api/timesheet/:id/export/excel
+/**
+ * @swagger
+ * /timesheet/{id}/export/excel:
+ *   get:
+ *     tags: [Timesheet]
+ *     summary: Экспортировать табель в Excel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: XLSX файл
+ *         content:
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
 router.get('/:id/export/excel', async (req, res) => {
   const { id } = req.params
   try {
@@ -364,7 +505,28 @@ router.get('/:id/export/excel', async (req, res) => {
   }
 })
 
-// GET /api/timesheet/:id/export/pdf
+/**
+ * @swagger
+ * /timesheet/{id}/export/pdf:
+ *   get:
+ *     tags: [Timesheet]
+ *     summary: Экспортировать табель в PDF
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: PDF файл
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
 router.get('/:id/export/pdf', async (req, res) => {
   const { id } = req.params
   try {

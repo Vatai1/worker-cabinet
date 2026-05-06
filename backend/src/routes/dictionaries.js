@@ -30,6 +30,23 @@ const uploadDocTemplate = multer({
 
 const router = express.Router()
 
+/**
+ * @swagger
+ * /dictionaries/departments:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Получить справочник отделов (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список отделов
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Department' }
+ */
 router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT d.id, d.name, d.manager_id, d.description, d.vacation_requests_blocked,
@@ -42,6 +59,34 @@ router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asy
   res.json(result.rows)
 }))
 
+/**
+ * @swagger
+ * /dictionaries/departments:
+ *   post:
+ *     tags: [Dictionaries]
+ *     summary: Создать отдел (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               manager_id: { type: integer }
+ *               description: { type: string }
+ *     responses:
+ *       201:
+ *         description: Отдел создан
+ *       409:
+ *         description: Отдел с таким названием уже существует
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { name, manager_id, description } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
@@ -56,6 +101,34 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
   res.status(201).json(result.rows[0])
 }))
 
+/**
+ * @swagger
+ * /dictionaries/departments/{id}:
+ *   put:
+ *     tags: [Dictionaries]
+ *     summary: Обновить отдел (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               manager_id: { type: integer }
+ *               description: { type: string }
+ *     responses:
+ *       200:
+ *         description: Отдел обновлён
+ */
 router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { name, manager_id, description } = req.body
@@ -74,6 +147,23 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
   res.json(result.rows[0])
 }))
 
+/**
+ * @swagger
+ * /dictionaries/departments/{id}:
+ *   delete:
+ *     tags: [Dictionaries]
+ *     summary: Удалить отдел (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Отдел удалён
+ */
 router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
@@ -89,6 +179,18 @@ router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin
   res.json({ success: true })
 }))
 
+/**
+ * @swagger
+ * /dictionaries/skills:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Получить справочник навыков (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список навыков
+ */
 router.get('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT sd.id, sd.name, sd.created_at,
@@ -99,6 +201,27 @@ router.get('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHan
   res.json(result.rows)
 }))
 
+/**
+ * @swagger
+ * /dictionaries/skills:
+ *   post:
+ *     tags: [Dictionaries]
+ *     summary: Создать навык (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *     responses:
+ *       201:
+ *         description: Навык создан
+ */
 router.post('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { name } = req.body
   if (!name?.trim()) throw new ValidationError('Название навыка обязательно')
@@ -113,6 +236,32 @@ router.post('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHa
   res.status(201).json(result.rows[0])
 }))
 
+/**
+ * @swagger
+ * /dictionaries/skills/{id}:
+ *   put:
+ *     tags: [Dictionaries]
+ *     summary: Обновить навык (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *     responses:
+ *       200:
+ *         description: Навык обновлён
+ */
 router.put('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { name } = req.body
@@ -131,6 +280,23 @@ router.put('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyn
   res.json(result.rows[0])
 }))
 
+/**
+ * @swagger
+ * /dictionaries/skills/{id}:
+ *   delete:
+ *     tags: [Dictionaries]
+ *     summary: Удалить навык (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Навык удалён
+ */
 router.delete('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
@@ -146,6 +312,18 @@ router.delete('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), a
   res.json({ success: true })
 }))
 
+/**
+ * @swagger
+ * /dictionaries/vacation-types:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Получить справочник типов отпусков (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список типов отпусков
+ */
 router.get('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT vt.id, vt.code, vt.name,
@@ -156,6 +334,28 @@ router.get('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'), 
   res.json(result.rows)
 }))
 
+/**
+ * @swagger
+ * /dictionaries/vacation-types:
+ *   post:
+ *     tags: [Dictionaries]
+ *     summary: Создать тип отпуска (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code, name]
+ *             properties:
+ *               code: { type: string }
+ *               name: { type: string }
+ *     responses:
+ *       201:
+ *         description: Тип отпуска создан
+ */
 router.post('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { code, name } = req.body
   if (!code?.trim()) throw new ValidationError('Код типа отпуска обязателен')
@@ -174,6 +374,33 @@ router.post('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'),
   res.status(201).json(result.rows[0])
 }))
 
+/**
+ * @swagger
+ * /dictionaries/vacation-types/{id}:
+ *   put:
+ *     tags: [Dictionaries]
+ *     summary: Обновить тип отпуска (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code, name]
+ *             properties:
+ *               code: { type: string }
+ *               name: { type: string }
+ *     responses:
+ *       200:
+ *         description: Тип отпуска обновлён
+ */
 router.put('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { code, name } = req.body
@@ -196,6 +423,23 @@ router.put('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'admin
   res.json(result.rows[0])
 }))
 
+/**
+ * @swagger
+ * /dictionaries/vacation-types/{id}:
+ *   delete:
+ *     tags: [Dictionaries]
+ *     summary: Удалить тип отпуска (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Тип отпуска удалён
+ */
 router.delete('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
@@ -211,6 +455,18 @@ router.delete('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'ad
   res.json({ success: true })
 }))
 
+/**
+ * @swagger
+ * /dictionaries/positions:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Получить справочник должностей (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список должностей
+ */
 router.get('/positions', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT DISTINCT position as name, COUNT(*) as employee_count
@@ -222,6 +478,18 @@ router.get('/positions', authenticateToken, authorizeRoles('hr', 'admin'), async
   res.json(result.rows)
 }))
 
+/**
+ * @swagger
+ * /dictionaries/doc-templates:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Получить справочник шаблонов документов (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список шаблонов
+ */
 router.get('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT id, name, description, category, purpose, file_key, mime_type, size, created_at, download_count
@@ -231,6 +499,30 @@ router.get('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), a
   res.json(result.rows)
 }))
 
+/**
+ * @swagger
+ * /dictionaries/doc-templates:
+ *   post:
+ *     tags: [Dictionaries]
+ *     summary: Создать шаблон документа (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               description: { type: string }
+ *               purpose: { type: string }
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       201:
+ *         description: Шаблон создан
+ */
 router.post('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), uploadDocTemplate.single('file'), asyncHandler(async (req, res) => {
   const { name, description, purpose } = req.body
   if (!name?.trim()) throw new ValidationError('Название шаблона обязательно')
@@ -257,6 +549,34 @@ router.post('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), 
   res.status(201).json(result.rows[0])
 }))
 
+/**
+ * @swagger
+ * /dictionaries/doc-templates/{id}:
+ *   put:
+ *     tags: [Dictionaries]
+ *     summary: Обновить шаблон документа (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               description: { type: string }
+ *               purpose: { type: string }
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       200:
+ *         description: Шаблон обновлён
+ */
 router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), uploadDocTemplate.single('file'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { name, description, purpose } = req.body
@@ -288,6 +608,23 @@ router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'
   res.json(result.rows[0])
 }))
 
+/**
+ * @swagger
+ * /dictionaries/doc-templates/{id}:
+ *   delete:
+ *     tags: [Dictionaries]
+ *     summary: Удалить шаблон документа (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Шаблон удалён
+ */
 router.delete('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
@@ -306,6 +643,23 @@ function getPublicApiUrl() {
   return process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || 'http://host.docker.internal:5000/api'
 }
 
+/**
+ * @swagger
+ * /dictionaries/doc-templates/{id}/preview-token:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Получить токен предпросмотра шаблона (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Токен и публичный URL
+ */
 router.get('/doc-templates/:id/preview-token', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const tmpl = await query('SELECT id FROM document_templates WHERE id = $1', [id])
@@ -418,6 +772,18 @@ router.post('/doc-templates/:id/callback', asyncHandler(async (req, res) => {
   res.json({ error: 0 })
 }))
 
+/**
+ * @swagger
+ * /dictionaries/managers:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Получить список руководителей (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список руководителей
+ */
 router.get('/managers', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT id, first_name, last_name, middle_name, position

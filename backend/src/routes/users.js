@@ -7,6 +7,27 @@ import { uploadToS3, getS3FileUrl } from '../config/s3.js'
 const router = express.Router()
 
 // Get all unique skills
+/**
+ * @swagger
+ * /users/skills/all:
+ *   get:
+ *     tags: [Users]
+ *     summary: Получить все навыки (справочник)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список навыков
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: integer }
+ *                   name: { type: string }
+ */
 router.get('/skills/all', authenticateToken, async (req, res) => {
   try {
     const result = await query(
@@ -20,6 +41,23 @@ router.get('/skills/all', authenticateToken, async (req, res) => {
 })
 
 // Get all unique positions
+/**
+ * @swagger
+ * /users/positions/all:
+ *   get:
+ *     tags: [Users]
+ *     summary: Получить все должности
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список должностей
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { type: string }
+ */
 router.get('/positions/all', authenticateToken, async (req, res) => {
   try {
     const result = await query(
@@ -33,6 +71,32 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
 })
 
 // Search users (for adding members to projects - no role restriction)
+/**
+ * @swagger
+ * /users/search:
+ *   get:
+ *     tags: [Users]
+ *     summary: Поиск пользователей
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: departmentId
+ *         schema: { type: integer }
+ *         description: Фильтр по отделу
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         description: Поисковый запрос (ФИО, email)
+ *     responses:
+ *       200:
+ *         description: Список пользователей
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/User' }
+ */
 router.get('/search', authenticateToken, async (req, res) => {
   try {
     const { departmentId, q } = req.query
@@ -82,6 +146,34 @@ router.get('/search', authenticateToken, async (req, res) => {
 })
 
 // Get all users (for managers/hr/employees)
+/**
+ * @swagger
+ * /users:
+ *   get:
+ *     tags: [Users]
+ *     summary: Получить список всех сотрудников
+ *     description: 'Доступно для ролей: employee, manager, hr, admin'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: departmentId
+ *         schema: { type: integer }
+ *         description: Фильтр по отделу
+ *     responses:
+ *       200:
+ *         description: Список сотрудников
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/User' }
+ *       403:
+ *         description: Доступ запрещён
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', 'admin'), async (req, res) => {
   try {
     const { departmentId } = req.query
@@ -127,6 +219,34 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
 })
 
 // Upload current user avatar
+/**
+ * @swagger
+ * /users/me/avatar:
+ *   post:
+ *     tags: [Users]
+ *     summary: Загрузить аватар
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Аватар загружен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 avatar: { type: string }
+ */
 router.post('/me/avatar', authenticateToken, uploadAvatar.single('avatar'), async (req, res) => {
   try {
     if (!req.file) {
@@ -150,6 +270,43 @@ router.post('/me/avatar', authenticateToken, uploadAvatar.single('avatar'), asyn
 })
 
 // Get user by id
+/**
+ * @swagger
+ * /users/{id}:
+ *   get:
+ *     tags: [Users]
+ *     summary: Получить профиль пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Профиль пользователя
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/User'
+ *                 - type: object
+ *                   properties:
+ *                     subordinates: { type: array, items: { $ref: '#/components/schemas/User' } }
+ *                     skills: { type: array, items: { type: string } }
+ *                     projects: { type: array, items: { $ref: '#/components/schemas/Project' } }
+ *       403:
+ *         description: Доступ запрещён (сотрудник видит только свой профиль)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Пользователь не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -258,6 +415,38 @@ router.get('/:id', authenticateToken, async (req, res) => {
 })
 
 // Add skill to user
+/**
+ * @swagger
+ * /users/{id}/skills:
+ *   post:
+ *     tags: [Users]
+ *     summary: Добавить навык пользователю
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [skill]
+ *             properties:
+ *               skill: { type: string }
+ *     responses:
+ *       200:
+ *         description: Навык добавлен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 skills: { type: array, items: { type: string } }
+ */
 router.post('/:id/skills', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -313,6 +502,38 @@ router.post('/:id/skills', authenticateToken, async (req, res) => {
 })
 
 // Remove skill from user
+/**
+ * @swagger
+ * /users/{id}/skills:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Удалить навык у пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [skill]
+ *             properties:
+ *               skill: { type: string }
+ *     responses:
+ *       200:
+ *         description: Навык удалён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 skills: { type: array, items: { type: string } }
+ */
 router.delete('/:id/skills', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -349,6 +570,37 @@ router.delete('/:id/skills', authenticateToken, async (req, res) => {
 })
 
 // Add project to user
+/**
+ * @swagger
+ * /users/{id}/projects:
+ *   post:
+ *     tags: [Users]
+ *     summary: Добавить проект в профиль
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, role]
+ *             properties:
+ *               name: { type: string }
+ *               role: { type: string }
+ *               status: { type: string }
+ *               startDate: { type: string, format: date }
+ *               endDate: { type: string, format: date }
+ *               description: { type: string }
+ *     responses:
+ *       200:
+ *         description: Проект добавлен
+ */
 router.post('/:id/projects', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -404,6 +656,33 @@ router.post('/:id/projects', authenticateToken, async (req, res) => {
 })
 
 // Delete project
+/**
+ * @swagger
+ * /users/{id}/projects/{projectId}:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Удалить проект из профиля
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: projectId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Проект удалён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ */
 router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) => {
   try {
     const { id, projectId } = req.params
@@ -427,6 +706,45 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
 })
 
 // Update user profile
+/**
+ * @swagger
+ * /users/{id}:
+ *   put:
+ *     tags: [Users]
+ *     summary: Обновить профиль пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               first_name: { type: string }
+ *               last_name: { type: string }
+ *               middle_name: { type: string }
+ *               phone: { type: string }
+ *               responsibility_area: { type: string }
+ *     responses:
+ *       200:
+ *         description: Профиль обновлён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *       403:
+ *         description: Доступ запрещён
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params

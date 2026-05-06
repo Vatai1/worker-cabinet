@@ -5,6 +5,26 @@ import { authenticateToken } from '../middleware/auth.js'
 
 const router = express.Router()
 
+/**
+ * @swagger
+ * /telegram/bot-info:
+ *   get:
+ *     tags: [Telegram]
+ *     summary: Получить информацию о Telegram-боте
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Информация о боте
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 available: { type: boolean }
+ *                 botUsername: { type: string }
+ *                 message: { type: string }
+ */
 router.get('/bot-info', authenticateToken, async (req, res) => {
   try {
     const isAvailable = TelegramService.isAvailable()
@@ -27,6 +47,26 @@ router.get('/bot-info', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /telegram/user-status:
+ *   get:
+ *     tags: [Telegram]
+ *     summary: Получить статус подключения Telegram
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Статус подключения
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 connected: { type: boolean }
+ *                 username: { type: string }
+ *                 notificationsEnabled: { type: boolean }
+ */
 router.get('/user-status', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
@@ -52,6 +92,39 @@ router.get('/user-status', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /telegram/connect:
+ *   post:
+ *     tags: [Telegram]
+ *     summary: Подключить Telegram аккаунт
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [telegramUsername]
+ *             properties:
+ *               telegramUsername: { type: string, example: '@username' }
+ *     responses:
+ *       200:
+ *         description: Аккаунт подключён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *       404:
+ *         description: Пользователь Telegram не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/connect', authenticateToken, async (req, res) => {
   try {
     const { telegramUsername } = req.body
@@ -90,6 +163,25 @@ router.post('/connect', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /telegram/disconnect:
+ *   post:
+ *     tags: [Telegram]
+ *     summary: Отключить Telegram аккаунт
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Аккаунт отключён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ */
 router.post('/disconnect', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
@@ -109,6 +201,34 @@ router.post('/disconnect', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /telegram/toggle-notifications:
+ *   post:
+ *     tags: [Telegram]
+ *     summary: Включить/выключить уведомления в Telegram
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [enabled]
+ *             properties:
+ *               enabled: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Настройки обновлены
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 enabled: { type: boolean }
+ */
 router.post('/toggle-notifications', authenticateToken, async (req, res) => {
   try {
     const { enabled } = req.body

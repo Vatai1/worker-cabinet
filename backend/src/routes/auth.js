@@ -10,6 +10,52 @@ const router = express.Router()
 
 router.use(sanitizeInput)
 
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Регистрация нового пользователя
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password, firstName, lastName]
+ *             properties:
+ *               email: { type: string, format: email, example: user@example.com }
+ *               password: { type: string, format: password, example: password123 }
+ *               firstName: { type: string, example: Иван }
+ *               lastName: { type: string, example: Иванов }
+ *               middleName: { type: string, example: Петрович }
+ *               position: { type: string }
+ *               departmentId: { type: integer }
+ *               phone: { type: string }
+ *               birthDate: { type: string, format: date }
+ *               hireDate: { type: string, format: date }
+ *               role: { type: string, enum: [employee, manager, hr, admin], default: employee }
+ *     responses:
+ *       201:
+ *         description: Пользователь зарегистрирован
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token: { type: string }
+ *                 user: { $ref: '#/components/schemas/User' }
+ *       400:
+ *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       409:
+ *         description: Email уже зарегистрирован
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/register', authLimiter, validateRegister, asyncHandler(async (req, res) => {
   const { email, password, firstName, lastName, middleName, position, departmentId, phone, birthDate, hireDate, role } = req.body
 
@@ -64,6 +110,29 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
   })
 }))
 
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Авторизация пользователя
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/LoginRequest' }
+ *     responses:
+ *       200:
+ *         description: Успешная авторизация
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/LoginResponse' }
+ *       401:
+ *         description: Неверные учётные данные
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) => {
   const { email, password } = req.body
 
@@ -129,6 +198,26 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
   })
 }))
 
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Получить данные текущего пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Данные пользователя
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/User' }
+ *       401:
+ *         description: Не авторизован
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get('/me', asyncHandler(async (req, res) => {
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]

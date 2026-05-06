@@ -6,6 +6,31 @@ const router = express.Router()
 
 const DEFAULT_DATA = { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }
 
+/**
+ * @swagger
+ * /hierarchy:
+ *   get:
+ *     tags: [Hierarchy]
+ *     summary: Получить организационную структуру
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Данные иерархии (ReactFlow)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     nodes: { type: array, items: { type: object } }
+ *                     edges: { type: array, items: { type: object } }
+ *                     viewport: { type: object }
+ *                 updated_at: { type: string, format: date-time, nullable: true }
+ *                 updated_by: { type: integer, nullable: true }
+ */
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT data, updated_at, updated_by FROM hr_hierarchy WHERE id = 1')
@@ -19,6 +44,29 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /hierarchy:
+ *   put:
+ *     tags: [Hierarchy]
+ *     summary: Сохранить организационную структуру (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [nodes, edges]
+ *             properties:
+ *               nodes: { type: array, items: { type: object } }
+ *               edges: { type: array, items: { type: object } }
+ *               viewport: { type: object }
+ *     responses:
+ *       200:
+ *         description: Структура сохранена
+ */
 router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   const { nodes, edges, viewport } = req.body
   if (!nodes || !edges) {
@@ -43,6 +91,23 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
   }
 })
 
+/**
+ * @swagger
+ * /hierarchy/department/{id}:
+ *   get:
+ *     tags: [Hierarchy]
+ *     summary: Получить иерархию отдела
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Данные иерархии отдела
+ */
 router.get('/department/:id', authenticateToken, async (req, res) => {
   const { id } = req.params
   try {
@@ -60,6 +125,34 @@ router.get('/department/:id', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /hierarchy/department/{id}:
+ *   put:
+ *     tags: [Hierarchy]
+ *     summary: Сохранить иерархию отдела (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [nodes, edges]
+ *             properties:
+ *               nodes: { type: array, items: { type: object } }
+ *               edges: { type: array, items: { type: object } }
+ *               viewport: { type: object }
+ *     responses:
+ *       200:
+ *         description: Иерархия сохранена
+ */
 router.put('/department/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   const { id } = req.params
   const { nodes, edges, viewport } = req.body

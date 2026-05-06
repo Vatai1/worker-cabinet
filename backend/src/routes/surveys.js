@@ -9,6 +9,23 @@ import {
 
 const router = express.Router()
 
+/**
+ * @swagger
+ * /surveys:
+ *   get:
+ *     tags: [Surveys]
+ *     summary: Получить все опросы (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список опросов
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Survey' }
+ */
 // GET /api/surveys — list all (HR/admin)
 router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
@@ -35,6 +52,18 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
   }
 })
 
+/**
+ * @swagger
+ * /surveys/my:
+ *   get:
+ *     tags: [Surveys]
+ *     summary: Получить активные опросы для текущего пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список доступных опросов
+ */
 // GET /api/surveys/my — active surveys for current user (MUST be before /:id)
 router.get('/my', authenticateToken, async (req, res) => {
   try {
@@ -63,6 +92,23 @@ router.get('/my', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /surveys/{id}:
+ *   get:
+ *     tags: [Surveys]
+ *     summary: Получить опрос с вопросами (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Опрос с вопросами
+ */
 // GET /api/surveys/:id — get survey with questions (HR/admin)
 router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
@@ -79,6 +125,43 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
   }
 })
 
+/**
+ * @swagger
+ * /surveys:
+ *   post:
+ *     tags: [Surveys]
+ *     summary: Создать опрос (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               targetType: { type: string, enum: [all, department, role, specific] }
+ *               targetIds: { type: array, items: { type: integer } }
+ *               deadline: { type: string, format: date }
+ *               anonymous: { type: boolean }
+ *               questions:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     type: { type: string, enum: [text, single_choice, multiple_choice, scale, rating] }
+ *                     text: { type: string }
+ *                     options: { type: array, items: { type: string } }
+ *                     scaleMin: { type: integer }
+ *                     scaleMax: { type: integer }
+ *                     required: { type: boolean }
+ *     responses:
+ *       201:
+ *         description: Опрос создан
+ */
 // POST /api/surveys — create draft (HR/admin)
 router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   const client = await getClient()
@@ -119,6 +202,38 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
   }
 })
 
+/**
+ * @swagger
+ * /surveys/{id}:
+ *   put:
+ *     tags: [Surveys]
+ *     summary: Обновить черновик опроса (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               targetType: { type: string }
+ *               targetIds: { type: array, items: { type: integer } }
+ *               deadline: { type: string, format: date }
+ *               anonymous: { type: boolean }
+ *               questions: { type: array, items: { type: object } }
+ *     responses:
+ *       200:
+ *         description: Опрос обновлён
+ */
 // PUT /api/surveys/:id — update draft (HR/admin)
 router.put('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   const client = await getClient()
@@ -163,6 +278,23 @@ router.put('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
   }
 })
 
+/**
+ * @swagger
+ * /surveys/{id}:
+ *   delete:
+ *     tags: [Surveys]
+ *     summary: Удалить опрос (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Опрос удалён
+ */
 // DELETE /api/surveys/:id (HR/admin)
 router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
@@ -174,6 +306,23 @@ router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (r
   }
 })
 
+/**
+ * @swagger
+ * /surveys/{id}/publish:
+ *   post:
+ *     tags: [Surveys]
+ *     summary: Опубликовать опрос (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Опрос опубликован
+ */
 // POST /api/surveys/:id/publish (HR/admin)
 router.post('/:id/publish', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
@@ -185,6 +334,23 @@ router.post('/:id/publish', authenticateToken, authorizeRoles('hr', 'admin'), as
   }
 })
 
+/**
+ * @swagger
+ * /surveys/{id}/close:
+ *   post:
+ *     tags: [Surveys]
+ *     summary: Закрыть опрос (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Опрос закрыт
+ */
 // POST /api/surveys/:id/close (HR/admin)
 router.post('/:id/close', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
@@ -200,6 +366,28 @@ router.post('/:id/close', authenticateToken, authorizeRoles('hr', 'admin'), asyn
   }
 })
 
+/**
+ * @swagger
+ * /surveys/{id}/view:
+ *   get:
+ *     tags: [Surveys]
+ *     summary: Просмотр опроса для прохождения
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Опрос с вопросами
+ *       409:
+ *         description: Опрос уже пройден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // GET /api/surveys/:id/view — for response page, checks access (any authenticated)
 router.get('/:id/view', authenticateToken, async (req, res) => {
   try {
@@ -239,6 +427,39 @@ router.get('/:id/view', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /surveys/{id}/respond:
+ *   post:
+ *     tags: [Surveys]
+ *     summary: Ответить на опрос
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [answers]
+ *             properties:
+ *               answers:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     questionId: { type: integer }
+ *                     value: { type: string }
+ *                     values: { type: array, items: { type: string } }
+ *     responses:
+ *       201:
+ *         description: Ответ принят
+ */
 // POST /api/surveys/:id/respond (any authenticated)
 router.post('/:id/respond', authenticateToken, async (req, res) => {
   const client = await getClient()
@@ -285,6 +506,23 @@ router.post('/:id/respond', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /surveys/{id}/analytics:
+ *   get:
+ *     tags: [Surveys]
+ *     summary: Получить аналитику опроса (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Аналитика опроса
+ */
 // GET /api/surveys/:id/analytics (HR/admin)
 router.get('/:id/analytics', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {

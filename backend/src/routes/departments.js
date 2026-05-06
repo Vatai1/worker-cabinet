@@ -4,6 +4,23 @@ import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 
 const router = express.Router()
 
+/**
+ * @swagger
+ * /departments:
+ *   get:
+ *     tags: [Departments]
+ *     summary: Получить список всех отделов
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список отделов с сотрудниками
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Department' }
+ */
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
@@ -51,6 +68,31 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /departments/{id}:
+ *   get:
+ *     tags: [Departments]
+ *     summary: Получить отдел по ID
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Отдел с сотрудниками
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Department' }
+ *       404:
+ *         description: Отдел не найден
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -99,6 +141,28 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /departments/vacation-block-all:
+ *   patch:
+ *     tags: [Departments]
+ *     summary: Заблокировать/разблокировать заявки на отпуск во всех отделах
+ *     description: 'Доступно для ролей: hr, admin'
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [blocked]
+ *             properties:
+ *               blocked: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Статус обновлён
+ */
 router.patch('/vacation-block-all', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { blocked } = req.body
@@ -119,6 +183,33 @@ router.patch('/vacation-block-all', authenticateToken, authorizeRoles('hr', 'adm
   }
 })
 
+/**
+ * @swagger
+ * /departments/{id}/vacation-block:
+ *   patch:
+ *     tags: [Departments]
+ *     summary: Заблокировать/разблокировать заявки на отпуск в отделе
+ *     description: 'Доступно для ролей: hr, admin'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [blocked]
+ *             properties:
+ *               blocked: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Статус обновлён
+ */
 router.patch('/:id/vacation-block', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params

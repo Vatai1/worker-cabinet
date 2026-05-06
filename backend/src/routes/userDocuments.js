@@ -7,6 +7,33 @@ import { uploadToS3, getFromS3, deleteFromS3 } from '../config/s3.js'
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
 
+/**
+ * @swagger
+ * /user-documents:
+ *   get:
+ *     tags: [Documents]
+ *     summary: Получить личные документы пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список документов
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: integer }
+ *                   name: { type: string }
+ *                   url: { type: string }
+ *                   size: { type: integer }
+ *                   mimeType: { type: string }
+ *                   category: { type: string }
+ *                   uploadedAt: { type: string }
+ *                   description: { type: string }
+ */
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
@@ -42,6 +69,29 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /user-documents:
+ *   post:
+ *     tags: [Documents]
+ *     summary: Загрузить личный документ
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file: { type: string, format: binary }
+ *               category: { type: string }
+ *               description: { type: string }
+ *     responses:
+ *       201:
+ *         description: Документ загружен
+ */
 router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     const userId = req.user.id
@@ -79,6 +129,28 @@ router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /user-documents/{id}/download:
+ *   get:
+ *     tags: [Documents]
+ *     summary: Скачать личный документ
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Файл документа
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
 router.get('/:id/download', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -110,6 +182,28 @@ router.get('/:id/download', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /user-documents/{id}/preview:
+ *   get:
+ *     tags: [Documents]
+ *     summary: Предпросмотр личного документа
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Файл документа
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
 router.get('/:id/preview', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -140,6 +234,23 @@ router.get('/:id/preview', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /user-documents/{id}:
+ *   delete:
+ *     tags: [Documents]
+ *     summary: Удалить личный документ
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Документ удалён
+ */
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
