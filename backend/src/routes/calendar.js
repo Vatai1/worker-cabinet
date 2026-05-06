@@ -2,7 +2,7 @@ import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError } from '../middleware/errors.js'
-import { encrypt, decrypt, fetchEwsEvents, testEwsConnection } from '../services/ewsService.js'
+import { encrypt, decrypt, fetchEwsEvents, fetchEwsEventBody, testEwsConnection } from '../services/ewsService.js'
 
 const router = express.Router()
 
@@ -117,7 +117,7 @@ router.get('/events', asyncHandler(async (req, res) => {
     try {
       const graphEvents = await fetchGraphEvents(req.user.id, graphResult.rows[0], startIso, endIso)
       allEvents.push(...graphEvents)
-    } catch {}
+    } catch (err) { console.error('[Graph] fetch error:', err.message) }
   }
 
   const ewsResult = await query('SELECT ews_url, username, password_encrypted, domain FROM exchange_credentials WHERE user_id = $1', [req.user.id])
@@ -126,13 +126,23 @@ router.get('/events', asyncHandler(async (req, res) => {
       const row = ewsResult.rows[0]
       const password = decrypt(row.password_encrypted)
       const ewsEvents = await fetchEwsEvents(row.ews_url, row.username, password, row.domain, startIso, endIso)
-      allEvents.push(...ewsEvents)
+      allEvents.push(...ewsEvents.map(e => ({ ...e, source: 'ews' })))
     } catch (err) {
-      console.error('EWS fetch error:', err.message)
+      console.error('[EWS] fetch error:', err.message)
     }
   }
 
   res.json(allEvents)
+}))
+
+router.get('/ews/event-body/:id', asyncHandler(async (req, res) => {
+  const ewsResult = await query('SELECT ews_url, username, password_encrypted, domain FROM exchange_credentials WHERE user_id = $1', [req.user.id])
+  if (ewsResult.rows.length === 0) return res.json({ body: undefined, attendees: undefined })
+
+  const row = ewsResult.rows[0]
+  const password = decrypt(row.password_encrypted)
+  const details = await fetchEwsEventBody(row.ews_url, row.username, password, row.domain, req.params.id, req.query.ck || '')
+  res.json(details)
 }))
 
 async function fetchGraphEvents(userId, tokenRow, startIso, endIso) {
@@ -167,13 +177,13 @@ async function fetchGraphEvents(userId, tokenRow, startIso, endIso) {
   }
 
   const graphRes = await fetch(
-    `https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=${encodeURIComponent(startIso)}&endDateTime=${encodeURIComponent(endIso)}&$top=100&$select=subject,start,end,isAllDay,location,body,organizer,categories`,
+    `https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=${encodeURIComponent(startIso)}&endDateTime=${encodeURIComponent(endIso)}&$top=100&$select=subject,start,end,isAllDay,location,body,bodyPreview,organizer,categories,attendees,webLink,sensitivity,importance,responseStatus,recurrence,createdDateTime,lastModifiedDateTime,isCancelled,isOrganizer,onlineMeetingUrl,onlineMeeting,reminderMinutesBeforeStart,isReminderOn,responseRequested,showAs,type,hasAttachments,iCalUId,seriesMasterId`,
     { headers: { Authorization: `Bearer ${access_token}` } }
   )
 
   if (!graphRes.ok) return []
   const data = await graphRes.json()
-  return data.value || []
+  return (data.value || []).map(e => ({ ...e, source: 'graph' }))
 }
 
 router.delete('/disconnect', asyncHandler(async (req, res) => {
