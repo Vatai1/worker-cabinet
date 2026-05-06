@@ -1174,6 +1174,10 @@ async function runMigrations() {
  `)
 
     await db.query(`
+  ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS is_submitted BOOLEAN NOT NULL DEFAULT false
+ `)
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS outlook_tokens (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,

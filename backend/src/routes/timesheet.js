@@ -326,15 +326,15 @@ router.put('/:id/entries', async (req, res) => {
     try {
       await client.query('BEGIN')
       const placeholders = normalizedEntries.map((_, i) => {
-        const base = i * 4
-        return `($${base+1}, $${base+2}, $${base+3}, $${base+4})`
+        const base = i * 5
+        return `($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5})`
       }).join(', ')
       await client.query(
-        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code)
+        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted)
          VALUES ${placeholders}
          ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
-           SET code = EXCLUDED.code`,
-        normalizedEntries.flatMap(e => [id, e.employee_id, e.date, e.code])
+           SET code = EXCLUDED.code, is_submitted = false`,
+        normalizedEntries.flatMap(e => [id, e.employee_id, e.date, e.code, false])
       )
       await client.query(
         `UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2`,
@@ -415,6 +415,14 @@ router.put('/:id/status', async (req, res) => {
        WHERE id = $3 RETURNING *`,
       [status, req.user.id, id]
     )
+
+    if (status === 'submitted' && current === 'draft') {
+      await query(
+        `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1`,
+        [id]
+      )
+    }
+
     res.json(result.rows[0])
   } catch (error) {
     console.error('Error updating timesheet status:', error)
