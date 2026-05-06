@@ -1185,6 +1185,19 @@ async function runMigrations() {
     `).catch(e => console.log('  - outlook_tokens:', e.message))
     console.log('  ✓ outlook_tokens')
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS exchange_credentials (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        ews_url TEXT NOT NULL,
+        username TEXT NOT NULL,
+        password_encrypted TEXT NOT NULL,
+        domain TEXT DEFAULT '',
+        connected_at TIMESTAMP DEFAULT NOW()
+      )
+    `).catch(e => console.log('  - exchange_credentials:', e.message))
+    console.log('  ✓ exchange_credentials')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     
