@@ -28,6 +28,7 @@ interface Props {
   year: number
   month: number
   readonly: boolean
+  role?: string
   onSave: () => void
 }
 
@@ -46,7 +47,7 @@ function isWeekend(year: number, month: number, day: number) {
   return dow === 0 || dow === 6
 }
 
-export function TimesheetGrid({ timesheetId, entries, employees, year, month, readonly, onSave }: Props) {
+export function TimesheetGrid({ timesheetId, entries, employees, year, month, readonly, role, onSave }: Props) {
   const totalDays = daysInMonth(year, month)
 
   const [changes, setChanges] = useState<Record<string, { code: string | null }>>({})
@@ -320,7 +321,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
                             className="w-full h-full bg-transparent text-center text-xs focus:outline-none cursor-pointer py-2 px-0 font-medium"
                           >
                             <option value=""></option>
-                            {TIMESHEET_CODES.map(c => (
+                            {TIMESHEET_CODES.filter(c => role === 'hr' || role === 'admin' || !['ОТ','ОС','ДО'].includes(c.code)).map(c => (
                               <option key={c.code} value={c.code}>{c.code}</option>
                             ))}
                           </select>

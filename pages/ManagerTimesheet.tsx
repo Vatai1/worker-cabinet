@@ -4,6 +4,7 @@ import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { TimesheetGrid, TimesheetEntry } from '@/components/timesheet/TimesheetGrid'
+import { useAuthStore } from '@/store/authStore'
 
 interface Timesheet {
   id: number
@@ -17,6 +18,7 @@ interface Timesheet {
 const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
 
 export function ManagerTimesheet() {
+  const user = useAuthStore(s => s.user)
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -156,6 +158,7 @@ export function ManagerTimesheet() {
               year={year}
               month={month}
               readonly={readonly}
+              role={user?.role}
               onSave={loadTimesheet}
             />
           )}
