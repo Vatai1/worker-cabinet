@@ -92,6 +92,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
     if (!isToday(day)) return
     const date = dateStr(year, month, day)
     const cell = getCell(empId, day)
+    if (cell.submitted) return
     const vacationCodes = ['ОТ', 'ОС', 'ДО']
     if (cell.code && vacationCodes.includes(cell.code)) return
     setChanges(prev => ({ ...prev, [`${empId}:${date}`]: { code } }))
@@ -295,7 +296,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
                   const todayDay = isToday(day)
                   const vacationCodes = ['ОТ', 'ОС', 'ДО']
                   const isVacation = cell.code && vacationCodes.includes(cell.code)
-                  const cellReadonly = readonly || !todayDay || weekend || isVacation
+                  const cellReadonly = readonly || !todayDay || weekend || isVacation || cell.submitted
                   return (
                     <td
                       key={day}
