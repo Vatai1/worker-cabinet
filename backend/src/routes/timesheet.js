@@ -282,12 +282,11 @@ router.put('/:id/entries', async (req, res) => {
       return res.status(403).json({ error: 'Нет доступа к этому табелю' })
     }
 
-    if (timesheet.status === 'approved' && !['hr', 'admin'].includes(req.user.role)) {
+    if (timesheet.status === 'approved' && req.user.role === 'manager') {
       return res.status(403).json({ error: 'Нельзя редактировать утверждённый табель' })
     }
 
     if (timesheet.status === 'submitted' && req.user.role === 'manager') {
-      return res.status(403).json({ error: 'Табель передан на утверждение, редактирование недоступно' })
     }
 
     const mm = String(timesheet.month).padStart(2, '0')
@@ -427,6 +426,24 @@ router.put('/:id/status', async (req, res) => {
   } catch (error) {
     console.error('Error updating timesheet status:', error)
     res.status(500).json({ error: 'Ошибка при изменении статуса' })
+  }
+})
+
+router.post('/:id/submit-today', async (req, res) => {
+  const { id } = req.params
+  try {
+    const tsResult = await query(`SELECT * FROM timesheets WHERE id = $1`, [id])
+    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
+
+    const today = toLocalDateStr(new Date())
+    const result = await query(
+      `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1 AND date = $2`,
+      [id, today]
+    )
+    res.json({ success: true, updated: result.rowCount })
+  } catch (error) {
+    console.error('Error submitting today:', error)
+    res.status(500).json({ error: 'Ошибка при отправке' })
   }
 })
 
