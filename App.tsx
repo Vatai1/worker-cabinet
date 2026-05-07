@@ -1,16 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, lazy, Suspense, Component, type ReactNode } from 'react'
-
-class PageErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
-  state = { error: null }
-  static getDerivedStateFromError(e: Error) { return { error: e.message } }
-  render() {
-    if (this.state.error) return (
-      <div className="p-8 text-destructive text-sm">Ошибка загрузки страницы: {this.state.error}</div>
-    )
-    return this.props.children
-  }
-}
+import { useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { Login } from '@/pages/Login'
 import { Layout } from '@/components/layout/Layout'
@@ -32,18 +21,14 @@ import { ProjectRoadmap } from '@/pages/ProjectRoadmap'
 import { Settings } from '@/pages/Settings'
 import { Departments } from '@/pages/Departments'
 import { DepartmentDetail } from '@/pages/DepartmentDetail'
-import { HRSurveys } from '@/pages/HRSurveys'
 import { Surveys } from '@/pages/Surveys'
 import { SurveyPage } from '@/pages/SurveyPage'
 import { Onboarding } from '@/pages/Onboarding'
 import { HROnboarding } from '@/pages/HROnboarding'
-import { HRVacationCalendar } from '@/pages/HRVacationCalendar'
-import { HRDictionaries } from '@/pages/HRDictionaries'
 import { ManagerTimesheet } from '@/pages/ManagerTimesheet'
-import { HRTimesheet } from '@/pages/HRTimesheet'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { AdminPanel } from '@/pages/AdminPanel'
-const HRHierarchy = lazy(() => import('@/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
+import { HRPanel } from '@/pages/HRPanel'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -159,17 +144,12 @@ function App() {
           <Route path="projects/:id" element={<BlockOnboardingRoute><ProjectDetail /></BlockOnboardingRoute>} />
           <Route path="projects/:id/documents" element={<BlockOnboardingRoute><ProjectDocuments /></BlockOnboardingRoute>} />
           <Route path="projects/:id/roadmap" element={<BlockOnboardingRoute><ProjectRoadmap /></BlockOnboardingRoute>} />
-          <Route path="hr/surveys" element={<HRRoute><HRSurveys /></HRRoute>} />
           <Route path="surveys" element={<ProtectedRoute><Surveys /></ProtectedRoute>} />
           <Route path="surveys/:id" element={<ProtectedRoute><SurveyPage /></ProtectedRoute>} />
           <Route path="onboarding" element={<OnboardingRoute><Onboarding /></OnboardingRoute>} />
-          <Route path="hr/onboarding" element={<HRRoute><HROnboarding /></HRRoute>} />
+          <Route path="hr" element={<HRRoute><HRPanel /></HRRoute>} />
           <Route path="hr/onboarding/:id" element={<HRRoute><HROnboarding /></HRRoute>} />
-          <Route path="hr/vacation-calendar" element={<HRRoute><HRVacationCalendar /></HRRoute>} />
-          <Route path="hr/hierarchy" element={<HRRoute><PageErrorBoundary><Suspense fallback={<div className="p-8 text-muted-foreground">Загрузка...</div>}><HRHierarchy /></Suspense></PageErrorBoundary></HRRoute>} />
-          <Route path="hr/dictionaries" element={<HRRoute><HRDictionaries /></HRRoute>} />
           <Route path="leader/timesheet" element={<ManagerRoute><ManagerTimesheet /></ManagerRoute>} />
-          <Route path="hr/timesheet" element={<HRRoute><HRTimesheet /></HRRoute>} />
           <Route path="admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />

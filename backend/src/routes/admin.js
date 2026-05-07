@@ -10,15 +10,19 @@ router.use(authenticateToken)
 router.use(authorizeRoles('admin'))
 
 async function logAudit(userId, userName, action, entityType, entityId, details, ipAddress) {
-  let name = userName
-  if (!name && userId) {
-    const r = await query('SELECT first_name, last_name FROM users WHERE id = $1', [userId])
-    if (r.rows.length > 0) name = `${r.rows[0].first_name} ${r.rows[0].last_name}`
+  try {
+    let name = userName
+    if (!name && userId) {
+      const r = await query('SELECT first_name, last_name FROM users WHERE id = $1', [userId])
+      if (r.rows.length > 0) name = `${r.rows[0].first_name} ${r.rows[0].last_name}`
+    }
+    await query(
+      `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, details, ip_address) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, name, action, entityType, entityId, details ? JSON.stringify(details) : null, ipAddress || null]
+    )
+  } catch (err) {
+    console.error('[AUDIT LOG ERROR]', err.message)
   }
-  await query(
-    `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, details, ip_address) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [userId, name, action, entityType, entityId, details ? JSON.stringify(details) : null, ipAddress]
-  ).catch(() => {})
 }
 
 // ===================== ROLES =====================

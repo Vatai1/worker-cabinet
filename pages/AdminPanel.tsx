@@ -85,6 +85,10 @@ const ACTION_LABELS: Record<string, string> = {
   user_password_reset: 'Сброс пароля',
   user_update: 'Обновление пользователя',
   settings_update: 'Обновление настроек',
+  bulk_status_change: 'Массовая смена статуса',
+  bulk_role_change: 'Массовая смена роли',
+  account_unlock: 'Разблокировка аккаунта',
+  login: 'Вход в систему',
 }
 
 const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string }> = {
@@ -96,6 +100,10 @@ const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: st
   user_password_reset:{ icon: RotateCcw,     color: 'text-orange-600 dark:text-orange-400',   bg: 'bg-orange-100 dark:bg-orange-900/30' },
   user_update:        { icon: UserCog,       color: 'text-sky-600 dark:text-sky-400',          bg: 'bg-sky-100 dark:bg-sky-900/30' },
   settings_update:    { icon: Sliders,       color: 'text-indigo-600 dark:text-indigo-400',    bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
+  bulk_status_change: { icon: ArrowUpDown,   color: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-100 dark:bg-amber-900/30' },
+  bulk_role_change:   { icon: ArrowRightLeft,color: 'text-violet-600 dark:text-violet-400',   bg: 'bg-violet-100 dark:bg-violet-900/30' },
+  account_unlock:     { icon: Unlock,        color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+  login:              { icon: Activity,      color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-100 dark:bg-blue-900/30' },
 }
 
 const ENTITY_LABELS: Record<string, string> = {
