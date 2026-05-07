@@ -3,18 +3,13 @@ import ExcelJS from 'exceljs'
 import PDFDocument from 'pdfkit'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { toLocalDateStr } from '../lib/dateUtils.js'
+import { getTimesheetExportData } from '../lib/timesheetExport.js'
 
 const router = express.Router()
 
 router.use(authenticateToken)
 router.use(authorizeRoles('manager', 'hr', 'admin'))
-
-function toLocalDateStr(d) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
 
 async function getManagerDepartmentId(userId) {
   const byManagerId = await query(
@@ -282,9 +277,6 @@ router.put('/:id/entries', async (req, res) => {
       return res.status(403).json({ error: 'Нет доступа к этому табелю' })
     }
 
-    if (timesheet.status === 'submitted' && req.user.role === 'manager') {
-    }
-
     const mm = String(timesheet.month).padStart(2, '0')
     const daysInTs = new Date(timesheet.year, timesheet.month, 0).getDate()
     const rangeStart = `${timesheet.year}-${mm}-01`
@@ -425,9 +417,29 @@ router.put('/:id/status', async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /timesheet/{id}/submit-today:
+ *   post:
+ *     tags: [Timesheet]
+ *     summary: Отправить записи за сегодняшний день
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Записи отправлены
+ */
 router.post('/:id/submit-today', async (req, res) => {
   const { id } = req.params
   try {
+    if (!(await canAccessTimesheet(req.user, id))) {
+      return res.status(403).json({ error: 'Нет доступа к этому табелю' })
+    }
     const tsResult = await query(`SELECT * FROM timesheets WHERE id = $1`, [id])
     if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
 
@@ -471,34 +483,9 @@ router.get('/:id/export/excel', async (req, res) => {
     if (!(await canAccessTimesheet(req.user, id))) {
       return res.status(403).json({ error: 'Нет доступа' })
     }
-    const tsResult = await query(
-      `SELECT t.*, d.name as department_name FROM timesheets t
-       JOIN departments d ON t.department_id = d.id WHERE t.id = $1`,
-      [id]
-    )
-    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
-    const timesheet = tsResult.rows[0]
-
-    const entriesResult = await query(
-      `SELECT te.employee_id, te.date, te.code,
-              u.first_name, u.last_name
-       FROM timesheet_entries te
-       JOIN users u ON te.employee_id = u.id
-       WHERE te.timesheet_id = $1
-       ORDER BY u.last_name, u.first_name, te.date`,
-      [id]
-    )
-
-    const daysInMonth = new Date(timesheet.year, timesheet.month, 0).getDate()
-
-    const byEmployee = {}
-    for (const e of entriesResult.rows) {
-      const key = e.employee_id
-      if (!byEmployee[key]) {
-        byEmployee[key] = { name: `${e.last_name} ${e.first_name}`, days: {} }
-      }
-      byEmployee[key].days[e.date] = e.code
-    }
+    const data = await getTimesheetExportData(id)
+    if (!data) return res.status(404).json({ error: 'Табель не найден' })
+    const { timesheet, daysInMonth, byEmployee } = data
 
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet('Табель')
@@ -554,34 +541,10 @@ router.get('/:id/export/pdf', async (req, res) => {
     if (!(await canAccessTimesheet(req.user, id))) {
       return res.status(403).json({ error: 'Нет доступа' })
     }
-    const tsResult = await query(
-      `SELECT t.*, d.name as department_name FROM timesheets t
-       JOIN departments d ON t.department_id = d.id WHERE t.id = $1`,
-      [id]
-    )
-    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
-    const timesheet = tsResult.rows[0]
-
-    const entriesResult = await query(
-      `SELECT te.employee_id, te.date, te.code,
-              u.first_name, u.last_name
-       FROM timesheet_entries te
-       JOIN users u ON te.employee_id = u.id
-       WHERE te.timesheet_id = $1
-       ORDER BY u.last_name, u.first_name, te.date`,
-      [id]
-    )
-
-    const daysInMonth = new Date(timesheet.year, timesheet.month, 0).getDate()
+    const data = await getTimesheetExportData(id)
+    if (!data) return res.status(404).json({ error: 'Табель не найден' })
+    const { timesheet, daysInMonth, byEmployee } = data
     const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
-
-    const byEmployee = {}
-    for (const e of entriesResult.rows) {
-      if (!byEmployee[e.employee_id]) {
-        byEmployee[e.employee_id] = { name: `${e.last_name} ${e.first_name}`, days: {} }
-      }
-      byEmployee[e.employee_id].days[e.date] = e.code
-    }
 
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="timesheet-${timesheet.year}-${timesheet.month}.pdf"`)

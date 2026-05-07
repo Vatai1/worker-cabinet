@@ -116,7 +116,7 @@ router.get('/search', authenticateToken, async (req, res) => {
         u.status,
         u.role,
         u.manager_id,
-        m.first_name || '' || m.last_name as manager_name
+        m.first_name || ' ' || m.last_name as manager_name
       FROM users u
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN users m ON u.manager_id = m.id

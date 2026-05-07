@@ -27,7 +27,6 @@ interface Props {
   employees: Employee[]
   year: number
   month: number
-  readonly: boolean
   role?: string
   onSave: () => void
 }
@@ -47,7 +46,7 @@ function isWeekend(year: number, month: number, day: number) {
   return dow === 0 || dow === 6
 }
 
-export function TimesheetGrid({ timesheetId, entries, employees, year, month, readonly, role, onSave }: Props) {
+export function TimesheetGrid({ timesheetId, entries, employees, year, month, role, onSave }: Props) {
   const totalDays = daysInMonth(year, month)
 
   const [changes, setChanges] = useState<Record<string, { code: string | null }>>({})
@@ -152,7 +151,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
           const colonIdx = key.indexOf(':')
           const empId = key.slice(0, colonIdx)
           const date = key.slice(colonIdx + 1)
-          return { employee_id: Number(empId), date, code: val.code, hours: null }
+          return { employee_id: Number(empId), date, code: val.code }
         })
         .filter(entry => {
           const cell = entryMap[`${entry.employee_id}:${entry.date}`]
@@ -206,7 +205,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
       {error && <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">{error}</div>}
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {!readonly && role !== 'hr' && role !== 'admin' && (
+        {role !== 'hr' && role !== 'admin' && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-muted-foreground font-medium">Массовые действия:</span>
             <Button variant="outline" size="sm" onClick={fillAllAttendance}>
@@ -215,12 +214,12 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
           </div>
         )}
         <div className="flex items-center gap-2 flex-wrap ml-auto">
-          {!readonly && hasChanges && (
+          {hasChanges && (
             <Button onClick={handleSave} disabled={saving} size="sm">
               {saving ? 'Сохранение...' : `Сохранить изменения`}
             </Button>
           )}
-          {!readonly && hasChanges && (
+          {hasChanges && (
             <Button variant="outline" size="sm" onClick={() => setChanges({})}>
               Сбросить
             </Button>
@@ -268,7 +267,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
               <th className="border-b border-border px-2 py-2 text-center bg-muted font-semibold min-w-[52px] text-xs">
                 ОТ
               </th>
-              {!readonly && role !== 'hr' && role !== 'admin' && (
+              {role !== 'hr' && role !== 'admin' && (
                 <th className="sticky right-0 z-20 border-b border-l border-border px-2 py-2 text-center bg-muted font-semibold min-w-[64px] text-xs">
                   Действия
                 </th>
@@ -296,7 +295,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
                   const todayDay = isToday(day)
                   const vacationCodes = ['ОТ', 'ОС', 'ДО']
                   const isVacation = cell.code && vacationCodes.includes(cell.code)
-                  const cellReadonly = readonly || !todayDay || weekend || isVacation || cell.submitted
+                  const cellReadonly = !todayDay || weekend || isVacation || cell.submitted
                   return (
                     <td
                       key={day}
@@ -340,7 +339,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
                 <td className="border-b border-border px-2 py-2 text-center font-bold text-blue-400 dark:text-blue-300">
                   {countCode(emp.id, 'ОТ') || ''}
                 </td>
-                {!readonly && role !== 'hr' && role !== 'admin' && (
+                {role !== 'hr' && role !== 'admin' && (
                   <td className="sticky right-0 z-10 border-l border-b border-border px-2 py-1.5 text-center bg-inherit">
                     <button
                       onClick={() => fillEmployeeAttendance(emp.id)}

@@ -1,29 +1,4 @@
-import type {
-  VacationRequest,
-  VacationBalance,
-  VacationRestriction,
-  VacationCalendarItem,
-} from '@/types'
-import { VacationRequestStatus, VacationType } from '@/types'
-
-export const mockVacationRequests: VacationRequest[] = []
-
-export const mockVacationBalances: Record<string, VacationBalance> = {}
-
-export const mockVacationRestrictions: VacationRestriction[] = []
-
-export const getVacationRequestStatusLabel = (
-  status: VacationRequestStatus
-): string => {
-  const labels: Record<VacationRequestStatus, string> = {
-    [VacationRequestStatus.ON_APPROVAL]: 'На согласовании',
-    [VacationRequestStatus.APPROVED]: 'Согласовано',
-    [VacationRequestStatus.REJECTED]: 'Не согласовано',
-    [VacationRequestStatus.CANCELLED_BY_EMPLOYEE]: 'Отменено сотрудником',
-    [VacationRequestStatus.CANCELLED_BY_MANAGER]: 'Отменено руководителем',
-  }
-  return labels[status]
-}
+import { VacationRequestStatus } from '@/types'
 
 export const getVacationRequestStatusBadge = (
   status: VacationRequestStatus
@@ -54,19 +29,6 @@ export const getVacationRequestStatusBadge = (
     },
   }
   return badges[status]
-}
-
-export const getVacationTypeLabel = (type: VacationType): string => {
-  const labels: Record<VacationType, string> = {
-    [VacationType.ANNUAL_PAID]: 'Ежегодный оплачиваемый',
-    [VacationType.UNPAID]: 'Без сохранения ЗП',
-    [VacationType.EDUCATIONAL]: 'Учебный',
-    [VacationType.MATERNITY]: 'По беременности и родам',
-    [VacationType.CHILD_CARE]: 'По уходу за ребёнком',
-    [VacationType.ADDITIONAL]: 'Дополнительный',
-    [VacationType.VETERAN]: 'Ветеранский',
-  }
-  return labels[type]
 }
 
 export const calculateVacationDuration = (

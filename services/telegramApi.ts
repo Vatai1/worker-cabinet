@@ -28,20 +28,10 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   return response.json()
 }
 
-interface BotInfo {
-  available: boolean
-  botUsername?: string
-  message: string
-}
-
 interface UserStatus {
   connected: boolean
   username?: string
   notificationsEnabled: boolean
-}
-
-export async function getBotInfo(): Promise<BotInfo> {
-  return request('/telegram/bot-info')
 }
 
 export async function getUserTelegramStatus(): Promise<UserStatus> {

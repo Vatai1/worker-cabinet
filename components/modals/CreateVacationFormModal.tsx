@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
-import { format } from 'date-fns'
 import { VacationType, VACATION_TYPES } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { X, FileText, Upload, AlertTriangle } from 'lucide-react'
-import { ru } from 'date-fns/locale'
 
 interface CreateVacationFormModalProps {
   isOpen: boolean
@@ -49,7 +47,6 @@ export function CreateVacationFormModal({
   const [comment, setComment] = useState('')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [hasCheckedRestrictions, setHasCheckedRestrictions] = useState(false)
   const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null)
 
@@ -67,7 +64,6 @@ export function CreateVacationFormModal({
     }
 
     if (userId && startDate && endDate && onCheckRestrictions) {
-      const dateKey = `${startDate}-${endDate}`
       if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
         console.log('[CreateVacationFormModal] Already checked these dates, skipping')
         return

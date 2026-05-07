@@ -107,12 +107,6 @@ export function formatFileSize(bytes: number): string {
   return `${size.toFixed(1)} ${units[unitIndex]}`
 }
 
-export function getFileIconType(mimeType: string): 'pdf' | 'image' | 'video' | 'audio' | 'text' | 'docx' | 'file' {
-  const type = getDocumentType(mimeType)
-  if (type === 'other') return 'file'
-  return type
-}
-
 export interface FolderItem {
   id: string
   name: string
@@ -193,33 +187,4 @@ export function getFileTypeLabel(mimeType: string, fileName?: string): string {
     if (ext && ext.length <= 5) return ext
   }
   return 'FILE'
-}
-
-export function formatDateShort(d: string) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(d))
-}
-
-export function formatDateTimeShort(d: string) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(d))
-}
-
-export function parseBreadcrumbs(path: string) {
-  const parts = path.split('/').filter(Boolean)
-  const crumbs: { name: string; path: string }[] = [{ name: 'Home', path: '' }]
-  let acc = ''
-  for (const p of parts) {
-    acc += '/' + p
-    crumbs.push({ name: p, path: acc })
-  }
-  return crumbs
 }

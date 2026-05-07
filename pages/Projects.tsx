@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/store/authStore'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/Avatar'
@@ -208,7 +207,6 @@ function MemberRow({ member }: { member: ProjectMemberType }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────
 export function Projects() {
-  const { user } = useAuthStore()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

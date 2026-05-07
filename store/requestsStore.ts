@@ -6,11 +6,9 @@ interface RequestsStore {
   addRequest: (request: Omit<Request, 'id' | 'createdAt' | 'status'>) => void
   updateRequestStatus: (id: string, status: Request['status'], reviewerComment?: string) => void
   cancelRequest: (id: string) => void
-  getRequestsByUserId: (userId: string) => Request[]
-  getPendingRequests: () => Request[]
 }
 
-export const useRequestsStore = create<RequestsStore>((set, get) => ({
+export const useRequestsStore = create<RequestsStore>((set) => ({
   requests: [],
   
   addRequest: (request) => {
@@ -46,11 +44,4 @@ export const useRequestsStore = create<RequestsStore>((set, get) => ({
     }))
   },
   
-  getRequestsByUserId: (userId) => {
-    return get().requests.filter((req) => req.userId === userId)
-  },
-  
-  getPendingRequests: () => {
-    return get().requests.filter((req) => req.status === 'pending')
-  },
 }))

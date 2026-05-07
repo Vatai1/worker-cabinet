@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { User, Briefcase } from 'lucide-react'
 
 interface Props {

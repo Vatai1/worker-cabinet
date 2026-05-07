@@ -13,7 +13,7 @@ import { API_BASE_URL } from '@/lib/api'
 import { getAvatarColor as getAvatarGradient } from '@/lib/constants'
 import {
   Mail, Phone, Calendar, Building2, Briefcase, ArrowLeft, Loader2,
-  FolderKanban, Wrench, User, CheckCircle2, Clock, CircleDot, Plus, Trash, Target, Crown,
+  Wrench, User, Plus, Trash, Target,
 } from 'lucide-react'
 
 interface EmployeeData {
@@ -56,17 +56,6 @@ const statusConfig = {
   active:   { label: 'Активен',   variant: 'success'     as const, dot: 'bg-emerald-500' },
   inactive: { label: 'Неактивен', variant: 'destructive' as const, dot: 'bg-red-500' },
   on_leave: { label: 'В отпуске', variant: 'warning'     as const, dot: 'bg-amber-500' },
-}
-
-const projectStatusConfig = {
-  active:    { label: 'Активный',   icon: CircleDot,     color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
-  completed: { label: 'Завершён',   icon: CheckCircle2,  color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
-  paused:    { label: 'На паузе',   icon: Clock,         color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-950/30' },
-}
-
-const projectRoleConfig = {
-  lead:   { label: 'Руководитель', icon: Crown,    color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30' },
-  member: { label: 'Участник',    icon: User,      color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
 }
 
 const SKILL_COLORS = [

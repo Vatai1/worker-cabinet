@@ -148,6 +148,7 @@ Roles: `employee`, `manager`, `hr`, `admin`, `onboarding`
 ## Important Notes
 
 1. **Always run** `npm run lint && npm run typecheck` after frontend changes
+2. **Always update Swagger** when modifying API routes — add or update JSDoc `@swagger` annotations for new/changed endpoints, keep them consistent with actual request/response shapes and status codes
 2. **Schema changes**: Add SQL to `backend/src/db/migrate.js` (monolithic migration, idempotent)
 3. **Date handling**: `formatDate()` from `@/lib/utils` — parses `YYYY-MM-DD` as local date (pg pool configured to return DATE as raw strings)
 4. **Environment**: `cp backend/.env.example backend/.env` — configure `DB_*`, `JWT_SECRET` (required, no fallback), `S3_*`, `TELEGRAM_BOT_TOKEN`

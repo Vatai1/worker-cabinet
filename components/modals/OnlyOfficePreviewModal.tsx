@@ -58,14 +58,12 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
   const [acknowledging, setAcknowledging] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [savedOk, setSavedOk] = useState(false)
   const [showSaveConfirm, setShowSaveConfirm] = useState(false)
 
   const handleForceSave = async () => {
     setShowSaveConfirm(false)
     if (!onSave || !editorRef.current) return
     setSaving(true)
-    setSavedOk(false)
     try {
       const downloadUrl = await new Promise<string>((resolve, reject) => {
         downloadResolveRef.current = resolve
@@ -419,10 +417,8 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
               <Button onClick={() => setShowSaveConfirm(true)} disabled={saving || loading}>
                 {saving
                   ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Сохранение...</>
-                  : savedOk
-                  ? <><CheckIcon className="h-4 w-4 mr-2 text-emerald-500" />Сохранено</>
                   : <><Save className="h-4 w-4 mr-2" />Сохранить</>
-                }
+                  }
               </Button>
             )}
             {!editable && onAcknowledge && !acknowledged && (

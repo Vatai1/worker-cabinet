@@ -1,6 +1,6 @@
-export type SurveyStatus = 'draft' | 'active' | 'closed'
-export type SurveyTargetType = 'all' | 'department' | 'employees'
-export type QuestionType = 'radio' | 'checkbox' | 'text' | 'scale'
+type SurveyStatus = 'draft' | 'active' | 'closed'
+type SurveyTargetType = 'all' | 'department' | 'employees'
+type QuestionType = 'radio' | 'checkbox' | 'text' | 'scale'
 
 export interface SurveyQuestion {
   id?: string
@@ -39,7 +39,7 @@ export interface SurveyAnalytics {
   questions: AnalyticsQuestion[]
 }
 
-export type AnalyticsQuestion =
+type AnalyticsQuestion =
   | { id: number; text: string; type: 'radio' | 'checkbox'; options: { label: string; count: number; percent: number }[] }
   | { id: number; text: string; type: 'scale'; average: number | null; distribution: Record<string, number> }
   | { id: number; text: string; type: 'text'; answers: string[] }

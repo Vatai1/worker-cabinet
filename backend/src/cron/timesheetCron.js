@@ -1,12 +1,6 @@
 import cron from 'node-cron'
 import { query, getClient } from '../config/database.js'
-
-function toLocalDateStr(d) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
+import { toLocalDateStr } from '../lib/dateUtils.js'
 
 async function createTimesheetRecords(year, month) {
   const depts = await query(`SELECT id FROM departments`)

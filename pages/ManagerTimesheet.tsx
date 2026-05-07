@@ -4,6 +4,7 @@ import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { TimesheetGrid, TimesheetEntry } from '@/components/timesheet/TimesheetGrid'
+import { TimesheetLegend } from '@/components/timesheet/TimesheetLegend'
 import { useAuthStore } from '@/store/authStore'
 
 interface Timesheet {
@@ -104,8 +105,6 @@ export function ManagerTimesheet() {
     }
   }
 
-  const readonly = false
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -152,30 +151,12 @@ export function ManagerTimesheet() {
               employees={timesheetData.employees}
               year={year}
               month={month}
-              readonly={readonly}
               role={user?.role}
               onSave={loadTimesheet}
             />
           )}
 
-          <div className="mt-6 p-4 bg-muted/30 rounded-xl border border-border/50">
-            <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Легенда классификатора</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {[
-                { code: 'Я', label: 'Явка', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
-                { code: 'ОТ', label: 'Ежегодный отпуск', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
-                { code: 'ОС', label: 'Отпуск без сохранения ЗП', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
-                { code: 'ДО', label: 'Дополнительный отпуск', color: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
-                { code: 'К', label: 'Командировка', color: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' },
-                { code: 'Б', label: 'Больничный', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300' },
-              ].map(({ code, label, color }) => (
-                <div key={code} className="flex items-center gap-2">
-                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-md ${color} font-mono font-bold text-sm`}>{code}</span>
-                  <span className="text-sm text-muted-foreground">{label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <TimesheetLegend />
         </div>
       )}
     </div>

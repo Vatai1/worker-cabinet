@@ -3,7 +3,6 @@ import type {
   VacationRequest,
   VacationBalance,
   VacationRestriction,
-  VacationCalendarItem,
   VacationFormData,
   VacationValidationError,
 } from '@/types'
@@ -33,12 +32,10 @@ interface VacationStore {
   fetchRestrictions: (departmentId: string) => Promise<void>
 
   createRequest: (userId: string, data: VacationFormData) => Promise<VacationRequest | null>
-  updateRequest: (requestId: string, data: Partial<VacationFormData>) => Promise<void>
   cancelRequest: (requestId: string) => Promise<void>
 
   approveRequest: (requestId: string, managerId: string) => Promise<void>
   rejectRequest: (requestId: string, managerId: string, reason: string) => Promise<void>
-  cancelByManager: (requestId: string, managerId: string, reason: string) => Promise<void>
 
   addComment: (requestId: string, comment: string) => Promise<void>
 
@@ -58,10 +55,6 @@ interface VacationStore {
   ) => Promise<void>
   
   deleteRestriction: (restrictionId: string) => Promise<void>
-  
-  getCalendarItems: (year: number) => VacationCalendarItem[]
-  
-  clearError: () => void
 }
 
 export const useVacationStore = create<VacationStore>()((set, get) => ({
@@ -254,29 +247,6 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         }
       },
 
-      updateRequest: async (requestId: string, data: Partial<VacationFormData>) => {
-        set({ loading: true, error: null })
-        try {
-          const updatedRequest = await vacationApi.updateRequest(requestId, data)
-
-          set((state) => ({
-            requests: state.requests.map((r) =>
-              r.id === requestId ? updatedRequest : r
-            ),
-            currentUserRequests: state.currentUserRequests.map((r) =>
-              r.id === requestId ? updatedRequest : r
-            ),
-            departmentRequests: state.departmentRequests.map((r) =>
-              r.id === requestId ? updatedRequest : r
-            ),
-            loading: false,
-          }))
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при обновлении заявки', loading: false })
-          throw error
-        }
-      },
-
       cancelRequest: async (requestId: string) => {
         set({ loading: true, error: null })
         try {
@@ -379,70 +349,6 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         }
       },
       
-      cancelByManager: async (requestId: string, managerId: string, reason: string) => {
-        set({ loading: true, error: null })
-        try {
-          const request = get().requests.find((r) => r.id === requestId)
-          if (!request) {
-            set({ error: 'Заявка не найдена', loading: false })
-            return
-          }
-          
-          if (request.status !== VacationRequestStatus.APPROVED) {
-            set({ error: 'Можно отменить только согласованные заявки', loading: false })
-            return
-          }
-          
-          const balance = get().balances[request.userId]
-          if (balance) {
-            const newBalance = {
-              ...balance,
-              usedDays: balance.usedDays - request.duration,
-              availableDays: balance.availableDays + request.duration,
-            }
-            set((state) => ({
-              balances: {
-                ...state.balances,
-                [request.userId]: newBalance,
-              },
-            }))
-          }
-          
-          const updatedRequest: VacationRequest = {
-            ...request,
-            status: VacationRequestStatus.CANCELLED_BY_MANAGER,
-            cancellationReason: reason,
-            statusHistory: [
-              ...request.statusHistory,
-              {
-                status: VacationRequestStatus.CANCELLED_BY_MANAGER,
-                changedAt: new Date().toISOString(),
-                changedBy: managerId,
-                changedByName: 'Руководитель',
-                comment: reason,
-              },
-            ],
-          }
-          
-          set((state) => ({
-            requests: state.requests.map((r) =>
-              r.id === requestId ? updatedRequest : r
-            ),
-            loading: false,
-          }))
-
-          useUIStore.getState().addNotification({
-            userId: request.userId,
-            type: 'warning',
-            title: 'Заявка на отпуск отменена руководителем',
-            message: `Ваша заявка на отпуск с ${new Date(request.startDate).toLocaleDateString('ru-RU')} по ${new Date(request.endDate).toLocaleDateString('ru-RU')} была отменена руководителем. Причина: ${reason}`,
-            read: false,
-          })
-        } catch (error) {
-          set({ error: 'Ошибка при отмене заявки руководителем', loading: false })
-        }
-      },
-
       addComment: async (requestId: string, comment: string) => {
         set({ loading: true, error: null })
         try {
@@ -499,25 +405,5 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         }
       },
       
-      getCalendarItems: (year: number) => {
-        const requests = get().requests.filter((r) => {
-          const startDate = new Date(r.startDate)
-          return startDate.getFullYear() === year && r.status === VacationRequestStatus.APPROVED
-        })
-        
-        return requests.map((r) => ({
-          requestId: r.id,
-          userId: r.userId,
-          userFirstName: r.userFirstName,
-          userLastName: r.userLastName,
-          userPosition: r.userPosition,
-          startDate: r.startDate,
-          endDate: r.endDate,
-          vacationType: r.vacationType,
-          status: r.status,
-        }))
-      },
-      
-      clearError: () => set({ error: null }),
     })
 )

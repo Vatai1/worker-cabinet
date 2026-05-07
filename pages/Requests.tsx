@@ -17,7 +17,7 @@ export function Requests() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const { requests, updateRequestStatus, cancelRequest } = useRequestsStore()
+  const { requests, cancelRequest } = useRequestsStore()
   const [filterStatus, setFilterStatus] = useState<RequestStatus>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [showForm, setShowForm] = useState(false)
