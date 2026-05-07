@@ -109,7 +109,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
       const next = { ...prev }
       const date = dateStr(year, month, todayDay)
       const cell = getCell(empId, todayDay)
-      if (['ОТ', 'ОС', 'ДО'].includes(cell.code ?? '')) return prev
+      if (cell.code || cell.submitted) return prev
       next[`${empId}:${date}`] = { code: 'Я' }
       return next
     })
@@ -127,7 +127,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, re
       const date = dateStr(year, month, todayDay)
       for (const emp of employees) {
         const cell = getCell(emp.id, todayDay)
-        if (['ОТ', 'ОС', 'ДО'].includes(cell.code ?? '')) continue
+        if (cell.code || cell.submitted) continue
         next[`${emp.id}:${date}`] = { code: 'Я' }
       }
       return next
