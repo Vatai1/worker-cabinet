@@ -13,7 +13,7 @@ export const authenticateToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
     
     const result = await query(
-      'SELECT id, email, role FROM users WHERE id = $1',
+      'SELECT id, email, role, first_name, last_name FROM users WHERE id = $1',
       [decoded.id]
     )
     
@@ -34,13 +34,38 @@ export const authorizeRoles = (...roles) => {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    console.log('[AUTH] User role:', req.user.role, 'Required roles:', roles)
-
     if (!roles.includes(req.user.role)) {
-      console.log('[AUTH] Forbidden - user role:', req.user.role, 'not in:', roles)
       return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
     }
 
     next()
+  }
+}
+
+export const requirePermission = (permissionCode) => {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+
+    if (req.user.role === 'admin') return next()
+
+    try {
+      const result = await query(
+        `SELECT 1 FROM role_permissions rp
+         JOIN roles r ON rp.role_id = r.id
+         JOIN permissions p ON rp.permission_id = p.id
+         WHERE r.name = $1 AND p.code = $2`,
+        [req.user.role, permissionCode]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
+      }
+
+      next()
+    } catch (err) {
+      return res.status(500).json({ error: 'Ошибка проверки прав доступа' })
+    }
   }
 }

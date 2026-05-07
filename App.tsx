@@ -42,6 +42,7 @@ import { HRDictionaries } from '@/pages/HRDictionaries'
 import { ManagerTimesheet } from '@/pages/ManagerTimesheet'
 import { HRTimesheet } from '@/pages/HRTimesheet'
 import { CalendarPage } from '@/pages/CalendarPage'
+import { AdminPanel } from '@/pages/AdminPanel'
 const HRHierarchy = lazy(() => import('@/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -94,6 +95,14 @@ function BlockOnboardingRoute({ children }: { children: React.ReactNode }) {
   const loading = useAuthStore((state) => state.loading)
   if (loading) return null
   if (user?.role === 'onboarding') return <Navigate to="/onboarding" replace />
+  return <>{children}</>
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((state) => state.user)
+  const loading = useAuthStore((state) => state.loading)
+  if (loading) return null
+  if (user?.role !== 'admin') return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -161,6 +170,7 @@ function App() {
           <Route path="hr/dictionaries" element={<HRRoute><HRDictionaries /></HRRoute>} />
           <Route path="leader/timesheet" element={<ManagerRoute><ManagerTimesheet /></ManagerRoute>} />
           <Route path="hr/timesheet" element={<HRRoute><HRTimesheet /></HRRoute>} />
+          <Route path="admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
