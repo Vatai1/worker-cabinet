@@ -23,6 +23,7 @@ import {
   Building2,
   ClipboardList,
   Calendar,
+  Shield,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -126,6 +127,38 @@ const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Уведомления', href: '/notifications', icon: Bell },
 ]
 
+const getAdminNavigation = (userId?: string): NavItem[] => [
+  { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
+  { name: 'Администрирование', href: '/admin', icon: Shield },
+  {
+    name: 'HR',
+    icon: Users,
+    children: [
+      { name: 'Опросы', href: '/hr/surveys' },
+      { name: 'Онбординг', href: '/hr/onboarding' },
+      { name: 'Отпуск', href: '/hr/vacation-calendar' },
+      { name: 'Иерархия', href: '/hr/hierarchy' },
+      { name: 'Справочники', href: '/hr/dictionaries' },
+      { name: 'Табель', href: '/hr/timesheet' },
+    ],
+  },
+  { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
+  { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Сотрудники', href: '/employees', icon: Users },
+  { name: 'Отделы', href: '/departments', icon: Building2 },
+  { name: 'Проекты', href: '/projects', icon: FolderKanban },
+  { name: 'Календарь', href: '/calendar', icon: Calendar },
+  {
+    name: 'Документы',
+    icon: FolderOpen,
+    children: [
+      { name: 'Ваши документы', href: '/documents' },
+    ],
+  },
+  { name: 'Уведомления', href: '/notifications', icon: Bell },
+]
+
 export function Sidebar() {
   const { user, logout } = useAuthStore()
   const { sidebarOpen, toggleSidebar, notifications, darkMode, toggleTheme } = useUIStore()
@@ -138,7 +171,8 @@ export function Sidebar() {
   const navigation =
     user?.role === 'onboarding' ? getOnboardingNavigation() :
     user?.role === 'manager' ? getManagerNavigation(user?.id) :
-    ['hr', 'admin'].includes(user?.role ?? '') ? getHRNavigation(user?.id) :
+    user?.role === 'admin' ? getAdminNavigation(user?.id) :
+    ['hr'].includes(user?.role ?? '') ? getHRNavigation(user?.id) :
     getEmployeeNavigation(user?.id)
 
   useEffect(() => {

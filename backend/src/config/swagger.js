@@ -199,6 +199,7 @@ const options = {
       { name: 'Timesheet', description: 'Табель учёта рабочего времени' },
       { name: 'Calendar', description: 'Интеграция с календарём (Outlook/EWS)' },
       { name: 'Telegram', description: 'Интеграция с Telegram' },
+      { name: 'Admin', description: 'Админ-панель: роли, доступы, пользователи, настройки, аудит' },
     ],
   },
   apis: ['./src/routes/*.js'],

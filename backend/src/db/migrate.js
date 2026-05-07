@@ -1202,6 +1202,189 @@ async function runMigrations() {
     `).catch(e => console.log('  - exchange_credentials:', e.message))
     console.log('  ✓ exchange_credentials')
 
+    // Step: Admin panel — dynamic roles, permissions, audit_log, system_settings
+    console.log('Creating admin panel tables...')
+
+    try {
+      await db.query(`ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(50)`)
+      console.log('  ✓ users.role converted from ENUM to VARCHAR(50)')
+    } catch (e) {
+      if (e.message.includes('cannot alter type of a column used by a view')) {
+        console.log('  - users.role ENUM→VARCHAR: blocked by view dependency')
+      } else if (!e.message.includes('already') && !e.message.includes('cannot alter')) {
+        console.log('  - users.role ENUM→VARCHAR:', e.message)
+      }
+    }
+    try {
+      await db.query(`ALTER TABLE users ALTER COLUMN role SET DEFAULT 'employee'`)
+    } catch (e) {}
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS roles (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(50) UNIQUE NOT NULL,
+        description TEXT,
+        is_system BOOLEAN NOT NULL DEFAULT false,
+        color VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    console.log('  ✓ roles')
+
+    const systemRoles = [
+      { name: 'employee', description: 'Сотрудник', color: '#6366f1' },
+      { name: 'manager', description: 'Руководитель', color: '#f59e0b' },
+      { name: 'hr', description: 'HR-менеджер', color: '#10b981' },
+      { name: 'admin', description: 'Администратор', color: '#ef4444' },
+      { name: 'director', description: 'Директор', color: '#8b5cf6' },
+      { name: 'onboarding', description: 'Онбординг', color: '#06b6d4' },
+    ]
+    for (const r of systemRoles) {
+      await db.query(
+        `INSERT INTO roles (name, description, is_system, color) VALUES ($1, $2, true, $3) ON CONFLICT (name) DO NOTHING`,
+        [r.name, r.description, r.color]
+      )
+    }
+    console.log('  ✓ system roles seeded')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS permissions (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(100) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        module VARCHAR(50) NOT NULL,
+        description TEXT
+      )
+    `)
+    console.log('  ✓ permissions')
+
+    const perms = [
+      { code: 'users:view', name: 'Просмотр пользователей', module: 'users' },
+      { code: 'users:create', name: 'Создание пользователей', module: 'users' },
+      { code: 'users:edit', name: 'Редактирование пользователей', module: 'users' },
+      { code: 'users:delete', name: 'Удаление пользователей', module: 'users' },
+      { code: 'users:manage_roles', name: 'Управление ролями', module: 'users' },
+      { code: 'users:reset_password', name: 'Сброс пароля', module: 'users' },
+      { code: 'vacation:view', name: 'Просмотр отпусков', module: 'vacation' },
+      { code: 'vacation:create', name: 'Создание заявлений на отпуск', module: 'vacation' },
+      { code: 'vacation:approve', name: 'Согласование отпусков', module: 'vacation' },
+      { code: 'vacation:manage', name: 'Управление отпусками', module: 'vacation' },
+      { code: 'projects:view', name: 'Просмотр проектов', module: 'projects' },
+      { code: 'projects:create', name: 'Создание проектов', module: 'projects' },
+      { code: 'projects:edit', name: 'Редактирование проектов', module: 'projects' },
+      { code: 'projects:delete', name: 'Удаление проектов', module: 'projects' },
+      { code: 'projects:manage', name: 'Полное управление проектами', module: 'projects' },
+      { code: 'surveys:view', name: 'Просмотр опросов', module: 'surveys' },
+      { code: 'surveys:create', name: 'Создание опросов', module: 'surveys' },
+      { code: 'surveys:manage', name: 'Управление опросами', module: 'surveys' },
+      { code: 'departments:view', name: 'Просмотр отделов', module: 'departments' },
+      { code: 'departments:create', name: 'Создание отделов', module: 'departments' },
+      { code: 'departments:edit', name: 'Редактирование отделов', module: 'departments' },
+      { code: 'departments:delete', name: 'Удаление отделов', module: 'departments' },
+      { code: 'departments:manage', name: 'Полное управление отделами', module: 'departments' },
+      { code: 'documents:view', name: 'Просмотр документов', module: 'documents' },
+      { code: 'documents:create', name: 'Создание документов', module: 'documents' },
+      { code: 'documents:manage', name: 'Управление документами', module: 'documents' },
+      { code: 'dictionaries:view', name: 'Просмотр справочников', module: 'dictionaries' },
+      { code: 'dictionaries:manage', name: 'Управление справочниками', module: 'dictionaries' },
+      { code: 'hierarchy:view', name: 'Просмотр иерархии', module: 'hierarchy' },
+      { code: 'hierarchy:manage', name: 'Управление иерархией', module: 'hierarchy' },
+      { code: 'timesheet:view', name: 'Просмотр табелей', module: 'timesheet' },
+      { code: 'timesheet:manage', name: 'Управление табелями', module: 'timesheet' },
+      { code: 'onboarding:view', name: 'Просмотр онбординга', module: 'onboarding' },
+      { code: 'onboarding:manage', name: 'Управление онбордингом', module: 'onboarding' },
+      { code: 'calendar:view', name: 'Просмотр календаря', module: 'calendar' },
+      { code: 'notifications:view', name: 'Просмотр уведомлений', module: 'notifications' },
+      { code: 'admin:access', name: 'Доступ к админ-панели', module: 'admin' },
+      { code: 'admin:roles', name: 'Управление ролями и доступами', module: 'admin' },
+      { code: 'admin:settings', name: 'Системные настройки', module: 'admin' },
+      { code: 'admin:audit', name: 'Просмотр логов аудита', module: 'admin' },
+    ]
+    for (const p of perms) {
+      await db.query(
+        `INSERT INTO permissions (code, name, module) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING`,
+        [p.code, p.name, p.module]
+      )
+    }
+    console.log('  ✓ permissions seeded')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+        permission_id INTEGER NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+        PRIMARY KEY (role_id, permission_id)
+      )
+    `)
+    console.log('  ✓ role_permissions')
+
+    const rolePermMap = {
+      admin: perms.map(p => p.code),
+      hr: perms.map(p => p.code).filter(c => !c.startsWith('admin:') && !c.startsWith('users:delete')),
+      director: ['users:view', 'vacation:view', 'vacation:create', 'vacation:approve', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'timesheet:manage', 'calendar:view', 'documents:view', 'notifications:view'],
+      manager: ['users:view', 'vacation:view', 'vacation:create', 'vacation:approve', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'timesheet:manage', 'calendar:view', 'documents:view', 'notifications:view'],
+      employee: ['users:view', 'vacation:view', 'vacation:create', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'calendar:view', 'documents:view', 'notifications:view'],
+      onboarding: ['onboarding:view', 'users:view', 'departments:view'],
+    }
+
+    for (const [roleName, permCodes] of Object.entries(rolePermMap)) {
+      const roleRes = await db.query('SELECT id FROM roles WHERE name = $1', [roleName])
+      if (roleRes.rows.length === 0) continue
+      const roleId = roleRes.rows[0].id
+      for (const code of permCodes) {
+        const permRes = await db.query('SELECT id FROM permissions WHERE code = $1', [code])
+        if (permRes.rows.length === 0) continue
+        await db.query(
+          `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [roleId, permRes.rows[0].id]
+        )
+      }
+    }
+    console.log('  ✓ role_permissions seeded')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        user_name VARCHAR(255),
+        action VARCHAR(100) NOT NULL,
+        entity_type VARCHAR(50),
+        entity_id VARCHAR(50),
+        details JSONB,
+        ip_address VARCHAR(45),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    await db.query('CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id)').catch(() => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action)').catch(() => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)').catch(() => {})
+    console.log('  ✓ audit_log')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key VARCHAR(100) PRIMARY KEY,
+        value TEXT NOT NULL,
+        description TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    console.log('  ✓ system_settings')
+
+    const settings = [
+      { key: 'company_name', value: 'Worker Cabinet', desc: 'Название компании' },
+      { key: 'vacation_default_days', value: '28', desc: 'Количество дней отпуска по умолчанию' },
+      { key: 'session_duration_days', value: '7', desc: 'Длительность сессии (дни)' },
+      { key: 'password_min_length', value: '8', desc: 'Минимальная длина пароля' },
+    ]
+    for (const s of settings) {
+      await db.query(
+        `INSERT INTO system_settings (key, value, description) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING`,
+        [s.key, s.value, s.desc]
+      )
+    }
+    console.log('  ✓ system_settings seeded')
+
+    console.log('✅ Admin panel tables created')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     
