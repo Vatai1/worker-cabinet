@@ -58,7 +58,6 @@ export function CreateVacationModal({
   const checkRestrictions = () => {
     console.log('[CreateVacationModal] checkRestrictions called', { userId, startDate, endDate, hasOnCheck: !!onCheckRestrictions })
     if (userId && startDate && endDate && onCheckRestrictions) {
-      const dateKey = `${startDate}-${endDate}`
       if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
         console.log('[CreateVacationModal] Already checked these dates, skipping')
         return

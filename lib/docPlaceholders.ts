@@ -91,6 +91,3 @@ export const getAllGroups = (): PlaceholderGroup[] => {
   }
   return result
 }
-
-export const getAllPlaceholders = (): Placeholder[] =>
-  getAllGroups().flatMap(g => g.items)

@@ -60,62 +60,6 @@ export const validateRegister = [
   handleValidationErrors,
 ]
 
-export const validateId = [
-  param('id')
-    .isInt({ min: 1 })
-    .withMessage('Некорректный ID'),
-  handleValidationErrors,
-]
-
-export const validateVacationRequest = [
-  body('startDate')
-    .isISO8601()
-    .withMessage('Некорректная дата начала'),
-  body('endDate')
-    .isISO8601()
-    .custom((endDate, { req }) => {
-      if (new Date(endDate) < new Date(req.body.startDate)) {
-        throw new Error('Дата окончания должна быть позже даты начала')
-      }
-      return true
-    }),
-  body('type')
-    .optional()
-    .isIn(['annual', 'unpaid', 'sick', 'study'])
-    .withMessage('Недопустимый тип отпуска'),
-  body('comment')
-    .optional()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Комментарий слишком длинный (макс. 500 символов)'),
-  handleValidationErrors,
-]
-
-export const validateProject = [
-  body('name')
-    .trim()
-    .isLength({ min: 1, max: 200 })
-    .withMessage('Название проекта обязательно (макс. 200 символов)'),
-  body('description')
-    .optional()
-    .trim()
-    .isLength({ max: 2000 })
-    .withMessage('Описание слишком длинное (макс. 2000 символов)'),
-  body('status')
-    .optional()
-    .isIn(['planning', 'active', 'on_hold', 'completed', 'cancelled'])
-    .withMessage('Недопустимый статус проекта'),
-  body('startDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Некорректная дата начала'),
-  body('endDate')
-    .optional()
-    .isISO8601()
-    .withMessage('Некорректная дата окончания'),
-  handleValidationErrors,
-]
-
 export const sanitizeInput = (req, res, next) => {
   if (req.body) {
     for (const key in req.body) {

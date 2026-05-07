@@ -140,8 +140,6 @@ function parseEwsEvents(xml) {
       }
     }
 
-    const onlineMeetingMatch = itemXml.match(/<t:OnlineMeetingSettings>([\s\S]*?)<\/t:OnlineMeetingSettings>/)
-
     events.push({
       id: itemId || 'ews-' + events.length,
       _changeKey: changeKey || undefined,

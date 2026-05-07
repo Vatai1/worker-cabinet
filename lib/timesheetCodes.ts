@@ -7,8 +7,6 @@ export const TIMESHEET_CODES = [
   { code: 'Б',  label: 'Больничный' },
 ] as const
 
-export type TimesheetCode = typeof TIMESHEET_CODES[number]['code']
-
 export const CODE_COLORS: Record<string, string> = {
   'Я':  'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   'ОТ': 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',

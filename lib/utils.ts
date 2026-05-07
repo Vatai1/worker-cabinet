@@ -35,13 +35,6 @@ export function formatDateTime(date: Date | string): string {
   }).format(d)
 }
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency: 'RUB',
-  }).format(amount)
-}
-
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error

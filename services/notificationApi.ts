@@ -19,14 +19,6 @@ export const notificationApi = {
     return response.json()
   },
 
-  getUnreadCount: async () => {
-    const response = await fetch(`${API_BASE_URL}/notifications/unread-count`, {
-      headers: getAuthHeaders(),
-    })
-    if (!response.ok) throw new Error('Failed to fetch unread count')
-    return response.json()
-  },
-
   markAsRead: async (id: string) => {
     const response = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
       method: 'PATCH',
@@ -54,21 +46,4 @@ export const notificationApi = {
     return response.json()
   },
 
-  create: async (notification: {
-    userId: string
-    title: string
-    message: string
-    type: 'info' | 'success' | 'warning' | 'error'
-  }) => {
-    const response = await fetch(`${API_BASE_URL}/notifications`, {
-      method: 'POST',
-      headers: {
-        ...getAuthHeaders(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(notification),
-    })
-    if (!response.ok) throw new Error('Failed to create notification')
-    return response.json()
-  },
 }

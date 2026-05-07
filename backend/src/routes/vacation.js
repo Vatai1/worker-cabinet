@@ -9,24 +9,6 @@ import PizZip from 'pizzip'
 
 const router = express.Router()
 
-const STATUS_NAMES = {
-  on_approval: 'На согласовании',
-  approved: 'Согласовано',
-  rejected: 'Отклонено',
-  cancelled_by_employee: 'Отменено сотрудником',
-  cancelled_by_manager: 'Отменено руководителем'
-}
-
-const VACATION_TYPE_NAMES = {
-  annual_paid: 'Ежегодный оплачиваемый',
-  unpaid: 'Без сохранения зарплаты',
-  educational: 'Учебный',
-  maternity: 'Декретный',
-  child_care: 'По уходу за ребёнком',
-  additional: 'Дополнительный',
-  veteran: 'Ветеранский'
-}
-
 const VALID_VACATION_TYPES = ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran']
 
 async function vacationDatesByMonth(startDate, endDate) {
@@ -2210,7 +2192,7 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
       `INSERT INTO vacation_request_status_history
         (request_id, status_id, changed_by, comment)
         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
-      [id, managerId, reason]
+      [id, userId, 'Отменено сотрудником']
     )
 
     await clearVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date)

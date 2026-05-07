@@ -1,14 +1,4 @@
-import type { Salary, ScheduleItem, Request, Document } from '@/types'
-
-export const mockEmployees: { id: string; firstName: string; lastName: string; color: string }[] = []
-
-export const mockSalaries: Salary[] = []
-
-export const mockSchedule: ScheduleItem[] = []
-
-export const mockRequests: Request[] = []
-
-export const mockDocuments: Document[] = []
+import type { Request } from '@/types'
 
 export const getRequestTypeLabel = (type: Request['type']): string => {
   const labels: Record<Request['type'], string> = {
@@ -29,17 +19,6 @@ export const getRequestStatusBadge = (status: Request['status']): { label: strin
     cancelled: { label: 'Отменено', className: 'bg-gray-100 text-gray-800' },
   }
   return badges[status]
-}
-
-export const getDocumentTypeLabel = (type: Document['type']): string => {
-  const labels: Record<Document['type'], string> = {
-    contract: 'Договор',
-    nda: 'NDA',
-    policy: 'Политика',
-    certificate: 'Сертификат',
-    other: 'Другое',
-  }
-  return labels[type]
 }
 
 export const formatFileSize = (bytes: number): string => {

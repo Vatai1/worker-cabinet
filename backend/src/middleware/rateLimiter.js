@@ -16,10 +16,3 @@ export const apiLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-export const passwordResetLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 3,
-  message: { error: 'Слишком много запросов на сброс пароля. Попробуйте через час.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-})

@@ -16,7 +16,7 @@ export enum VacationType {
   VETERAN = 'veteran',
 }
 
-export interface VacationTypeInfo {
+interface VacationTypeInfo {
   id: number
   name: string
   description: string
@@ -68,40 +68,6 @@ export const VACATION_TYPES: Record<VacationType, VacationTypeInfo> = {
   },
 }
 
-export interface VacationRequestStatusInfo {
-  id: number
-  name: string
-  description: string
-}
-
-export const VACATION_REQUEST_STATUSES: Record<VacationRequestStatus, VacationRequestStatusInfo> = {
-  [VacationRequestStatus.ON_APPROVAL]: {
-    id: 1,
-    name: 'На согласовании',
-    description: 'Заявка создана, ожидает решения руководителя',
-  },
-  [VacationRequestStatus.APPROVED]: {
-    id: 2,
-    name: 'Согласовано',
-    description: 'Руководитель одобрил отпуск',
-  },
-  [VacationRequestStatus.REJECTED]: {
-    id: 3,
-    name: 'Не согласовано',
-    description: 'Руководитель отклонил запрос',
-  },
-  [VacationRequestStatus.CANCELLED_BY_EMPLOYEE]: {
-    id: 4,
-    name: 'Отменено сотрудником',
-    description: 'Сотрудник отозвал заявку',
-  },
-  [VacationRequestStatus.CANCELLED_BY_MANAGER]: {
-    id: 5,
-    name: 'Отменено руководителем',
-    description: 'Руководитель отменил уже одобренный отпуск',
-  },
-}
-
 export interface VacationRequest {
   id: string
   userId: string
@@ -140,7 +106,7 @@ export interface VacationRequest {
   statusHistory: VacationRequestStatusHistory[]
 }
 
-export interface VacationRequestStatusHistory {
+interface VacationRequestStatusHistory {
   status: VacationRequestStatus
   changedAt: string
   changedBy: string
@@ -210,21 +176,4 @@ export interface VacationValidationError {
   details?: any
 }
 
-export interface VacationApiError {
-  code: string
-  message: string
-  details?: any
-}
 
-export interface VacationTransferRequest {
-  originalRequestId: string
-  newStartDate: string
-  newEndDate: string
-  reason: string
-}
-
-export interface VacationTransferInfo {
-  transferRequestedAt?: string
-  transferReason?: string
-  transferredFromId?: string
-}

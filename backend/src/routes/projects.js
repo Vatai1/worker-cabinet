@@ -4,7 +4,6 @@ import { authenticateToken } from '../middleware/auth.js'
 import { upload } from '../middleware/upload.js'
 import { uploadToS3, deleteFromS3, getFromS3, getPresignedUrl } from '../config/s3.js'
 import jwt from 'jsonwebtoken'
-import crypto from 'crypto'
 
 const router = express.Router()
 

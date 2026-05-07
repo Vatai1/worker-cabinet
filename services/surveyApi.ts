@@ -1,15 +1,18 @@
 import { API_BASE_URL } from '@/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
-import type { Survey, SurveyWithQuestions, SurveyAnalytics, SurveyQuestion } from '@/types'
+import type { Survey, SurveyWithQuestions, SurveyAnalytics } from '@/types'
 
-export interface SurveyFormPayload {
+interface SurveyFormPayload {
   title: string
   description?: string
   targetType: string
-  targetIds: string[]
-  deadline?: string
-  anonymous: boolean
-  questions: Omit<SurveyQuestion, 'id' | 'localId'>[]
+  targetDepartmentId?: number
+  questions: Array<{
+    text: string
+    type: string
+    required: boolean
+    options?: string[]
+  }>
 }
 
 export const surveyApi = {

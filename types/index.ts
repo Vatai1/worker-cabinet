@@ -21,26 +21,6 @@ export interface User {
   gender?: 'male' | 'female' | 'other'
 }
 
-export interface Salary {
-  id: string
-  userId: string
-  amount: number
-  bonus: number
-  total: number
-  period: string
-  paymentDate: string
-  status: 'paid' | 'pending' | 'cancelled'
-}
-
-export interface ScheduleItem {
-  id: string
-  date: string
-  startTime: string
-  endTime: string
-  type: 'work' | 'day_off' | 'vacation' | 'sick_leave' | 'business_trip'
-  notes?: string
-}
-
 export interface Request {
   id: string
   userId: string
@@ -80,12 +60,6 @@ export interface AuthState {
   user: User | null
   isAuthenticated: boolean
   token: string | null
-}
-
-export interface AppState {
-  auth: AuthState
-  notifications: Notification[]
-  sidebarOpen: boolean
 }
 
 export * from './vacation'
