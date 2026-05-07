@@ -139,20 +139,7 @@ export function ManagerTimesheet() {
       ) : timesheet && (
         <div className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{timesheet.department_name}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                timesheet.status === 'draft' ? 'bg-muted text-muted-foreground' :
-                timesheet.status === 'submitted' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
-                'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
-              }`}>
-                {timesheet.status === 'draft' ? 'Черновик' :
-                 timesheet.status === 'submitted' ? 'На утверждении' : 'Утверждён'}
-              </span>
-            </div>
-            {timesheet.status === 'approved' && (
-              <span className="text-xs text-green-600 dark:text-green-400 font-medium">Табель утверждён</span>
-            )}
+            <span className="text-sm text-muted-foreground">{timesheet.department_name}</span>
             <Button onClick={handleSubmitToday} disabled={submitting}>
               {submitting ? 'Отправка...' : 'Отправить за сегодня'}
             </Button>
