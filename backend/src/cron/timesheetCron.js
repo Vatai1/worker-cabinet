@@ -29,7 +29,7 @@ async function addDayEntries(year, month, day) {
 
   const timesheets = await query(
     `SELECT id, department_id FROM timesheets
-     WHERE year = $1 AND month = $2 AND status = 'draft'`,
+     WHERE year = $1 AND month = $2`,
     [year, month]
   )
 
