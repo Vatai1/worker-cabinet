@@ -651,4 +651,569 @@ router.get('/stats', asyncHandler(async (req, res) => {
   })
 }))
 
+// ===================== BULK ACTIONS =====================
+
+/**
+ * @swagger
+ * /admin/users/bulk-status:
+ *   put:
+ *     tags: [Admin]
+ *     summary: Массовое изменение статуса пользователей
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userIds, status]
+ *             properties:
+ *               userIds: { type: array, items: { type: integer } }
+ *               status: { type: string, enum: [active, inactive, on_leave] }
+ *     responses:
+ *       200:
+ *         description: Статусы обновлены
+ */
+router.put('/users/bulk-status', asyncHandler(async (req, res) => {
+  const { userIds, status } = req.body
+  if (!Array.isArray(userIds) || userIds.length === 0) throw new ValidationError('Выберите хотя бы одного пользователя')
+  if (!['active', 'inactive', 'on_leave'].includes(status)) throw new ValidationError('Недопустимый статус')
+
+  const result = await query(
+    `UPDATE users SET status = $1 WHERE id = ANY($2)`,
+    [status, userIds]
+  )
+
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'bulk_status_change', 'user', null,
+    { count: result.rowCount, status }, req.ip)
+  res.json({ success: true, updated: result.rowCount })
+}))
+
+/**
+ * @swagger
+ * /admin/users/bulk-role:
+ *   put:
+ *     tags: [Admin]
+ *     summary: Массовое изменение роли пользователей
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userIds, role]
+ *             properties:
+ *               userIds: { type: array, items: { type: integer } }
+ *               role: { type: string }
+ *     responses:
+ *       200:
+ *         description: Роли обновлены
+ */
+router.put('/users/bulk-role', asyncHandler(async (req, res) => {
+  const { userIds, role } = req.body
+  if (!Array.isArray(userIds) || userIds.length === 0) throw new ValidationError('Выберите хотя бы одного пользователя')
+  if (!role?.trim()) throw new ValidationError('Роль обязательна')
+
+  const roleCheck = await query('SELECT id FROM roles WHERE name = $1', [role.trim()])
+  if (roleCheck.rows.length === 0) throw new ValidationError('Роль не найдена')
+
+  const result = await query(
+    `UPDATE users SET role = $1 WHERE id = ANY($2)`,
+    [role.trim(), userIds]
+  )
+
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'bulk_role_change', 'user', null,
+    { count: result.rowCount, role: role.trim() }, req.ip)
+  res.json({ success: true, updated: result.rowCount })
+}))
+
+/**
+ * @swagger
+ * /admin/users/export:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Экспорт пользователей в CSV
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: CSV файл
+ */
+router.get('/users/export', asyncHandler(async (req, res) => {
+  const result = await query(`
+    SELECT u.id, u.email, u.first_name, u.last_name, u.middle_name, u.position,
+      u.status, u.role, u.phone, u.hire_date, u.responsibility_area,
+      d.name as department
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
+    ORDER BY u.last_name, u.first_name
+  `)
+
+  const sep = ';'
+  const header = ['ID', 'Email', 'Фамилия', 'Имя', 'Отчество', 'Должность', 'Статус', 'Роль', 'Телефон', 'Дата найма', 'Зона ответственности', 'Отдел'].join(sep)
+  const rows = result.rows.map(r =>
+    [r.id, r.email, r.last_name, r.first_name, r.middle_name || '', r.position, r.status, r.role, r.phone || '', r.hire_date || '', r.responsibility_area || '', r.department || ''].join(sep)
+  )
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', 'attachment; filename=users_export.csv')
+  res.send('\uFEFF' + header + '\n' + rows.join('\n'))
+}))
+
+// ===================== ANALYTICS =====================
+
+/**
+ * @swagger
+ * /admin/analytics/activity:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Данные для графиков активности
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: days, in: query, schema: { type: integer, default: 30 } }
+ *     responses:
+ *       200:
+ *         description: Данные аналитики
+ */
+router.get('/analytics/activity', asyncHandler(async (req, res) => {
+  const days = Math.min(parseInt(req.query.days) || 30, 365)
+
+  const activityByDay = await query(`
+    SELECT DATE(created_at) as date, COUNT(*) as count
+    FROM audit_log
+    WHERE created_at >= CURRENT_DATE - ($1 || ' days')::interval
+    GROUP BY DATE(created_at)
+    ORDER BY date
+  `, [days])
+
+  const activityByType = await query(`
+    SELECT action, COUNT(*) as count
+    FROM audit_log
+    WHERE created_at >= CURRENT_DATE - ($1 || ' days')::interval
+    GROUP BY action
+    ORDER BY count DESC
+  `, [days])
+
+  const topUsers = await query(`
+    SELECT user_name, COUNT(*) as count
+    FROM audit_log
+    WHERE created_at >= CURRENT_DATE - ($1 || ' days')::interval AND user_id IS NOT NULL
+    GROUP BY user_id, user_name
+    ORDER BY count DESC
+    LIMIT 10
+  `, [days])
+
+  const loginStats = await query(`
+    SELECT DATE(created_at) as date, COUNT(*) as count
+    FROM audit_log
+    WHERE action = 'login' AND created_at >= CURRENT_DATE - ($1 || ' days')::interval
+    GROUP BY DATE(created_at)
+    ORDER BY date
+  `, [days]).catch(() => ({ rows: [] }))
+
+  const newUsersByMonth = await query(`
+    SELECT DATE_TRUNC('month', created_at) as month, COUNT(*) as count
+    FROM users
+    WHERE created_at >= CURRENT_DATE - '12 months'::interval
+    GROUP BY DATE_TRUNC('month', created_at)
+    ORDER BY month
+  `)
+
+  const vacationByMonth = await query(`
+    SELECT DATE_TRUNC('month', created_at) as month, COUNT(*) as count
+    FROM vacation_requests
+    WHERE created_at >= CURRENT_DATE - '12 months'::interval
+    GROUP BY DATE_TRUNC('month', created_at)
+    ORDER BY month
+  `)
+
+  const departmentSize = await query(`
+    SELECT d.name, COUNT(u.id) as count
+    FROM departments d
+    LEFT JOIN users u ON u.department_id = d.id AND u.status = 'active'
+    GROUP BY d.id, d.name
+    ORDER BY count DESC
+    LIMIT 15
+  `)
+
+  res.json({
+    activityByDay: activityByDay.rows,
+    activityByType: activityByType.rows,
+    topUsers: topUsers.rows,
+    loginStats: loginStats.rows,
+    newUsersByMonth: newUsersByMonth.rows,
+    vacationByMonth: vacationByMonth.rows,
+    departmentSize: departmentSize.rows,
+  })
+}))
+
+// ===================== SYSTEM HEALTH =====================
+
+/**
+ * @swagger
+ * /admin/health:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Состояние системы
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Метрики системы
+ */
+router.get('/health', asyncHandler(async (req, res) => {
+  const dbVersion = await query('SELECT version() as v')
+  const dbSize = await query("SELECT pg_database_size(current_database()) as size")
+  const tableStats = await query(`
+    SELECT relname as table, n_live_tup as rows, pg_size_pretty(pg_total_relation_size(relid)) as size
+    FROM pg_stat_user_tables
+    ORDER BY pg_total_relation_size(relid) DESC
+    LIMIT 20
+  `)
+  const activeConns = await query(`
+    SELECT state, COUNT(*) as count FROM pg_stat_activity WHERE datname = current_database() GROUP BY state
+  `)
+  const uptime = process.uptime()
+  const memUsage = process.memoryUsage()
+
+  res.json({
+    database: {
+      version: dbVersion.rows[0]?.v?.split(' ').slice(0, 2).join(' ') || 'unknown',
+      size: dbSize.rows[0]?.size || 0,
+      sizeFormatted: formatBytes(dbSize.rows[0]?.size || 0),
+      connections: activeConns.rows,
+      tables: tableStats.rows,
+    },
+    server: {
+      uptime: Math.floor(uptime),
+      uptimeFormatted: formatUptime(uptime),
+      memory: {
+        rss: formatBytes(memUsage.rss),
+        heapUsed: formatBytes(memUsage.heapUsed),
+        heapTotal: formatBytes(memUsage.heapTotal),
+        rssBytes: memUsage.rss,
+        heapUsedBytes: memUsage.heapUsed,
+      },
+      nodeVersion: process.version,
+      platform: process.platform,
+      cpuUsage: process.cpuUsage(),
+    },
+    environment: process.env.NODE_ENV || 'development',
+  })
+}))
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+function formatUptime(seconds) {
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const parts = []
+  if (d > 0) parts.push(`${d} дн.`)
+  if (h > 0) parts.push(`${h} ч.`)
+  parts.push(`${m} мин.`)
+  return parts.join(' ')
+}
+
+// ===================== ERROR LOGS =====================
+
+/**
+ * @swagger
+ * /admin/error-log:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Лог ошибок системы
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: page, in: query, schema: { type: integer, default: 1 } }
+ *       - { name: limit, in: query, schema: { type: integer, default: 50 } }
+ *     responses:
+ *       200:
+ *         description: Лог ошибок
+ */
+router.get('/error-log', asyncHandler(async (req, res) => {
+  const { page = '1', limit = '50' } = req.query
+  const offset = (parseInt(page) - 1) * parseInt(limit)
+
+  const countResult = await query(`SELECT COUNT(*) as total FROM error_log`)
+  const total = parseInt(countResult.rows[0].total)
+
+  const result = await query(`
+    SELECT id, message, stack, path, method, status_code, user_id, user_email, ip, created_at
+    FROM error_log
+    ORDER BY created_at DESC
+    LIMIT $1 OFFSET $2
+  `, [parseInt(limit), offset])
+
+  res.json({ errors: result.rows, total, page: parseInt(page), limit: parseInt(limit) })
+}))
+
+// ===================== SECURITY =====================
+
+/**
+ * @swagger
+ * /admin/security/failed-logins:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Неудачные попытки входа
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: days, in: query, schema: { type: integer, default: 30 } }
+ *     responses:
+ *       200:
+ *         description: Список неудачных попыток
+ */
+router.get('/security/failed-logins', asyncHandler(async (req, res) => {
+  const days = Math.min(parseInt(req.query.days) || 30, 365)
+
+  const attempts = await query(`
+    SELECT id, email, ip_address, created_at
+    FROM failed_login_attempts
+    WHERE created_at >= CURRENT_DATE - ($1 || ' days')::interval
+    ORDER BY created_at DESC
+    LIMIT 200
+  `, [days])
+
+  const byIp = await query(`
+    SELECT ip_address, COUNT(*) as count, MAX(created_at) as last_attempt
+    FROM failed_login_attempts
+    WHERE created_at >= CURRENT_DATE - ($1 || ' days')::interval
+    GROUP BY ip_address
+    ORDER BY count DESC
+    LIMIT 20
+  `, [days])
+
+  const byEmail = await query(`
+    SELECT email, COUNT(*) as count, MAX(created_at) as last_attempt
+    FROM failed_login_attempts
+    WHERE created_at >= CURRENT_DATE - ($1 || ' days')::interval
+    GROUP BY email
+    ORDER BY count DESC
+    LIMIT 20
+  `, [days])
+
+  res.json({ attempts: attempts.rows, byIp: byIp.rows, byEmail: byEmail.rows })
+}))
+
+/**
+ * @swagger
+ * /admin/security/locked-accounts:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Заблокированные аккаунты
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Список заблокированных
+ */
+router.get('/security/locked-accounts', asyncHandler(async (req, res) => {
+  const result = await query(`
+    SELECT u.id, u.email, u.first_name, u.last_name, u.locked_until, u.failed_login_count,
+      d.name as department
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
+    WHERE u.locked_until IS NOT NULL AND u.locked_until > NOW()
+    ORDER BY u.locked_until DESC
+  `)
+  res.json(result.rows)
+}))
+
+/**
+ * @swagger
+ * /admin/users/{id}/unlock:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Разблокировать аккаунт
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Аккаунт разблокирован
+ */
+router.post('/users/:id/unlock', asyncHandler(async (req, res) => {
+  const { id } = req.params
+  await query('UPDATE users SET locked_until = NULL, failed_login_count = 0 WHERE id = $1', [id])
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'account_unlock', 'user', id, {}, req.ip)
+  res.json({ success: true })
+}))
+
+// ===================== REPORTS =====================
+
+/**
+ * @swagger
+ * /admin/reports/vacations:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Отчёт по отпускам
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: year, in: query, schema: { type: integer } }
+ *       - { name: departmentId, in: query, schema: { type: integer } }
+ *       - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+ *     responses:
+ *       200:
+ *         description: Отчёт по отпускам
+ */
+router.get('/reports/vacations', asyncHandler(async (req, res) => {
+  const year = parseInt(req.query.year) || new Date().getFullYear()
+  const { departmentId, format } = req.query
+
+  const deptFilter = departmentId ? ` AND u.department_id = ${parseInt(departmentId)}` : ''
+
+  const result = await query(`
+    SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, d.name as department,
+      COALESCE(vb.total_days, 28) as total_days,
+      COALESCE(vb.used_days, 0) as used_days,
+      COALESCE(vb.available_days, 28) as available_days,
+      COALESCE(vb.reserved_days, 0) as reserved_days,
+      (SELECT COUNT(*) FROM vacation_requests vr WHERE vr.user_id = u.id AND EXTRACT(YEAR FROM vr.created_at) = $1) as request_count
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
+    LEFT JOIN vacation_balances vb ON vb.user_id = u.id AND vb.year = $1
+    WHERE u.status = 'active'${deptFilter}
+    ORDER BY d.name, u.last_name, u.first_name
+  `, [year])
+
+  if (format === 'csv') {
+    const sep = ';'
+    const header = ['Фамилия', 'Имя', 'Отчество', 'Должность', 'Отдел', 'Всего дней', 'Использовано', 'Доступно', 'Зарезервировано', 'Заявлений'].join(sep)
+    const rows = result.rows.map(r =>
+      [r.last_name, r.first_name, r.middle_name || '', r.position, r.department || '', r.total_days, r.used_days, r.available_days, r.reserved_days, r.request_count].join(sep)
+    )
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename=vacation_report_${year}.csv`)
+    return res.send('\uFEFF' + header + '\n' + rows.join('\n'))
+  }
+
+  res.json(result.rows)
+}))
+
+/**
+ * @swagger
+ * /admin/reports/hires:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Отчёт по наймам
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: dateFrom, in: query, schema: { type: string, format: date } }
+ *       - { name: dateTo, in: query, schema: { type: string, format: date } }
+ *       - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+ *     responses:
+ *       200:
+ *         description: Отчёт по наймам
+ */
+router.get('/reports/hires', asyncHandler(async (req, res) => {
+  const { dateFrom, dateTo, format } = req.query
+  const conditions = []
+  const values = []
+  let idx = 1
+
+  if (dateFrom) { conditions.push(`u.hire_date >= $${idx++}`); values.push(dateFrom) }
+  if (dateTo) { conditions.push(`u.hire_date <= $${idx++}`); values.push(dateTo) }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+
+  const result = await query(`
+    SELECT u.id, u.first_name, u.last_name, u.middle_name, u.email, u.position, u.hire_date,
+      u.status, u.role, d.name as department,
+      m.first_name as manager_first, m.last_name as manager_last
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
+    LEFT JOIN users m ON u.manager_id = m.id
+    ${where}
+    ORDER BY u.hire_date DESC
+  `, values)
+
+  if (format === 'csv') {
+    const sep = ';'
+    const header = ['Фамилия', 'Имя', 'Отчество', 'Email', 'Должность', 'Отдел', 'Дата найма', 'Статус', 'Роль', 'Руководитель'].join(sep)
+    const rows = result.rows.map(r =>
+      [r.last_name, r.first_name, r.middle_name || '', r.email, r.position, r.department || '', r.hire_date || '', r.status, r.role, r.manager_first ? `${r.manager_first} ${r.manager_last}` : ''].join(sep)
+    )
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename=hires_report.csv')
+    return res.send('\uFEFF' + header + '\n' + rows.join('\n'))
+  }
+
+  res.json(result.rows)
+}))
+
+// ===================== DICTIONARIES =====================
+
+/**
+ * @swagger
+ * /admin/dictionaries:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Все справочники для редактирования
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Справочники
+ */
+router.get('/dictionaries', asyncHandler(async (req, res) => {
+  const [positions, vacationTypes, skills] = await Promise.all([
+    query('SELECT DISTINCT position as name, COUNT(*) as count FROM users GROUP BY position ORDER BY position'),
+    query('SELECT id, code, name FROM vacation_types ORDER BY name'),
+    query('SELECT id, name FROM skills_dictionary ORDER BY name'),
+  ])
+
+  res.json({ positions: positions.rows, vacationTypes: vacationTypes.rows, skills: skills.rows })
+}))
+
+/**
+ * @swagger
+ * /admin/dictionaries/skills:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Добавить навык в справочник
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *     responses:
+ *       201:
+ *         description: Навык добавлен
+ */
+router.post('/dictionaries/skills', asyncHandler(async (req, res) => {
+  const { name } = req.body
+  if (!name?.trim()) throw new ValidationError('Название обязательно')
+  const result = await query(
+    `INSERT INTO skills_dictionary (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING *`,
+    [name.trim()]
+  )
+  if (result.rows.length === 0) throw new ValidationError('Такой навык уже существует')
+  res.status(201).json(result.rows[0])
+}))
+
+/**
+ * @swagger
+ * /admin/dictionaries/skills/{id}:
+ *   delete:
+ *     tags: [Admin]
+ *     summary: Удалить навык из справочника
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Навык удалён
+ */
+router.delete('/dictionaries/skills/:id', asyncHandler(async (req, res) => {
+  await query('DELETE FROM skills_dictionary WHERE id = $1', [req.params.id])
+  res.json({ success: true })
+}))
+
 export default router
