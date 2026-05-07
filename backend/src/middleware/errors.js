@@ -1,3 +1,5 @@
+import { query } from '../config/database.js'
+
 class AppError extends Error {
   constructor(message, statusCode = 500, code = 'INTERNAL_ERROR') {
     super(message)
@@ -50,6 +52,24 @@ export const errorHandler = (err, req, res, next) => {
     method: req.method,
     body: process.env.NODE_ENV === 'development' ? req.body : undefined,
   })
+
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
+
+  if (!err.isOperational && err.statusCode !== 401 && err.statusCode !== 403) {
+    query(
+      `INSERT INTO error_log (message, stack, path, method, status_code, user_id, user_email, ip) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        err.message?.substring(0, 2000),
+        process.env.NODE_ENV === 'development' ? err.stack?.substring(0, 5000) : null,
+        req.path?.substring(0, 500),
+        req.method,
+        err.statusCode || 500,
+        req.user?.id || null,
+        req.user?.email || null,
+        ip,
+      ]
+    ).catch(() => {})
+  }
 
   if (err.isOperational) {
     return res.status(err.statusCode).json({

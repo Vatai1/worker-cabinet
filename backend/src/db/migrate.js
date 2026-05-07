@@ -1385,6 +1385,50 @@ async function runMigrations() {
 
     console.log('✅ Admin panel tables created')
 
+    // Step: Error log + failed logins + account lockout
+    console.log('Creating security tables...')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS error_log (
+        id SERIAL PRIMARY KEY,
+        message TEXT NOT NULL,
+        stack TEXT,
+        path VARCHAR(500),
+        method VARCHAR(10),
+        status_code INTEGER,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        user_email VARCHAR(255),
+        ip VARCHAR(45),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    await db.query('CREATE INDEX IF NOT EXISTS idx_error_log_created ON error_log(created_at)').catch(() => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_error_log_status ON error_log(status_code)').catch(() => {})
+    console.log('  ✓ error_log')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS failed_login_attempts (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        ip_address VARCHAR(45),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    await db.query('CREATE INDEX IF NOT EXISTS idx_failed_login_created ON failed_login_attempts(created_at)').catch(() => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_failed_login_email ON failed_login_attempts(email)').catch(() => {})
+    console.log('  ✓ failed_login_attempts')
+
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP`)
+      console.log('  ✓ locked_until column')
+    } catch (e) {}
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_count INTEGER DEFAULT 0`)
+      console.log('  ✓ failed_login_count column')
+    } catch (e) {}
+
+    console.log('✅ Security tables created')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     

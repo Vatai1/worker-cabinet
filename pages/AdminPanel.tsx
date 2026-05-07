@@ -11,19 +11,60 @@ import {
   Shield, Users, Key, Building2, Settings2, ScrollText, Search,
   Loader2, Plus, Trash2, Edit3, Check, X, AlertTriangle, Activity,
   ChevronLeft, ChevronRight, RefreshCw, UserCog, Lock,
-  UserPlus, RotateCcw, Sliders, Clock, Globe,
+  RotateCcw, Sliders, Clock, Globe,
   ShieldCheck, ArrowRightLeft, Eye, ArrowUpDown,
+  BarChart3, Download, FileText, Database,
+  HardDrive, Server, AlertCircle, Unlock, UserPlus,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry, AdminStats } from '@/types/admin'
 
-type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit'
+type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'analytics' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries'
 
-const TABS: { id: TabId; name: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'users', name: 'Пользователи', icon: Users },
-  { id: 'roles', name: 'Роли и доступы', icon: Key },
-  { id: 'departments', name: 'Отделы', icon: Building2 },
-  { id: 'settings', name: 'Настройки', icon: Settings2 },
-  { id: 'audit', name: 'Аудит', icon: ScrollText },
+interface TabItem {
+  id: TabId
+  name: string
+  icon: React.ComponentType<{ className?: string }>
+  description: string
+  color: string
+}
+
+interface TabGroup {
+  label: string
+  tabs: TabItem[]
+}
+
+const TAB_GROUPS: TabGroup[] = [
+  {
+    label: 'Управление',
+    tabs: [
+      { id: 'users', name: 'Пользователи', icon: Users, description: 'Сотрудники, роли, статусы', color: 'from-blue-500 to-indigo-600' },
+      { id: 'roles', name: 'Роли и доступы', icon: Key, description: 'Динамические роли, пермишены', color: 'from-violet-500 to-purple-600' },
+      { id: 'departments', name: 'Отделы', icon: Building2, description: 'Структура организации', color: 'from-emerald-500 to-teal-600' },
+    ],
+  },
+  {
+    label: 'Аналитика и отчёты',
+    tabs: [
+      { id: 'analytics', name: 'Аналитика', icon: BarChart3, description: 'Графики, статистика', color: 'from-amber-500 to-orange-600' },
+      { id: 'reports', name: 'Отчёты', icon: FileText, description: 'Отпуска, наймы, CSV', color: 'from-cyan-500 to-blue-600' },
+    ],
+  },
+  {
+    label: 'Данные',
+    tabs: [
+      { id: 'dictionaries', name: 'Справочники', icon: ScrollText, description: 'Должности, навыки, типы', color: 'from-pink-500 to-rose-600' },
+      { id: 'settings', name: 'Настройки', icon: Settings2, description: 'Параметры системы', color: 'from-slate-500 to-gray-600' },
+    ],
+  },
+  {
+    label: 'Безопасность и контроль',
+    tabs: [
+      { id: 'security', name: 'Безопасность', icon: ShieldCheck, description: 'Блокировки, попытки входа', color: 'from-red-500 to-rose-600' },
+      { id: 'audit', name: 'Аудит', icon: Activity, description: 'Лог действий', color: 'from-indigo-500 to-blue-600' },
+      { id: 'errors', name: 'Ошибки', icon: AlertCircle, description: 'Лог ошибок системы', color: 'from-orange-500 to-red-600' },
+      { id: 'health', name: 'Система', icon: Server, description: 'БД, память, подключения', color: 'from-teal-500 to-emerald-600' },
+    ],
+  },
 ]
 
 const ROLE_LABELS: Record<string, string> = {
@@ -200,32 +241,78 @@ export function AdminPanel() {
         </div>
       )}
 
-      <div className="flex gap-1 p-1 bg-muted/50 rounded-xl overflow-x-auto">
-        {TABS.map((tab) => {
-          const Icon = tab.icon
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
+        <nav className="space-y-4">
+          {TAB_GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1.5">{group.label}</p>
+              <div className="space-y-0.5">
+                {group.tabs.map((tab) => {
+                  const Icon = tab.icon
+                  const isActive = activeTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={cn(
+                        'group flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-all duration-200',
+                        isActive
+                          ? 'bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 shadow-sm'
+                          : 'hover:bg-muted/40 border border-transparent',
+                      )}
+                    >
+                      <div className={cn(
+                        'p-2 rounded-lg transition-all duration-200 shrink-0',
+                        isActive
+                          ? `bg-gradient-to-br ${tab.color} text-white shadow-sm`
+                          : 'bg-muted/50 text-muted-foreground group-hover:bg-muted',
+                      )}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={cn(
+                          'text-sm font-medium truncate transition-colors',
+                          isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground',
+                        )}>
+                          {tab.name}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/70 truncate leading-tight">{tab.description}</p>
+                      </div>
+                      {isActive && <div className="ml-auto w-1 h-4 rounded-full bg-primary shrink-0" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        <div className="min-w-0 relative">
+          {([
+            ['users', UsersTab],
+            ['roles', RolesTab],
+            ['departments', DepartmentsTab],
+            ['settings', SettingsTab],
+            ['audit', AuditTab],
+            ['analytics', AnalyticsTab],
+            ['health', HealthTab],
+            ['errors', ErrorsTab],
+            ['security', SecurityTab],
+            ['reports', ReportsTab],
+            ['dictionaries', DictionariesTab],
+          ] as const).map(([id, Component]) => (
+            <div
+              key={id}
               className={cn(
-                'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all',
-                activeTab === tab.id
-                  ? 'bg-card text-foreground shadow-sm border border-border/50'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                'transition-opacity duration-200 ease-in-out',
+                activeTab === id ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
               )}
             >
-              <Icon className="h-4 w-4" />
-              {tab.name}
-            </button>
-          )
-        })}
+              <Component />
+            </div>
+          ))}
+        </div>
       </div>
-
-      {activeTab === 'users' && <UsersTab />}
-      {activeTab === 'roles' && <RolesTab />}
-      {activeTab === 'departments' && <DepartmentsTab />}
-      {activeTab === 'settings' && <SettingsTab />}
-      {activeTab === 'audit' && <AuditTab />}
     </div>
   )
 }
@@ -274,6 +361,9 @@ function UsersTab() {
   const [resetPwdId, setResetPwdId] = useState<number | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkAction, setBulkAction] = useState('')
+  const [bulkRole, setBulkRole] = useState('')
 
   useEffect(() => {
     fetchRoles()
@@ -352,11 +442,67 @@ function UsersTab() {
 
   const totalPages = Math.ceil(total / 25)
 
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (selectedIds.size === users.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(users.map((u) => u.id)))
+    }
+  }
+
+  const executeBulkAction = async () => {
+    if (selectedIds.size === 0) return
+    const ids = Array.from(selectedIds)
+    try {
+      if (bulkAction === 'activate') {
+        const res = await fetch(`${API_BASE_URL}/admin/users/bulk-status`, {
+          method: 'PUT', headers: getAuthHeadersWithContentType(),
+          body: JSON.stringify({ userIds: ids, status: 'active' }),
+        })
+        if (res.ok) { setSelectedIds(new Set()); fetchUsers() }
+        else { const d = await res.json(); setError(d.error) }
+      } else if (bulkAction === 'deactivate') {
+        const res = await fetch(`${API_BASE_URL}/admin/users/bulk-status`, {
+          method: 'PUT', headers: getAuthHeadersWithContentType(),
+          body: JSON.stringify({ userIds: ids, status: 'inactive' }),
+        })
+        if (res.ok) { setSelectedIds(new Set()); fetchUsers() }
+        else { const d = await res.json(); setError(d.error) }
+      } else if (bulkAction === 'setRole' && bulkRole) {
+        const res = await fetch(`${API_BASE_URL}/admin/users/bulk-role`, {
+          method: 'PUT', headers: getAuthHeadersWithContentType(),
+          body: JSON.stringify({ userIds: ids, role: bulkRole }),
+        })
+        if (res.ok) { setSelectedIds(new Set()); setBulkAction(''); setBulkRole(''); fetchUsers() }
+        else { const d = await res.json(); setError(d.error) }
+      }
+    } catch (err) { setError(getErrorMessage(err)) }
+  }
+
+  const exportUsers = () => {
+    window.open(`${API_BASE_URL}/admin/users/export`, '_blank')
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><UserCog className="h-5 w-5" /> Управление пользователями</CardTitle>
-        <CardDescription>Всего: {total}</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2"><UserCog className="h-5 w-5" /> Управление пользователями</CardTitle>
+            <CardDescription>Всего: {total}</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={exportUsers}>
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Экспорт CSV
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
@@ -386,6 +532,30 @@ function UsersTab() {
           </div>
         )}
 
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
+            <span className="text-sm font-medium">Выбрано: {selectedIds.size}</span>
+            <select value={bulkAction} onChange={(e) => setBulkAction(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+              <option value="">Действие...</option>
+              <option value="activate">Активировать</option>
+              <option value="deactivate">Деактивировать</option>
+              <option value="setRole">Изменить роль</option>
+            </select>
+            {bulkAction === 'setRole' && (
+              <select value={bulkRole} onChange={(e) => setBulkRole(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+                <option value="">Выберите роль...</option>
+                {roles.map((r) => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
+              </select>
+            )}
+            <Button size="sm" onClick={executeBulkAction} disabled={!bulkAction || (bulkAction === 'setRole' && !bulkRole)}>
+              Применить
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkRole('') }}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
         ) : (
@@ -393,6 +563,9 @@ function UsersTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="pb-3 pr-2 font-medium w-8">
+                    <input type="checkbox" checked={selectedIds.size === users.length && users.length > 0} onChange={toggleAll} className="rounded" />
+                  </th>
                   <th className="pb-3 pr-4 font-medium">Сотрудник</th>
                   <th className="pb-3 pr-4 font-medium">Email</th>
                   <th className="pb-3 pr-4 font-medium">Должность</th>
@@ -404,7 +577,10 @@ function UsersTab() {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-muted/30 transition-colors">
+                  <tr key={user.id} className={cn('transition-colors', selectedIds.has(user.id) ? 'bg-primary/5' : 'hover:bg-muted/30')}>
+                    <td className="py-3 pr-2">
+                      <input type="checkbox" checked={selectedIds.has(user.id)} onChange={() => toggleSelect(user.id)} className="rounded" />
+                    </td>
                     <td className="py-3 pr-4">
                       <div className="font-medium">{user.last_name} {user.first_name}</div>
                       {user.middle_name && <div className="text-xs text-muted-foreground">{user.middle_name}</div>}
@@ -1197,6 +1373,747 @@ function AuditTab() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ===================== ANALYTICS TAB =====================
+
+function AnalyticsTab() {
+  const [data, setData] = useState<{
+    activityByDay: { date: string; count: string }[]
+    activityByType: { action: string; count: string }[]
+    topUsers: { user_name: string; count: string }[]
+    newUsersByMonth: { month: string; count: string }[]
+    vacationByMonth: { month: string; count: string }[]
+    departmentSize: { name: string; count: string }[]
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [days, setDays] = useState(30)
+
+  useEffect(() => { fetchData() }, [days])
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/analytics/activity?days=${days}`, { headers: getAuthHeaders() })
+      if (res.ok) setData(await res.json())
+    } catch {} finally { setLoading(false) }
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+  if (!data) return null
+
+  const maxDayCount = Math.max(...data.activityByDay.map(d => parseInt(d.count)), 1)
+  const maxDeptCount = Math.max(...data.departmentSize.map(d => parseInt(d.count)), 1)
+  const maxTypeCount = Math.max(...data.activityByType.map(d => parseInt(d.count)), 1)
+  const chartColors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4', '#84cc16']
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Аналитика активности</CardTitle>
+              <CardDescription>Графики и статистика системы</CardDescription>
+            </div>
+            <select value={days} onChange={(e) => setDays(parseInt(e.target.value))} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+              <option value={7}>7 дней</option>
+              <option value={30}>30 дней</option>
+              <option value={90}>90 дней</option>
+              <option value={365}>Год</option>
+            </select>
+          </div>
+        </CardHeader>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader><CardTitle className="text-base">Активность по дням</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-1 h-40">
+              {data.activityByDay.slice(-30).map((d) => (
+                <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group relative">
+                  <span className="absolute -top-6 text-[10px] bg-popover border border-border px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                    {d.count} — {d.date}
+                  </span>
+                  <div
+                    className="w-full bg-gradient-to-t from-indigo-500 to-violet-400 rounded-t transition-all group-hover:from-indigo-400 group-hover:to-violet-300"
+                    style={{ height: `${(parseInt(d.count) / maxDayCount) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }}
+                  />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Размер отделов</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {data.departmentSize.map((d, i) => (
+              <div key={d.name} className="flex items-center gap-3">
+                <span className="text-sm w-32 truncate" title={d.name}>{d.name || 'Без отдела'}</span>
+                <div className="flex-1 h-6 bg-muted/30 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${(parseInt(d.count) / maxDeptCount) * 100}%`, backgroundColor: chartColors[i % chartColors.length] }} />
+                </div>
+                <span className="text-sm font-medium w-8 text-right">{d.count}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Типы действий</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {data.activityByType.map((d, i) => (
+              <div key={d.action} className="flex items-center gap-3">
+                <span className="text-sm flex-1">{ACTION_LABELS[d.action] || d.action}</span>
+                <div className="w-32 h-5 bg-muted/30 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${(parseInt(d.count) / maxTypeCount) * 100}%`, backgroundColor: chartColors[i % chartColors.length] }} />
+                </div>
+                <span className="text-sm font-medium w-8 text-right">{d.count}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Самые активные пользователи</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {data.topUsers.map((d, i) => (
+              <div key={d.user_name} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/20">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white">
+                  {i + 1}
+                </div>
+                <span className="text-sm flex-1 font-medium">{d.user_name}</span>
+                <Badge className="text-[10px]">{d.count} действий</Badge>
+              </div>
+            ))}
+            {data.topUsers.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Нет данных</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Новые пользователи по месяцам</CardTitle></CardHeader>
+          <CardContent>
+            {data.newUsersByMonth.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Нет данных</p>
+            ) : (
+              <div className="flex items-end gap-1 h-32">
+                {data.newUsersByMonth.map((d) => {
+                  const maxVal = Math.max(...data.newUsersByMonth.map(x => parseInt(x.count)), 1)
+                  return (
+                    <div key={d.month} className="flex-1 flex flex-col items-center gap-1 group relative">
+                      <span className="absolute -top-6 text-[10px] bg-popover border border-border px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        {d.count}
+                      </span>
+                      <div className="w-full bg-gradient-to-t from-emerald-500 to-teal-400 rounded-t" style={{ height: `${(parseInt(d.count) / maxVal) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }} />
+                      <span className="text-[9px] text-muted-foreground">{new Date(d.month).toLocaleDateString('ru-RU', { month: 'short' })}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Заявления на отпуск по месяцам</CardTitle></CardHeader>
+          <CardContent>
+            {data.vacationByMonth.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Нет данных</p>
+            ) : (
+              <div className="flex items-end gap-1 h-32">
+                {data.vacationByMonth.map((d) => {
+                  const maxVal = Math.max(...data.vacationByMonth.map(x => parseInt(x.count)), 1)
+                  return (
+                    <div key={d.month} className="flex-1 flex flex-col items-center gap-1 group relative">
+                      <span className="absolute -top-6 text-[10px] bg-popover border border-border px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        {d.count}
+                      </span>
+                      <div className="w-full bg-gradient-to-t from-amber-500 to-orange-400 rounded-t" style={{ height: `${(parseInt(d.count) / maxVal) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }} />
+                      <span className="text-[9px] text-muted-foreground">{new Date(d.month).toLocaleDateString('ru-RU', { month: 'short' })}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// ===================== HEALTH TAB =====================
+
+function HealthTab() {
+  const [health, setHealth] = useState<{
+    database: { version: string; sizeFormatted: string; connections: { state: string; count: string }[]; tables: { table: string; rows: string; size: string }[] }
+    server: { uptimeFormatted: string; memory: { rss: string; heapUsed: string; heapTotal: string }; nodeVersion: string; platform: string }
+    environment: string
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => { fetchHealth() }, [])
+
+  const fetchHealth = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/health`, { headers: getAuthHeaders() })
+      if (res.ok) setHealth(await res.json())
+    } catch {} finally { setLoading(false) }
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+  if (!health) return null
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+              <Database className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">PostgreSQL</p>
+              <p className="font-bold">{health.database.version}</p>
+              <p className="text-xs text-muted-foreground">Размер: {health.database.sizeFormatted}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-blue-100 dark:bg-blue-900/30">
+              <Server className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Node.js {health.server.nodeVersion}</p>
+              <p className="font-bold">Uptime: {health.server.uptimeFormatted}</p>
+              <p className="text-xs text-muted-foreground">{health.server.platform} | {health.environment}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-violet-100 dark:bg-violet-900/30">
+              <HardDrive className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Память (Heap)</p>
+              <p className="font-bold">{health.server.memory.heapUsed} / {health.server.memory.heapTotal}</p>
+              <p className="text-xs text-muted-foreground">RSS: {health.server.memory.rss}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Подключения к БД</CardTitle>
+            <Button variant="outline" size="sm" onClick={fetchHealth}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Обновить</Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-3">
+            {health.database.connections.map((c) => (
+              <div key={c.state} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30">
+                <div className={cn('w-2 h-2 rounded-full', c.state === 'active' ? 'bg-emerald-500' : 'bg-amber-500')} />
+                <span className="text-sm capitalize">{c.state}</span>
+                <Badge className="text-[10px]">{c.count}</Badge>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Таблицы базы данных</CardTitle></CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="pb-2 pr-4 font-medium">Таблица</th>
+                  <th className="pb-2 pr-4 font-medium text-right">Строк</th>
+                  <th className="pb-2 font-medium text-right">Размер</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/30">
+                {health.database.tables.map((t) => (
+                  <tr key={t.table} className="hover:bg-muted/20">
+                    <td className="py-2 pr-4 font-mono text-xs">{t.table}</td>
+                    <td className="py-2 pr-4 text-right text-muted-foreground">{parseInt(t.rows).toLocaleString('ru-RU')}</td>
+                    <td className="py-2 text-right text-muted-foreground">{t.size}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ===================== ERRORS TAB =====================
+
+function ErrorsTab() {
+  const [errors, setErrors] = useState<{ id: number; message: string; stack: string | null; path: string | null; method: string | null; status_code: number; user_email: string | null; ip: string | null; created_at: string }[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
+
+  useEffect(() => { fetchErrors() }, [page])
+
+  const fetchErrors = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/error-log?page=${page}&limit=25`, { headers: getAuthHeaders() })
+      if (res.ok) {
+        const data = await res.json()
+        setErrors(data.errors)
+        setTotal(data.total)
+      }
+    } catch {} finally { setLoading(false) }
+  }
+
+  const totalPages = Math.ceil(total / 25)
+  const statusColor = (code: number) => {
+    if (code >= 500) return 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30'
+    if (code >= 400) return 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30'
+    return 'text-muted-foreground bg-muted/50'
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2"><AlertCircle className="h-5 w-5" /> Журнал ошибок</CardTitle>
+            <CardDescription>Всего: {total}</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchErrors}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Обновить</Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        ) : errors.length === 0 ? (
+          <div className="flex flex-col items-center py-12 text-muted-foreground">
+            <Check className="h-12 w-12 mb-3 opacity-20" />
+            <p className="text-sm font-medium">Ошибок не обнаружено</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {errors.map((err) => (
+              <div key={err.id} className={cn('p-4 rounded-xl border transition-colors cursor-pointer', expandedId === err.id ? 'border-border bg-muted/10' : 'border-border/30 hover:border-border/60')} onClick={() => setExpandedId(expandedId === err.id ? null : err.id)}>
+                <div className="flex items-start gap-3">
+                  <Badge className={cn('text-[10px] shrink-0', statusColor(err.status_code || 500))}>
+                    {err.status_code || 500}
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{err.message}</p>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      {err.method && <span className="font-mono">{err.method}</span>}
+                      {err.path && <span className="font-mono truncate">{err.path}</span>}
+                      <span>·</span>
+                      <span>{new Date(err.created_at).toLocaleString('ru-RU')}</span>
+                      {err.user_email && <><span>·</span><span>{err.user_email}</span></>}
+                    </div>
+                    {expandedId === err.id && err.stack && (
+                      <pre className="mt-3 p-3 rounded-lg bg-muted/30 text-xs font-mono overflow-x-auto whitespace-pre-wrap text-muted-foreground max-h-64 overflow-y-auto">
+                        {err.stack}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4">
+            <p className="text-sm text-muted-foreground">{(page - 1) * 25 + 1}–{Math.min(page * 25, total)} из {total}</p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+              <span className="text-sm py-1">{page}/{totalPages}</span>
+              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}><ChevronRight className="h-4 w-4" /></Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ===================== SECURITY TAB =====================
+
+function SecurityTab() {
+  const [failedLogins, setFailedLogins] = useState<{ attempts: { id: number; email: string; ip_address: string; created_at: string }[]; byIp: { ip_address: string; count: string; last_attempt: string }[]; byEmail: { email: string; count: string; last_attempt: string }[] } | null>(null)
+  const [lockedAccounts, setLockedAccounts] = useState<{ id: number; email: string; first_name: string; last_name: string; locked_until: string; failed_login_count: number; department: string | null }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [days, setDays] = useState(30)
+
+  useEffect(() => { fetchData() }, [days])
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const [flRes, lockedRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/admin/security/failed-logins?days=${days}`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/admin/security/locked-accounts`, { headers: getAuthHeaders() }),
+      ])
+      if (flRes.ok) setFailedLogins(await flRes.json())
+      if (lockedRes.ok) setLockedAccounts(await lockedRes.json())
+    } catch {} finally { setLoading(false) }
+  }
+
+  const unlockAccount = async (id: number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/users/${id}/unlock`, {
+        method: 'POST', headers: getAuthHeadersWithContentType(),
+      })
+      if (res.ok) setLockedAccounts((prev) => prev.filter((a) => a.id !== id))
+    } catch {}
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+
+  return (
+    <div className="space-y-4">
+      {lockedAccounts.length > 0 && (
+        <Card className="border-red-200 dark:border-red-900/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <Lock className="h-5 w-5" /> Заблокированные аккаунты ({lockedAccounts.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {lockedAccounts.map((a) => (
+                <div key={a.id} className="flex items-center justify-between p-3 rounded-xl bg-red-50 dark:bg-red-900/20">
+                  <div>
+                    <p className="font-medium">{a.last_name} {a.first_name}</p>
+                    <p className="text-xs text-muted-foreground">{a.email} · Попыток: {a.failed_login_count} · До: {new Date(a.locked_until).toLocaleString('ru-RU')}</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => unlockAccount(a.id)}>
+                    <Unlock className="h-3.5 w-3.5 mr-1" /> Разблокировать
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Неудачные попытки входа</CardTitle>
+              <CardDescription>За последние {days} дней</CardDescription>
+            </div>
+            <select value={days} onChange={(e) => setDays(parseInt(e.target.value))} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+              <option value={7}>7 дней</option>
+              <option value={30}>30 дней</option>
+              <option value={90}>90 дней</option>
+            </select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {failedLogins && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-sm font-medium mb-2">По IP-адресам</h4>
+                <div className="space-y-1">
+                  {failedLogins.byIp.map((ip) => (
+                    <div key={ip.ip_address} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 text-sm">
+                      <span className="font-mono text-xs">{ip.ip_address}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge className="text-[10px]" variant="destructive">{ip.count}</Badge>
+                        <span className="text-[10px] text-muted-foreground">{new Date(ip.last_attempt).toLocaleString('ru-RU')}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {failedLogins.byIp.length === 0 && <p className="text-sm text-muted-foreground py-2">Нет данных</p>}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium mb-2">По email</h4>
+                <div className="space-y-1">
+                  {failedLogins.byEmail.map((e) => (
+                    <div key={e.email} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 text-sm">
+                      <span className="font-mono text-xs">{e.email}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge className="text-[10px]" variant="destructive">{e.count}</Badge>
+                        <span className="text-[10px] text-muted-foreground">{new Date(e.last_attempt).toLocaleString('ru-RU')}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {failedLogins.byEmail.length === 0 && <p className="text-sm text-muted-foreground py-2">Нет данных</p>}
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ===================== REPORTS TAB =====================
+
+function ReportsTab() {
+  const [vacationYear, setVacationYear] = useState(new Date().getFullYear())
+  const [vacationData, setVacationData] = useState<unknown[]>([])
+  const [hiresData, setHiresData] = useState<unknown[]>([])
+  const [loading, setLoading] = useState(false)
+  const [activeReport, setActiveReport] = useState<'vacation' | 'hires' | null>(null)
+
+  const loadVacationReport = async () => {
+    setLoading(true); setActiveReport('vacation')
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reports/vacations?year=${vacationYear}`, { headers: getAuthHeaders() })
+      if (res.ok) setVacationData(await res.json())
+    } catch {} finally { setLoading(false) }
+  }
+
+  const loadHiresReport = async () => {
+    setLoading(true); setActiveReport('hires')
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reports/hires`, { headers: getAuthHeaders() })
+      if (res.ok) setHiresData(await res.json())
+    } catch {} finally { setLoading(false) }
+  }
+
+  const downloadVacationCsv = () => {
+    window.open(`${API_BASE_URL}/admin/reports/vacations?year=${vacationYear}&format=csv`, '_blank')
+  }
+
+  const downloadHiresCsv = () => {
+    window.open(`${API_BASE_URL}/admin/reports/hires?format=csv`, '_blank')
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={loadVacationReport}>
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-900/30">
+              <FileText className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold">Отчёт по отпускам</h3>
+              <p className="text-xs text-muted-foreground mt-1">Балансы дней, использованные и доступные отпуска по сотрудникам</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={loadHiresReport}>
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+              <UserCog className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold">Отчёт по наймам</h3>
+              <p className="text-xs text-muted-foreground mt-1">Все сотрудники с датами найма, отделами и руководителями</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </div>
+
+      {loading && <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}
+
+      {activeReport === 'vacation' && !loading && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CardTitle>Отчёт по отпускам {vacationYear}</CardTitle>
+                <Input type="number" value={vacationYear} onChange={(e) => setVacationYear(parseInt(e.target.value))} className="w-24 h-8 text-sm" onClick={(e) => e.stopPropagation()} />
+                <Button size="sm" onClick={loadVacationReport}>Обновить</Button>
+              </div>
+              <Button variant="outline" size="sm" onClick={downloadVacationCsv}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">Сотрудник</th>
+                    <th className="pb-2 pr-3 font-medium">Отдел</th>
+                    <th className="pb-2 pr-3 font-medium text-right">Всего</th>
+                    <th className="pb-2 pr-3 font-medium text-right">Использовано</th>
+                    <th className="pb-2 pr-3 font-medium text-right">Зарезервировано</th>
+                    <th className="pb-2 font-medium text-right">Доступно</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {(vacationData as Record<string, unknown>[]).map((r, i) => (
+                    <tr key={i} className="hover:bg-muted/20">
+                      <td className="py-2 pr-3">{String(r.last_name)} {String(r.first_name)}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{String(r.department || '—')}</td>
+                      <td className="py-2 pr-3 text-right">{String(r.total_days)}</td>
+                      <td className="py-2 pr-3 text-right">{String(r.used_days)}</td>
+                      <td className="py-2 pr-3 text-right">{String(r.reserved_days)}</td>
+                      <td className="py-2 text-right font-medium">{String(r.available_days)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeReport === 'hires' && !loading && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Отчёт по наймам</CardTitle>
+              <Button variant="outline" size="sm" onClick={downloadHiresCsv}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">Сотрудник</th>
+                    <th className="pb-2 pr-3 font-medium">Email</th>
+                    <th className="pb-2 pr-3 font-medium">Должность</th>
+                    <th className="pb-2 pr-3 font-medium">Отдел</th>
+                    <th className="pb-2 pr-3 font-medium">Дата найма</th>
+                    <th className="pb-2 font-medium">Статус</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {(hiresData as Record<string, unknown>[]).map((r, i) => (
+                    <tr key={i} className="hover:bg-muted/20">
+                      <td className="py-2 pr-3">{String(r.last_name)} {String(r.first_name)}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{String(r.email)}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{String(r.position)}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{String(r.department || '—')}</td>
+                      <td className="py-2 pr-3">{String(r.hire_date || '—')}</td>
+                      <td className="py-2"><Badge className={cn('text-[10px]', STATUS_COLORS[String(r.status)])}>{STATUS_LABELS[String(r.status)] || String(r.status)}</Badge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ===================== DICTIONARIES TAB =====================
+
+function DictionariesTab() {
+  const [data, setData] = useState<{ positions: { name: string; count: string }[]; vacationTypes: { id: number; code: string; name: string }[]; skills: { id: number; name: string }[] } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [newSkill, setNewSkill] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => { fetchData() }, [])
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/dictionaries`, { headers: getAuthHeaders() })
+      if (res.ok) setData(await res.json())
+    } catch {} finally { setLoading(false) }
+  }
+
+  const addSkill = async () => {
+    if (!newSkill.trim()) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/dictionaries/skills`, {
+        method: 'POST', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ name: newSkill.trim() }),
+      })
+      if (res.ok) { setNewSkill(''); fetchData() }
+      else { const d = await res.json(); setError(d.error) }
+    } catch (err) { setError(getErrorMessage(err)) }
+  }
+
+  const deleteSkill = async (id: number) => {
+    try {
+      await fetch(`${API_BASE_URL}/admin/dictionaries/skills/${id}`, {
+        method: 'DELETE', headers: getAuthHeaders(),
+      })
+      fetchData()
+    } catch {}
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+  if (!data) return null
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <Card>
+        <CardHeader><CardTitle className="text-base">Должности</CardTitle><CardDescription>Используются сотрудниками</CardDescription></CardHeader>
+        <CardContent>
+          <div className="space-y-1 max-h-80 overflow-y-auto">
+            {data.positions.map((p) => (
+              <div key={p.name} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20">
+                <span className="text-sm">{p.name}</span>
+                <Badge className="text-[10px]">{p.count}</Badge>
+              </div>
+            ))}
+            {data.positions.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Пусто</p>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Типы отпусков</CardTitle><CardDescription>Системный справочник</CardDescription></CardHeader>
+        <CardContent>
+          <div className="space-y-1 max-h-80 overflow-y-auto">
+            {data.vacationTypes.map((vt) => (
+              <div key={vt.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20">
+                <span className="text-sm">{vt.name}</span>
+                <span className="text-[10px] font-mono text-muted-foreground">{vt.code}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Навыки</CardTitle><CardDescription>Каталог навыков компании</CardDescription></CardHeader>
+        <CardContent className="space-y-3">
+          {error && (
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-xs">
+              <AlertTriangle className="h-3 w-3 shrink-0" /> {error}
+              <button onClick={() => setError(null)} className="ml-auto"><X className="h-3 w-3" /></button>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input placeholder="Новый навык" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} className="h-8 text-sm" />
+            <Button size="sm" onClick={addSkill}><Plus className="h-3.5 w-3.5" /></Button>
+          </div>
+          <div className="space-y-1 max-h-64 overflow-y-auto">
+            {data.skills.map((s) => (
+              <div key={s.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 group">
+                <span className="text-sm">{s.name}</span>
+                <button onClick={() => deleteSkill(s.id)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            {data.skills.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Пусто</p>}
+          </div>
         </CardContent>
       </Card>
     </div>

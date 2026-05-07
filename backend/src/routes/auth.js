@@ -135,6 +135,7 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
  */
 router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) => {
   const { email, password } = req.body
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
 
   const result = await query(
     `SELECT u.*, d.name as department_name, d.manager_id as department_manager_id
@@ -145,15 +146,35 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
   )
 
   if (result.rows.length === 0) {
+    await query(`INSERT INTO failed_login_attempts (email, ip_address) VALUES ($1, $2)`, [email, ip]).catch(() => {})
     throw new UnauthorizedError('Неверный email или пароль')
   }
 
   const user = result.rows[0]
 
+  if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    throw new UnauthorizedError('Аккаунт временно заблокирован. Обратитесь к администратору.')
+  }
+
   const validPassword = await bcrypt.compare(password, user.password_hash)
 
   if (!validPassword) {
+    const newCount = (user.failed_login_count || 0) + 1
+    const lockThreshold = 5
+    if (newCount >= lockThreshold) {
+      await query(
+        `UPDATE users SET failed_login_count = $1, locked_until = NOW() + interval '30 minutes' WHERE id = $2`,
+        [newCount, user.id]
+      )
+    } else {
+      await query(`UPDATE users SET failed_login_count = $1 WHERE id = $2`, [newCount, user.id])
+    }
+    await query(`INSERT INTO failed_login_attempts (email, ip_address) VALUES ($1, $2)`, [email, ip]).catch(() => {})
     throw new UnauthorizedError('Неверный email или пароль')
+  }
+
+  if (user.failed_login_count > 0 || user.locked_until) {
+    await query(`UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = $1`, [user.id])
   }
 
   if (!process.env.JWT_SECRET) {
@@ -165,6 +186,11 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   )
+
+  await query(
+    `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, ip_address) VALUES ($1, $2, 'login', 'user', $3, $4)`,
+    [user.id, `${user.first_name} ${user.last_name}`, String(user.id), ip]
+  ).catch(() => {})
 
   let subordinates = []
   if (user.role === 'manager' || user.role === 'hr' || user.role === 'admin') {
