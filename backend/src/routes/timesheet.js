@@ -282,10 +282,6 @@ router.put('/:id/entries', async (req, res) => {
       return res.status(403).json({ error: 'Нет доступа к этому табелю' })
     }
 
-    if (timesheet.status === 'approved' && req.user.role === 'manager') {
-      return res.status(403).json({ error: 'Нельзя редактировать утверждённый табель' })
-    }
-
     if (timesheet.status === 'submitted' && req.user.role === 'manager') {
     }
 
