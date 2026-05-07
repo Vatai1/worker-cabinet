@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
+import { getAuthHeaders } from '@/lib/authHeaders'
 import { getErrorMessage } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
-import { Button } from '@/components/ui/Button'
 import { TimesheetGrid, TimesheetEntry } from '@/components/timesheet/TimesheetGrid'
 import { useAuthStore } from '@/store/authStore'
 
@@ -29,7 +28,6 @@ export function HRTimesheet() {
   const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[]; employees: { id: number; first_name: string; last_name: string }[] } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [statusLoading, setStatusLoading] = useState(false)
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
@@ -70,29 +68,7 @@ export function HRTimesheet() {
 
   useEffect(() => { loadTimesheet() }, [selectedDept, year, month])
 
-  async function handleStatusChange(status: string) {
-    if (!timesheet) return
-    setStatusLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`${API_BASE_URL}/timesheet/${timesheet.id}/status`, {
-        method: 'PUT',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ status }),
-      })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Ошибка')
-      }
-      await loadTimesheet()
-    } catch (err: unknown) {
-      setError(getErrorMessage(err))
-    } finally {
-      setStatusLoading(false)
-    }
-  }
-
-  const readonly = false
+const readonly = false
 
   return (
     <div className="space-y-6">
@@ -138,29 +114,6 @@ export function HRTimesheet() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              timesheet.status === 'draft' ? 'bg-muted text-muted-foreground' :
-              timesheet.status === 'submitted' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' :
-              'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
-            }`}>
-              {timesheet.status === 'draft' ? 'Черновик' :
-               timesheet.status === 'submitted' ? 'На утверждении' : 'Утверждён'}
-            </span>
-            <div className="flex gap-2">
-              {timesheet.status === 'submitted' && (
-                <Button onClick={() => handleStatusChange('approved')} disabled={statusLoading}>
-                  Утвердить
-                </Button>
-              )}
-              {timesheet.status === 'approved' && (
-                <Button variant="outline" onClick={() => handleStatusChange('submitted')} disabled={statusLoading}>
-                  Вернуть на доработку
-                </Button>
-              )}
-            </div>
-          </div>
-
           {timesheetData && (
             <TimesheetGrid
               timesheetId={timesheet.id}
