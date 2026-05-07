@@ -73,15 +73,14 @@ export function ManagerTimesheet() {
     }
   }
 
-  async function handleSubmit() {
+  async function handleSubmitToday() {
     if (!timesheet) return
     setSubmitting(true)
     setError(null)
     try {
-      const res = await fetch(`${API_BASE_URL}/timesheet/${timesheet.id}/status`, {
-        method: 'PUT',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ status: 'submitted' }),
+      const res = await fetch(`${API_BASE_URL}/timesheet/${timesheet.id}/submit-today`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
       })
       if (!res.ok) {
         const d = await res.json()
@@ -95,7 +94,7 @@ export function ManagerTimesheet() {
     }
   }
 
-  const readonly = timesheet?.status !== 'draft'
+  const readonly = false
 
   return (
     <div className="space-y-6">
@@ -141,11 +140,12 @@ export function ManagerTimesheet() {
                  timesheet.status === 'submitted' ? 'На утверждении' : 'Утверждён'}
               </span>
             </div>
-            {timesheet.status === 'draft' && (
-              <Button onClick={handleSubmit} disabled={submitting}>
-                {submitting ? 'Отправка...' : 'Отправить на утверждение'}
-              </Button>
+            {timesheet.status === 'approved' && (
+              <span className="text-xs text-green-600 dark:text-green-400 font-medium">Табель утверждён</span>
             )}
+            <Button onClick={handleSubmitToday} disabled={submitting}>
+              {submitting ? 'Отправка...' : 'Отправить за сегодня'}
+            </Button>
           </div>
 
           {timesheetData && (
