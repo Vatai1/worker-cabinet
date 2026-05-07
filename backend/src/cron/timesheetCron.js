@@ -71,7 +71,7 @@ async function addDayEntries(year, month, day) {
         } else if (vacationDays.has(emp.id)) {
           code = 'ОТ'
         } else {
-          code = 'Я'
+          code = null
         }
         return [ts.id, emp.id, dateStr, code]
       })
