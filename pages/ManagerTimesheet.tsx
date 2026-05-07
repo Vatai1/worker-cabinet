@@ -76,7 +76,15 @@ export function ManagerTimesheet() {
   }
 
   async function handleSubmitToday() {
-    if (!timesheet) return
+    if (!timesheet || !timesheetData) return
+    const today = new Date()
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+    const todayEntries = timesheetData.entries.filter((e: TimesheetEntry) => e.date === todayStr)
+    const emptyCells = todayEntries.filter((e: TimesheetEntry) => !e.code)
+    if (emptyCells.length > 0) {
+      setError(`Заполните все ячейки за сегодня (${emptyCells.length} пустых)`)
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
