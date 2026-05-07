@@ -90,7 +90,7 @@ export function HRTimesheet() {
     }
   }
 
-  const readonly = timesheet?.status === 'approved'
+  const readonly = false
 
   return (
     <div className="space-y-6">
