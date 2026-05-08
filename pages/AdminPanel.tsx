@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
 import { getErrorMessage, cn } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
+import { useModulesStore } from '@/store/modulesStore'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -13,12 +14,13 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, UserCog, Lock,
   RotateCcw, Sliders, Clock, Globe,
   ShieldCheck, ArrowRightLeft, Eye, ArrowUpDown,
-  BarChart3, Download, FileText, Database,
-  HardDrive, Server, AlertCircle, Unlock, UserPlus,
+  Download, FileText, Database,
+  HardDrive, Server, AlertCircle, Unlock, UserPlus, Boxes,
+  TrendingUp, Clock3, FolderKanban, CalendarX,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry, AdminStats } from '@/types/admin'
 
-type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'analytics' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries'
+type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries' | 'modules'
 
 interface TabItem {
   id: TabId
@@ -43,15 +45,15 @@ const TAB_GROUPS: TabGroup[] = [
     ],
   },
   {
-    label: 'Аналитика и отчёты',
+    label: 'Отчёты',
     tabs: [
-      { id: 'analytics', name: 'Аналитика', icon: BarChart3, description: 'Графики, статистика', color: 'from-amber-500 to-orange-600' },
       { id: 'reports', name: 'Отчёты', icon: FileText, description: 'Отпуска, наймы, CSV', color: 'from-cyan-500 to-blue-600' },
     ],
   },
   {
     label: 'Данные',
     tabs: [
+      { id: 'modules', name: 'Модули', icon: Boxes, description: 'Включение/отключение разделов', color: 'from-orange-500 to-amber-600' },
       { id: 'dictionaries', name: 'Справочники', icon: ScrollText, description: 'Должности, навыки, типы', color: 'from-pink-500 to-rose-600' },
       { id: 'settings', name: 'Настройки', icon: Settings2, description: 'Параметры системы', color: 'from-slate-500 to-gray-600' },
     ],
@@ -89,6 +91,7 @@ const ACTION_LABELS: Record<string, string> = {
   bulk_role_change: 'Массовая смена роли',
   account_unlock: 'Разблокировка аккаунта',
   login: 'Вход в систему',
+  module_toggle: 'Переключение модуля',
 }
 
 const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string }> = {
@@ -104,6 +107,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: st
   bulk_role_change:   { icon: ArrowRightLeft,color: 'text-violet-600 dark:text-violet-400',   bg: 'bg-violet-100 dark:bg-violet-900/30' },
   account_unlock:     { icon: Unlock,        color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
   login:              { icon: Activity,      color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-100 dark:bg-blue-900/30' },
+  module_toggle:      { icon: Boxes,         color: 'text-orange-600 dark:text-orange-400',   bg: 'bg-orange-100 dark:bg-orange-900/30' },
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -302,12 +306,12 @@ export function AdminPanel() {
             ['departments', DepartmentsTab],
             ['settings', SettingsTab],
             ['audit', AuditTab],
-            ['analytics', AnalyticsTab],
             ['health', HealthTab],
             ['errors', ErrorsTab],
             ['security', SecurityTab],
             ['reports', ReportsTab],
             ['dictionaries', DictionariesTab],
+            ['modules', ModulesTab],
           ] as const).map(([id, Component]) => (
             <div
               key={id}
@@ -1389,173 +1393,6 @@ function AuditTab() {
 
 // ===================== ANALYTICS TAB =====================
 
-function AnalyticsTab() {
-  const [data, setData] = useState<{
-    activityByDay: { date: string; count: string }[]
-    activityByType: { action: string; count: string }[]
-    topUsers: { user_name: string; count: string }[]
-    newUsersByMonth: { month: string; count: string }[]
-    vacationByMonth: { month: string; count: string }[]
-    departmentSize: { name: string; count: string }[]
-  } | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [days, setDays] = useState(30)
-
-  useEffect(() => { fetchData() }, [days])
-
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/analytics/activity?days=${days}`, { headers: getAuthHeaders() })
-      if (res.ok) setData(await res.json())
-    } catch {} finally { setLoading(false) }
-  }
-
-  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-  if (!data) return null
-
-  const maxDayCount = Math.max(...data.activityByDay.map(d => parseInt(d.count)), 1)
-  const maxDeptCount = Math.max(...data.departmentSize.map(d => parseInt(d.count)), 1)
-  const maxTypeCount = Math.max(...data.activityByType.map(d => parseInt(d.count)), 1)
-  const chartColors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4', '#84cc16']
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Аналитика активности</CardTitle>
-              <CardDescription>Графики и статистика системы</CardDescription>
-            </div>
-            <select value={days} onChange={(e) => setDays(parseInt(e.target.value))} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
-              <option value={7}>7 дней</option>
-              <option value={30}>30 дней</option>
-              <option value={90}>90 дней</option>
-              <option value={365}>Год</option>
-            </select>
-          </div>
-        </CardHeader>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Активность по дням</CardTitle></CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-1 h-40">
-              {data.activityByDay.slice(-30).map((d) => (
-                <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group relative">
-                  <span className="absolute -top-6 text-[10px] bg-popover border border-border px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                    {d.count} — {d.date}
-                  </span>
-                  <div
-                    className="w-full bg-gradient-to-t from-indigo-500 to-violet-400 rounded-t transition-all group-hover:from-indigo-400 group-hover:to-violet-300"
-                    style={{ height: `${(parseInt(d.count) / maxDayCount) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }}
-                  />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Размер отделов</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {data.departmentSize.map((d, i) => (
-              <div key={d.name} className="flex items-center gap-3">
-                <span className="text-sm w-32 truncate" title={d.name}>{d.name || 'Без отдела'}</span>
-                <div className="flex-1 h-6 bg-muted/30 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${(parseInt(d.count) / maxDeptCount) * 100}%`, backgroundColor: chartColors[i % chartColors.length] }} />
-                </div>
-                <span className="text-sm font-medium w-8 text-right">{d.count}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Типы действий</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {data.activityByType.map((d, i) => (
-              <div key={d.action} className="flex items-center gap-3">
-                <span className="text-sm flex-1">{ACTION_LABELS[d.action] || d.action}</span>
-                <div className="w-32 h-5 bg-muted/30 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full" style={{ width: `${(parseInt(d.count) / maxTypeCount) * 100}%`, backgroundColor: chartColors[i % chartColors.length] }} />
-                </div>
-                <span className="text-sm font-medium w-8 text-right">{d.count}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Самые активные пользователи</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {data.topUsers.map((d, i) => (
-              <div key={d.user_name} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/20">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white">
-                  {i + 1}
-                </div>
-                <span className="text-sm flex-1 font-medium">{d.user_name}</span>
-                <Badge className="text-[10px]">{d.count} действий</Badge>
-              </div>
-            ))}
-            {data.topUsers.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Нет данных</p>}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Новые пользователи по месяцам</CardTitle></CardHeader>
-          <CardContent>
-            {data.newUsersByMonth.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Нет данных</p>
-            ) : (
-              <div className="flex items-end gap-1 h-32">
-                {data.newUsersByMonth.map((d) => {
-                  const maxVal = Math.max(...data.newUsersByMonth.map(x => parseInt(x.count)), 1)
-                  return (
-                    <div key={d.month} className="flex-1 flex flex-col items-center gap-1 group relative">
-                      <span className="absolute -top-6 text-[10px] bg-popover border border-border px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        {d.count}
-                      </span>
-                      <div className="w-full bg-gradient-to-t from-emerald-500 to-teal-400 rounded-t" style={{ height: `${(parseInt(d.count) / maxVal) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }} />
-                      <span className="text-[9px] text-muted-foreground">{new Date(d.month).toLocaleDateString('ru-RU', { month: 'short' })}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Заявления на отпуск по месяцам</CardTitle></CardHeader>
-          <CardContent>
-            {data.vacationByMonth.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Нет данных</p>
-            ) : (
-              <div className="flex items-end gap-1 h-32">
-                {data.vacationByMonth.map((d) => {
-                  const maxVal = Math.max(...data.vacationByMonth.map(x => parseInt(x.count)), 1)
-                  return (
-                    <div key={d.month} className="flex-1 flex flex-col items-center gap-1 group relative">
-                      <span className="absolute -top-6 text-[10px] bg-popover border border-border px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        {d.count}
-                      </span>
-                      <div className="w-full bg-gradient-to-t from-amber-500 to-orange-400 rounded-t" style={{ height: `${(parseInt(d.count) / maxVal) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }} />
-                      <span className="text-[9px] text-muted-foreground">{new Date(d.month).toLocaleDateString('ru-RU', { month: 'short' })}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
-}
-
 // ===================== HEALTH TAB =====================
 
 function HealthTab() {
@@ -1878,12 +1715,34 @@ function SecurityTab() {
 
 // ===================== REPORTS TAB =====================
 
+type ReportId = 'vacation' | 'hires' | 'turnover' | 'tenure' | 'unused_vacations' | 'project_load'
+
 function ReportsTab() {
   const [vacationYear, setVacationYear] = useState(new Date().getFullYear())
   const [vacationData, setVacationData] = useState<unknown[]>([])
   const [hiresData, setHiresData] = useState<unknown[]>([])
+  const [turnoverData, setTurnoverData] = useState<{
+    year: number; avgHeadcount: number; totalHired: number; totalFired: number
+    turnoverRate: string; monthly: { month: string; hired: number }[]
+    byDepartment: { department: string; hired: number; fired: number; active: number }[]
+  } | null>(null)
+  const [tenureData, setTenureData] = useState<{
+    tenureDistribution: { group: string; count: number }[]
+    avgTenureYears: string; earliestHire: string | null
+    byDepartment: { department: string; count: number; avgYears: number }[]
+  } | null>(null)
+  const [unusedVacationsData, setUnusedVacationsData] = useState<{
+    year: number; totalUnused: number; employeesWithUnused: number
+    employees: Record<string, unknown>[]
+  } | null>(null)
+  const [projectLoadData, setProjectLoadData] = useState<{
+    summary: { totalProjects: number; activeProjects: number; totalAssigned: number; activeAssigned: number }
+    projects: { id: number; name: string; status: string; memberCount: number; members: { id: number; name: string; role: string }[] }[]
+  } | null>(null)
   const [loading, setLoading] = useState(false)
-  const [activeReport, setActiveReport] = useState<'vacation' | 'hires' | null>(null)
+  const [activeReport, setActiveReport] = useState<ReportId | null>(null)
+  const [turnoverYear, setTurnoverYear] = useState(new Date().getFullYear())
+  const [unusedYear, setUnusedYear] = useState(new Date().getFullYear())
 
   const loadVacationReport = async () => {
     setLoading(true); setActiveReport('vacation')
@@ -1901,41 +1760,71 @@ function ReportsTab() {
     } catch {} finally { setLoading(false) }
   }
 
-  const downloadVacationCsv = () => {
-    window.open(`${API_BASE_URL}/admin/reports/vacations?year=${vacationYear}&format=csv`, '_blank')
+  const loadTurnoverReport = async () => {
+    setLoading(true); setActiveReport('turnover')
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reports/turnover?year=${turnoverYear}`, { headers: getAuthHeaders() })
+      if (res.ok) setTurnoverData(await res.json())
+    } catch {} finally { setLoading(false) }
   }
 
-  const downloadHiresCsv = () => {
-    window.open(`${API_BASE_URL}/admin/reports/hires?format=csv`, '_blank')
+  const loadTenureReport = async () => {
+    setLoading(true); setActiveReport('tenure')
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reports/tenure-age`, { headers: getAuthHeaders() })
+      if (res.ok) setTenureData(await res.json())
+    } catch {} finally { setLoading(false) }
   }
+
+  const loadUnusedVacationsReport = async () => {
+    setLoading(true); setActiveReport('unused_vacations')
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reports/unused-vacations?year=${unusedYear}`, { headers: getAuthHeaders() })
+      if (res.ok) setUnusedVacationsData(await res.json())
+    } catch {} finally { setLoading(false) }
+  }
+
+  const loadProjectLoadReport = async () => {
+    setLoading(true); setActiveReport('project_load')
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/reports/project-load`, { headers: getAuthHeaders() })
+      if (res.ok) setProjectLoadData(await res.json())
+    } catch {} finally { setLoading(false) }
+  }
+
+  const downloadCsv = (endpoint: string) => {
+    window.open(`${API_BASE_URL}/admin/reports/${endpoint}&format=csv`, '_blank')
+  }
+
+  const reportCards: { id: ReportId; name: string; desc: string; icon: React.ComponentType<{ className?: string }>; bgColor: string; iconColor: string; onClick: () => void }[] = [
+    { id: 'vacation', name: 'Отчёт по отпускам', desc: 'Балансы дней, использованные и доступные отпуска', icon: FileText, bgColor: 'bg-amber-100 dark:bg-amber-900/30', iconColor: 'text-amber-600 dark:text-amber-400', onClick: loadVacationReport },
+    { id: 'hires', name: 'Отчёт по наймам', desc: 'Сотрудники с датами найма, отделами и руководителями', icon: UserCog, bgColor: 'bg-emerald-100 dark:bg-emerald-900/30', iconColor: 'text-emerald-600 dark:text-emerald-400', onClick: loadHiresReport },
+    { id: 'turnover', name: 'Текучесть кадров', desc: 'Коэффициент текучести, наймы и увольнения по отделам', icon: TrendingUp, bgColor: 'bg-red-100 dark:bg-red-900/30', iconColor: 'text-red-600 dark:text-red-400', onClick: loadTurnoverReport },
+    { id: 'tenure', name: 'Стаж и распределение', desc: 'Средний стаж, распределение по группам и отделам', icon: Clock3, bgColor: 'bg-violet-100 dark:bg-violet-900/30', iconColor: 'text-violet-600 dark:text-violet-400', onClick: loadTenureReport },
+    { id: 'unused_vacations', name: 'Неиспользованные отпуска', desc: 'Сотрудники с неиспользованными днями отпуска', icon: CalendarX, bgColor: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400', onClick: loadUnusedVacationsReport },
+    { id: 'project_load', name: 'Загрузка по проектам', desc: 'Количество участников и состав проектов', icon: FolderKanban, bgColor: 'bg-cyan-100 dark:bg-cyan-900/30', iconColor: 'text-cyan-600 dark:text-cyan-400', onClick: loadProjectLoadReport },
+  ]
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={loadVacationReport}>
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-900/30">
-              <FileText className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold">Отчёт по отпускам</h3>
-              <p className="text-xs text-muted-foreground mt-1">Балансы дней, использованные и доступные отпуска по сотрудникам</p>
-            </div>
-            <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={loadHiresReport}>
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-              <UserCog className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold">Отчёт по наймам</h3>
-              <p className="text-xs text-muted-foreground mt-1">Все сотрудники с датами найма, отделами и руководителями</p>
-            </div>
-            <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {reportCards.map((card) => {
+          const Icon = card.icon
+          return (
+            <Card key={card.id} className={cn('cursor-pointer hover:border-primary/50 transition-colors', activeReport === card.id && 'border-primary/50 ring-1 ring-primary/20')} onClick={card.onClick}>
+              <CardContent className="p-6 flex items-center gap-4">
+                <div className={cn('p-3 rounded-xl', card.bgColor)}>
+                  <Icon className={cn('h-6 w-6', card.iconColor)} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">{card.name}</h3>
+                  <p className="text-xs text-muted-foreground mt-1">{card.desc}</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {loading && <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}
@@ -1949,7 +1838,7 @@ function ReportsTab() {
                 <Input type="number" value={vacationYear} onChange={(e) => setVacationYear(parseInt(e.target.value))} className="w-24 h-8 text-sm" onClick={(e) => e.stopPropagation()} />
                 <Button size="sm" onClick={loadVacationReport}>Обновить</Button>
               </div>
-              <Button variant="outline" size="sm" onClick={downloadVacationCsv}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
+              <Button variant="outline" size="sm" onClick={() => downloadCsv(`vacations?year=${vacationYear}`)}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -1988,7 +1877,7 @@ function ReportsTab() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Отчёт по наймам</CardTitle>
-              <Button variant="outline" size="sm" onClick={downloadHiresCsv}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
+              <Button variant="outline" size="sm" onClick={() => downloadCsv('hires?')}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -2013,6 +1902,233 @@ function ReportsTab() {
                       <td className="py-2 pr-3 text-muted-foreground">{String(r.department || '—')}</td>
                       <td className="py-2 pr-3">{String(r.hire_date || '—')}</td>
                       <td className="py-2"><Badge className={cn('text-[10px]', STATUS_COLORS[String(r.status)])}>{STATUS_LABELS[String(r.status)] || String(r.status)}</Badge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeReport === 'turnover' && !loading && turnoverData && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CardTitle>Текучесть кадров {turnoverData.year}</CardTitle>
+                <Input type="number" value={turnoverYear} onChange={(e) => setTurnoverYear(parseInt(e.target.value))} className="w-24 h-8 text-sm" onClick={(e) => e.stopPropagation()} />
+                <Button size="sm" onClick={loadTurnoverReport}>Обновить</Button>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => downloadCsv(`turnover?year=${turnoverYear}`)}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-3 rounded-xl bg-muted/30 text-center">
+                <p className="text-2xl font-bold">{turnoverData.turnoverRate}%</p>
+                <p className="text-xs text-muted-foreground">Коэфф. текучести</p>
+              </div>
+              <div className="p-3 rounded-xl bg-muted/30 text-center">
+                <p className="text-2xl font-bold">{turnoverData.avgHeadcount}</p>
+                <p className="text-xs text-muted-foreground">Ср. численность</p>
+              </div>
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-center">
+                <p className="text-2xl font-bold text-emerald-600">{turnoverData.totalHired}</p>
+                <p className="text-xs text-muted-foreground">Принято</p>
+              </div>
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-center">
+                <p className="text-2xl font-bold text-red-600">{turnoverData.totalFired}</p>
+                <p className="text-xs text-muted-foreground">Уволено</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">Отдел</th>
+                    <th className="pb-2 pr-3 font-medium text-right">Активных</th>
+                    <th className="pb-2 pr-3 font-medium text-right text-emerald-600">Нанято</th>
+                    <th className="pb-2 font-medium text-right text-red-600">Уволено</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {turnoverData.byDepartment.map((r, i) => (
+                    <tr key={i} className="hover:bg-muted/20">
+                      <td className="py-2 pr-3">{r.department}</td>
+                      <td className="py-2 pr-3 text-right">{r.active}</td>
+                      <td className="py-2 pr-3 text-right text-emerald-600">{r.hired}</td>
+                      <td className="py-2 text-right text-red-600">{r.fired}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeReport === 'tenure' && !loading && tenureData && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Стаж и распределение</CardTitle>
+              <Button variant="outline" size="sm" onClick={() => downloadCsv('tenure-age?')}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-xl bg-muted/30 text-center">
+                <p className="text-2xl font-bold">{tenureData.avgTenureYears} лет</p>
+                <p className="text-xs text-muted-foreground">Средний стаж</p>
+              </div>
+              <div className="p-3 rounded-xl bg-muted/30 text-center">
+                <p className="text-2xl font-bold">{tenureData.tenureDistribution.reduce((s, r) => s + r.count, 0)}</p>
+                <p className="text-xs text-muted-foreground">Активных сотрудников</p>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium mb-2">Распределение по стажу</h4>
+              <div className="space-y-2">
+                {(() => {
+                  const maxCount = Math.max(...tenureData.tenureDistribution.map(d => d.count), 1)
+                  return tenureData.tenureDistribution.map((d) => (
+                    <div key={d.group} className="flex items-center gap-3">
+                      <span className="text-sm w-32 truncate">{d.group}</span>
+                      <div className="flex-1 h-5 bg-muted/30 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full" style={{ width: `${(d.count / maxCount) * 100}%` }} />
+                      </div>
+                      <span className="text-sm font-medium w-8 text-right">{d.count}</span>
+                    </div>
+                  ))
+                })()}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">Отдел</th>
+                    <th className="pb-2 pr-3 font-medium text-right">Сотрудников</th>
+                    <th className="pb-2 font-medium text-right">Средний стаж</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {tenureData.byDepartment.map((r, i) => (
+                    <tr key={i} className="hover:bg-muted/20">
+                      <td className="py-2 pr-3">{r.department}</td>
+                      <td className="py-2 pr-3 text-right">{r.count}</td>
+                      <td className="py-2 text-right font-medium">{r.avgYears.toFixed(1)} лет</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeReport === 'unused_vacations' && !loading && unusedVacationsData && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CardTitle>Неиспользованные отпуска {unusedVacationsData.year}</CardTitle>
+                <Input type="number" value={unusedYear} onChange={(e) => setUnusedYear(parseInt(e.target.value))} className="w-24 h-8 text-sm" onClick={(e) => e.stopPropagation()} />
+                <Button size="sm" onClick={loadUnusedVacationsReport}>Обновить</Button>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => downloadCsv(`unused-vacations?year=${unusedYear}`)}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-center">
+                <p className="text-2xl font-bold text-amber-600">{unusedVacationsData.totalUnused}</p>
+                <p className="text-xs text-muted-foreground">Неиспользованных дней</p>
+              </div>
+              <div className="p-3 rounded-xl bg-muted/30 text-center">
+                <p className="text-2xl font-bold">{unusedVacationsData.employeesWithUnused}</p>
+                <p className="text-xs text-muted-foreground">Сотрудников с остатком</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">Сотрудник</th>
+                    <th className="pb-2 pr-3 font-medium">Отдел</th>
+                    <th className="pb-2 pr-3 font-medium text-right">Всего</th>
+                    <th className="pb-2 pr-3 font-medium text-right">Использовано</th>
+                    <th className="pb-2 pr-3 font-medium text-right">Зарезервировано</th>
+                    <th className="pb-2 font-medium text-right text-amber-600">Остаток</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {(unusedVacationsData.employees as Record<string, unknown>[]).map((r, i) => (
+                    <tr key={i} className="hover:bg-muted/20">
+                      <td className="py-2 pr-3">{String(r.last_name)} {String(r.first_name)}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{String(r.department || '—')}</td>
+                      <td className="py-2 pr-3 text-right">{String(r.total_days)}</td>
+                      <td className="py-2 pr-3 text-right">{String(r.used_days)}</td>
+                      <td className="py-2 pr-3 text-right">{String(r.reserved_days)}</td>
+                      <td className="py-2 text-right font-medium text-amber-600">{String(r.available_days)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeReport === 'project_load' && !loading && projectLoadData && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Загрузка по проектам</CardTitle>
+              <Button variant="outline" size="sm" onClick={() => downloadCsv('project-load?')}><Download className="h-3.5 w-3.5 mr-1" /> CSV</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-3 rounded-xl bg-muted/30 text-center">
+                <p className="text-2xl font-bold">{projectLoadData.summary.totalProjects}</p>
+                <p className="text-xs text-muted-foreground">Всего проектов</p>
+              </div>
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-center">
+                <p className="text-2xl font-bold text-emerald-600">{projectLoadData.summary.activeProjects}</p>
+                <p className="text-xs text-muted-foreground">Активных</p>
+              </div>
+              <div className="p-3 rounded-xl bg-muted/30 text-center">
+                <p className="text-2xl font-bold">{projectLoadData.summary.totalAssigned}</p>
+                <p className="text-xs text-muted-foreground">Назначено людей</p>
+              </div>
+              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-center">
+                <p className="text-2xl font-bold text-blue-600">{projectLoadData.summary.activeAssigned}</p>
+                <p className="text-xs text-muted-foreground">На активных проектах</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">Проект</th>
+                    <th className="pb-2 pr-3 font-medium">Статус</th>
+                    <th className="pb-2 pr-3 font-medium text-right">Участников</th>
+                    <th className="pb-2 font-medium">Команда</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {projectLoadData.projects.map((p) => (
+                    <tr key={p.id} className="hover:bg-muted/20">
+                      <td className="py-2 pr-3 font-medium">{p.name}</td>
+                      <td className="py-2 pr-3"><Badge className="text-[10px]">{p.status}</Badge></td>
+                      <td className="py-2 pr-3 text-right">{p.memberCount}</td>
+                      <td className="py-2 text-muted-foreground text-xs">
+                        {p.members.length > 0 ? p.members.map(m => m.name).join(', ') : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -2125,5 +2241,168 @@ function DictionariesTab() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// ===================== MODULES TAB =====================
+
+interface ModuleItem {
+  id: number
+  code: string
+  name: string
+  description: string | null
+  icon: string | null
+  route: string | null
+  sort_order: number
+  is_enabled: boolean
+  updated_at: string
+}
+
+const MODULE_COLORS: Record<string, { active: string; inactive: string; icon: string }> = {
+  vacation:     { active: 'from-blue-500 to-indigo-600',   inactive: 'bg-blue-100 dark:bg-blue-900/30',  icon: 'text-blue-600 dark:text-blue-400' },
+  surveys:      { active: 'from-violet-500 to-purple-600', inactive: 'bg-violet-100 dark:bg-violet-900/30', icon: 'text-violet-600 dark:text-violet-400' },
+  projects:     { active: 'from-emerald-500 to-teal-600',  inactive: 'bg-emerald-100 dark:bg-emerald-900/30', icon: 'text-emerald-600 dark:text-emerald-400' },
+  documents:    { active: 'from-amber-500 to-orange-600',  inactive: 'bg-amber-100 dark:bg-amber-900/30', icon: 'text-amber-600 dark:text-amber-400' },
+  timesheet:    { active: 'from-cyan-500 to-blue-600',     inactive: 'bg-cyan-100 dark:bg-cyan-900/30', icon: 'text-cyan-600 dark:text-cyan-400' },
+  onboarding:   { active: 'from-pink-500 to-rose-600',     inactive: 'bg-pink-100 dark:bg-pink-900/30', icon: 'text-pink-600 dark:text-pink-400' },
+  hierarchy:    { active: 'from-indigo-500 to-blue-600',   inactive: 'bg-indigo-100 dark:bg-indigo-900/30', icon: 'text-indigo-600 dark:text-indigo-400' },
+  dictionaries: { active: 'from-teal-500 to-emerald-600',  inactive: 'bg-teal-100 dark:bg-teal-900/30', icon: 'text-teal-600 dark:text-teal-400' },
+  calendar:     { active: 'from-sky-500 to-blue-600',      inactive: 'bg-sky-100 dark:bg-sky-900/30', icon: 'text-sky-600 dark:text-sky-400' },
+  notifications:{ active: 'from-red-500 to-rose-600',      inactive: 'bg-red-100 dark:bg-red-900/30', icon: 'text-red-600 dark:text-red-400' },
+  telegram:     { active: 'from-blue-500 to-cyan-600',     inactive: 'bg-blue-100 dark:bg-blue-900/30', icon: 'text-blue-600 dark:text-blue-400' },
+}
+
+function ModulesTab() {
+  const [modules, setModules] = useState<ModuleItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => { fetchModules() }, [])
+
+  const fetchModules = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/modules`, { headers: getAuthHeaders() })
+      if (res.ok) setModules(await res.json())
+    } catch {} finally { setLoading(false) }
+  }
+
+  const toggleModule = async (mod: ModuleItem) => {
+    setTogglingId(mod.id)
+    setError(null)
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/modules/${mod.id}/toggle`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setModules((prev) => prev.map((m) => m.id === mod.id ? { ...m, is_enabled: data.enabled } : m))
+        useModulesStore.getState().fetchModules()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Ошибка')
+      }
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setTogglingId(null) }
+  }
+
+  const enabledCount = modules.filter(m => m.is_enabled).length
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2"><Boxes className="h-5 w-5" /> Модули системы</CardTitle>
+            <CardDescription>Включено {enabledCount} из {modules.length} модулей</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+            <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+            <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {modules.map((mod) => {
+            const colors = MODULE_COLORS[mod.code] || MODULE_COLORS.documents
+            const isLoading = togglingId === mod.id
+
+            return (
+              <div
+                key={mod.id}
+                className={cn(
+                  'relative flex flex-col p-5 rounded-2xl border-2 transition-all duration-300',
+                  mod.is_enabled
+                    ? 'border-primary/20 bg-card shadow-sm hover:shadow-md hover:border-primary/40'
+                    : 'border-border/30 bg-muted/20 opacity-70 hover:opacity-100',
+                )}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className={cn(
+                    'p-2.5 rounded-xl transition-all duration-300',
+                    mod.is_enabled
+                      ? `bg-gradient-to-br ${colors.active} text-white shadow-md`
+                      : colors.inactive,
+                  )}>
+                    <Boxes className={cn('h-5 w-5', !mod.is_enabled && (colors.icon || 'text-muted-foreground'))} />
+                  </div>
+
+                  <button
+                    onClick={() => toggleModule(mod)}
+                    disabled={isLoading}
+                    className={cn(
+                      'relative w-12 h-7 rounded-full transition-all duration-300 shrink-0',
+                      mod.is_enabled ? 'bg-primary shadow-sm' : 'bg-muted-foreground/20',
+                      isLoading && 'opacity-50 cursor-wait',
+                    )}
+                  >
+                    <div className={cn(
+                      'absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-all duration-300',
+                      mod.is_enabled ? 'left-[22px]' : 'left-0.5',
+                    )} />
+                    {isLoading && (
+                      <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-primary" />
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className={cn(
+                      'font-semibold transition-colors',
+                      mod.is_enabled ? 'text-foreground' : 'text-muted-foreground',
+                    )}>
+                      {mod.name}
+                    </h3>
+                    {mod.is_enabled ? (
+                      <Badge className="text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">ON</Badge>
+                    ) : (
+                      <Badge className="text-[9px] bg-muted text-muted-foreground">OFF</Badge>
+                    )}
+                  </div>
+                  {mod.description && (
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{mod.description}</p>
+                  )}
+                  {mod.route && (
+                    <p className="text-[10px] font-mono text-muted-foreground/60 mt-2">{mod.route}</p>
+                  )}
+                </div>
+
+                {mod.is_enabled && (
+                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

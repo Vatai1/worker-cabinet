@@ -2,6 +2,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
+import { useModulesStore } from '@/store/modulesStore'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
@@ -24,6 +25,7 @@ import {
   ClipboardList,
   Calendar,
   Shield,
+  BarChart3,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -33,7 +35,8 @@ interface NavItem {
   name: string
   href?: string
   icon: React.ComponentType<{ className?: string }>
-  children?: { name: string; href: string }[]
+  children?: { name: string; href: string; module?: string }[]
+  module?: string
 }
 
 const getOnboardingNavigation = (): NavItem[] => [
@@ -48,25 +51,26 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
     name: 'Отдел',
     icon: Building2,
     children: [
-      { name: 'Табель', href: '/timesheet' },
-      { name: 'Отпуск', href: '/vacation' },
+      { name: 'Табель', href: '/timesheet', module: 'timesheet' },
+      { name: 'Отпуск', href: '/vacation', module: 'vacation' },
       { name: 'Сотрудники', href: '/employees' },
     ],
   },
-  { name: 'Опросы', href: '/surveys', icon: ClipboardList },
+  { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys' },
   { name: 'Отделы', href: '/departments', icon: Building2 },
-  { name: 'Проекты', href: '/projects', icon: FolderKanban },
-  { name: 'Календарь', href: '/calendar', icon: Calendar },
+  { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects' },
+  { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Заявления', href: '/requests', icon: FileText },
   {
     name: 'Документы',
     icon: FolderOpen,
+    module: 'documents',
     children: [
       { name: 'Ваши документы', href: '/documents' },
     ],
   },
-  { name: 'Уведомления', href: '/notifications', icon: Bell },
+  { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications' },
 ]
 
 const getManagerNavigation = (userId?: string): NavItem[] => [
@@ -76,82 +80,97 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
     name: 'Отдел',
     icon: Building2,
     children: [
-      { name: 'Табель', href: '/leader/timesheet' },
-      { name: 'Отпуск', href: '/vacation' },
+      { name: 'Табель', href: '/leader/timesheet', module: 'timesheet' },
+      { name: 'Отпуск', href: '/vacation', module: 'vacation' },
       { name: 'Сотрудники', href: '/employees' },
     ],
   },
   { name: 'Отделы', href: '/departments', icon: Building2 },
-  { name: 'Проекты', href: '/projects', icon: FolderKanban },
+  { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects' },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText },
-  { name: 'Опросы', href: '/surveys', icon: ClipboardList },
-  { name: 'Календарь', href: '/calendar', icon: Calendar },
+  { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys' },
+  { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar' },
   {
     name: 'Документы',
     icon: FolderOpen,
+    module: 'documents',
     children: [
       { name: 'Ваши документы', href: '/documents' },
     ],
   },
-  { name: 'Уведомления', href: '/notifications', icon: Bell },
+  { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications' },
 ]
 
 const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'HR-панель', href: '/hr', icon: Users },
-  { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
-  { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys' },
+  { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation' },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
-  { name: 'Проекты', href: '/projects', icon: FolderKanban },
-  { name: 'Календарь', href: '/calendar', icon: Calendar },
+  { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects' },
+  { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar' },
   {
     name: 'Документы',
     icon: FolderOpen,
+    module: 'documents',
     children: [
       { name: 'Ваши документы', href: '/documents' },
     ],
   },
-  { name: 'Уведомления', href: '/notifications', icon: Bell },
+  { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications' },
 ]
 
 const getAdminNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Администрирование', href: '/admin', icon: Shield },
+  { name: 'Аналитика', href: '/admin/analytics', icon: BarChart3 },
   { name: 'HR-панель', href: '/hr', icon: Users },
-  { name: 'Мои опросы', href: '/surveys', icon: ClipboardList },
-  { name: 'Отпуск', href: '/vacation', icon: Plane },
+  { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys' },
+  { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation' },
   { name: 'Сотрудники', href: '/employees', icon: Users },
   { name: 'Отделы', href: '/departments', icon: Building2 },
-  { name: 'Проекты', href: '/projects', icon: FolderKanban },
-  { name: 'Календарь', href: '/calendar', icon: Calendar },
+  { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects' },
+  { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar' },
   {
     name: 'Документы',
     icon: FolderOpen,
+    module: 'documents',
     children: [
       { name: 'Ваши документы', href: '/documents' },
     ],
   },
-  { name: 'Уведомления', href: '/notifications', icon: Bell },
+  { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications' },
 ]
 
 export function Sidebar() {
   const { user, logout } = useAuthStore()
   const { sidebarOpen, toggleSidebar, notifications, darkMode, toggleTheme } = useUIStore()
+  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const navigate = useNavigate()
   const location = useLocation()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
 
   const userUnreadCount = notifications.filter((n) => n.userId === user?.id && !n.read).length
 
-  const navigation =
+  const rawNavigation =
     user?.role === 'onboarding' ? getOnboardingNavigation() :
     user?.role === 'manager' ? getManagerNavigation(user?.id) :
     user?.role === 'admin' ? getAdminNavigation(user?.id) :
     ['hr'].includes(user?.role ?? '') ? getHRNavigation(user?.id) :
     getEmployeeNavigation(user?.id)
+
+  const navigation = rawNavigation
+    .filter((item) => !item.module || isModuleEnabled(item.module))
+    .map((item) => {
+      if (!item.children) return item
+      const filteredChildren = item.children.filter((child) => !child.module || isModuleEnabled(child.module))
+      if (filteredChildren.length === 0) return null
+      return { ...item, children: filteredChildren }
+    })
+    .filter(Boolean) as NavItem[]
 
   useEffect(() => {
     navigation.forEach((item) => {
