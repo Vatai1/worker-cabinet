@@ -174,6 +174,71 @@ worker-cabinet/
 └── lib/                      # Утилиты: cn(), formatDate(), authHeaders, api.ts
 ```
 
+## Тестирование
+
+### HTTP-интеграционные тесты (183 теста)
+
+Тесты покрывают все 16 групп маршрутов API через HTTP-запросы к запущенному серверу.
+
+```bash
+# Запустить сервер (если не запущен)
+cd backend && node src/server.js &
+
+# Запустить все тесты (нужен свежий сервер без rate-limit)
+kill $(lsof -ti:5000) 2>/dev/null; sleep 1
+cd backend && node src/server.js > /dev/null 2>&1 &
+sleep 2 && rm -f /tmp/worker-cabinet-test-tokens.json
+cd backend && node --test --test-concurrency=1 \
+  src/tests/auth-extended.test.js \
+  src/tests/departments.test.js \
+  src/tests/notifications.test.js \
+  src/tests/users.test.js \
+  src/tests/hierarchy.test.js \
+  src/tests/telegram.test.js \
+  src/tests/documents.test.js \
+  src/tests/user-documents.test.js \
+  src/tests/calendar.test.js \
+  src/tests/dictionaries.test.js \
+  src/tests/vacation.test.js \
+  src/tests/surveys.test.js \
+  src/tests/timesheet.test.js \
+  src/tests/projects.test.js \
+  src/tests/onboarding.test.js \
+  src/tests/admin.test.js
+```
+
+Отдельные файлы:
+```bash
+cd backend && node --test src/tests/admin.test.js          # 39 тестов
+cd backend && node --test src/tests/dictionaries.test.js   # 15 тестов
+cd backend && node --test src/tests/projects.test.js       # 21 тест
+cd backend && node --test src/tests/timesheet.test.js      # 14 тестов
+# ... и т.д.
+```
+
+**Важно:** Auth-rate-limiter (10 запросов / 15 мин) требует перезапуска сервера между прогонами. Токены кэшируются в `/tmp/worker-cabinet-test-tokens.json` (TTL 5 мин).
+
+### Покрытие по маршрутам
+
+| Файл | Тестов | Маршруты |
+|------|--------|----------|
+| `admin.test.js` | 39 | `/admin/*` (users, roles, permissions, settings, stats, reports, audit, modules) |
+| `projects.test.js` | 21 | `/projects/*` (CRUD, members, folders, documents, roadmap v1/v2) |
+| `dictionaries.test.js` | 15 | `/dictionaries/*` (departments, skills, vacation-types, positions, managers) |
+| `timesheet.test.js` | 14 | `/timesheet/*` (CRUD, entries, status workflow, export excel/pdf) |
+| `surveys.test.js` | 13 | `/surveys/*` (CRUD, publish, respond, analytics, close) |
+| `onboarding.test.js` | 12 | `/onboarding/*` (templates, records, self-service) |
+| `users.test.js` | 12 | `/users/*` (list, search, profile, skills, projects) |
+| `vacation.test.js` | 12 | `/vacation/*` (requests, calendar, restrictions, transfers, application) |
+| `departments.test.js` | 7 | `/departments/*` (list, detail, vacation-block) |
+| `notifications.test.js` | 7 | `/notifications/*` (list, unread, read, CRUD) |
+| `calendar.test.js` | 6 | `/calendar/*` (OAuth, events, EWS, disconnect) |
+| `hierarchy.test.js` | 6 | `/hierarchy/*` (get/save, department-level) |
+| `telegram.test.js` | 6 | `/telegram/*` (bot-info, connect, disconnect, toggle) |
+| `user-documents.test.js` | 5 | `/user-documents/*` (list, download, preview, delete) |
+| `auth-extended.test.js` | 5 | `/auth/*` (register, me) |
+| `documents.test.js` | 3 | `/documents/*` (list for user/employee) |
+
 ## Лицензия
 
 MIT

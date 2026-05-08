@@ -1,12 +1,14 @@
-import { describe, it, beforeEach, afterEach } from 'node:test'
+import { describe, it, beforeEach, afterEach, after } from 'node:test'
 import assert from 'node:assert'
 import bcrypt from 'bcryptjs'
-import { query, getClient } from '../src/config/database.js'
+import { pool, query, getClient } from '../config/database.js'
 
 describe('Vacation Request Status History', () => {
   let employeeId
   let managerId
   let vacationRequestId
+
+  after(() => pool.end())
 
   const EMPLOYEE = {
     email: 'vacation-emp@example.com',
@@ -43,8 +45,8 @@ describe('Vacation Request Status History', () => {
       const empHash = await bcrypt.hash(EMPLOYEE.password, 10)
       const empResult = await client.query(
         `INSERT INTO users 
-         (email, password_hash, first_name, last_name, position, department_id, role)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (email, password_hash, first_name, last_name, position, department_id, role, hire_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE)
          RETURNING id`,
         [EMPLOYEE.email, empHash, EMPLOYEE.firstName, EMPLOYEE.lastName, EMPLOYEE.position, EMPLOYEE.departmentId, EMPLOYEE.role]
       )
@@ -53,8 +55,8 @@ describe('Vacation Request Status History', () => {
       const mgrHash = await bcrypt.hash(MANAGER.password, 10)
       const mgrResult = await client.query(
         `INSERT INTO users 
-         (email, password_hash, first_name, last_name, position, department_id, role)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (email, password_hash, first_name, last_name, position, department_id, role, hire_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE)
          RETURNING id`,
         [MANAGER.email, mgrHash, MANAGER.firstName, MANAGER.lastName, MANAGER.position, MANAGER.departmentId, MANAGER.role]
       )
