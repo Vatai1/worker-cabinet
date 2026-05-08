@@ -2,7 +2,7 @@ import { useState, useMemo, lazy, Suspense } from 'react'
 import { cn } from '@/lib/utils'
 import {
   Users, ClipboardList, UserPlus, Plane, Network, BookOpen,
-  Calendar, Loader2,
+  Calendar, Loader2, BarChart3,
 } from 'lucide-react'
 import { useModulesStore } from '@/store/modulesStore'
 import { HRSurveys } from '@/pages/HRSurveys'
@@ -10,9 +10,10 @@ import { HROnboarding } from '@/pages/HROnboarding'
 import { HRVacationCalendar } from '@/pages/HRVacationCalendar'
 import { HRDictionaries } from '@/pages/HRDictionaries'
 import { HRTimesheet } from '@/pages/HRTimesheet'
+import { AnalyticsTab } from '@/pages/AdminAnalytics'
 const HRHierarchy = lazy(() => import('@/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 
-type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'dictionaries' | 'timesheet'
+type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'dictionaries' | 'timesheet' | 'analytics'
 
 interface TabItem {
   id: TabId
@@ -48,6 +49,12 @@ const TAB_GROUPS: TabGroup[] = [
     label: 'Справочники',
     tabs: [
       { id: 'dictionaries', name: 'Справочники', icon: BookOpen, description: 'Должности, типы, навыки', color: 'from-pink-500 to-rose-600', module: 'dictionaries' },
+    ],
+  },
+  {
+    label: 'Аналитика',
+    tabs: [
+      { id: 'analytics', name: 'Аналитика', icon: BarChart3, description: 'Графики и статистика', color: 'from-amber-500 to-orange-600', module: 'analytics' },
     ],
   },
 ]
@@ -143,6 +150,7 @@ export function HRPanel() {
               ['vacation', HRVacationCalendar],
               ['dictionaries', HRDictionaries],
               ['timesheet', HRTimesheet],
+              ['analytics', AnalyticsTab],
             ] as const).map(([id, Component]) => (
               <div
                 key={id}

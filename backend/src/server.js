@@ -22,7 +22,6 @@ import calendarRoutes from './routes/calendar.js'
 import adminRoutes from './routes/admin.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { errorHandler } from './middleware/errors.js'
-import { apiLimiter } from './middleware/rateLimiter.js'
 
 dotenv.config()
 
@@ -70,7 +69,6 @@ app.use((req, res, next) => {
   next()
 })
 
-app.use('/api', apiLimiter)
 app.use('/api/auth', authRoutes)
 app.use('/api/vacation', vacationRoutes)
 app.use('/api/users', userRoutes)
