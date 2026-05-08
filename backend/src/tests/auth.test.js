@@ -1,11 +1,13 @@
-import { describe, it, beforeEach, afterEach } from 'node:test'
+import { describe, it, beforeEach, afterEach, after } from 'node:test'
 import assert from 'node:assert'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import { pool, query, getClient } from '../src/config/database.js'
-import { authenticateToken, authorizeRoles } from '../src/middleware/auth.js'
+import { pool, query, getClient } from '../config/database.js'
+import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 
 describe('Authentication System', () => {
+
+  after(() => pool.end())
 
   let testUserId
   const TEST_USER = {
@@ -23,8 +25,8 @@ describe('Authentication System', () => {
       const passwordHash = await bcrypt.hash(TEST_USER.password, 10)
       const result = await query(
         `INSERT INTO users 
-         (email, password_hash, first_name, last_name, position, department_id, role)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (email, password_hash, first_name, last_name, position, department_id, role, hire_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE)
          RETURNING id`,
         [TEST_USER.email, passwordHash, TEST_USER.firstName, TEST_USER.lastName, TEST_USER.position, TEST_USER.departmentId, TEST_USER.role]
       )
@@ -352,8 +354,8 @@ describe('Authentication System', () => {
       const passwordHash = await bcrypt.hash('ManagerPass123!', 10)
       const result = await query(
         `INSERT INTO users 
-         (email, password_hash, first_name, last_name, position, department_id, role)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (email, password_hash, first_name, last_name, position, department_id, role, hire_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE)
          RETURNING id`,
         ['manager-auth@example.com', passwordHash, 'Manager', 'User', 'Manager', TEST_USER.departmentId, 'manager']
       )
