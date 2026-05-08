@@ -29,7 +29,6 @@ import { HROnboarding } from '@/pages/HROnboarding'
 import { ManagerTimesheet } from '@/pages/ManagerTimesheet'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { AdminPanel } from '@/pages/AdminPanel'
-import { AdminAnalytics } from '@/pages/AdminAnalytics'
 import { HRPanel } from '@/pages/HRPanel'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -94,8 +93,18 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 }
 
 function ModuleGuard({ module, children }: { module: string; children: React.ReactNode }) {
-  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
-  if (!isModuleEnabled(module)) return <Navigate to="/dashboard" replace />
+  const loaded = useModulesStore((s) => s.loaded)
+  const enabledModules = useModulesStore((s) => s.enabledModules)
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground">Загрузка...</div>
+      </div>
+    )
+  }
+
+  if (!enabledModules.has(module)) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -159,7 +168,6 @@ function App() {
           <Route path="hr/onboarding/:id" element={<ModuleGuard module="onboarding"><HRRoute><HROnboarding /></HRRoute></ModuleGuard>} />
           <Route path="leader/timesheet" element={<ModuleGuard module="timesheet"><ManagerRoute><ManagerTimesheet /></ManagerRoute></ModuleGuard>} />
           <Route path="admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
-          <Route path="admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

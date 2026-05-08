@@ -25,7 +25,6 @@ import {
   ClipboardList,
   Calendar,
   Shield,
-  BarChart3,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/components/ui/Avatar'
@@ -126,7 +125,6 @@ const getAdminNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
   { name: 'Администрирование', href: '/admin', icon: Shield },
-  { name: 'Аналитика', href: '/admin/analytics', icon: BarChart3 },
   { name: 'HR-панель', href: '/hr', icon: Users },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation' },
@@ -148,7 +146,7 @@ const getAdminNavigation = (userId?: string): NavItem[] => [
 export function Sidebar() {
   const { user, logout } = useAuthStore()
   const { sidebarOpen, toggleSidebar, notifications, darkMode, toggleTheme } = useUIStore()
-  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+  const { isModuleEnabled, modulesLoaded } = useModulesStore()
   const navigate = useNavigate()
   const location = useLocation()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
@@ -162,7 +160,7 @@ export function Sidebar() {
     ['hr'].includes(user?.role ?? '') ? getHRNavigation(user?.id) :
     getEmployeeNavigation(user?.id)
 
-  const navigation = rawNavigation
+  const navigation = !modulesLoaded ? [] : rawNavigation
     .filter((item) => !item.module || isModuleEnabled(item.module))
     .map((item) => {
       if (!item.children) return item

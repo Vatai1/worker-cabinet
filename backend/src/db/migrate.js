@@ -1458,6 +1458,7 @@ async function runMigrations() {
       { code: 'calendar', name: 'Календарь', description: 'Интеграция с Outlook/EWS календарём', icon: 'CalendarDays', route: '/calendar', sort: 90 },
       { code: 'notifications', name: 'Уведомления', description: 'Система уведомлений и Telegram-бот', icon: 'Bell', route: '/notifications', sort: 100 },
       { code: 'telegram', name: 'Telegram', description: 'Интеграция с Telegram-ботом', icon: 'MessageCircle', route: null, sort: 110 },
+      { code: 'analytics', name: 'Аналитика', description: 'Графики, статистика и аналитика системы', icon: 'BarChart3', route: '/admin/analytics', sort: 120 },
     ]
     for (const m of defaultModules) {
       await db.query(

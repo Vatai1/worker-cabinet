@@ -3,6 +3,7 @@ import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders
 import { getErrorMessage, cn } from '@/lib/utils'
 import { API_BASE_URL } from '@/lib/api'
 import { useModulesStore } from '@/store/modulesStore'
+import { AnalyticsTab } from '@/pages/AdminAnalytics'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -14,13 +15,13 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, UserCog, Lock,
   RotateCcw, Sliders, Clock, Globe,
   ShieldCheck, ArrowRightLeft, Eye, ArrowUpDown,
-  Download, FileText, Database,
+  BarChart3, Download, FileText, Database,
   HardDrive, Server, AlertCircle, Unlock, UserPlus, Boxes,
   TrendingUp, Clock3, FolderKanban, CalendarX,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry, AdminStats } from '@/types/admin'
 
-type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries' | 'modules'
+type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'analytics' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries' | 'modules'
 
 interface TabItem {
   id: TabId
@@ -28,6 +29,7 @@ interface TabItem {
   icon: React.ComponentType<{ className?: string }>
   description: string
   color: string
+  module?: string
 }
 
 interface TabGroup {
@@ -47,6 +49,7 @@ const TAB_GROUPS: TabGroup[] = [
   {
     label: 'Отчёты',
     tabs: [
+      { id: 'analytics', name: 'Аналитика', icon: BarChart3, description: 'Графики, статистика', color: 'from-amber-500 to-orange-600', module: 'analytics' },
       { id: 'reports', name: 'Отчёты', icon: FileText, description: 'Отпуска, наймы, CSV', color: 'from-cyan-500 to-blue-600' },
     ],
   },
@@ -92,6 +95,9 @@ const ACTION_LABELS: Record<string, string> = {
   account_unlock: 'Разблокировка аккаунта',
   login: 'Вход в систему',
   module_toggle: 'Переключение модуля',
+  module_create: 'Создание модуля',
+  module_update: 'Обновление модуля',
+  module_delete: 'Удаление модуля',
 }
 
 const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string }> = {
@@ -108,6 +114,9 @@ const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: st
   account_unlock:     { icon: Unlock,        color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
   login:              { icon: Activity,      color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-100 dark:bg-blue-900/30' },
   module_toggle:      { icon: Boxes,         color: 'text-orange-600 dark:text-orange-400',   bg: 'bg-orange-100 dark:bg-orange-900/30' },
+  module_create:      { icon: Boxes,         color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+  module_update:      { icon: Boxes,         color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-100 dark:bg-blue-900/30' },
+  module_delete:      { icon: Trash2,        color: 'text-red-600 dark:text-red-400',         bg: 'bg-red-100 dark:bg-red-900/30' },
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -220,6 +229,14 @@ const STATUS_LABELS: Record<string, string> = {
 export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<TabId>('users')
   const [stats, setStats] = useState<AdminStats | null>(null)
+  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+
+  const filteredGroups = TAB_GROUPS
+    .map((group) => ({
+      ...group,
+      tabs: group.tabs.filter((tab) => !tab.module || isModuleEnabled(tab.module)),
+    }))
+    .filter((group) => group.tabs.length > 0)
 
   useEffect(() => {
     fetchStats()
@@ -255,7 +272,7 @@ export function AdminPanel() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
         <nav className="space-y-4">
-          {TAB_GROUPS.map((group) => (
+          {filteredGroups.map((group) => (
             <div key={group.label}>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1.5">{group.label}</p>
               <div className="space-y-0.5">
@@ -306,6 +323,7 @@ export function AdminPanel() {
             ['departments', DepartmentsTab],
             ['settings', SettingsTab],
             ['audit', AuditTab],
+            ['analytics', AnalyticsTab],
             ['health', HealthTab],
             ['errors', ErrorsTab],
             ['security', SecurityTab],
@@ -2270,6 +2288,7 @@ const MODULE_COLORS: Record<string, { active: string; inactive: string; icon: st
   calendar:     { active: 'from-sky-500 to-blue-600',      inactive: 'bg-sky-100 dark:bg-sky-900/30', icon: 'text-sky-600 dark:text-sky-400' },
   notifications:{ active: 'from-red-500 to-rose-600',      inactive: 'bg-red-100 dark:bg-red-900/30', icon: 'text-red-600 dark:text-red-400' },
   telegram:     { active: 'from-blue-500 to-cyan-600',     inactive: 'bg-blue-100 dark:bg-blue-900/30', icon: 'text-blue-600 dark:text-blue-400' },
+  analytics:    { active: 'from-amber-500 to-orange-600',  inactive: 'bg-amber-100 dark:bg-amber-900/30', icon: 'text-amber-600 dark:text-amber-400' },
 }
 
 function ModulesTab() {

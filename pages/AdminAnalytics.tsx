@@ -21,7 +21,7 @@ const ACTION_LABELS: Record<string, string> = {
   module_toggle: 'Переключение модуля',
 }
 
-export function AdminAnalytics() {
+export function AnalyticsTab() {
   const [data, setData] = useState<{
     activityByDay: { date: string; count: string }[]
     activityByType: { action: string; count: string }[]

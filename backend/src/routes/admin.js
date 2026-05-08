@@ -1504,6 +1504,127 @@ router.get('/modules', asyncHandler(async (req, res) => {
 
 /**
  * @swagger
+ * /admin/modules:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Создать новый модуль
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code, name]
+ *             properties:
+ *               code: { type: string, example: training }
+ *               name: { type: string, example: Обучение }
+ *               description: { type: string }
+ *               icon: { type: string, example: GraduationCap }
+ *               route: { type: string, example: /training }
+ *               sort_order: { type: integer, example: 130 }
+ *     responses:
+ *       201:
+ *         description: Модуль создан
+ *       409:
+ *         description: Модуль с таким кодом уже существует
+ */
+router.post('/modules', asyncHandler(async (req, res) => {
+  const { code, name, description, icon, route, sort_order } = req.body
+  if (!code?.trim()) throw new ValidationError('Код модуля обязателен')
+  if (!name?.trim()) throw new ValidationError('Название модуля обязательно')
+
+  const result = await query(
+    `INSERT INTO modules (code, name, description, icon, route, sort_order) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [code.trim(), name.trim(), description || null, icon || null, route || null, sort_order || 0]
+  )
+
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    'module_create', 'module', String(result.rows[0].id),
+    { code: code.trim(), name: name.trim() }, req.ip)
+
+  res.status(201).json(result.rows[0])
+}))
+
+/**
+ * @swagger
+ * /admin/modules/{id}:
+ *   put:
+ *     tags: [Admin]
+ *     summary: Обновить модуль
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: integer } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               description: { type: string }
+ *               icon: { type: string }
+ *               route: { type: string }
+ *               sort_order: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Модуль обновлён
+ *       404:
+ *         description: Модуль не найден
+ */
+router.put('/modules/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const { name, description, icon, route, sort_order } = req.body
+
+  const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
+  if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
+
+  const result = await query(
+    `UPDATE modules SET name = COALESCE($1, name), description = COALESCE($2, description),
+      icon = COALESCE($3, icon), route = COALESCE($4, route), sort_order = COALESCE($5, sort_order),
+      updated_at = NOW() WHERE id = $6 RETURNING *`,
+    [name || null, description !== undefined ? description : null, icon || null, route || null, sort_order !== undefined ? sort_order : null, id]
+  )
+
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    'module_update', 'module', id,
+    { code: existing.rows[0].code, updatedFields: Object.keys(req.body) }, req.ip)
+
+  res.json(result.rows[0])
+}))
+
+/**
+ * @swagger
+ * /admin/modules/{id}:
+ *   delete:
+ *     tags: [Admin]
+ *     summary: Удалить модуль
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Модуль удалён
+ *       404:
+ *         description: Модуль не найден
+ */
+router.delete('/modules/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
+  if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
+
+  await query('DELETE FROM modules WHERE id = $1', [id])
+
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    'module_delete', 'module', id,
+    { code: existing.rows[0].code, name: existing.rows[0].name }, req.ip)
+
+  res.json({ success: true })
+}))
+
+/**
+ * @swagger
  * /admin/modules/{id}/toggle:
  *   put:
  *     tags: [Admin]
