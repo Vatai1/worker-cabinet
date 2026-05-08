@@ -92,6 +92,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
+app.get('/api/modules', async (req, res) => {
+  try {
+    const { query } = await import('./config/database.js')
+    const result = await query('SELECT code, is_enabled FROM modules ORDER BY sort_order')
+    const enabled = result.rows.filter(r => r.is_enabled).map(r => r.code)
+    res.json({ modules: result.rows, enabled })
+  } catch {
+    res.json({ modules: [], enabled: [] })
+  }
+})
+
 app.use(errorHandler)
 
 app.use((req, res) => {

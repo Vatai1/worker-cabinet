@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { User, AuthState } from '@/types'
 import { setCookie, getCookie, deleteCookie } from '@/lib/cookies'
 import { API_BASE_URL } from '@/lib/api'
+import { useModulesStore } from './modulesStore'
 
 interface AuthStore extends AuthState {
   loading: boolean
@@ -61,6 +62,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         token,
         loading: false,
       })
+      useModulesStore.getState().fetchModules()
     } catch (error) {
       console.error('[AuthStore] checkAuth error:', error)
       deleteCookie('auth_token')
@@ -113,6 +115,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         isAuthenticated: true,
         token: data.token,
       })
+      useModulesStore.getState().fetchModules()
       console.log('[AuthStore] Token saved to cookie')
     } catch (error) {
       console.log('[AuthStore] Login failed:', error)

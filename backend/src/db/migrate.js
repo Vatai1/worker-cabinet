@@ -1429,6 +1429,45 @@ async function runMigrations() {
 
     console.log('✅ Security tables created')
 
+    // Step: Modules toggle
+    console.log('Creating modules table...')
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS modules (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        icon VARCHAR(50),
+        route VARCHAR(255),
+        sort_order INTEGER DEFAULT 0,
+        is_enabled BOOLEAN NOT NULL DEFAULT true,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    console.log('  ✓ modules')
+
+    const defaultModules = [
+      { code: 'vacation', name: 'Отпуска', description: 'Управление отпусками, балансы, заявления', icon: 'Plane', route: '/vacation', sort: 10 },
+      { code: 'surveys', name: 'Опросы', description: 'Создание и прохождение опросов', icon: 'ClipboardList', route: '/surveys', sort: 20 },
+      { code: 'projects', name: 'Проекты', description: 'Управление проектами и задачами', icon: 'FolderKanban', route: '/projects', sort: 30 },
+      { code: 'documents', name: 'Документы', description: 'Загрузка и хранение документов', icon: 'FolderOpen', route: '/documents', sort: 40 },
+      { code: 'timesheet', name: 'Табель', description: 'Учёт рабочего времени по Т-13', icon: 'Calendar', route: '/timesheet', sort: 50 },
+      { code: 'onboarding', name: 'Онбординг', description: 'Адаптация новых сотрудников', icon: 'UserPlus', route: '/onboarding', sort: 60 },
+      { code: 'hierarchy', name: 'Иерархия', description: 'Организационная структура компании', icon: 'Network', route: '/hr/hierarchy', sort: 70 },
+      { code: 'dictionaries', name: 'Справочники', description: 'Справочники должностей, навыков, типов', icon: 'BookOpen', route: '/hr/dictionaries', sort: 80 },
+      { code: 'calendar', name: 'Календарь', description: 'Интеграция с Outlook/EWS календарём', icon: 'CalendarDays', route: '/calendar', sort: 90 },
+      { code: 'notifications', name: 'Уведомления', description: 'Система уведомлений и Telegram-бот', icon: 'Bell', route: '/notifications', sort: 100 },
+      { code: 'telegram', name: 'Telegram', description: 'Интеграция с Telegram-ботом', icon: 'MessageCircle', route: null, sort: 110 },
+    ]
+    for (const m of defaultModules) {
+      await db.query(
+        `INSERT INTO modules (code, name, description, icon, route, sort_order) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (code) DO NOTHING`,
+        [m.code, m.name, m.description, m.icon, m.route, m.sort]
+      )
+    }
+    console.log('  ✓ modules seeded')
+    console.log('✅ Modules table created')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
+import { useModulesStore } from '@/store/modulesStore'
 import { Login } from '@/pages/Login'
 import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
@@ -28,6 +29,7 @@ import { HROnboarding } from '@/pages/HROnboarding'
 import { ManagerTimesheet } from '@/pages/ManagerTimesheet'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { AdminPanel } from '@/pages/AdminPanel'
+import { AdminAnalytics } from '@/pages/AdminAnalytics'
 import { HRPanel } from '@/pages/HRPanel'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -91,6 +93,12 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function ModuleGuard({ module, children }: { module: string; children: React.ReactNode }) {
+  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+  if (!isModuleEnabled(module)) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 function App() {
   const user = useAuthStore((state) => state.user)
   const checkAuth = useAuthStore((state) => state.checkAuth)
@@ -128,7 +136,7 @@ function App() {
           <Route path="dashboard" element={<BlockOnboardingRoute><Dashboard /></BlockOnboardingRoute>} />
           <Route path="leader" element={<BlockOnboardingRoute><LeaderDashboard /></BlockOnboardingRoute>} />
           <Route path="manager" element={<BlockOnboardingRoute><ManagerDashboard /></BlockOnboardingRoute>} />
-          <Route path="vacation" element={<BlockOnboardingRoute><Vacation /></BlockOnboardingRoute>} />
+          <Route path="vacation" element={<ModuleGuard module="vacation"><BlockOnboardingRoute><Vacation /></BlockOnboardingRoute></ModuleGuard>} />
           <Route path="employees" element={<Employees />} />
           <Route path="departments" element={<Departments />} />
           <Route path="departments/:id" element={<DepartmentDetail />} />
@@ -136,21 +144,22 @@ function App() {
           <Route path="settings" element={<Settings />} />
 
           <Route path="requests" element={<BlockOnboardingRoute><Requests /></BlockOnboardingRoute>} />
-          <Route path="documents" element={<BlockOnboardingRoute><Documents /></BlockOnboardingRoute>} />
-          <Route path="notifications" element={<BlockOnboardingRoute><Notifications /></BlockOnboardingRoute>} />
-          <Route path="calendar" element={<BlockOnboardingRoute><CalendarPage /></BlockOnboardingRoute>} />
+          <Route path="documents" element={<ModuleGuard module="documents"><BlockOnboardingRoute><Documents /></BlockOnboardingRoute></ModuleGuard>} />
+          <Route path="notifications" element={<ModuleGuard module="notifications"><BlockOnboardingRoute><Notifications /></BlockOnboardingRoute></ModuleGuard>} />
+          <Route path="calendar" element={<ModuleGuard module="calendar"><BlockOnboardingRoute><CalendarPage /></BlockOnboardingRoute></ModuleGuard>} />
           <Route path="employees/:id" element={<EmployeeProfile />} />
-          <Route path="projects" element={<BlockOnboardingRoute><Projects /></BlockOnboardingRoute>} />
-          <Route path="projects/:id" element={<BlockOnboardingRoute><ProjectDetail /></BlockOnboardingRoute>} />
-          <Route path="projects/:id/documents" element={<BlockOnboardingRoute><ProjectDocuments /></BlockOnboardingRoute>} />
-          <Route path="projects/:id/roadmap" element={<BlockOnboardingRoute><ProjectRoadmap /></BlockOnboardingRoute>} />
-          <Route path="surveys" element={<ProtectedRoute><Surveys /></ProtectedRoute>} />
-          <Route path="surveys/:id" element={<ProtectedRoute><SurveyPage /></ProtectedRoute>} />
-          <Route path="onboarding" element={<OnboardingRoute><Onboarding /></OnboardingRoute>} />
+          <Route path="projects" element={<ModuleGuard module="projects"><BlockOnboardingRoute><Projects /></BlockOnboardingRoute></ModuleGuard>} />
+          <Route path="projects/:id" element={<ModuleGuard module="projects"><BlockOnboardingRoute><ProjectDetail /></BlockOnboardingRoute></ModuleGuard>} />
+          <Route path="projects/:id/documents" element={<ModuleGuard module="projects"><BlockOnboardingRoute><ProjectDocuments /></BlockOnboardingRoute></ModuleGuard>} />
+          <Route path="projects/:id/roadmap" element={<ModuleGuard module="projects"><BlockOnboardingRoute><ProjectRoadmap /></BlockOnboardingRoute></ModuleGuard>} />
+          <Route path="surveys" element={<ModuleGuard module="surveys"><ProtectedRoute><Surveys /></ProtectedRoute></ModuleGuard>} />
+          <Route path="surveys/:id" element={<ModuleGuard module="surveys"><ProtectedRoute><SurveyPage /></ProtectedRoute></ModuleGuard>} />
+          <Route path="onboarding" element={<ModuleGuard module="onboarding"><OnboardingRoute><Onboarding /></OnboardingRoute></ModuleGuard>} />
           <Route path="hr" element={<HRRoute><HRPanel /></HRRoute>} />
-          <Route path="hr/onboarding/:id" element={<HRRoute><HROnboarding /></HRRoute>} />
-          <Route path="leader/timesheet" element={<ManagerRoute><ManagerTimesheet /></ManagerRoute>} />
+          <Route path="hr/onboarding/:id" element={<ModuleGuard module="onboarding"><HRRoute><HROnboarding /></HRRoute></ModuleGuard>} />
+          <Route path="leader/timesheet" element={<ModuleGuard module="timesheet"><ManagerRoute><ManagerTimesheet /></ManagerRoute></ModuleGuard>} />
           <Route path="admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+          <Route path="admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

@@ -1051,6 +1051,270 @@ router.post('/users/:id/unlock', asyncHandler(async (req, res) => {
 
 /**
  * @swagger
+ * /admin/reports/turnover:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Отчёт по текучести кадров
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: year, in: query, schema: { type: integer } }
+ *       - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+ *     responses:
+ *       200:
+ *         description: Отчёт по текучести
+ */
+router.get('/reports/turnover', asyncHandler(async (req, res) => {
+  const year = parseInt(req.query.year) || new Date().getFullYear()
+  const { format } = req.query
+  const yearStart = `${year}-01-01`
+  const yearEnd = `${year}-12-31`
+
+  const [startCount, hired, fired] = await Promise.all([
+    query(`SELECT COUNT(*) as cnt FROM users WHERE hire_date < $1 OR ($1 IS NULL)`, [yearStart]),
+    query(`SELECT COUNT(*) as cnt, DATE_TRUNC('month', hire_date) as month FROM users WHERE hire_date BETWEEN $1 AND $2 GROUP BY month ORDER BY month`, [yearStart, yearEnd]),
+    query(`SELECT COUNT(*) as cnt FROM users WHERE status = 'inactive' AND updated_at BETWEEN $1 AND $2`, [yearStart, yearEnd]),
+  ])
+
+  const avgHeadcount = parseInt(startCount.rows[0].cnt)
+  const totalHired = hired.rows.reduce((sum, r) => sum + parseInt(r.cnt), 0)
+  const totalFired = parseInt(fired.rows[0].cnt)
+  const turnoverRate = avgHeadcount > 0 ? ((totalFired + totalHired) / 2 / avgHeadcount * 100).toFixed(1) : '0'
+
+  const monthly = hired.rows.map(r => ({
+    month: r.month,
+    hired: parseInt(r.cnt),
+  }))
+
+  const byDept = await query(`
+    SELECT d.name as department,
+      COUNT(CASE WHEN u.hire_date BETWEEN $1 AND $2 THEN 1 END) as hired,
+      COUNT(CASE WHEN u.status = 'inactive' AND u.updated_at BETWEEN $1 AND $2 THEN 1 END) as fired,
+      COUNT(CASE WHEN u.status = 'active' THEN 1 END) as active
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
+    GROUP BY d.name
+    ORDER BY d.name
+  `, [yearStart, yearEnd])
+
+  const result = {
+    year,
+    avgHeadcount,
+    totalHired,
+    totalFired,
+    turnoverRate,
+    monthly,
+    byDepartment: byDept.rows.map(r => ({
+      department: r.department || 'Без отдела',
+      hired: parseInt(r.hired),
+      fired: parseInt(r.fired),
+      active: parseInt(r.active),
+    })),
+  }
+
+  if (format === 'csv') {
+    const sep = ';'
+    const header = ['Отдел', 'Нанято', 'Уволено', 'Активных'].join(sep)
+    const rows = result.byDepartment.map(r =>
+      [r.department, r.hired, r.fired, r.active].join(sep)
+    )
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename=turnover_report_${year}.csv`)
+    return res.send('\uFEFF' + header + '\n' + rows.join('\n'))
+  }
+
+  res.json(result)
+}))
+
+/**
+ * @swagger
+ * /admin/reports/tenure-age:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Отчёт по стажу и возрасту
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+ *     responses:
+ *       200:
+ *         description: Отчёт по стажу и возрасту
+ */
+router.get('/reports/tenure-age', asyncHandler(async (req, res) => {
+  const { format } = req.query
+
+  const tenure = await query(`
+    SELECT
+      CASE
+        WHEN hire_date IS NULL THEN 'Не указан'
+        WHEN CURRENT_DATE - hire_date < 365 THEN 'Менее 1 года'
+        WHEN CURRENT_DATE - hire_date < 730 THEN '1-2 года'
+        WHEN CURRENT_DATE - hire_date < 1095 THEN '2-3 года'
+        WHEN CURRENT_DATE - hire_date < 1825 THEN '3-5 лет'
+        WHEN CURRENT_DATE - hire_date < 3650 THEN '5-10 лет'
+        ELSE 'Более 10 лет'
+      END as tenure_group,
+      COUNT(*) as count
+    FROM users WHERE status = 'active'
+    GROUP BY tenure_group ORDER BY MIN(hire_date) DESC
+  `)
+
+  const avgTenure = await query(`
+    SELECT AVG(EXTRACT(YEAR FROM age(CURRENT_DATE, hire_date))) as avg_years,
+           MIN(hire_date) as earliest_hire
+    FROM users WHERE status = 'active' AND hire_date IS NOT NULL
+  `)
+
+  const byDept = await query(`
+    SELECT d.name as department,
+      COUNT(*) as count,
+      AVG(EXTRACT(YEAR FROM age(CURRENT_DATE, u.hire_date)))::numeric(10,1) as avg_years
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
+    WHERE u.status = 'active' AND u.hire_date IS NOT NULL
+    GROUP BY d.name ORDER BY avg_years DESC
+  `)
+
+  const result = {
+    tenureDistribution: tenure.rows.map(r => ({ group: r.tenure_group, count: parseInt(r.count) })),
+    avgTenureYears: avgTenure.rows[0]?.avg_years ? parseFloat(avgTenure.rows[0].avg_years).toFixed(1) : '0',
+    earliestHire: avgTenure.rows[0]?.earliest_hire || null,
+    byDepartment: byDept.rows.map(r => ({
+      department: r.department || 'Без отдела',
+      count: parseInt(r.count),
+      avgYears: parseFloat(r.avg_years) || 0,
+    })),
+  }
+
+  if (format === 'csv') {
+    const sep = ';'
+    const header = ['Группа стажа', 'Количество'].join(sep)
+    const rows = result.tenureDistribution.map(r => [r.group, r.count].join(sep))
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename=tenure_report.csv')
+    return res.send('\uFEFF' + header + '\n' + rows.join('\n'))
+  }
+
+  res.json(result)
+}))
+
+/**
+ * @swagger
+ * /admin/reports/unused-vacations:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Отчёт по неиспользованным отпускам
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: year, in: query, schema: { type: integer } }
+ *       - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+ *     responses:
+ *       200:
+ *         description: Неиспользованные отпуска
+ */
+router.get('/reports/unused-vacations', asyncHandler(async (req, res) => {
+  const year = parseInt(req.query.year) || new Date().getFullYear()
+  const { format } = req.query
+
+  const result = await query(`
+    SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, d.name as department,
+      COALESCE(vb.total_days, 28) as total_days,
+      COALESCE(vb.used_days, 0) as used_days,
+      COALESCE(vb.available_days, 28) as available_days,
+      COALESCE(vb.reserved_days, 0) as reserved_days
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
+    LEFT JOIN vacation_balances vb ON vb.user_id = u.id AND vb.year = $1
+    WHERE u.status = 'active'
+      AND COALESCE(vb.available_days, 28) > 0
+    ORDER BY vb.available_days DESC NULLS LAST, u.last_name
+  `, [year])
+
+  const totalUnused = result.rows.reduce((sum, r) => sum + parseInt(r.available_days), 0)
+  const employeesWithUnused = result.rows.length
+
+  if (format === 'csv') {
+    const sep = ';'
+    const header = ['Фамилия', 'Имя', 'Отчество', 'Должность', 'Отдел', 'Всего дней', 'Использовано', 'Доступно', 'Зарезервировано'].join(sep)
+    const rows = result.rows.map(r =>
+      [r.last_name, r.first_name, r.middle_name || '', r.position, r.department || '', r.total_days, r.used_days, r.available_days, r.reserved_days].join(sep)
+    )
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename=unused_vacations_${year}.csv`)
+    return res.send('\uFEFF' + header + '\n' + rows.join('\n'))
+  }
+
+  res.json({ year, totalUnused, employeesWithUnused, employees: result.rows })
+}))
+
+/**
+ * @swagger
+ * /admin/reports/project-load:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Отчёт по загрузке по проектам
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+ *     responses:
+ *       200:
+ *         description: Загрузка по проектам
+ */
+router.get('/reports/project-load', asyncHandler(async (req, res) => {
+  const { format } = req.query
+
+  const projects = await query(`
+    SELECT cp.id, cp.name, cp.status,
+      COUNT(cpm.id) as member_count,
+      COALESCE(json_agg(json_build_object('id', u.id, 'name', u.first_name || ' ' || u.last_name, 'role', cpm.role))
+        FILTER (WHERE u.id IS NOT NULL), '[]') as members
+    FROM company_projects cp
+    LEFT JOIN company_project_members cpm ON cpm.project_id = cp.id
+    LEFT JOIN users u ON cpm.user_id = u.id AND u.status = 'active'
+    GROUP BY cp.id
+    ORDER BY member_count DESC, cp.name
+  `)
+
+  const summary = await query(`
+    SELECT COUNT(DISTINCT cp.id) as total_projects,
+      COUNT(DISTINCT CASE WHEN cp.status = 'active' THEN cp.id END) as active_projects,
+      COUNT(DISTINCT cpm.user_id) as total_assigned,
+      COUNT(DISTINCT CASE WHEN cp.status = 'active' THEN cpm.user_id END) as active_assigned
+    FROM company_projects cp
+    LEFT JOIN company_project_members cpm ON cpm.project_id = cp.id
+    LEFT JOIN users u ON cpm.user_id = u.id AND u.status = 'active'
+  `)
+
+  const result = {
+    summary: {
+      totalProjects: parseInt(summary.rows[0]?.total_projects || '0'),
+      activeProjects: parseInt(summary.rows[0]?.active_projects || '0'),
+      totalAssigned: parseInt(summary.rows[0]?.total_assigned || '0'),
+      activeAssigned: parseInt(summary.rows[0]?.active_assigned || '0'),
+    },
+    projects: projects.rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      status: r.status,
+      memberCount: parseInt(r.member_count),
+      members: r.members,
+    })),
+  }
+
+  if (format === 'csv') {
+    const sep = ';'
+    const header = ['Проект', 'Статус', 'Кол-во участников', 'Участники'].join(sep)
+    const rows = result.projects.map(r =>
+      [r.name, r.status, r.memberCount, r.members.map(m => m.name).join(', ')].join(sep)
+    )
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename=project_load.csv')
+    return res.send('\uFEFF' + header + '\n' + rows.join('\n'))
+  }
+
+  res.json(result)
+}))
+
+/**
+ * @swagger
  * /admin/reports/vacations:
  *   get:
  *     tags: [Admin]
@@ -1218,6 +1482,67 @@ router.post('/dictionaries/skills', asyncHandler(async (req, res) => {
 router.delete('/dictionaries/skills/:id', asyncHandler(async (req, res) => {
   await query('DELETE FROM skills_dictionary WHERE id = $1', [req.params.id])
   res.json({ success: true })
+}))
+
+// ===================== MODULES =====================
+
+/**
+ * @swagger
+ * /admin/modules:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Получить все модули системы
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Список модулей
+ */
+router.get('/modules', asyncHandler(async (req, res) => {
+  const result = await query('SELECT * FROM modules ORDER BY sort_order')
+  res.json(result.rows)
+}))
+
+/**
+ * @swagger
+ * /admin/modules/{id}/toggle:
+ *   put:
+ *     tags: [Admin]
+ *     summary: Включить/выключить модуль
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Статус модуля обновлён
+ */
+router.put('/modules/:id/toggle', asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
+  if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
+
+  const newStatus = !existing.rows[0].is_enabled
+  await query('UPDATE modules SET is_enabled = $1, updated_at = NOW() WHERE id = $2', [newStatus, id])
+
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    'module_toggle', 'module', id,
+    { module: existing.rows[0].code, name: existing.rows[0].name, enabled: newStatus }, req.ip)
+  res.json({ success: true, enabled: newStatus })
+}))
+
+/**
+ * @swagger
+ * /admin/modules/enabled:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Получить список включённых модулей (публичный)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Включённые модули
+ */
+router.get('/modules/enabled', asyncHandler(async (req, res) => {
+  const result = await query('SELECT code FROM modules WHERE is_enabled = true')
+  res.json(result.rows.map(r => r.code))
 }))
 
 export default router
