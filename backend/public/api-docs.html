@@ -268,7 +268,7 @@ const $$ = s => document.querySelectorAll(s)
 const methodColors = {get:'var(--get)',post:'var(--post)',put:'var(--put)',delete:'var(--delete)',patch:'var(--patch)'}
 
 let spec = null
-let authToken = localStorage.getItem('api_docs_token') || ''
+let authToken = ''
 let activeEp = null
 let tryMode = false
 
@@ -685,13 +685,11 @@ function bindGlobalEvents() {
   $('#authModal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('open') })
   $('#authSaveBtn').addEventListener('click', () => {
     authToken = $('#authTokenInput').value.trim()
-    localStorage.setItem('api_docs_token', authToken)
     updateAuthUI()
     $('#authModal').classList.remove('open')
   })
   $('#authClearBtn').addEventListener('click', () => {
     authToken = ''
-    localStorage.removeItem('api_docs_token')
     updateAuthUI()
   })
   $('#exportBtn').addEventListener('click', () => {

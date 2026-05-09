@@ -37,6 +37,12 @@ cd backend && node --test src/tests/timesheet.test.js
 ### No Comments
 Never add comments unless explicitly requested.
 
+### No localStorage
+`localStorage` КАТЕГОРИЧЕСКИ НЕЛЬЗЯ использовать. Все пользовательские данные и настройки хранятся на сервере (PostgreSQL, cookies для авторизации). Существующие использования `localStorage` в коде — технический долг и должны быть удалены при рефакторинге.
+
+### Module Settings Must Persist to DB
+Настройки модулей (`vacation`, `calendar`, `notifications`, `auth`) должны храниться в PostgreSQL, а не в хардкод-дефолтах на фронтенде. Backend-эндпоинты `GET/PATCH /api/admin/modules/:id/settings` необходимо реализовать. Таблица `modules` должна содержать JSONB-колонку `settings` для хранения настроек каждого модуля. Фронтенд (`moduleSettingsStore.ts`) уже написан для работы с этими эндпоинтами.
+
 ### Language
 Russian for all user-facing text and error messages.
 

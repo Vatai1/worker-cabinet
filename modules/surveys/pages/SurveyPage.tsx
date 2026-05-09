@@ -6,16 +6,6 @@ import { surveyApi } from '@/modules/surveys/services/surveyApi'
 import { getErrorMessage, formatDate } from '@/shared/lib/utils'
 import type { SurveyWithQuestions } from '@/shared/types'
 
-const LS_KEY = 'completed_surveys'
-
-function getCompleted(): string[] {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]') } catch { return [] }
-}
-function markCompleted(id: string) {
-  const list = getCompleted()
-  if (!list.includes(id)) localStorage.setItem(LS_KEY, JSON.stringify([...list, id]))
-}
-
 export function SurveyPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -31,7 +21,6 @@ export function SurveyPage() {
 
   useEffect(() => {
     if (!id) return
-    if (getCompleted().includes(id)) { setBlockMessage('Вы уже прошли этот опрос'); setLoading(false); return }
     surveyApi.view(id)
       .then(setSurvey)
       .catch((err: unknown) => setBlockMessage(getErrorMessage(err)))
@@ -73,7 +62,6 @@ export function SurveyPage() {
         return { questionId: qId, value: (a as string) || '' }
       })
       await surveyApi.respond(id!, payload)
-      markCompleted(id!)
       setSubmitted(true)
     } catch (err: unknown) {
       setSubmitError(getErrorMessage(err))

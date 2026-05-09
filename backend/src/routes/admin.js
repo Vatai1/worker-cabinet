@@ -1669,4 +1669,63 @@ router.get('/modules/enabled', asyncHandler(async (req, res) => {
   res.json(result.rows.map(r => r.code))
 }))
 
+/**
+ * @swagger
+ * /admin/modules/{id}/settings:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Получить настройки модуля
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string }, description: 'Код модуля (vacation, calendar, notifications, auth)' }
+ *     responses:
+ *       200:
+ *         description: Настройки модуля (JSONB)
+ *       404:
+ *         description: Модуль не найден
+ */
+router.get('/modules/:id/settings', asyncHandler(async (req, res) => {
+  const result = await query('SELECT settings FROM modules WHERE code = $1', [req.params.id])
+  if (result.rows.length === 0) throw new NotFoundError('Модуль не найден')
+  res.json(result.rows[0].settings || {})
+}))
+
+/**
+ * @swagger
+ * /admin/modules/{id}/settings:
+ *   patch:
+ *     tags: [Admin]
+ *     summary: Обновить настройки модуля
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: string }, description: 'Код модуля (vacation, calendar, notifications, auth)' }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Произвольные настройки модуля (JSONB)
+ *     responses:
+ *       200:
+ *         description: Настройки обновлены
+ *       404:
+ *         description: Модуль не найден
+ */
+router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const existing = await query('SELECT id FROM modules WHERE code = $1', [id])
+  if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
+
+  const result = await query(
+    'UPDATE modules SET settings = $1, updated_at = NOW() WHERE code = $2 RETURNING settings',
+    [JSON.stringify(req.body), id]
+  )
+
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    'module_settings_update', 'module', String(existing.rows[0].id), req.body, req.ip)
+
+  res.json(result.rows[0].settings)
+}))
+
 export default router
