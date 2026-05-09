@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import https from 'https'
+import http from 'http'
 import httpntlm from 'httpntlm'
 import { URL } from 'url'
 
@@ -234,38 +235,54 @@ export async function fetchEwsEventBody(ewsUrl, username, password, domain, item
   }
 }
 
-function ntlmRequest(ewsUrl, username, password, domain, envelope) {
-  return new Promise((resolve, reject) => {
+async function ntlmRequest(ewsUrl, username, password, domain, envelope, retries = 10) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const ts = Date.now()
     const parsed = new URL(ewsUrl)
-    const agent = parsed.protocol === 'https:'
-      ? new https.Agent({ rejectUnauthorized: false })
-      : undefined
 
-    httpntlm.post({
-      url: ewsUrl,
-      username: username,
-      password: password,
-      domain: domain || '',
-      workstation: '',
-      body: envelope,
-      headers: {
-        'Content-Type': 'text/xml; charset=utf-8',
-        'User-Agent': 'WorkerCabinet/1.0',
-        'Accept': 'text/xml',
-      },
-      agent: agent,
-      rejectUnauthorized: false,
-    }, (err, res) => {
-      if (err) return reject(err)
-      if (res.statusCode === 401) {
-        return reject(new Error('Неверный логин или пароль. Проверьте домен, логин и пароль.'))
+    const agent = parsed.protocol === 'https:'
+      ? new https.Agent({ keepAlive: true, rejectUnauthorized: false })
+      : new http.Agent({ keepAlive: true })
+
+    try {
+      const result = await new Promise((resolve, reject) => {
+        httpntlm.post({
+          url: ewsUrl,
+          username: username,
+          password: password,
+          domain: domain || '',
+          workstation: '',
+          body: envelope,
+          headers: {
+            'Content-Type': 'text/xml; charset=utf-8',
+            'User-Agent': 'WorkerCabinet/1.0',
+            'Accept': 'text/xml',
+          },
+          agent,
+          rejectUnauthorized: false,
+        }, (err, res) => {
+          agent.destroy()
+          const elapsed = Date.now() - ts
+          if (err) {
+            console.log(`[EWS] attempt ${attempt}/${retries} FAIL ${elapsed}ms`)
+            return reject(err)
+          }
+          console.log(`[EWS] attempt ${attempt}/${retries} OK ${elapsed}ms status=${res.statusCode}`)
+          if (res.statusCode === 401) return reject(new Error('Неверный логин или пароль. Проверьте домен, логин и пароль.'))
+          if (res.statusCode >= 400) return reject(new Error('EWS HTTP ' + res.statusCode + ': ' + (res.body || '').substring(0, 200)))
+          resolve(res.body)
+        })
+      })
+
+      return result
+    } catch (err) {
+      agent.destroy()
+      if (attempt === retries) {
+        console.log(`[EWS] all ${retries} attempts failed`)
+        throw err
       }
-      if (res.statusCode >= 400) {
-        return reject(new Error('EWS HTTP ' + res.statusCode + ': ' + (res.body || '').substring(0, 200)))
-      }
-      resolve(res.body)
-    })
-  })
+    }
+  }
 }
 
 export async function fetchEwsEvents(ewsUrl, username, password, domain, startIso, endIso) {
