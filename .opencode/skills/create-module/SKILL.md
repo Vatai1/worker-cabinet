@@ -14,14 +14,16 @@ A module is a self-contained feature that can be toggled on/off by admins via th
 
 ## Module Architecture Overview
 
-A module touches **9 files** across 3 layers + 2 docs. Every module must be registered in all of them:
+A module touches **10 files** across 3 layers + 2 docs + manifest. Every module must be registered in all of them:
 
 ```
 DB layer:       backend/src/db/migrate.js          — seed record in defaultModules
 Backend layer:  backend/src/routes/<module>.js      — Express routes with Swagger JSDoc
                 backend/src/server.js               — route registration + import
                 backend/src/config/swagger.js       — tag definition
-Frontend layer: pages/<ModuleName>.tsx              — React page component
+Frontend layer: modules/<code>/                     — module directory
+                modules/<code>/pages/               — React page components
+                modules/<code>/MODULE.md            — module manifest
                 App.tsx                            — route with ModuleGuard
                 components/layout/Sidebar.tsx       — nav item with module: 'code'
                 pages/AdminPanel.tsx                — MODULE_COLORS entry
@@ -43,6 +45,7 @@ Before writing any code, confirm these with the user (or infer from context):
 | `icon` | `GraduationCap` | Lucide icon name (https://lucide.dev/icons) |
 | `route` | `/training` | Frontend URL path |
 | `sort_order` | `130` | Number for ordering in admin modules list |
+| `category` | `work` | Category key: `hr`, `work`, `docs`, `admin`, `general` |
 | `roles` | `employee, manager, hr` | Who sees it in sidebar |
 | `panels` | `hr, admin` | Which panels should have a tab for it (optional) |
 | `tag` | `Training` | Swagger tag name |
@@ -56,7 +59,7 @@ Before writing any code, confirm these with the user (or infer from context):
 Find the `defaultModules` array (search for `code: 'analytics'` to find the end) and append:
 
 ```javascript
-{ code: '<CODE>', name: '<NAME>', description: '<DESCRIPTION>', icon: '<ICON>', route: '<ROUTE>', sort: <SORT_ORDER> },
+{ code: '<CODE>', name: '<NAME>', description: '<DESCRIPTION>', icon: '<ICON>', route: '<ROUTE>', sort: <SORT_ORDER>, category: '<CATEGORY>' },
 ```
 
 Run migration:
@@ -394,6 +397,68 @@ Suggested color palette (pick one not already used):
 
 ---
 
+### Step 8.5: Module Manifest
+
+**File:** `modules/<code>/MODULE.md`
+
+Create a MODULE.md manifest following the template below. This file provides AI agents with context about the module.
+
+```markdown
+# Модуль: <NAME>
+
+## Основная информация
+
+- **Код**: `<code>`
+- **Категория**: `<CATEGORY>`
+- **Маршрут**: `<ROUTE>`
+- **Иконка**: `<ICON>`
+- **Сортировка**: `<SORT_ORDER>`
+- **Описание**: `<DESCRIPTION>`
+
+## Файловая структура
+
+\`\`\`
+modules/<code>/
+└── pages/
+    └── <ModuleName>.tsx
+\`\`\`
+
+## API эндпоинты
+
+**Файл**: `backend/src/routes/<code>.js`
+
+| Метод | Путь | Роли | Описание |
+|--------|------|------|----------|
+| GET | `/api/<code>/` | <roles> | Описание |
+| POST | `/api/<code>/` | <roles> | Создать |
+| GET | `/api/<code>/:id` | <roles> | Получить по ID |
+| PUT | `/api/<code>/:id` | <roles> | Обновить |
+| DELETE | `/api/<code>/:id` | <roles> | Удалить |
+
+## Роли и доступ
+
+| Роль | Доступ |
+|------|--------|
+| employee | Описание доступа |
+| manager | Описание доступа |
+| hr | Описание доступа |
+| admin | Описание доступа |
+| onboarding | Описание доступа |
+
+## Зависимости
+
+**Frontend**:
+- `@/shared/lib/*`
+- `@/shared/components/ui/*`
+
+**Backend**:
+- (специфичные зависимости)
+```
+
+Fill in all sections with actual data. Reference existing MODULE.md files in `modules/` and `core/` for examples.
+
+---
+
 ### Optional: Panel Tabs
 
 If the module should appear as a tab inside HR Panel or Admin Panel:
@@ -472,6 +537,7 @@ npm run dev                                    # Start and verify
 Then verify:
 - [ ] Module appears in Admin Panel → Modules with toggle
 - [ ] Sidebar shows/hides nav item when toggled
+- [ ] MODULE.md manifest created in module directory
 - [ ] Direct URL access redirects to `/dashboard` when module is off
 - [ ] Swagger docs at `/api-docs` show new endpoints
 - [ ] AGENTS.md route groups count and tags list updated
@@ -488,7 +554,7 @@ To remove a module, reverse all steps:
 2. Delete `backend/src/routes/<code>.js`
 3. Remove import + `app.use` from `server.js`
 4. Remove tag from `swagger.js`
-5. Delete `pages/<ModuleName>.tsx`
+5. Delete `modules/<code>/` directory (including MODULE.md)
 6. Remove route from `App.tsx`
 7. Remove nav items from `Sidebar.tsx`
 8. Remove from `MODULE_COLORS` in `AdminPanel.tsx`
@@ -505,11 +571,11 @@ Here's a complete walkthrough for a hypothetical `training` module:
 
 ### Specs
 - code: `training`, name: `Обучение`, icon: `GraduationCap`, route: `/training`
-- sort: 130, tag: `Training`, roles: all, panels: HR
+- sort: 130, category: `work`, tag: `Training`, roles: all, panels: HR
 
 ### Step 1: migrate.js
 ```javascript
-{ code: 'training', name: 'Обучение', description: 'Курсы, сертификации, план развития', icon: 'GraduationCap', route: '/training', sort: 130 },
+{ code: 'training', name: 'Обучение', description: 'Курсы, сертификации, план развития', icon: 'GraduationCap', route: '/training', sort: 130, category: 'work' },
 ```
 
 ### Step 2: backend/src/routes/training.js
