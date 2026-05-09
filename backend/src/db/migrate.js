@@ -1420,6 +1420,7 @@ async function runMigrations() {
       { code: 'calendar', name: 'Календарь', description: 'Интеграция с Outlook/EWS календарём', icon: 'CalendarDays', route: '/calendar', sort: 90, category: 'admin' },
       { code: 'notifications', name: 'Уведомления', description: 'Email-уведомления о событиях в системе', icon: 'Bell', route: '/notifications', sort: 100, category: 'docs' },
       { code: 'analytics', name: 'Аналитика', description: 'Графики, статистика и аналитика системы', icon: 'BarChart3', route: '/admin/analytics', sort: 120, category: 'admin' },
+      { code: 'auth', name: 'Авторизация', description: 'Настройки аутентификации, авторизации и безопасности', icon: 'Lock', route: null, sort: 5, category: 'core' },
     ]
     for (const m of defaultModules) {
       await db.query(
