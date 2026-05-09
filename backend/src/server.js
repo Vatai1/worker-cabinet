@@ -7,7 +7,6 @@ import { swaggerSpec } from './config/swagger.js'
 import authRoutes from './routes/auth.js'
 import vacationRoutes from './routes/vacation.js'
 import userRoutes from './routes/users.js'
-import telegramRoutes from './routes/telegram.js'
 import notificationsRoutes from './routes/notifications.js'
 import projectsRoutes from './routes/projects.js'
 import documentsRoutes from './routes/documents.js'
@@ -72,7 +71,6 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/vacation', vacationRoutes)
 app.use('/api/users', userRoutes)
-app.use('/api/telegram', telegramRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/projects', projectsRoutes)
 app.use('/api/documents', documentsRoutes)
