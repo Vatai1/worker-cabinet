@@ -116,7 +116,6 @@ Copy-Item .env.example .env
 - Multer (загрузка файлов)
 - docxtemplater (генерация DOCX)
 - ExcelJS + PDFKit (экспорт табелей)
-- Telegram Bot API (опционально)
 - EWS/Outlook OAuth2 (интеграция с календарём)
 
 ## Тестовые пользователи
@@ -153,7 +152,7 @@ worker-cabinet/
 │   └── src/
 │       ├── routes/           # auth, vacation, users, departments, projects,
 │       │                     # surveys, onboarding, documents, notifications,
-│       │                     # hierarchy, dictionaries, telegram,
+│       │                     # hierarchy, dictionaries,
 │       │                     # timesheet, calendar
 │       ├── middleware/       # JWT auth, multer upload, rate limiter
 │       ├── services/         # Бизнес-логика
@@ -194,7 +193,6 @@ cd backend && node --test --test-concurrency=1 \
   src/tests/notifications.test.js \
   src/tests/users.test.js \
   src/tests/hierarchy.test.js \
-  src/tests/telegram.test.js \
   src/tests/documents.test.js \
   src/tests/user-documents.test.js \
   src/tests/calendar.test.js \
@@ -234,7 +232,6 @@ cd backend && node --test src/tests/timesheet.test.js      # 14 тестов
 | `notifications.test.js` | 7 | `/notifications/*` (list, unread, read, CRUD) |
 | `calendar.test.js` | 6 | `/calendar/*` (OAuth, events, EWS, disconnect) |
 | `hierarchy.test.js` | 6 | `/hierarchy/*` (get/save, department-level) |
-| `telegram.test.js` | 6 | `/telegram/*` (bot-info, connect, disconnect, toggle) |
 | `user-documents.test.js` | 5 | `/user-documents/*` (list, download, preview, delete) |
 | `auth-extended.test.js` | 5 | `/auth/*` (register, me) |
 | `documents.test.js` | 3 | `/documents/*` (list for user/employee) |

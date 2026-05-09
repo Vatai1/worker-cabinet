@@ -9,7 +9,6 @@ Backend API для HR-системы управления сотрудникам
 - JWT аутентификация
 - MinIO (S3-совместимое хранилище файлов)
 - Multer (загрузка файлов)
-- Telegram Bot API (опционально)
 
 ## Установка и настройка
 
@@ -45,9 +44,6 @@ S3_PORT=9000
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin
 S3_BUCKET=worker-cabinet
-
-# Telegram (опционально)
-TELEGRAM_BOT_TOKEN=
 ```
 
 ### 3. Запустите миграции
@@ -171,11 +167,6 @@ npm start
 
 Типы справочников: `position`, `contract_type`, `department_type`, `grade`, `skill`, `education`, `language`, `doc_type`
 
-### Telegram (`/api/telegram`)
-
-- `POST /webhook` — Webhook для Telegram-бота
-- `GET /status` — Статус бота
-
 ## Тестовые пользователи
 
 | Email | Пароль | Роль |
@@ -207,7 +198,7 @@ backend/
 │   │   ├── notifications.js
 │   │   ├── hierarchy.js
 │   │   ├── dictionaries.js
-│   │   └── telegram.js
+│   │   └── dictionaries.js
 │   ├── middleware/
 │   │   ├── auth.js           # JWT middleware
 │   │   ├── upload.js         # Multer (MinIO)

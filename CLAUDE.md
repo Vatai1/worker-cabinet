@@ -10,7 +10,6 @@ Worker Cabinet is a full-stack HR management system for managing vacations, empl
 - **Backend**: Node.js + Express + PostgreSQL (`backend/`)
 - **State management**: Zustand (auth token persisted to cookies)
 - **File storage**: MinIO (S3-compatible)
-- **Optional**: Telegram bot for notifications
 
 ## Commands
 
