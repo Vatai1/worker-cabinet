@@ -121,6 +121,3 @@ deploy/
 | S3_ACCESS_KEY | Access ключ MinIO | Нет (default: minioadmin) |
 | S3_SECRET_KEY | Secret ключ MinIO | Нет (default: minioadmin123) |
 | S3_BUCKET | Имя бакета | Нет (default: worker-cabinet) |
-| TELEGRAM_BOT_TOKEN | Токен Telegram бота | Нет |
-| TELEGRAM_BOT_USERNAME | Username бота | Нет |
-| TELEGRAM_ADMIN_CHAT_ID | Chat ID админа | Нет |

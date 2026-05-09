@@ -1,7 +1,6 @@
 import express from 'express'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
-import { TelegramService } from '../services/telegramService.js'
 import { getFromS3 } from '../config/s3.js'
 import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
@@ -433,41 +432,6 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
 
-    const managerResult = await client.query(
-      `SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id =
-       (SELECT manager_id FROM users WHERE id = $1)`,
-      [userId]
-    )
-    const manager = managerResult.rows[0]
-    const employee = await client.query(
-      'SELECT id, first_name, last_name, position FROM users WHERE id = $1',
-      [userId]
-    )
-
-    if (manager) {
-      TelegramService.sendNewRequestNotification(
-        {
-          firstName: manager.first_name,
-          lastName: manager.last_name,
-          telegram_chat_id: manager.telegram_chat_id,
-          telegram_notifications_enabled: manager.telegram_notifications_enabled
-        },
-        {
-          start_date: request.start_date,
-          end_date: request.end_date,
-          duration: request.duration,
-          vacation_type: request.vacation_type,
-          has_travel: request.has_travel,
-          comment: request.comment
-        },
-        {
-          firstName: employee.rows[0].first_name,
-          lastName: employee.rows[0].last_name,
-          position: employee.rows[0].position
-        }
-      ).catch(console.error)
-    }
-
     res.status(201).json(request)
   } catch (error) {
     await client.query('ROLLBACK')
@@ -697,28 +661,6 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
 
     await client.query('COMMIT')
 
-    const userResult = await client.query(
-      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
-      [request.user_id]
-    )
-    const user = userResult.rows[0]
-
-    TelegramService.sendVacationApprovedNotification(
-      {
-        firstName: user.first_name,
-        lastName: user.last_name,
-        telegram_chat_id: user.telegram_chat_id,
-        telegram_notifications_enabled: user.telegram_notifications_enabled
-      },
-      {
-        start_date: request.start_date,
-        end_date: request.end_date,
-        duration: request.duration,
-        vacation_type: request.vacation_type,
-        has_travel: request.has_travel
-      }
-    ).catch(console.error)
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -835,27 +777,6 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
 
     await client.query('COMMIT')
 
-    const userResult = await client.query(
-      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
-      [request.user_id]
-    )
-    const user = userResult.rows[0]
-
-    TelegramService.sendVacationRejectedNotification(
-      {
-        firstName: user.first_name,
-        lastName: user.last_name,
-        telegram_chat_id: user.telegram_chat_id,
-        telegram_notifications_enabled: user.telegram_notifications_enabled
-      },
-      {
-        start_date: request.start_date,
-        end_date: request.end_date,
-        duration: request.duration,
-        rejection_reason: request.rejection_reason
-      }
-    ).catch(console.error)
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -967,27 +888,6 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
 
-    const userResult = await client.query(
-      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
-      [userId]
-    )
-    const user = userResult.rows[0]
-
-    TelegramService.sendVacationCancelledNotification(
-      {
-        firstName: user.first_name,
-        lastName: user.last_name,
-        telegram_chat_id: user.telegram_chat_id,
-        telegram_notifications_enabled: user.telegram_notifications_enabled
-      },
-      {
-        start_date: request.start_date,
-        end_date: request.end_date,
-        duration: request.duration,
-        status: 'cancelled_by_employee'
-      }
-    ).catch(console.error)
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -1084,27 +984,6 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
     await clearVacationTimesheetEntries(client, request.user_id, request.start_date, request.end_date)
 
     await client.query('COMMIT')
-
-    const userResult = await client.query(
-      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
-      [request.user_id]
-    )
-    const user = userResult.rows[0]
-
-    TelegramService.sendVacationCancelledNotification(
-      {
-        firstName: user.first_name,
-        lastName: user.last_name,
-        telegram_chat_id: user.telegram_chat_id,
-        telegram_notifications_enabled: user.telegram_notifications_enabled
-      },
-      {
-        start_date: request.start_date,
-        end_date: request.end_date,
-        duration: request.duration,
-        status: 'cancelled_by_manager'
-      }
-    ).catch(console.error)
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
@@ -1698,42 +1577,6 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
 
-    const managerResult = await client.query(
-      `SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id =
-       (SELECT manager_id FROM users WHERE id = $1)`,
-      [userId]
-    )
-    const manager = managerResult.rows[0]
-    const employeeResult = await client.query(
-      'SELECT id, first_name, last_name, position FROM users WHERE id = $1',
-      [userId]
-    )
-    const employee = employeeResult.rows[0]
-
-    if (manager) {
-      TelegramService.sendNewRequestNotification(
-        {
-          firstName: manager.first_name,
-          lastName: manager.last_name,
-          telegram_chat_id: manager.telegram_chat_id,
-          telegram_notifications_enabled: manager.telegram_notifications_enabled
-        },
-        {
-          start_date: newRequest.start_date,
-          end_date: newRequest.end_date,
-          duration: newRequest.duration,
-          vacation_type: originalRequest.vacation_type,
-          has_travel: newRequest.has_travel,
-          comment: `Перенос из заявки #${id}: ${reason}`
-        },
-        {
-          firstName: employee.first_name,
-          lastName: employee.last_name,
-          position: employee.position
-        }
-       ).catch(console.error)
-    }
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -1862,28 +1705,6 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
 
     await client.query('COMMIT')
 
-    const userResult = await client.query(
-      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
-      [newRequest.user_id]
-    )
-    const user = userResult.rows[0]
-
-    TelegramService.sendVacationApprovedNotification(
-      {
-        firstName: user.first_name,
-        lastName: user.last_name,
-        telegram_chat_id: user.telegram_chat_id,
-        telegram_notifications_enabled: user.telegram_notifications_enabled
-      },
-      {
-        start_date: newRequest.start_date,
-        end_date: newRequest.end_date,
-        duration: newRequest.duration,
-        vacation_type: newRequest.vacation_type,
-        has_travel: newRequest.has_travel
-      }
-         ).catch(console.error)
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -2010,27 +1831,6 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
     )
 
     await client.query('COMMIT')
-
-    const userResult = await client.query(
-      'SELECT id, first_name, last_name, telegram_chat_id, telegram_notifications_enabled FROM users WHERE id = $1',
-      [newRequest.user_id]
-    )
-    const user = userResult.rows[0]
-
-    TelegramService.sendVacationRejectedNotification(
-      {
-        firstName: user.first_name,
-        lastName: user.last_name,
-        telegram_chat_id: user.telegram_chat_id,
-        telegram_notifications_enabled: user.telegram_notifications_enabled
-      },
-      {
-        start_date: newRequest.start_date,
-        end_date: newRequest.end_date,
-        duration: newRequest.duration,
-        rejection_reason: reason
-      }
-         ).catch(console.error)
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name

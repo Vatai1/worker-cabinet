@@ -648,28 +648,6 @@ async function runMigrations() {
     console.log('✅ Roadmap v2 tables created')
 
     try {
-      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(100)`)
-      console.log('  ✓ telegram_chat_id column added')
-    } catch (e) {
-      if (e.message.includes('already exists')) {
-        console.log('  ✓ telegram_chat_id (already exists)')
-      } else {
-        console.log('  - telegram_chat_id:', e.message)
-      }
-    }
-
-    try {
-      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_notifications_enabled BOOLEAN DEFAULT false`)
-      console.log('  ✓ telegram_notifications_enabled column added')
-    } catch (e) {
-      if (e.message.includes('already exists')) {
-        console.log('  ✓ telegram_notifications_enabled (already exists)')
-      } else {
-        console.log('  - telegram_notifications_enabled:', e.message)
-      }
-    }
-
-    try {
       await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS responsibility_area TEXT`)
       console.log('  ✓ responsibility_area column added')
     } catch (e) {
@@ -721,18 +699,6 @@ async function runMigrations() {
         console.log('  ✓ travel_destination (already exists)')
       } else {
         console.log('  - travel_destination:', e.message)
-      }
-    }
-
-    // Add telegram_username to users
-    try {
-      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username VARCHAR(255)`)
-      console.log('  ✓ telegram_username column added')
-    } catch (e) {
-      if (e.message.includes('already exists')) {
-        console.log('  ✓ telegram_username (already exists)')
-      } else {
-        console.log('  - telegram_username:', e.message)
       }
     }
 

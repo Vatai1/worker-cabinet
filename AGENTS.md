@@ -134,7 +134,7 @@ finally { client.release() }
 JSDoc annotations on all route files generate OpenAPI 3.0 spec via `swagger-jsdoc` (`backend/src/config/swagger.js`).
 - Spec JSON: `GET /api-docs.json`
 - Custom UI: `GET /api-docs` (serves `backend/public/api-docs.html`, dev only)
-- Tags: Auth, Users, Vacation, Projects, Documents, Notifications, Departments, Surveys, Onboarding, Hierarchy, Dictionaries, Timesheet, Calendar, Telegram
+- Tags: Auth, Users, Vacation, Projects, Documents, Notifications, Departments, Surveys, Onboarding, Hierarchy, Dictionaries, Timesheet, Calendar
 - When adding new routes, add JSDoc `@swagger` annotation before the `router.get/post/...` call
 - YAML descriptions with colons must be quoted: `description: 'Доступно для ролей: hr, admin'`
 
@@ -151,7 +151,7 @@ Roles: `employee`, `manager`, `hr`, `admin`, `onboarding`
 2. **Always update Swagger** when modifying API routes — add or update JSDoc `@swagger` annotations for new/changed endpoints, keep them consistent with actual request/response shapes and status codes
 2. **Schema changes**: Add SQL to `backend/src/db/migrate.js` (monolithic migration, idempotent)
 3. **Date handling**: `formatDate()` from `@/lib/utils` — parses `YYYY-MM-DD` as local date (pg pool configured to return DATE as raw strings)
-4. **Environment**: `cp backend/.env.example backend/.env` — configure `DB_*`, `JWT_SECRET` (required, no fallback), `S3_*`, `TELEGRAM_BOT_TOKEN`
+4. **Environment**: `cp backend/.env.example backend/.env` — configure `DB_*`, `JWT_SECRET` (required, no fallback), `S3_*`
 5. **API base URL**: `import { API_BASE_URL } from '@/lib/api'` — reads `VITE_API_BASE_URL`, defaults to `http://localhost:5000/api`
 6. **Sidebar**: NEVER remove existing nav items from `components/layout/Sidebar.tsx`
 7. **Route file order matters**: In `onboarding.js`, literal paths (`/templates`, `/me`) must precede parameterized paths (`/:id`) to avoid Express matching them as params
