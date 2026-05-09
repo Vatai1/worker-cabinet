@@ -14,7 +14,7 @@ A module is a self-contained feature that can be toggled on/off by admins via th
 
 ## Module Architecture Overview
 
-A module touches **7 files** across 3 layers. Every module must be registered in all of them:
+A module touches **9 files** across 3 layers + 2 docs. Every module must be registered in all of them:
 
 ```
 DB layer:       backend/src/db/migrate.js          — seed record in defaultModules
@@ -25,6 +25,8 @@ Frontend layer: pages/<ModuleName>.tsx              — React page component
                 App.tsx                            — route with ModuleGuard
                 components/layout/Sidebar.tsx       — nav item with module: 'code'
                 pages/AdminPanel.tsx                — MODULE_COLORS entry
+Docs:           AGENTS.md                          — route groups count + Swagger tags list
+                README.md                          — route listing + test coverage table
 ```
 
 Optional: `pages/HRPanel.tsx` and/or `pages/AdminPanel.tsx` tab if the module lives inside a panel.
@@ -413,6 +415,49 @@ Same pattern — add to `TAB_GROUPS`, render map, and `TabId` type.
 
 ---
 
+### Step 9: Update AGENTS.md
+
+**File:** `AGENTS.md`
+
+1. Update route groups count — find the line with `**N route groups**` and increment the number:
+```
+**15 route groups** → **16 route groups**
+```
+
+2. Update Swagger tags list — find the Tags line and append the new tag:
+```
+- Tags: Auth, Users, Vacation, ..., Calendar, <TAG>
+```
+
+---
+
+### Step 10: Update README.md
+
+**File:** `README.md`
+
+1. Update route listing in project structure — find the `routes/` comment block and add `<code>`:
+```
+│       ├── routes/           # auth, vacation, users, departments, projects,
+│       │                     # surveys, onboarding, documents, notifications,
+│       │                     # hierarchy, dictionaries, timesheet, calendar, <code>
+```
+
+2. Update route groups count — find `все N групп маршрутов` and increment:
+```
+Тесты покрывают все 16 групп маршрутов → все 17 групп маршрутов
+```
+
+3. If tests are added, update the test commands and coverage table — add:
+```bash
+  src/tests/<code>.test.js \
+```
+And add a row to the coverage table:
+```
+| `<code>.test.js` | N | `/<code>/*` (...) |
+```
+
+---
+
 ## Verification Checklist
 
 After completing all steps, run:
@@ -429,6 +474,8 @@ Then verify:
 - [ ] Sidebar shows/hides nav item when toggled
 - [ ] Direct URL access redirects to `/dashboard` when module is off
 - [ ] Swagger docs at `/api-docs` show new endpoints
+- [ ] AGENTS.md route groups count and tags list updated
+- [ ] README.md routes listing and test coverage updated
 - [ ] No console errors
 
 ---
@@ -447,6 +494,8 @@ To remove a module, reverse all steps:
 8. Remove from `MODULE_COLORS` in `AdminPanel.tsx`
 9. Remove from `TAB_GROUPS` in `HRPanel.tsx` / `AdminPanel.tsx` if present
 10. Delete DB table if needed: `DROP TABLE IF EXISTS <table>`
+11. Update `AGENTS.md` — decrement route groups count, remove tag from Tags list
+12. Update `README.md` — remove from routes listing, test commands, coverage table; update route groups count
 
 ---
 

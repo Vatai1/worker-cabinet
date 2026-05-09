@@ -1,5 +1,4 @@
 import { query } from '../config/database.js'
-import { createNotification } from './notificationService.js'
 
 // Check if a user is in a survey's target audience
 export async function isUserInTarget(survey, userId, departmentId) {
@@ -44,16 +43,6 @@ export async function publishSurvey(surveyId, publisherUserId) {
   if (!result.rows.length) throw new Error('Опрос не найден или уже опубликован')
   const survey = result.rows[0]
 
-  const targetIds = await resolveTargetUserIds(survey, publisherUserId)
-  for (const userId of targetIds) {
-    await createNotification(
-      userId,
-      `Новый опрос: ${survey.title}`,
-      'Вас приглашают пройти опрос.',
-      'info',
-      `/surveys/${surveyId}`
-    )
-  }
   return survey
 }
 

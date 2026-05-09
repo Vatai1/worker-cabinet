@@ -2,7 +2,6 @@ import express from 'express'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { TelegramService } from '../services/telegramService.js'
-import { createNotification } from '../services/notificationService.js'
 import { getFromS3 } from '../config/s3.js'
 import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
@@ -467,13 +466,6 @@ router.post('/requests', authenticateToken, async (req, res) => {
           position: employee.rows[0].position
         }
       ).catch(console.error)
-
-      createNotification(
-        manager.id,
-        'Новая заявка на отпуск',
-        `${employee.rows[0].last_name} ${employee.rows[0].first_name} подал(а) заявку на отпуск с ${request.start_date} по ${request.end_date}`,
-        'info'
-      ).catch(console.error)
     }
 
     res.status(201).json(request)
@@ -727,13 +719,6 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
       }
     ).catch(console.error)
 
-    createNotification(
-      user.id,
-      'Отпуск одобрен',
-      `Ваша заявка на отпуск с ${request.start_date} по ${request.end_date} одобрена`,
-      'success'
-    ).catch(console.error)
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -871,13 +856,6 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
       }
     ).catch(console.error)
 
-    createNotification(
-      user.id,
-      'Отпуск отклонен',
-      `Ваша заявка на отпуск с ${request.start_date} по ${request.end_date} отклонена. Причина: ${request.rejection_reason}`,
-      'error'
-    ).catch(console.error)
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -1010,13 +988,6 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
       }
     ).catch(console.error)
 
-    createNotification(
-      userId,
-      'Заявка на отпуск отменена',
-      `Ваша заявка на отпуск с ${request.start_date} по ${request.end_date} отменена`,
-      'warning'
-    ).catch(console.error)
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -1133,13 +1104,6 @@ router.post('/requests/:id/cancel-by-manager', authenticateToken, authorizeRoles
         duration: request.duration,
         status: 'cancelled_by_manager'
       }
-    ).catch(console.error)
-
-    createNotification(
-      user.id,
-      'Заявка на отпуск отменена руководителем',
-      `Ваша заявка на отпуск с ${request.start_date} по ${request.end_date} была отменена руководителем. Причина: ${reason}`,
-      'warning'
     ).catch(console.error)
 
     const fullResult = await client.query(
@@ -1767,14 +1731,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
           lastName: employee.last_name,
           position: employee.position
         }
-      ).catch(console.error)
-
-      createNotification(
-        manager.id,
-        'Запрос на перенос отпуска',
-        `${employee.last_name} ${employee.first_name} запросил(а) перенос отпуска с ${originalRequest.start_date} на ${newStartDate}`,
-        'info'
-      ).catch(console.error)
+       ).catch(console.error)
     }
 
     const fullResult = await client.query(
@@ -1925,14 +1882,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
         vacation_type: newRequest.vacation_type,
         has_travel: newRequest.has_travel
       }
-    ).catch(console.error)
-
-    createNotification(
-      user.id,
-      'Перенос отпуска одобрен',
-      `Ваш запрос на перенос отпуска с ${originalRequest.start_date} на ${newRequest.start_date} одобрен`,
-      'success'
-    ).catch(console.error)
+         ).catch(console.error)
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
@@ -2080,14 +2030,7 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
         duration: newRequest.duration,
         rejection_reason: reason
       }
-    ).catch(console.error)
-
-    createNotification(
-      user.id,
-      'Перенос отпуска отклонён',
-      `Ваш запрос на перенос отпуска отклонён. Причина: ${reason}`,
-      'error'
-    ).catch(console.error)
+         ).catch(console.error)
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
