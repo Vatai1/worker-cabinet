@@ -2287,7 +2287,6 @@ const MODULE_COLORS: Record<string, { active: string; inactive: string; icon: st
   dictionaries: { active: 'from-teal-500 to-emerald-600',  inactive: 'bg-teal-100 dark:bg-teal-900/30', icon: 'text-teal-600 dark:text-teal-400' },
   calendar:     { active: 'from-sky-500 to-blue-600',      inactive: 'bg-sky-100 dark:bg-sky-900/30', icon: 'text-sky-600 dark:text-sky-400' },
   notifications:{ active: 'from-red-500 to-rose-600',      inactive: 'bg-red-100 dark:bg-red-900/30', icon: 'text-red-600 dark:text-red-400' },
-  telegram:     { active: 'from-blue-500 to-cyan-600',     inactive: 'bg-blue-100 dark:bg-blue-900/30', icon: 'text-blue-600 dark:text-blue-400' },
   analytics:    { active: 'from-amber-500 to-orange-600',  inactive: 'bg-amber-100 dark:bg-amber-900/30', icon: 'text-amber-600 dark:text-amber-400' },
 }
 
