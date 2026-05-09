@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { query } from '../config/database.js'
+import { seedVacationTemplates } from './default-vacation-templates.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -386,6 +387,28 @@ async function seed() {
       }
     }
     console.log(`  ✓ ${historyCreated} status history records created`)
+
+    console.log('Recalculating vacation balances from actual requests...')
+    const balances = await query('SELECT user_id, year FROM vacation_balances')
+    for (const b of balances.rows) {
+      const used = await query(
+        `SELECT COALESCE(SUM(vr.duration), 0) as s
+         FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id
+         WHERE vr.user_id = $1 AND rs.code = 'approved' AND EXTRACT(YEAR FROM vr.start_date) = $2`,
+        [b.user_id, b.year]
+      )
+      const reserved = await query(
+        `SELECT COALESCE(SUM(vr.duration), 0) as s
+         FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id
+         WHERE vr.user_id = $1 AND rs.code = 'on_approval' AND EXTRACT(YEAR FROM vr.start_date) = $2`,
+        [b.user_id, b.year]
+      )
+      await query(
+        'UPDATE vacation_balances SET used_days = $1, reserved_days = $2 WHERE user_id = $3 AND year = $4',
+        [used.rows[0].s, reserved.rows[0].s, b.user_id, b.year]
+      )
+    }
+    console.log(`  ✓ ${balances.rows.length} vacation balances recalculated`)
 
     console.log('Creating projects...')
     const projects = []
@@ -844,6 +867,9 @@ async function seed() {
       }
     }
     console.log(`  ✓ ${responsesCreated} survey responses, ${answersCreated} answers created`)
+
+    console.log('  Seeding default vacation templates...')
+    await seedVacationTemplates()
 
     console.log('\n✅ Comprehensive seed completed successfully!')
     console.log('\nSummary:')
