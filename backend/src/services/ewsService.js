@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import https from 'https'
 import httpntlm from 'httpntlm'
 import { URL } from 'url'
 
@@ -236,6 +237,9 @@ export async function fetchEwsEventBody(ewsUrl, username, password, domain, item
 function ntlmRequest(ewsUrl, username, password, domain, envelope) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(ewsUrl)
+    const agent = parsed.protocol === 'https:'
+      ? new https.Agent({ rejectUnauthorized: false })
+      : undefined
 
     httpntlm.post({
       url: ewsUrl,
@@ -249,7 +253,7 @@ function ntlmRequest(ewsUrl, username, password, domain, envelope) {
         'User-Agent': 'WorkerCabinet/1.0',
         'Accept': 'text/xml',
       },
-      ca: parsed.protocol === 'https:' ? undefined : undefined,
+      agent: agent,
       rejectUnauthorized: false,
     }, (err, res) => {
       if (err) return reject(err)

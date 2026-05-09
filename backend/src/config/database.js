@@ -15,14 +15,14 @@ export const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 })
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err)
-  process.exit(-1)
+  console.error('Unexpected error on idle client:', err.message || err)
 })
 
 export const query = (text, params) => pool.query(text, params)
