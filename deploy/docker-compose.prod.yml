@@ -51,6 +51,7 @@ services:
       POSTGRES_DB: ${DB_NAME:-worker_cabinet}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ../docker/init-db:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 10s
@@ -88,11 +89,16 @@ services:
       - ALLOW_PRIVATE_IP_ADDRESS=true
       - ALLOW_META_IP_ADDRESS=true
       - USE_UNAUTHORIZED_STORAGE=true
+      - DB_TYPE=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=onlyoffice
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PWD=${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
       - onlyoffice_data:/var/www/onlyoffice/Data
       - onlyoffice_logs:/var/log/onlyoffice
       - onlyoffice_lib:/var/lib/onlyoffice
-      - onlyoffice_db:/var/lib/postgresql
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
       interval: 30s
@@ -102,26 +108,10 @@ services:
     networks:
       - worker-cabinet-network
     depends_on:
-      - onlyoffice-db
-      - onlyoffice-redis
-
-  onlyoffice-db:
-    image: postgres:15-alpine
-    container_name: worker-cabinet-onlyoffice-db
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=onlyoffice
-      - POSTGRES_USER=onlyoffice
-      - POSTGRES_PASSWORD=onlyoffice
-    volumes:
-      - onlyoffice_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U onlyoffice"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - worker-cabinet-network
+      postgres:
+        condition: service_healthy
+      onlyoffice-redis:
+        condition: service_healthy
 
   onlyoffice-redis:
     image: redis:7-alpine
@@ -141,8 +131,6 @@ volumes:
   onlyoffice_data:
   onlyoffice_logs:
   onlyoffice_lib:
-  onlyoffice_db:
-  onlyoffice_postgres_data:
 
 networks:
   worker-cabinet-network:
