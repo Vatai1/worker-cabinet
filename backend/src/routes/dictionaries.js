@@ -483,14 +483,14 @@ router.get('/positions', authenticateToken, authorizeRoles('hr', 'admin'), async
  * /dictionaries/doc-templates:
  *   get:
  *     tags: [Dictionaries]
- *     summary: Получить справочник шаблонов документов (HR/admin)
+ *     summary: Получить справочник шаблонов документов (все роли)
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Список шаблонов
  */
-router.get('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/doc-templates', authenticateToken, asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT id, name, description, category, purpose, file_key, mime_type, size, created_at, download_count
      FROM document_templates

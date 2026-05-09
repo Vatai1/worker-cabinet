@@ -517,7 +517,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 
     const start = new Date(startDate)
     const end = new Date(endDate)
-    const newDuration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1
+    const newDuration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
 
     if (request.status === 'on_approval') {
       const origYear = extractYear(request.start_date)
@@ -1809,17 +1809,17 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
 
     await client.query(
       `UPDATE vacation_balances
-       SET reserved_days = reserved_days - $1,
-           used_days = used_days + $1
-       WHERE user_id = $2 AND year = EXTRACT(YEAR FROM $3::date)`,
-      [newRequest.duration, newRequest.user_id, newRequest.start_date]
+        SET reserved_days = reserved_days - $1,
+            used_days = used_days + $2
+        WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
+      [newRequest.duration, originalRequest.duration, newRequest.user_id, newRequest.start_date]
     )
 
     await client.query(
       `UPDATE vacation_requests
-       SET transfer_requested_at = NULL,
-           transfer_reason = NULL
-       WHERE id = $1`,
+        SET transfer_requested_at = NULL,
+            transfer_reason = NULL
+        WHERE id = $1`,
       [originalRequest.id]
     )
 
@@ -1917,10 +1917,10 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
 
     await client.query(
       `UPDATE vacation_balances
-       SET reserved_days = reserved_days - $1,
-           used_days = used_days + $1
-       WHERE user_id = $2 AND year = EXTRACT(YEAR FROM $3::date)`,
-      [newRequest.duration, userId, newRequest.start_date]
+        SET reserved_days = reserved_days - $1,
+            used_days = used_days + $2
+        WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
+      [newRequest.duration, originalRequest.duration, userId, newRequest.start_date]
     )
 
     await client.query(

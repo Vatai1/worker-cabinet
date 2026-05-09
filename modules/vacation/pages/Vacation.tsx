@@ -68,7 +68,7 @@ export function Vacation() {
       fetchUserRequests(user.id)
       fetchBalance(user.id, year).then(setBalance)
 
-      if (user.role === 'manager') {
+      if (isManager) {
         fetchAllRequests()
         fetchRestrictions(user.departmentId || '1')
       } else {
