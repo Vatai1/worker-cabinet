@@ -187,7 +187,7 @@ async function setupEnv() {
 
 async function startServices() {
   log.info('Запуск сервисов (PostgreSQL, MinIO, OnlyOffice)...')
-  await runCommand('docker-compose', ['up', '-d', 'postgres', 'minio', 'onlyoffice'])
+  await runCommand('docker-compose', ['up', '-d', 'postgres', 'minio', 'onlyoffice', 'rabbitmq'])
   log.success('Сервисы запущены')
 
   log.info('Ожидание готовности PostgreSQL...')
@@ -212,6 +212,7 @@ async function installDependencies() {
   log.info('Установка зависимостей...')
   await runCommand('npm', ['install'])
   await runCommand('npm', ['install'], { cwd: join(PROJECT_DIR, 'backend') })
+  await runCommand('npm', ['install'], { cwd: join(PROJECT_DIR, 'notification-service') })
   log.success('Зависимости установлены')
 }
 
