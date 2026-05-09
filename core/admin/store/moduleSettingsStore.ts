@@ -3,8 +3,6 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import type { ModuleId, VacationSettings, CalendarSettings, NotificationsSettings, AuthSettings } from '@/core/admin/components/modules/types'
 
-const STORAGE_KEY_PREFIX = 'module-settings'
-
 const DEFAULT_VACATION: VacationSettings = {
   active: true, allowRetroactive: false, allowFractional: false,
   minDuration: 1, maxDuration: 28, minTenure: 3, weekStart: 'mon',
@@ -62,26 +60,6 @@ const DEFAULTS: Record<ModuleId, VacationSettings | CalendarSettings | Notificat
   auth: DEFAULT_AUTH,
 }
 
-function loadDraft(moduleId: ModuleId): VacationSettings | CalendarSettings | NotificationsSettings | AuthSettings | null {
-  try {
-    const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}-${moduleId}-draft`)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return null
-}
-
-function saveDraft(moduleId: ModuleId, settings: VacationSettings | CalendarSettings | NotificationsSettings | AuthSettings) {
-  try {
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}-${moduleId}-draft`, JSON.stringify(settings))
-  } catch {}
-}
-
-function clearDraft(moduleId: ModuleId) {
-  try {
-    localStorage.removeItem(`${STORAGE_KEY_PREFIX}-${moduleId}-draft`)
-  } catch {}
-}
-
 type SettingsValue = VacationSettings | CalendarSettings | NotificationsSettings | AuthSettings
 
 interface ModuleSettingsState {
@@ -127,15 +105,6 @@ export const useModuleSettingsStore = create<ModuleSettingsState>((set, get) => 
   },
 
   loadSettings: async (moduleId) => {
-    const draft = loadDraft(moduleId)
-    if (draft) {
-      set((s) => ({
-        settings: { ...s.settings, [moduleId]: draft },
-        originalSettings: { ...s.originalSettings, [moduleId]: { ...draft } },
-        loaded: { ...s.loaded, [moduleId]: true },
-      }))
-    }
-
     set((s) => ({ loading: { ...s.loading, [moduleId]: true } }))
     try {
       const res = await fetch(`${API_BASE_URL}/admin/modules/${moduleId}/settings`, {
@@ -150,7 +119,6 @@ export const useModuleSettingsStore = create<ModuleSettingsState>((set, get) => 
           originalSettings: { ...s.originalSettings, [moduleId]: { ...merged } },
           loaded: { ...s.loaded, [moduleId]: true },
         }))
-        clearDraft(moduleId)
       }
     } catch {
       if (!get().loaded[moduleId]) {
@@ -169,7 +137,6 @@ export const useModuleSettingsStore = create<ModuleSettingsState>((set, get) => 
     set((s) => {
       const current = s.settings[moduleId] as unknown as Record<string, unknown>
       const updated = { ...current, [key]: value } as unknown as SettingsValue
-      saveDraft(moduleId, updated)
       return { settings: { ...s.settings, [moduleId]: updated } }
     })
   },
@@ -178,7 +145,6 @@ export const useModuleSettingsStore = create<ModuleSettingsState>((set, get) => 
     set((s) => {
       const current = s.settings[moduleId] as unknown as Record<string, unknown>
       const updated = { ...current, ...patch } as unknown as SettingsValue
-      saveDraft(moduleId, updated)
       return { settings: { ...s.settings, [moduleId]: updated } }
     })
   },
@@ -197,7 +163,6 @@ export const useModuleSettingsStore = create<ModuleSettingsState>((set, get) => 
           originalSettings: { ...s.originalSettings, [moduleId]: { ...s.settings[moduleId] } },
           saving: { ...s.saving, [moduleId]: false },
         }))
-        clearDraft(moduleId)
         return true
       }
     } catch {}
@@ -206,11 +171,9 @@ export const useModuleSettingsStore = create<ModuleSettingsState>((set, get) => 
   },
 
   resetToDefaults: (moduleId) => {
-    const defaults = { ...DEFAULTS[moduleId] }
     set((s) => ({
-      settings: { ...s.settings, [moduleId]: defaults },
+      settings: { ...s.settings, [moduleId]: { ...DEFAULTS[moduleId] } },
     }))
-    saveDraft(moduleId, defaults)
   },
 
   discardChanges: (moduleId) => {
@@ -218,6 +181,5 @@ export const useModuleSettingsStore = create<ModuleSettingsState>((set, get) => 
     set((s) => ({
       settings: { ...s.settings, [moduleId]: original },
     }))
-    clearDraft(moduleId)
   },
 }))

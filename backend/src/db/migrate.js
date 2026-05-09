@@ -1397,6 +1397,11 @@ async function runMigrations() {
       console.log('  ✓ modules category column')
     } catch (e) {}
 
+    try {
+      await db.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'`)
+      console.log('  ✓ modules settings column')
+    } catch (e) {}
+
     const categoryMap = {
       vacation: 'hr', surveys: 'work', projects: 'work', documents: 'docs',
       timesheet: 'work', onboarding: 'hr', hierarchy: 'hr',
