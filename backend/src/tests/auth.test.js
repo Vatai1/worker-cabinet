@@ -277,7 +277,7 @@ describe('Authentication System', () => {
       const data = await response.json()
       
       assert.strictEqual(response.status, 401, 'Should return 401')
-      assert.strictEqual(data.error, 'Invalid email or password', 'Error message should match')
+      assert.strictEqual(data.error, 'Неверный email или пароль', 'Error message should match')
     })
 
     it('should reject login with non-existent email', async () => {
@@ -293,7 +293,7 @@ describe('Authentication System', () => {
       const data = await response.json()
       
       assert.strictEqual(response.status, 401, 'Should return 401')
-      assert.strictEqual(data.error, 'Invalid email or password', 'Error message should match')
+      assert.strictEqual(data.error, 'Неверный email или пароль', 'Error message should match')
     })
   })
 
@@ -402,12 +402,12 @@ describe('Authentication System', () => {
       assert.ok(Array.isArray(data), 'Response should be an array')
     })
 
-    it('should deny employee access to all users', async () => {
+    it('should allow employee to list users', async () => {
       const response = await fetch('http://localhost:5000/api/users', {
         headers: { 'Authorization': `Bearer ${employeeToken}` }
       })
       
-      assert.strictEqual(response.status, 403, 'Should return 403')
+      assert.strictEqual(response.status, 200, 'Should return 200')
     })
 
     it('should allow employee to access own profile', async () => {

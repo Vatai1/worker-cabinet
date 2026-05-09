@@ -190,7 +190,6 @@ const options = {
       { name: 'Vacation', description: 'Управление отпусками' },
       { name: 'Projects', description: 'Управление проектами' },
       { name: 'Documents', description: 'Управление документами' },
-      { name: 'Notifications', description: 'Уведомления' },
       { name: 'Departments', description: 'Отделы' },
       { name: 'Surveys', description: 'Опросы' },
       { name: 'Onboarding', description: 'Адаптация новых сотрудников' },

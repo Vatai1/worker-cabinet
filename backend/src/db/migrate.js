@@ -680,20 +680,6 @@ async function runMigrations() {
       }
     }
 
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS notifications (
-        id          SERIAL PRIMARY KEY,
-        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        title       VARCHAR(255) NOT NULL,
-        message     TEXT NOT NULL,
-        type        VARCHAR(20) DEFAULT 'info',
-        read        BOOLEAN DEFAULT false,
-        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `).catch(e => console.log('  - notifications:', e.message))
-
-    await db.query('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)').catch(e => {})
-
     try {
       await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active_director BOOLEAN DEFAULT false`)
       console.log('  ✓ active_director column added')
@@ -891,12 +877,6 @@ async function runMigrations() {
       )
     `).catch(e => console.log('  - document_templates:', e.message))
     console.log('  ✓ document_templates')
-
-    // Add link column to notifications
-    await db.query(`
-      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link TEXT
-    `).catch(e => console.log('  - notifications.link:', e.message))
-    console.log('  ✓ notifications.link column')
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS surveys (
@@ -1294,7 +1274,6 @@ async function runMigrations() {
       { code: 'onboarding:view', name: 'Просмотр онбординга', module: 'onboarding' },
       { code: 'onboarding:manage', name: 'Управление онбордингом', module: 'onboarding' },
       { code: 'calendar:view', name: 'Просмотр календаря', module: 'calendar' },
-      { code: 'notifications:view', name: 'Просмотр уведомлений', module: 'notifications' },
       { code: 'admin:access', name: 'Доступ к админ-панели', module: 'admin' },
       { code: 'admin:roles', name: 'Управление ролями и доступами', module: 'admin' },
       { code: 'admin:settings', name: 'Системные настройки', module: 'admin' },
@@ -1320,9 +1299,9 @@ async function runMigrations() {
     const rolePermMap = {
       admin: perms.map(p => p.code),
       hr: perms.map(p => p.code).filter(c => !c.startsWith('admin:') && !c.startsWith('users:delete')),
-      director: ['users:view', 'vacation:view', 'vacation:create', 'vacation:approve', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'timesheet:manage', 'calendar:view', 'documents:view', 'notifications:view'],
-      manager: ['users:view', 'vacation:view', 'vacation:create', 'vacation:approve', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'timesheet:manage', 'calendar:view', 'documents:view', 'notifications:view'],
-      employee: ['users:view', 'vacation:view', 'vacation:create', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'calendar:view', 'documents:view', 'notifications:view'],
+      director: ['users:view', 'vacation:view', 'vacation:create', 'vacation:approve', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'timesheet:manage', 'calendar:view', 'documents:view'],
+      manager: ['users:view', 'vacation:view', 'vacation:create', 'vacation:approve', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'timesheet:manage', 'calendar:view', 'documents:view'],
+      employee: ['users:view', 'vacation:view', 'vacation:create', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'calendar:view', 'documents:view'],
       onboarding: ['onboarding:view', 'users:view', 'departments:view'],
     }
 
@@ -1456,7 +1435,6 @@ async function runMigrations() {
       { code: 'hierarchy', name: 'Иерархия', description: 'Организационная структура компании', icon: 'Network', route: '/hr/hierarchy', sort: 70 },
       { code: 'dictionaries', name: 'Справочники', description: 'Справочники должностей, навыков, типов', icon: 'BookOpen', route: '/hr/dictionaries', sort: 80 },
       { code: 'calendar', name: 'Календарь', description: 'Интеграция с Outlook/EWS календарём', icon: 'CalendarDays', route: '/calendar', sort: 90 },
-      { code: 'notifications', name: 'Уведомления', description: 'Система уведомлений и Telegram-бот', icon: 'Bell', route: '/notifications', sort: 100 },
       { code: 'analytics', name: 'Аналитика', description: 'Графики, статистика и аналитика системы', icon: 'BarChart3', route: '/admin/analytics', sort: 120 },
     ]
     for (const m of defaultModules) {
