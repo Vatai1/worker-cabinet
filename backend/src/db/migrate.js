@@ -1400,8 +1400,10 @@ async function runMigrations() {
       { code: 'onboarding', name: 'Онбординг', description: 'Адаптация новых сотрудников', icon: 'UserPlus', route: '/onboarding', sort: 60 },
       { code: 'hierarchy', name: 'Иерархия', description: 'Организационная структура компании', icon: 'Network', route: '/hr/hierarchy', sort: 70 },
       { code: 'dictionaries', name: 'Справочники', description: 'Справочники должностей, навыков, типов', icon: 'BookOpen', route: '/hr/dictionaries', sort: 80 },
+      { code: 'skills', name: 'Навыки', description: 'Управление навыками и компетенциями сотрудников', icon: 'Wrench', route: null, sort: 85 },
       { code: 'calendar', name: 'Календарь', description: 'Интеграция с Outlook/EWS календарём', icon: 'CalendarDays', route: '/calendar', sort: 90 },
       { code: 'analytics', name: 'Аналитика', description: 'Графики, статистика и аналитика системы', icon: 'BarChart3', route: '/admin/analytics', sort: 120 },
+      { code: 'notifications', name: 'Уведомления', description: 'Email-уведомления о событиях в системе', icon: 'Bell', route: '/notifications', sort: 100 },
     ]
     for (const m of defaultModules) {
       await db.query(
@@ -1411,6 +1413,31 @@ async function runMigrations() {
     }
     console.log('  ✓ modules seeded')
     console.log('✅ Modules table created')
+
+    console.log('Creating notification tables...')
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS notification_queue (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(100) NOT NULL,
+        channel VARCHAR(20) NOT NULL DEFAULT 'email',
+        data JSONB DEFAULT '{}',
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        send_at TIMESTAMP WITH TIME ZONE,
+        sent_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `)
+    await db.query('CREATE INDEX IF NOT EXISTS idx_notification_queue_status ON notification_queue (status, send_at)').catch(() => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_notification_queue_user ON notification_queue (user_id, read_at)').catch(() => {})
+    try {
+      await db.query(`ALTER TABLE notification_queue ADD COLUMN IF NOT EXISTS read_at TIMESTAMP WITH TIME ZONE`)
+    } catch (e) {}
+    console.log('  ✓ notification_queue')
+    console.log('✅ Notification tables created')
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')

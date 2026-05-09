@@ -10,6 +10,7 @@ import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { PLACEHOLDERS_BY_PURPOSE, getAllGroups } from '@/shared/lib/docPlaceholders'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { useModulesStore } from '@/shared/store/modulesStore'
 
 const TABS = [
   { value: 'departments', label: 'Отделы', icon: Building2, color: 'text-blue-500', bgColor: 'bg-blue-50 dark:bg-blue-950/30' },
@@ -42,6 +43,8 @@ interface DictItem {
 type AllData = Record<string, DictItem[]>
 
 export function HRDictionaries() {
+  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+  const filteredTabs = TABS.filter(t => t.value !== 'skills' || isModuleEnabled('skills'))
   const [tab, setTab] = useState('departments')
   const [items, setItems] = useState<DictItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -83,6 +86,12 @@ export function HRDictionaries() {
   }, [tab])
 
   useEffect(() => {
+    if (!filteredTabs.some(t => t.value === tab)) {
+      setTab(filteredTabs[0]?.value || 'departments')
+    }
+  }, [filteredTabs, tab])
+
+  useEffect(() => {
     setEditItem(null)
     setSearch('')
     setContextMenuId(null)
@@ -115,7 +124,7 @@ export function HRDictionaries() {
     let cancelled = false
     setAllDataLoading(true)
     Promise.all(
-      TABS.map(async (t) => {
+      filteredTabs.map(async (t) => {
         try {
           const res = await fetch(`${API_BASE_URL}/dictionaries/${t.value}`, { headers: getAuthHeaders() })
           if (!res.ok) return { type: t.value, items: [] }
@@ -140,7 +149,7 @@ export function HRDictionaries() {
     if (!isSearchActive) return []
     const q = search.toLowerCase()
     const grouped: { type: string; tab: typeof TABS[number]; items: DictItem[] }[] = []
-    for (const t of TABS) {
+    for (const t of filteredTabs) {
       const typeItems = (allData[t.value] || []).filter(
         (item) => item.name.toLowerCase().includes(q) || (item.code && item.code.toLowerCase().includes(q))
       )
@@ -381,7 +390,7 @@ export function HRDictionaries() {
       ) : (
         <>
           <div className="flex gap-1 rounded-xl bg-muted/50 p-1">
-            {TABS.map((t) => {
+            {filteredTabs.map((t) => {
               const Icon = t.icon
               return (
                 <button

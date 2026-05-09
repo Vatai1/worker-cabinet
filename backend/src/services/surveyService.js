@@ -34,7 +34,7 @@ export async function countTargetUsers(survey) {
   return ids.length
 }
 
-// Publish survey: set status + send notifications
+// Publish survey: set status
 export async function publishSurvey(surveyId, publisherUserId) {
   const result = await query(
     "UPDATE surveys SET status = 'active' WHERE id = $1 AND status = 'draft' RETURNING *",

@@ -24,6 +24,7 @@ import {
   ClipboardList,
   Calendar,
   Shield,
+  Bell,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback } from '@/shared/components/ui/Avatar'
@@ -59,6 +60,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
+  { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications' },
   { name: 'Заявления', href: '/requests', icon: FileText },
   {
     name: 'Документы',
@@ -74,6 +76,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
 const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/leader', icon: Users },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
+  { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications' },
   {
     name: 'Отдел',
     icon: Building2,
@@ -102,6 +105,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
 const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
+  { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications' },
   { name: 'HR-панель', href: '/hr', icon: Users },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation' },
@@ -123,6 +127,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
 const getAdminNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User },
+  { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications' },
   { name: 'Администрирование', href: '/admin', icon: Shield },
   { name: 'HR-панель', href: '/hr', icon: Users },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys' },

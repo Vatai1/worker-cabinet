@@ -72,27 +72,6 @@ const PROJECTS_DATA = [
   { name: 'Report Generator', full_name: 'Automated Report Generator', description: 'Автоматический генератор отчётов', status: 'active' },
 ]
 
-const NOTIFICATION_TEMPLATES = [
-  { title: 'Новый отпуск на согласовании', message: 'Сотрудник {name} запросил отпуск с {date} по {date2}' },
-  { title: 'Отпуск согласован', message: 'Ваш отпуск с {date} по {date2} был согласован' },
-  { title: 'Отпуск отклонён', message: 'Ваш отпуск с {date} по {date2} был отклонён' },
-  { title: 'Новый участник проекта', message: '{name} добавлен в проект {project}' },
-  { title: 'Обновление проекта', message: 'Проект {project} был обновлён' },
-  { title: 'Новая задача', message: 'Вам назначена новая задача в проекте {project}' },
-  { title: 'Напоминание о документах', message: 'Пожалуйста, обновите личные документы' },
-  { title: 'Баланс отпуска', message: 'Ваш доступный баланс отпуска: {days} дней' },
-  { title: 'Добро пожаловать!', message: 'Добро пожаловать в команду, {name}!' },
-  { title: 'Обучение назначено', message: 'Вам назначено обучение: {project}' },
-  { title: 'Дедлайн приближается', message: 'Дедлайн по проекту {project} через {days} дней' },
-  { title: 'Еженедельный отчёт', message: 'Не забудьте заполнить еженедельный отчёт' },
-  { title: 'Новый сотрудник в отделе', message: 'В ваш отдел присоединился {name}' },
-  { title: 'Изменение графика', message: 'Ваш график на {date} был изменён' },
-  { title: 'Обновление навыков', message: 'Ваши навыки были обновлены' },
-  { title: 'Назначение наставника', message: '{name} назначен вашим наставником' },
-  { title: 'Завершение испытательного срока', message: 'Ваш испытательный срок завершается {date}' },
-  { title: 'Годовщина работы', message: 'Поздравляем с {days} днём работы в компании!' },
-]
-
 const ROADMAP_ROWS = ['Планирование', 'Разработка', 'Тестирование', 'Деплой', 'Поддержка']
 const ROADMAP_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981']
 
@@ -555,37 +534,6 @@ async function seed() {
     }
     console.log(`  ✓ ${skillsAssigned} user skills assigned`)
 
-    console.log('Creating notifications...')
-    let notificationsCreated = 0
-    const notificationUsers = users.filter(u => u.role !== 'admin')
-    
-    for (let i = 0; i < 200; i++) {
-      const user = randomItem(notificationUsers)
-      const template = randomItem(NOTIFICATION_TEMPLATES)
-      
-      let title = template.title
-      let message = template.message
-        .replace('{name}', `${randomItem(FIRST_NAMES_MALE)} ${randomItem(LAST_NAMES_MALE)}`)
-        .replace('{date}', randomDate(new Date(2025, 0, 1), new Date(2025, 6, 1)))
-        .replace('{date2}', randomDate(new Date(2025, 6, 1), new Date(2025, 11, 31)))
-        .replace('{project}', randomItem(PROJECTS_DATA).name)
-        .replace('{days}', String(randomInt(5, 28)))
-      
-      const existing = await query(
-        'SELECT 1 FROM notifications WHERE user_id = $1 AND title = $2 AND message = $3',
-        [user.id, title, message]
-      )
-      if (existing.rows.length > 0) continue
-      
-      await query(
-        `INSERT INTO notifications (user_id, title, message, type, read, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [user.id, title, message, randomItem(['info', 'warning', 'success']), Math.random() > 0.3, new Date(Date.now() - randomInt(0, 30) * 24 * 60 * 60 * 1000).toISOString()]
-      )
-      notificationsCreated++
-    }
-    console.log(`  ✓ ${notificationsCreated} notifications created`)
-
     console.log('Creating vacation restrictions...')
     let restrictionsCreated = 0
     
@@ -872,7 +820,6 @@ async function seed() {
     console.log(`  Projects: ${projects.length}`)
     console.log(`  Skills in dictionary: ${SKILLS_DATA.length}`)
     console.log(`  Vacation requests: ${requestsCreated}`)
-    console.log(`  Notifications: ${notificationsCreated}`)
     console.log(`  Vacation restrictions: ${restrictionsCreated}`)
     console.log(`  Surveys: ${surveysCreated}`)
     console.log(`  Survey responses: ${responsesCreated}`)

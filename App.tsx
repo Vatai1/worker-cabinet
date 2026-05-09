@@ -28,6 +28,7 @@ import { Onboarding } from '@/modules/onboarding/pages/Onboarding'
 import { HROnboarding } from '@/modules/onboarding/pages/HROnboarding'
 import { ManagerTimesheet } from '@/modules/timesheet/pages/ManagerTimesheet'
 import { CalendarPage } from '@/modules/calendar/pages/CalendarPage'
+import { Notifications } from '@/modules/notifications/pages/Notifications'
 import { AdminPanel } from '@/core/admin/pages/AdminPanel'
 import { HRPanel } from '@/shared/pages/HRPanel'
 
@@ -151,6 +152,7 @@ function App() {
           <Route path="departments/:id" element={<DepartmentDetail />} />
           <Route path="profile" element={<Profile />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="notifications" element={<ModuleGuard module="notifications"><BlockOnboardingRoute><Notifications /></BlockOnboardingRoute></ModuleGuard>} />
 
           <Route path="requests" element={<BlockOnboardingRoute><Requests /></BlockOnboardingRoute>} />
           <Route path="documents" element={<ModuleGuard module="documents"><BlockOnboardingRoute><Documents /></BlockOnboardingRoute></ModuleGuard>} />
