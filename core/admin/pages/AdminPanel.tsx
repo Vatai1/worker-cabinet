@@ -2274,10 +2274,28 @@ interface ModuleItem {
   description: string | null
   icon: string | null
   route: string | null
+  category: string
   sort_order: number
   is_enabled: boolean
   updated_at: string
 }
+
+type ModuleCategoryKey = 'hr' | 'work' | 'docs' | 'admin' | 'general'
+
+interface ModuleCategory {
+  key: ModuleCategoryKey
+  name: string
+  icon: React.ComponentType<{ className?: string }>
+  color: string
+}
+
+const MODULE_CATEGORIES: ModuleCategory[] = [
+  { key: 'hr', name: 'HR и Люди', icon: UserPlus, color: 'text-blue-500' },
+  { key: 'work', name: 'Проекты и Работа', icon: FolderKanban, color: 'text-emerald-500' },
+  { key: 'docs', name: 'Документы и Коммуникации', icon: FileText, color: 'text-amber-500' },
+  { key: 'admin', name: 'Аналитика и Управление', icon: BarChart3, color: 'text-violet-500' },
+  { key: 'general', name: 'Общие', icon: Boxes, color: 'text-muted-foreground' },
+]
 
 const MODULE_COLORS: Record<string, { active: string; inactive: string; icon: string }> = {
   vacation:     { active: 'from-blue-500 to-indigo-600',   inactive: 'bg-blue-100 dark:bg-blue-900/30',  icon: 'text-blue-600 dark:text-blue-400' },
@@ -2329,6 +2347,15 @@ function ModulesTab() {
 
   const enabledCount = modules.filter(m => m.is_enabled).length
 
+  const groupedModules = MODULE_CATEGORIES
+    .map(cat => ({
+      ...cat,
+      modules: modules
+        .filter(m => (m.category || 'general') === cat.key)
+        .sort((a, b) => a.sort_order - b.sort_order),
+    }))
+    .filter(g => g.modules.length > 0)
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
 
   return (
@@ -2349,75 +2376,92 @@ function ModulesTab() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {modules.map((mod) => {
-            const colors = MODULE_COLORS[mod.code] || MODULE_COLORS.documents
-            const isLoading = togglingId === mod.id
-
+        <div className="space-y-6">
+          {groupedModules.map(group => {
+            const CategoryIcon = group.icon
+            const groupEnabled = group.modules.filter(m => m.is_enabled).length
             return (
-              <div
-                key={mod.id}
-                className={cn(
-                  'relative flex flex-col p-5 rounded-2xl border-2 transition-all duration-300',
-                  mod.is_enabled
-                    ? 'border-primary/20 bg-card shadow-sm hover:shadow-md hover:border-primary/40'
-                    : 'border-border/30 bg-muted/20 opacity-70 hover:opacity-100',
-                )}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className={cn(
-                    'p-2.5 rounded-xl transition-all duration-300',
-                    mod.is_enabled
-                      ? `bg-gradient-to-br ${colors.active} text-white shadow-md`
-                      : colors.inactive,
-                  )}>
-                    <Boxes className={cn('h-5 w-5', !mod.is_enabled && (colors.icon || 'text-muted-foreground'))} />
-                  </div>
-
-                  <button
-                    onClick={() => toggleModule(mod)}
-                    disabled={isLoading}
-                    className={cn(
-                      'relative w-12 h-7 rounded-full transition-all duration-300 shrink-0',
-                      mod.is_enabled ? 'bg-primary shadow-sm' : 'bg-muted-foreground/20',
-                      isLoading && 'opacity-50 cursor-wait',
-                    )}
-                  >
-                    <div className={cn(
-                      'absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-all duration-300',
-                      mod.is_enabled ? 'left-[22px]' : 'left-0.5',
-                    )} />
-                    {isLoading && (
-                      <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-primary" />
-                    )}
-                  </button>
+              <div key={group.key}>
+                <div className="flex items-center gap-2 mb-3">
+                  <CategoryIcon className={cn('h-4 w-4', group.color)} />
+                  <h3 className="font-semibold text-sm text-foreground">{group.name}</h3>
+                  <Badge className="text-[10px] bg-muted text-muted-foreground ml-auto">
+                    {groupEnabled}/{group.modules.length}
+                  </Badge>
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {group.modules.map((mod) => {
+                    const colors = MODULE_COLORS[mod.code] || MODULE_COLORS.documents
+                    const isLoading = togglingId === mod.id
 
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className={cn(
-                      'font-semibold transition-colors',
-                      mod.is_enabled ? 'text-foreground' : 'text-muted-foreground',
-                    )}>
-                      {mod.name}
-                    </h3>
-                    {mod.is_enabled ? (
-                      <Badge className="text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">ON</Badge>
-                    ) : (
-                      <Badge className="text-[9px] bg-muted text-muted-foreground">OFF</Badge>
-                    )}
-                  </div>
-                  {mod.description && (
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{mod.description}</p>
-                  )}
-                  {mod.route && (
-                    <p className="text-[10px] font-mono text-muted-foreground/60 mt-2">{mod.route}</p>
-                  )}
+                    return (
+                      <div
+                        key={mod.id}
+                        className={cn(
+                          'relative flex flex-col p-5 rounded-2xl border-2 transition-all duration-300',
+                          mod.is_enabled
+                            ? 'border-primary/20 bg-card shadow-sm hover:shadow-md hover:border-primary/40'
+                            : 'border-border/30 bg-muted/20 opacity-70 hover:opacity-100',
+                        )}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className={cn(
+                            'p-2.5 rounded-xl transition-all duration-300',
+                            mod.is_enabled
+                              ? `bg-gradient-to-br ${colors.active} text-white shadow-md`
+                              : colors.inactive,
+                          )}>
+                            <Boxes className={cn('h-5 w-5', !mod.is_enabled && (colors.icon || 'text-muted-foreground'))} />
+                          </div>
+
+                          <button
+                            onClick={() => toggleModule(mod)}
+                            disabled={isLoading}
+                            className={cn(
+                              'relative w-12 h-7 rounded-full transition-all duration-300 shrink-0',
+                              mod.is_enabled ? 'bg-primary shadow-sm' : 'bg-muted-foreground/20',
+                              isLoading && 'opacity-50 cursor-wait',
+                            )}
+                          >
+                            <div className={cn(
+                              'absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-all duration-300',
+                              mod.is_enabled ? 'left-[22px]' : 'left-0.5',
+                            )} />
+                            {isLoading && (
+                              <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-primary" />
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className={cn(
+                              'font-semibold transition-colors',
+                              mod.is_enabled ? 'text-foreground' : 'text-muted-foreground',
+                            )}>
+                              {mod.name}
+                            </h3>
+                            {mod.is_enabled ? (
+                              <Badge className="text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">ON</Badge>
+                            ) : (
+                              <Badge className="text-[9px] bg-muted text-muted-foreground">OFF</Badge>
+                            )}
+                          </div>
+                          {mod.description && (
+                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{mod.description}</p>
+                          )}
+                          {mod.route && (
+                            <p className="text-[10px] font-mono text-muted-foreground/60 mt-2">{mod.route}</p>
+                          )}
+                        </div>
+
+                        {mod.is_enabled && (
+                          <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-
-                {mod.is_enabled && (
-                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                )}
               </div>
             )
           })}

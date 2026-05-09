@@ -1384,6 +1384,7 @@ async function runMigrations() {
         description TEXT,
         icon VARCHAR(50),
         route VARCHAR(255),
+        category VARCHAR(100) DEFAULT 'general',
         sort_order INTEGER DEFAULT 0,
         is_enabled BOOLEAN NOT NULL DEFAULT true,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -1391,24 +1392,39 @@ async function runMigrations() {
     `)
     console.log('  ✓ modules')
 
+    try {
+      await db.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'general'`)
+      console.log('  ✓ modules category column')
+    } catch (e) {}
+
+    const categoryMap = {
+      vacation: 'hr', surveys: 'work', projects: 'work', documents: 'docs',
+      timesheet: 'work', onboarding: 'hr', hierarchy: 'hr',
+      dictionaries: 'admin', skills: 'hr', calendar: 'admin',
+      analytics: 'admin', notifications: 'docs',
+    }
+    for (const [code, category] of Object.entries(categoryMap)) {
+      await db.query(`UPDATE modules SET category = $1 WHERE code = $2 AND (category IS NULL OR category = 'general')`, [category, code])
+    }
+
     const defaultModules = [
-      { code: 'vacation', name: 'Отпуска', description: 'Управление отпусками, балансы, заявления', icon: 'Plane', route: '/vacation', sort: 10 },
-      { code: 'surveys', name: 'Опросы', description: 'Создание и прохождение опросов', icon: 'ClipboardList', route: '/surveys', sort: 20 },
-      { code: 'projects', name: 'Проекты', description: 'Управление проектами и задачами', icon: 'FolderKanban', route: '/projects', sort: 30 },
-      { code: 'documents', name: 'Документы', description: 'Загрузка и хранение документов', icon: 'FolderOpen', route: '/documents', sort: 40 },
-      { code: 'timesheet', name: 'Табель', description: 'Учёт рабочего времени по Т-13', icon: 'Calendar', route: '/timesheet', sort: 50 },
-      { code: 'onboarding', name: 'Онбординг', description: 'Адаптация новых сотрудников', icon: 'UserPlus', route: '/onboarding', sort: 60 },
-      { code: 'hierarchy', name: 'Иерархия', description: 'Организационная структура компании', icon: 'Network', route: '/hr/hierarchy', sort: 70 },
-      { code: 'dictionaries', name: 'Справочники', description: 'Справочники должностей, навыков, типов', icon: 'BookOpen', route: '/hr/dictionaries', sort: 80 },
-      { code: 'skills', name: 'Навыки', description: 'Управление навыками и компетенциями сотрудников', icon: 'Wrench', route: null, sort: 85 },
-      { code: 'calendar', name: 'Календарь', description: 'Интеграция с Outlook/EWS календарём', icon: 'CalendarDays', route: '/calendar', sort: 90 },
-      { code: 'analytics', name: 'Аналитика', description: 'Графики, статистика и аналитика системы', icon: 'BarChart3', route: '/admin/analytics', sort: 120 },
-      { code: 'notifications', name: 'Уведомления', description: 'Email-уведомления о событиях в системе', icon: 'Bell', route: '/notifications', sort: 100 },
+      { code: 'vacation', name: 'Отпуска', description: 'Управление отпусками, балансы, заявления', icon: 'Plane', route: '/vacation', sort: 10, category: 'hr' },
+      { code: 'surveys', name: 'Опросы', description: 'Создание и прохождение опросов', icon: 'ClipboardList', route: '/surveys', sort: 20, category: 'work' },
+      { code: 'projects', name: 'Проекты', description: 'Управление проектами и задачами', icon: 'FolderKanban', route: '/projects', sort: 30, category: 'work' },
+      { code: 'documents', name: 'Документы', description: 'Загрузка и хранение документов', icon: 'FolderOpen', route: '/documents', sort: 40, category: 'docs' },
+      { code: 'timesheet', name: 'Табель', description: 'Учёт рабочего времени по Т-13', icon: 'Calendar', route: '/timesheet', sort: 50, category: 'work' },
+      { code: 'onboarding', name: 'Онбординг', description: 'Адаптация новых сотрудников', icon: 'UserPlus', route: '/onboarding', sort: 60, category: 'hr' },
+      { code: 'hierarchy', name: 'Иерархия', description: 'Организационная структура компании', icon: 'Network', route: '/hr/hierarchy', sort: 70, category: 'hr' },
+      { code: 'dictionaries', name: 'Справочники', description: 'Справочники должностей, навыков, типов', icon: 'BookOpen', route: '/hr/dictionaries', sort: 80, category: 'admin' },
+      { code: 'skills', name: 'Навыки', description: 'Управление навыками и компетенциями сотрудников', icon: 'Wrench', route: null, sort: 85, category: 'hr' },
+      { code: 'calendar', name: 'Календарь', description: 'Интеграция с Outlook/EWS календарём', icon: 'CalendarDays', route: '/calendar', sort: 90, category: 'admin' },
+      { code: 'notifications', name: 'Уведомления', description: 'Email-уведомления о событиях в системе', icon: 'Bell', route: '/notifications', sort: 100, category: 'docs' },
+      { code: 'analytics', name: 'Аналитика', description: 'Графики, статистика и аналитика системы', icon: 'BarChart3', route: '/admin/analytics', sort: 120, category: 'admin' },
     ]
     for (const m of defaultModules) {
       await db.query(
-        `INSERT INTO modules (code, name, description, icon, route, sort_order) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (code) DO NOTHING`,
-        [m.code, m.name, m.description, m.icon, m.route, m.sort]
+        `INSERT INTO modules (code, name, description, icon, route, sort_order, category) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (code) DO NOTHING`,
+        [m.code, m.name, m.description, m.icon, m.route, m.sort, m.category]
       )
     }
     console.log('  ✓ modules seeded')
