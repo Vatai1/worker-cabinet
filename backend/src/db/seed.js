@@ -190,6 +190,38 @@ async function seed() {
       users.push({ ...hr, id: result.rows[0].id, role: 'hr', departmentId: hrDept.id })
     }
 
+    const fixedUsers = [
+      { email: 'ivanov@example.com', firstName: 'Иван', lastName: 'Иванов', middleName: 'Петрович', position: 'Frontend Developer', isMale: true, role: 'employee', deptIndex: 1 },
+      { email: 'petrov@example.com', firstName: 'Пётр', lastName: 'Петров', middleName: 'Иванович', position: 'Руководитель разработки', isMale: true, role: 'manager', deptIndex: 1 },
+    ]
+
+    const fixedUserResults = []
+    for (const fu of fixedUsers) {
+      if (emailSet.has(fu.email)) continue
+      emailSet.add(fu.email)
+      const existing = await query('SELECT id FROM users WHERE email = $1', [fu.email])
+      if (existing.rows.length > 0) {
+        fixedUserResults.push({ ...fu, id: existing.rows[0].id, departmentId: departments[fu.deptIndex].id })
+        continue
+      }
+      const result = await query(
+        `INSERT INTO users (email, password_hash, first_name, last_name, middle_name, position, department_id, hire_date, role, manager_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL) RETURNING id`,
+        [fu.email, passwordHash, fu.firstName, fu.lastName, fu.middleName, fu.position, departments[fu.deptIndex].id, randomDate(new Date(2020, 0, 1), new Date(2023, 0, 1)), fu.role]
+      )
+      fixedUserResults.push({ ...fu, id: result.rows[0].id, departmentId: departments[fu.deptIndex].id })
+    }
+    users.push(...fixedUserResults)
+
+    if (fixedUserResults.find(u => u.role === 'manager')) {
+      const deptId = departments[1].id
+      const mgr = fixedUserResults.find(u => u.role === 'manager')
+      if (mgr) {
+        await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [mgr.id, deptId])
+        departments[1].managerId = mgr.id
+      }
+    }
+
     const managers = []
     for (let i = 0; i < departments.length; i++) {
       const dept = departments[i]
@@ -825,11 +857,10 @@ async function seed() {
     console.log(`  Survey responses: ${responsesCreated}`)
     console.log('\nLogin credentials:')
     console.log('  admin@example.com (admin)')
+    console.log('  ivanov@example.com (employee)')
+    console.log('  petrov@example.com (manager)')
     console.log('  elena@example.com (HR Director)')
     console.log('  maria@example.com (HR Manager)')
-    console.log('  ivana@example.com (HR Business Partner)')
-    console.log('  natalia@example.com (Talent Acquisition)')
-    console.log('  olga@example.com (Recruiter)')
     console.log('  Password: password123 (for all users)')
     
     process.exit(0)
