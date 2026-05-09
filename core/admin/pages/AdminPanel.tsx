@@ -2162,6 +2162,7 @@ function ReportsTab() {
 // ===================== DICTIONARIES TAB =====================
 
 function DictionariesTab() {
+  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const [data, setData] = useState<{ positions: { name: string; count: string }[]; vacationTypes: { id: number; code: string; name: string }[]; skills: { id: number; name: string }[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [newSkill, setNewSkill] = useState('')
@@ -2232,32 +2233,34 @@ function DictionariesTab() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Навыки</CardTitle><CardDescription>Каталог навыков компании</CardDescription></CardHeader>
-        <CardContent className="space-y-3">
-          {error && (
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-xs">
-              <AlertTriangle className="h-3 w-3 shrink-0" /> {error}
-              <button onClick={() => setError(null)} className="ml-auto"><X className="h-3 w-3" /></button>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <Input placeholder="Новый навык" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} className="h-8 text-sm" />
-            <Button size="sm" onClick={addSkill}><Plus className="h-3.5 w-3.5" /></Button>
-          </div>
-          <div className="space-y-1 max-h-64 overflow-y-auto">
-            {data.skills.map((s) => (
-              <div key={s.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 group">
-                <span className="text-sm">{s.name}</span>
-                <button onClick={() => deleteSkill(s.id)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Trash2 className="h-3 w-3" />
-                </button>
+      {isModuleEnabled('skills') && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Навыки</CardTitle><CardDescription>Каталог навыков компании</CardDescription></CardHeader>
+          <CardContent className="space-y-3">
+            {error && (
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-xs">
+                <AlertTriangle className="h-3 w-3 shrink-0" /> {error}
+                <button onClick={() => setError(null)} className="ml-auto"><X className="h-3 w-3" /></button>
               </div>
-            ))}
-            {data.skills.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Пусто</p>}
-          </div>
-        </CardContent>
-      </Card>
+            )}
+            <div className="flex gap-2">
+              <Input placeholder="Новый навык" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} className="h-8 text-sm" />
+              <Button size="sm" onClick={addSkill}><Plus className="h-3.5 w-3.5" /></Button>
+            </div>
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {data.skills.map((s) => (
+                <div key={s.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 group">
+                  <span className="text-sm">{s.name}</span>
+                  <button onClick={() => deleteSkill(s.id)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              {data.skills.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Пусто</p>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

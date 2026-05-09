@@ -527,28 +527,6 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('
           [doc.onboarding_id]
         )
 
-        const userResult = await client.query(
-          'SELECT first_name, last_name FROM users WHERE id = $1',
-          [doc.user_id]
-        )
-        const { first_name, last_name } = userResult.rows[0]
-
-        const hrUsers = await client.query(
-          "SELECT id FROM users WHERE role IN ('hr', 'admin')"
-        )
-        for (const hrUser of hrUsers.rows) {
-          await client.query(
-            `INSERT INTO notifications (user_id, title, message, type, link)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [
-              hrUser.id,
-              'Онбординг завершён',
-              `Сотрудник ${first_name} ${last_name} завершил онбординг`,
-              'success',
-              `/hr/onboarding/${doc.onboarding_id}`,
-            ]
-          )
-        }
       }
 
       await client.query('COMMIT')

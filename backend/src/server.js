@@ -18,9 +18,11 @@ import hierarchyRoutes from './routes/hierarchy.js'
 import dictionariesRoutes from './routes/dictionaries.js'
 import timesheetRoutes from './routes/timesheet.js'
 import calendarRoutes from './routes/calendar.js'
+import notificationsRoutes from './routes/notifications.js'
 import adminRoutes from './routes/admin.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { errorHandler } from './middleware/errors.js'
+import * as rabbitmq from './config/rabbitmq.js'
 
 dotenv.config()
 
@@ -81,6 +83,7 @@ app.use('/api/hierarchy', hierarchyRoutes)
 app.use('/api/dictionaries', dictionariesRoutes)
 app.use('/api/timesheet', timesheetRoutes)
 app.use('/api/calendar', calendarRoutes)
+app.use('/api/notifications', notificationsRoutes)
 app.use('/api/admin', adminRoutes)
 
 app.get('/api/health', (req, res) => {
@@ -104,8 +107,18 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' })
 })
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`)
   console.log(`Environment: ${process.env.NODE_ENV}`)
   scheduleTimesheetCron()
+
+  if (process.env.RABBITMQ_URL) {
+    try {
+      await rabbitmq.connect()
+    } catch (err) {
+      console.warn(`[RABBITMQ] Connection failed: ${err.message}. Publishing disabled.`)
+    }
+  } else {
+    console.warn('[RABBITMQ] RABBITMQ_URL not set. Publishing disabled.')
+  }
 })

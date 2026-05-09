@@ -6,14 +6,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avat
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { AddSkillModal } from '@/core/admin/components/modals/AddSkillModal'
 import { AddProjectModal } from '@/core/admin/components/modals/AddProjectModal'
+import { SkillsCard } from '@/modules/skills/components/SkillsCard'
 import { useAuthStore } from '@/core/auth/store/authStore'
+import { useModulesStore } from '@/shared/store/modulesStore'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAvatarColor as getAvatarGradient } from '@/shared/lib/constants'
 import {
   Mail, Phone, Calendar, Building2, Briefcase, ArrowLeft, Loader2,
-  Wrench, User, Plus, Trash, Target,
+  User, Target,
 } from 'lucide-react'
 
 interface EmployeeData {
@@ -58,16 +59,6 @@ const statusConfig = {
   on_leave: { label: 'В отпуске', variant: 'warning'     as const, dot: 'bg-amber-500' },
 }
 
-const SKILL_COLORS = [
-  'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
-  'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-  'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
-  'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300',
-  'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300',
-]
-
 const roleLabels: Record<string, string> = {
   employee: 'Сотрудник',
   manager:  'Руководитель',
@@ -81,15 +72,12 @@ export function EmployeeProfile() {
   const [employee, setEmployee] = useState<EmployeeData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isAddSkillModalOpen, setIsAddSkillModalOpen] = useState(false)
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false)
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; skill: string } | null>(null)
   const [editingResponsibility, setEditingResponsibility] = useState(false)
   const [responsibilityText, setResponsibilityText] = useState('')
-  const [addingSkill, setAddingSkill] = useState(false)
-  const [removingSkill, setRemovingSkill] = useState<string | null>(null)
 
   const isOwnProfile = currentUser?.id === id
+  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
 
   useEffect(() => {
     if (!id) return
@@ -122,28 +110,6 @@ export function EmployeeProfile() {
     fetchEmployee()
   }, [id])
 
-  const handleAddSkill = async (skill: string) => {
-    if (!employee) return
-
-    setAddingSkill(true)
-    const newSkills = [...(employee.skills || []), skill]
-    const updatedEmployee = { ...employee, skills: newSkills }
-    setEmployee(updatedEmployee)
-
-    try {
-      await fetch(`${API_BASE_URL}/users/${id}/skills`, {
-        method: 'POST',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ skill }),
-      })
-    } catch (err) {
-      console.error('Failed to add skill:', err)
-      setEmployee(employee)
-    } finally {
-      setAddingSkill(false)
-    }
-  }
-
   const handleAddProject = async (project: Omit<Project, 'id'>) => {
     if (!employee) return
 
@@ -165,40 +131,6 @@ export function EmployeeProfile() {
       console.error('Failed to add project:', err)
       setEmployee(employee)
     }
-  }
-
-  const handleRemoveSkill = async (skill: string) => {
-    if (!employee) return
-
-    setRemovingSkill(skill)
-    setContextMenu(null)
-    const newSkills = employee.skills?.filter(s => s !== skill) || []
-    const updatedEmployee = { ...employee, skills: newSkills }
-    setEmployee(updatedEmployee)
-
-    try {
-      await fetch(`${API_BASE_URL}/users/${id}/skills`, {
-        method: 'DELETE',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ skill }),
-      })
-    } catch (err) {
-      console.error('Failed to remove skill:', err)
-      setEmployee(employee)
-    } finally {
-      setRemovingSkill(null)
-    }
-  }
-
-  const handleContextMenu = (e: React.MouseEvent, skill: string) => {
-    e.preventDefault()
-    if (!isOwnProfile) return
-
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      skill,
-    })
   }
 
   const handleStartEditingResponsibility = () => {
@@ -230,14 +162,6 @@ export function EmployeeProfile() {
     setResponsibilityText(employee?.responsibilityArea || '')
     setEditingResponsibility(false)
   }
-
-  useEffect(() => {
-    const handleClickOutside = () => setContextMenu(null)
-    if (contextMenu) {
-      document.addEventListener('click', handleClickOutside)
-      return () => document.removeEventListener('click', handleClickOutside)
-    }
-  }, [contextMenu])
 
   if (loading) {
     return (
@@ -453,81 +377,17 @@ export function EmployeeProfile() {
            </CardContent>
          </Card>
 
-        {/* Навыки */}
-        <Card className="md:col-span-2">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Wrench className="h-4 w-4 text-primary" />
-                Навыки и компетенции
-              </CardTitle>
-              {isOwnProfile && (
-                <Button size="sm" onClick={() => setIsAddSkillModalOpen(true)} disabled={addingSkill}>
-                  {addingSkill ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-                  Добавить
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {employee.skills && employee.skills.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {employee.skills.map((skill, i) => (
-                  <span
-                    key={skill}
-                    onContextMenu={(e) => handleContextMenu(e, skill)}
-                    className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-transform hover:scale-105 cursor-pointer ${removingSkill === skill ? 'opacity-50' : ''} ${SKILL_COLORS[i % SKILL_COLORS.length]}`}
-                  >
-                    {removingSkill === skill && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <EmptySection
-                icon={<Wrench className="h-8 w-8 text-muted-foreground/40" />}
-                text="Навыки не указаны"
-              />
-            )}
-          </CardContent>
-        </Card>
+        {isModuleEnabled('skills') && (
+          <SkillsCard
+            skills={employee.skills || []}
+            userId={id!}
+            isOwnProfile={isOwnProfile}
+            onSkillsChange={(skills) => setEmployee(prev => prev ? { ...prev, skills } : prev)}
+          />
+        )}
       </div>
 
-      {/* Context Menu */}
-      {contextMenu && (
-        <>
-          <div
-            className="fixed inset-0 z-50"
-            style={{ background: 'transparent' }}
-          />
-          <div
-            className="fixed z-50 min-w-[200px] rounded-lg border bg-popover shadow-md animate-in fade-in zoom-in-95"
-            style={{
-              left: `${Math.min(contextMenu.x, window.innerWidth - 220)}px`,
-              top: `${Math.min(contextMenu.y, window.innerHeight - 100)}px`,
-            }}
-          >
-            <div className="p-1">
-              <button
-                onClick={() => handleRemoveSkill(contextMenu.skill)}
-                disabled={removingSkill !== null}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md disabled:opacity-50"
-              >
-                {removingSkill ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash className="h-4 w-4" />}
-                Удалить навык
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
       {/* Modals */}
-      <AddSkillModal
-        open={isAddSkillModalOpen}
-        onClose={() => setIsAddSkillModalOpen(false)}
-        onAdd={handleAddSkill}
-        userId={id}
-      />
       <AddProjectModal
         open={isAddProjectModalOpen}
         onClose={() => setIsAddProjectModalOpen(false)}
@@ -546,13 +406,4 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
   )
 }
 
-function EmptySection({ icon, text }: { icon: React.ReactNode; text: string }) {
-  return (
-    <div className="text-center py-8">
-      <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted mb-3">
-        {icon}
-      </div>
-      <p className="text-muted-foreground text-sm">{text}</p>
-    </div>
-  )
-}
+
