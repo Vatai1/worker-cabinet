@@ -68,3 +68,10 @@ REFACTORING_SUMMARY.md
 # Uploads
 backend/uploads/
 .worktrees/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
