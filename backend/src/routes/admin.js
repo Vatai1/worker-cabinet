@@ -1522,6 +1522,7 @@ router.get('/modules', asyncHandler(async (req, res) => {
  *               description: { type: string }
  *               icon: { type: string, example: GraduationCap }
  *               route: { type: string, example: /training }
+ *               category: { type: string, example: work, enum: [hr, work, docs, admin, general] }
  *               sort_order: { type: integer, example: 130 }
  *     responses:
  *       201:
@@ -1530,13 +1531,13 @@ router.get('/modules', asyncHandler(async (req, res) => {
  *         description: Модуль с таким кодом уже существует
  */
 router.post('/modules', asyncHandler(async (req, res) => {
-  const { code, name, description, icon, route, sort_order } = req.body
+  const { code, name, description, icon, route, category, sort_order } = req.body
   if (!code?.trim()) throw new ValidationError('Код модуля обязателен')
   if (!name?.trim()) throw new ValidationError('Название модуля обязательно')
 
   const result = await query(
-    `INSERT INTO modules (code, name, description, icon, route, sort_order) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [code.trim(), name.trim(), description || null, icon || null, route || null, sort_order || 0]
+    `INSERT INTO modules (code, name, description, icon, route, category, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [code.trim(), name.trim(), description || null, icon || null, route || null, category || 'general', sort_order || 0]
   )
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
@@ -1566,6 +1567,7 @@ router.post('/modules', asyncHandler(async (req, res) => {
  *               description: { type: string }
  *               icon: { type: string }
  *               route: { type: string }
+ *               category: { type: string, enum: [hr, work, docs, admin, general] }
  *               sort_order: { type: integer }
  *     responses:
  *       200:
@@ -1575,16 +1577,17 @@ router.post('/modules', asyncHandler(async (req, res) => {
  */
 router.put('/modules/:id', asyncHandler(async (req, res) => {
   const { id } = req.params
-  const { name, description, icon, route, sort_order } = req.body
+  const { name, description, icon, route, category, sort_order } = req.body
 
   const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
 
   const result = await query(
     `UPDATE modules SET name = COALESCE($1, name), description = COALESCE($2, description),
-      icon = COALESCE($3, icon), route = COALESCE($4, route), sort_order = COALESCE($5, sort_order),
-      updated_at = NOW() WHERE id = $6 RETURNING *`,
-    [name || null, description !== undefined ? description : null, icon || null, route || null, sort_order !== undefined ? sort_order : null, id]
+      icon = COALESCE($3, icon), route = COALESCE($4, route), category = COALESCE($5, category),
+      sort_order = COALESCE($6, sort_order),
+      updated_at = NOW() WHERE id = $7 RETURNING *`,
+    [name || null, description !== undefined ? description : null, icon || null, route || null, category || null, sort_order !== undefined ? sort_order : null, id]
   )
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
