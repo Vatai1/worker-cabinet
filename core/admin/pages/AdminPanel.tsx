@@ -2364,6 +2364,8 @@ function ModulesTab() {
     auth: { emoji: '🔐', color: '#3B82F6' },
   }
 
+  const CORE_CODES = ['notifications', 'auth']
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
 
   const groupedModules = MODULE_CATEGORIES
@@ -2371,7 +2373,6 @@ function ModulesTab() {
       ...cat,
       modules: modules
         .filter(m => {
-  const CORE_CODES = ['notifications', 'auth']
   if (CORE_CODES.includes(m.code)) return cat.key === 'core'
   const catKey = (!m.category || m.category === 'general') ? 'core' : m.category
   return catKey === cat.key
@@ -2443,23 +2444,25 @@ function ModulesTab() {
                               )}
                             </div>
 
-                            <button
-                              onClick={() => toggleModule(mod)}
-                              disabled={isLoading}
-                              className={cn(
-                                'relative w-12 h-7 rounded-full transition-all duration-300 shrink-0',
-                                mod.is_enabled ? 'bg-primary shadow-sm' : 'bg-muted-foreground/20',
-                                isLoading && 'opacity-50 cursor-wait',
-                              )}
-                            >
-                              <div className={cn(
-                                'absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-all duration-300',
-                                mod.is_enabled ? 'left-[22px]' : 'left-0.5',
-                              )} />
-                              {isLoading && (
-                                <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-primary" />
-                              )}
-                            </button>
+                            {!CORE_CODES.includes(mod.code) && (
+                              <button
+                                onClick={() => toggleModule(mod)}
+                                disabled={isLoading}
+                                className={cn(
+                                  'relative w-12 h-7 rounded-full transition-all duration-300 shrink-0',
+                                  mod.is_enabled ? 'bg-primary shadow-sm' : 'bg-muted-foreground/20',
+                                  isLoading && 'opacity-50 cursor-wait',
+                                )}
+                              >
+                                <div className={cn(
+                                  'absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-all duration-300',
+                                  mod.is_enabled ? 'left-[22px]' : 'left-0.5',
+                                )} />
+                                {isLoading && (
+                                  <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-primary" />
+                                )}
+                              </button>
+                            )}
                           </div>
 
                           <div className="flex-1">
@@ -2470,13 +2473,15 @@ function ModulesTab() {
                               )}>
                                 {mod.name}
                               </h3>
-                              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={
-                                mod.is_enabled
-                                  ? { backgroundColor: 'rgba(16,185,129,0.15)', color: '#10B981', borderColor: 'rgba(16,185,129,0.3)' }
-                                  : { backgroundColor: 'rgba(107,114,128,0.15)', color: '#6B7280', borderColor: 'transparent' }
-                              }>
-                                {mod.is_enabled ? 'Активен' : 'Отключен'}
-                              </span>
+                              {!CORE_CODES.includes(mod.code) && (
+                                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={
+                                  mod.is_enabled
+                                    ? { backgroundColor: 'rgba(16,185,129,0.15)', color: '#10B981', borderColor: 'rgba(16,185,129,0.3)' }
+                                    : { backgroundColor: 'rgba(107,114,128,0.15)', color: '#6B7280', borderColor: 'transparent' }
+                                }>
+                                  {mod.is_enabled ? 'Активен' : 'Отключен'}
+                                </span>
+                              )}
                             </div>
                             {mod.description && (
                               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{mod.description}</p>
