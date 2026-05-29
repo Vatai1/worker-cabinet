@@ -1328,6 +1328,7 @@ async function runMigrations() {
       { key: 'login_stat_3_value', value: '12', desc: 'Статистика 3 — значение' },
       { key: 'login_stat_3_label', value: 'отделов', desc: 'Статистика 3 — подпись' },
       { key: 'login_demo_buttons', value: 'true', desc: 'Показывать демо-кнопки быстрого входа' },
+      { key: 'login_show_stats', value: 'true', desc: 'Показывать блок статистики на странице входа' },
     ]
     for (const s of settings) {
       await db.query(

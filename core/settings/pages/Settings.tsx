@@ -27,6 +27,7 @@ export function Settings() {
   const [stat3Value, setStat3Value] = useState('')
   const [stat3Label, setStat3Label] = useState('')
   const [demoButtons, setDemoButtons] = useState(true)
+  const [showStats, setShowStats] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,6 +47,7 @@ export function Settings() {
       setStat3Value(settings.login_stat_3_value || '')
       setStat3Label(settings.login_stat_3_label || '')
       setDemoButtons(settings.login_demo_buttons !== 'false')
+      setShowStats(settings.login_show_stats !== 'false')
     }
   }, [settings])
 
@@ -64,6 +66,7 @@ export function Settings() {
         { key: 'login_stat_3_value', value: stat3Value },
         { key: 'login_stat_3_label', value: stat3Label },
         { key: 'login_demo_buttons', value: String(demoButtons) },
+        { key: 'login_show_stats', value: String(showStats) },
       ])
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -242,7 +245,20 @@ export function Settings() {
 
             <div className="flex items-center justify-between rounded-xl border border-border/50 p-4">
               <div className="space-y-0.5">
-                <Label>Демо-кнопки быстрого входа</Label>
+                <Label>Показывать блок статистики</Label>
+                <p className="text-xs text-muted-foreground">
+                  Три карточки со статистикой на левой панели страницы входа
+                </p>
+              </div>
+              <Switch
+                checked={showStats}
+                onCheckedChange={setShowStats}
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-border/50 p-4">
+              <div className="space-y-0.5">
+                <Label>Показывать демо-кнопки быстрого входа</Label>
                 <p className="text-xs text-muted-foreground">
                   Показывать кнопки для быстрого входа под тестовыми аккаунтами
                 </p>

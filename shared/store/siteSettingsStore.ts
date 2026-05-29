@@ -12,6 +12,7 @@ interface LoginSettings {
   login_stat_3_value: string
   login_stat_3_label: string
   login_demo_buttons: string
+  login_show_stats: string
 }
 
 interface SiteSettingsState {
@@ -33,6 +34,7 @@ const defaults: LoginSettings = {
   login_stat_3_value: '12',
   login_stat_3_label: 'отделов',
   login_demo_buttons: 'true',
+  login_show_stats: 'true',
 }
 
 export const useSiteSettingsStore = create<SiteSettingsState>((set, get) => ({
