@@ -1,10 +1,11 @@
-﻿import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
+import { useSiteSettingsStore } from '@/shared/store/siteSettingsStore'
 
 export function Login() {
   const [email, setEmail] = useState('')
@@ -13,6 +14,8 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
   const login = useAuthStore((state) => state.login)
+  const { settings, fetchPublicSettings } = useSiteSettingsStore()
+  const showDemo = settings.login_demo_buttons !== 'false'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,6 +26,25 @@ export function Login() {
       await login(email, password)
       navigate('/dashboard')
     } catch (err) {
+      setError('Неверный email или пароль')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchPublicSettings()
+  }, [fetchPublicSettings])
+
+  const handleDemoLogin = async (demoEmail: string) => {
+    setEmail(demoEmail)
+    setPassword('password123')
+    setError('')
+    setIsLoading(true)
+    try {
+      await login(demoEmail, 'password123')
+      navigate('/dashboard')
+    } catch {
       setError('Неверный email или пароль')
     } finally {
       setIsLoading(false)
@@ -41,20 +63,20 @@ export function Login() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
-          <h1 className="text-4xl font-extrabold mb-3 leading-tight">Личный кабинет сотрудника</h1>
-          <p className="text-white/70 text-lg leading-relaxed">Единая платформа для управления персоналом, отпусками и документами</p>
+          <h1 className="text-4xl font-extrabold mb-3 leading-tight">{settings.login_title || 'Личный кабинет сотрудника'}</h1>
+          <p className="text-white/70 text-lg leading-relaxed">{settings.login_subtitle || 'Единая платформа для управления персоналом, отпусками и документами'}</p>
           <div className="grid grid-cols-3 gap-4 mt-10">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 ring-1 ring-white/10">
-              <p className="text-3xl font-extrabold">24</p>
-              <p className="text-white/60 text-xs mt-1">дня отпуска</p>
+              <p className="text-3xl font-extrabold">{settings.login_stat_1_value || '24'}</p>
+              <p className="text-white/60 text-xs mt-1">{settings.login_stat_1_label || 'дня отпуска'}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 ring-1 ring-white/10">
-              <p className="text-3xl font-extrabold">156</p>
-              <p className="text-white/60 text-xs mt-1">сотрудников</p>
+              <p className="text-3xl font-extrabold">{settings.login_stat_2_value || '156'}</p>
+              <p className="text-white/60 text-xs mt-1">{settings.login_stat_2_label || 'сотрудников'}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 ring-1 ring-white/10">
-              <p className="text-3xl font-extrabold">12</p>
-              <p className="text-white/60 text-xs mt-1">отделов</p>
+              <p className="text-3xl font-extrabold">{settings.login_stat_3_value || '12'}</p>
+              <p className="text-white/60 text-xs mt-1">{settings.login_stat_3_label || 'отделов'}</p>
             </div>
           </div>
         </div>
@@ -124,6 +146,7 @@ export function Login() {
               )}
             </Button>
           </form>
+          {showDemo && (
           <div className="mt-8 space-y-4">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -134,34 +157,35 @@ export function Login() {
               </div>
             </div>
             <div className="grid gap-3">
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:bg-primary/10 transition-colors">
+              <button type="button" onClick={() => handleDemoLogin('ivanov@example.com')} disabled={isLoading} className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:bg-primary/10 transition-colors text-left w-full disabled:opacity-50">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
                     <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
-                  <div className="flex-1">
+                  <div>
                     <p className="text-sm font-semibold text-foreground">Сотрудник</p>
                     <p className="font-mono text-xs text-muted-foreground mt-0.5">ivanov@example.com</p>
                   </div>
                 </div>
-              </div>
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:bg-primary/10 transition-colors">
+              </button>
+              <button type="button" onClick={() => handleDemoLogin('admin@example.com')} disabled={isLoading} className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:bg-primary/10 transition-colors text-left w-full disabled:opacity-50">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
                     <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-foreground">Руководитель</p>
-                    <p className="font-mono text-xs text-muted-foreground mt-0.5">manager@example.com</p>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Администратор</p>
+                    <p className="font-mono text-xs text-muted-foreground mt-0.5">admin@example.com</p>
                   </div>
                 </div>
-              </div>
+              </button>
             </div>
           </div>
+          )}
         </CardContent>
       </Card>
       </div>

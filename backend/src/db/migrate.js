@@ -1319,6 +1319,15 @@ async function runMigrations() {
       { key: 'vacation_default_days', value: '28', desc: 'Количество дней отпуска по умолчанию' },
       { key: 'session_duration_days', value: '7', desc: 'Длительность сессии (дни)' },
       { key: 'password_min_length', value: '8', desc: 'Минимальная длина пароля' },
+      { key: 'login_title', value: 'Личный кабинет сотрудника', desc: 'Заголовок на странице входа' },
+      { key: 'login_subtitle', value: 'Единая платформа для управления персоналом, отпусками и документами', desc: 'Описание на странице входа' },
+      { key: 'login_stat_1_value', value: '24', desc: 'Статистика 1 — значение' },
+      { key: 'login_stat_1_label', value: 'дня отпуска', desc: 'Статистика 1 — подпись' },
+      { key: 'login_stat_2_value', value: '156', desc: 'Статистика 2 — значение' },
+      { key: 'login_stat_2_label', value: 'сотрудников', desc: 'Статистика 2 — подпись' },
+      { key: 'login_stat_3_value', value: '12', desc: 'Статистика 3 — значение' },
+      { key: 'login_stat_3_label', value: 'отделов', desc: 'Статистика 3 — подпись' },
+      { key: 'login_demo_buttons', value: 'true', desc: 'Показывать демо-кнопки быстрого входа' },
     ]
     for (const s of settings) {
       await db.query(
