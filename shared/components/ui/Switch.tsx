@@ -1,4 +1,4 @@
-﻿import * as React from 'react'
+import * as React from 'react'
 import { cn } from '@/shared/lib/utils'
 
 export interface SwitchProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
@@ -16,15 +16,15 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         ref={ref}
         onClick={() => onCheckedChange?.(!checked)}
         className={cn(
-          'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-          checked ? 'bg-primary' : 'bg-input',
+          'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+          checked ? 'bg-primary shadow-sm shadow-primary/30' : 'bg-input',
           className
         )}
         {...props}
       >
         <span
           className={cn(
-            'pointer-events-none block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform duration-200',
+            'pointer-events-none block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-all duration-300',
             checked ? 'translate-x-5' : 'translate-x-0'
           )}
         />
@@ -32,7 +32,6 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
     )
   }
 )
-
 Switch.displayName = 'Switch'
 
 export { Switch }

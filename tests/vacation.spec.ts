@@ -136,7 +136,7 @@ test.describe('US-4. Отмена заявки', () => {
 
     if (hasCard) {
       await requestCard.click()
-      await expect(page.getByRole('button', { name: 'Отменить заявку' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Отменить заявку' }).first()).toBeVisible()
     }
   })
 
@@ -146,7 +146,7 @@ test.describe('US-4. Отмена заявки', () => {
 
     if (hasCard) {
       await requestCard.click()
-      await page.getByRole('button', { name: 'Отменить заявку' }).click()
+      await page.getByRole('button', { name: 'Отменить заявку' }).first().click()
       await expect(page.getByText('Отменить заявку?')).toBeVisible({ timeout: 5_000 })
       await expect(page.getByText(/Вы уверены, что хотите отменить/)).toBeVisible()
     }

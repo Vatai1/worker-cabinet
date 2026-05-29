@@ -1,59 +1,47 @@
-import { useEffect, useRef } from 'react'
-import { User, Briefcase } from 'lucide-react'
+import * as React from 'react'
+import { cn } from '@/shared/lib/utils'
 
-interface Props {
-  x: number
-  y: number
-  onClose: () => void
-  onViewProfile: () => void
-  onViewRole: () => void
+interface ContextMenuProps {
+  children: React.ReactNode
+  items: { label: string; onClick: () => void; danger?: boolean; icon?: React.ReactNode }[]
 }
 
-export function ContextMenu({ x, y, onClose, onViewProfile, onViewRole }: Props) {
-  const menuRef = useRef<HTMLDivElement>(null)
+export function ContextMenu({ children, items }: ContextMenuProps) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        onClose()
-      }
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [onClose])
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   return (
-    <div
-      ref={menuRef}
-      className="fixed z-50 min-w-[200px] bg-background rounded-lg shadow-2xl border border-border/50 py-1 animate-in fade-in zoom-in duration-100"
-      style={{ left: x, top: y }}
-    >
-      <button
-        onClick={() => { onViewProfile(); onClose() }}
-        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
-      >
-        <User className="h-4 w-4" />
-        Показать профиль
-      </button>
-      <button
-        onClick={() => { onViewRole(); onClose() }}
-        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
-      >
-        <Briefcase className="h-4 w-4" />
-        Показать роль в проекте
-      </button>
+    <div ref={ref} className="relative">
+      <div onClick={() => setOpen(!open)} className="cursor-pointer">
+        {children}
+      </div>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-lg border border-border/60 bg-popover p-1 shadow-lg animate-scale-in">
+          {items.map((item, i) => (
+            <button
+              key={i}
+              onClick={() => { item.onClick(); setOpen(false) }}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors duration-150',
+                item.danger
+                  ? 'text-destructive hover:bg-destructive/10'
+                  : 'hover:bg-muted'
+              )}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

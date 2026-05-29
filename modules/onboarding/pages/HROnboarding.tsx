@@ -501,7 +501,7 @@ function OnboardingDetailModal({ detail, loading, onClose, onCancel, onOpenOnlyO
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-border/50">
           <h3 className="text-lg font-semibold">
             {detail ? `${detail.lastName} ${detail.firstName}` : 'Загрузка...'}
@@ -640,7 +640,7 @@ function AddOnboardingModal({ departments, positions, templates, onTemplatesNeed
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-border/50">
           <h3 className="text-lg font-semibold">Добавить сотрудника на онбординг</h3>
           <button onClick={onClose}><X className="h-5 w-5 text-muted-foreground" /></button>
@@ -778,7 +778,7 @@ function TemplateModal({ template, departments, positions, onClose, onSuccess }:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-border/50">
           <h3 className="text-lg font-semibold">{isEdit ? 'Редактировать шаблон' : 'Создать шаблон'}</h3>
           <button onClick={onClose}><X className="h-5 w-5 text-muted-foreground" /></button>
@@ -855,7 +855,7 @@ function ConfirmModal({ title, message, confirmLabel, confirmVariant = 'default'
 }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
         <h3 className="text-lg font-semibold">{title}</h3>
         <p className="text-muted-foreground">{message}</p>
         {error && <p className="text-sm text-destructive">{error}</p>}

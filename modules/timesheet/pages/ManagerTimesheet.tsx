@@ -1,11 +1,12 @@
-﻿import { useEffect, useState } from 'react'
-import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { getErrorMessage } from '@/shared/lib/utils'
-import { API_BASE_URL } from '@/shared/lib/api'
+import { useEffect, useState } from 'react'
 import { Button } from '@/shared/components/ui/Button'
 import { TimesheetGrid, TimesheetEntry } from '@/shared/components/timesheet/TimesheetGrid'
 import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
+import { CalendarDays } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { getErrorMessage } from '@/shared/lib/utils'
+import { API_BASE_URL } from '@/shared/lib/api'
 
 interface Timesheet {
   id: number
@@ -107,27 +108,34 @@ export function ManagerTimesheet() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-bold">Табель</h1>
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={month}
-            onChange={e => setMonth(Number(e.target.value))}
-            className="border border-border rounded-lg px-3 py-2 text-sm bg-card"
-          >
-            {MONTH_NAMES.map((name, i) => (
-              <option key={i + 1} value={i + 1}>{name}</option>
-            ))}
-          </select>
-          <select
-            value={year}
-            onChange={e => setYear(Number(e.target.value))}
-            className="border border-border rounded-lg px-3 py-2 text-sm bg-card"
-          >
-            {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+      <div className="page-header">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10">
+              <CalendarDays className="h-5 w-5 text-primary" />
+            </div>
+            <h1 className="text-xl font-bold">Табель</h1>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={month}
+              onChange={e => setMonth(Number(e.target.value))}
+              className="border border-border rounded-lg px-3 py-2 text-sm bg-card"
+            >
+              {MONTH_NAMES.map((name, i) => (
+                <option key={i + 1} value={i + 1}>{name}</option>
+              ))}
+            </select>
+            <select
+              value={year}
+              onChange={e => setYear(Number(e.target.value))}
+              className="border border-border rounded-lg px-3 py-2 text-sm bg-card"
+            >
+              {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -136,7 +144,7 @@ export function ManagerTimesheet() {
       {loading ? (
         <div className="text-muted-foreground">Загрузка...</div>
       ) : timesheet && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-fade-in">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-sm text-muted-foreground">{timesheet.department_name}</span>
             <Button onClick={handleSubmitToday} disabled={submitting}>

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
 import { X, FileText, Upload, AlertTriangle } from 'lucide-react'
@@ -127,7 +127,7 @@ export function CreateVacationFormModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     const validationErrors = validateDates()
     setErrors(validationErrors)
 
@@ -165,22 +165,26 @@ export function CreateVacationFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b flex justify-between items-center">
-          <h2 className="text-xl font-semibold">Создать заявку на отпуск</h2>
+      <div className="bg-card rounded-xl border border-border/60 shadow-sm w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto animate-scale-in">
+        <div className="p-6 border-b border-border/60 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-primary/10">
+              <FileText className="h-5 w-5 text-primary" />
+            </div>
+            <h2 className="text-xl font-bold">Создать заявку на отпуск</h2>
+          </div>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground"
+            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground interactive transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Период отпуска */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="startDate" className="block text-sm font-medium text-muted-foreground mb-1">
+              <label htmlFor="startDate" className="block text-sm font-medium text-muted-foreground mb-1.5">
                 Дата начала
               </label>
               <input
@@ -189,7 +193,7 @@ export function CreateVacationFormModal({
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 min={new Date().toISOString().split('T')[0]}
-                className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                 disabled={loading}
               />
               {errors.startDate && (
@@ -197,7 +201,7 @@ export function CreateVacationFormModal({
               )}
             </div>
             <div>
-              <label htmlFor="endDate" className="block text-sm font-medium text-muted-foreground mb-1">
+              <label htmlFor="endDate" className="block text-sm font-medium text-muted-foreground mb-1.5">
                 Дата окончания
               </label>
               <input
@@ -206,7 +210,7 @@ export function CreateVacationFormModal({
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 min={startDate || new Date().toISOString().split('T')[0]}
-                className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                 disabled={loading || !startDate}
               />
               {errors.endDate && (
@@ -221,16 +225,15 @@ export function CreateVacationFormModal({
             </div>
           )}
 
-          {/* Тип отпуска */}
           <div>
-            <label htmlFor="vacationType" className="block text-sm font-medium text-muted-foreground mb-1">
+            <label htmlFor="vacationType" className="block text-sm font-medium text-muted-foreground mb-1.5">
               Тип отпуска
             </label>
             <select
               id="vacationType"
               value={vacationType}
               onChange={(e) => setVacationType(e.target.value as VacationType)}
-              className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               disabled={loading}
             >
               {Object.values(VacationType).map((type) => {
@@ -247,7 +250,6 @@ export function CreateVacationFormModal({
             )}
           </div>
 
-          {/* Проезд к месту проведения отпуска */}
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -277,7 +279,7 @@ export function CreateVacationFormModal({
 
             {hasTravel && (
               <div>
-                <label htmlFor="travelDestination" className="block text-sm font-medium text-muted-foreground mb-1">
+                <label htmlFor="travelDestination" className="block text-sm font-medium text-muted-foreground mb-1.5">
                   Город назначения
                 </label>
                 <input
@@ -285,16 +287,15 @@ export function CreateVacationFormModal({
                   id="travelDestination"
                   value={travelDestination}
                   onChange={(e) => setTravelDestination(e.target.value)}
-                  className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder="Введите город проезда"
                   disabled={loading}
                 />
               </div>
             )}
 
-          {/* Комментарий */}
           <div>
-            <label htmlFor="comment" className="block text-sm font-medium text-muted-foreground mb-1">
+            <label htmlFor="comment" className="block text-sm font-medium text-muted-foreground mb-1.5">
               Комментарий <span className="text-muted-foreground">(необязательно)</span>
             </label>
             <textarea
@@ -302,16 +303,15 @@ export function CreateVacationFormModal({
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               rows={3}
-              className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="Укажите причину или дополнительные сведения..."
               disabled={loading}
             />
           </div>
 
-          {/* Справка для учебного отпуска */}
           {vacationType === VacationType.EDUCATIONAL && (
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1">
+              <label className="block text-sm font-medium text-muted-foreground mb-1.5">
                 Справка <span className="text-destructive">*</span>
               </label>
               <div className="mt-1">
@@ -323,7 +323,7 @@ export function CreateVacationFormModal({
                       type="button"
                       onClick={() => setReferenceFile(null)}
                       disabled={loading}
-                      className="text-primary hover:text-primary/80 p-1"
+                      className="text-primary hover:text-primary/80 p-1 interactive"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -362,9 +362,8 @@ export function CreateVacationFormModal({
             </div>
           )}
 
-          {/* Информация о днях */}
           {countsInCounter && duration > 0 && (
-            <div className={`p-3 rounded-lg ${hasEnoughDays ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+            <div className={`p-3 rounded-lg ${hasEnoughDays ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30'}`}>
               <div className="text-sm">
                 <div className="font-medium mb-1">
                   {hasEnoughDays ? '✅ Достаточно дней' : '⚠️ Недостаточно дней'}
@@ -381,19 +380,18 @@ export function CreateVacationFormModal({
             </div>
           )}
 
-          {/* Предупреждения о нарушении ограничений */}
           {restrictionWarnings.length > 0 && (
-            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30">
               <div className="text-sm">
-                <div className="font-medium mb-2 flex items-center gap-2 text-amber-800">
+                <div className="font-medium mb-2 flex items-center gap-2 text-amber-800 dark:text-amber-400">
                   <AlertTriangle className="h-4 w-4" />
                   ⚠️ Внимание
                 </div>
                 {restrictionWarnings.map((warning, index) => (
-                  <div key={index} className="text-amber-700 mb-2 last:mb-0">
+                  <div key={index} className="text-amber-700 dark:text-amber-300 mb-2 last:mb-0">
                     <div>{warning.message}</div>
                     {warning.details?.conflictingEmployee && (
-                      <div className="text-xs text-amber-600 mt-1">
+                      <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                         Даты: {warning.details.conflictingEmployee.dates}
                       </div>
                     )}
@@ -403,7 +401,6 @@ export function CreateVacationFormModal({
             </div>
           )}
 
-          {/* Кнопки */}
           <div className="flex gap-3 pt-4">
             <Button
               type="button"

@@ -253,22 +253,22 @@ export function AdminPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg">
-          <Shield className="h-6 w-6" />
+      <div className="flex items-center gap-3 page-header">
+        <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+          <Shield className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Администрирование</h1>
-          <p className="text-sm text-muted-foreground">Управление ролями, доступами и настройками системы</p>
+          <h1 className="text-xl font-bold">Администрирование</h1>
+          <p className="text-sm text-muted-foreground">Управление ролями, доступами и настройками</p>
         </div>
       </div>
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard icon={Users} label="Пользователей" value={stats.totalUsers} sub={`Активных: ${stats.activeUsers}`} color="blue" />
-          <StatCard icon={Key} label="Ролей" value={stats.totalRoles} color="purple" />
-          <StatCard icon={Building2} label="Отделов" value={stats.totalDepartments} color="emerald" />
-          <StatCard icon={Activity} label="Действий сегодня" value={stats.auditToday} color="amber" />
+          <StatCard icon={Users} label="Пользователей" value={stats.totalUsers} sub={`Активных: ${stats.activeUsers}`} />
+          <StatCard icon={Key} label="Ролей" value={stats.totalRoles} />
+          <StatCard icon={Building2} label="Отделов" value={stats.totalDepartments} />
+          <StatCard icon={Activity} label="Действий сегодня" value={stats.auditToday} />
         </div>
       )}
 
@@ -286,16 +286,16 @@ export function AdminPanel() {
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={cn(
-                        'group flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-all duration-200',
+                        'group flex items-center gap-3 w-full rounded-lg px-3 py-2 text-left transition-all duration-200',
                         isActive
-                          ? 'bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 shadow-sm'
-                          : 'hover:bg-muted/40 border border-transparent',
+                          ? 'bg-primary/8 text-primary'
+                          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
                       )}
                     >
                       <div className={cn(
                         'p-2 rounded-lg transition-all duration-200 shrink-0',
                         isActive
-                          ? `bg-gradient-to-br ${tab.color} text-white shadow-sm`
+                          ? `bg-primary/10 text-primary`
                           : 'bg-muted/50 text-muted-foreground group-hover:bg-muted',
                       )}>
                         <Icon className="h-4 w-4" />
@@ -349,23 +349,16 @@ export function AdminPanel() {
   )
 }
 
-function StatCard({ icon: Icon, label, value, sub, color }: {
+function StatCard({ icon: Icon, label, value, sub }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
   value: number
   sub?: string
-  color: string
 }) {
-  const bgMap: Record<string, string> = {
-    blue: 'from-blue-500 to-indigo-600',
-    purple: 'from-violet-500 to-purple-600',
-    emerald: 'from-emerald-500 to-teal-600',
-    amber: 'from-amber-500 to-orange-600',
-  }
   return (
-    <Card>
+    <Card className="section-card">
       <CardContent className="p-4 flex items-center gap-4">
-        <div className={cn('p-2.5 rounded-xl bg-gradient-to-br text-white', bgMap[color] || bgMap.blue)}>
+        <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
           <Icon className="h-5 w-5" />
         </div>
         <div>
@@ -2434,7 +2427,7 @@ function ModulesTab() {
                             <div className={cn(
                               'p-2.5 rounded-xl transition-all duration-300',
                               mod.is_enabled
-                                ? `bg-gradient-to-br ${colors.active} text-white shadow-md`
+                                ? `bg-primary/10 text-primary`
                                 : colors.inactive,
                             )}>
                               {settingsInfo ? (

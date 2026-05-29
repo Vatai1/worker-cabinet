@@ -1,14 +1,14 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/core/auth/store/authStore'
-import { API_BASE_URL } from '@/shared/lib/api'
-import { getAuthHeaders } from '@/shared/lib/authHeaders'
-import { getErrorMessage, formatDate } from '@/shared/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { OnlyOfficePreviewModal } from '@/shared/components/OnlyOfficePreviewModal'
 import { CheckCircle2, Circle, FileText, Download, Loader2, BookOpen, Eye } from 'lucide-react'
+import { useAuthStore } from '@/core/auth/store/authStore'
+import { API_BASE_URL } from '@/shared/lib/api'
+import { getAuthHeaders } from '@/shared/lib/authHeaders'
+import { getErrorMessage, formatDate } from '@/shared/lib/utils'
 
 interface OnboardingDocument {
   id: number
@@ -113,13 +113,19 @@ export function Onboarding() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Онбординг</h1>
-        <p className="text-muted-foreground">Добро пожаловать, {onboarding.firstName} {onboarding.lastName}!</p>
+      <div className="page-header">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-primary/10">
+            <BookOpen className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Онбординг</h1>
+            <p className="text-sm text-muted-foreground">Добро пожаловать, {onboarding.firstName} {onboarding.lastName}!</p>
+          </div>
+        </div>
       </div>
 
-      {/* Progress block */}
-      <Card>
+      <Card className="section-card stagger-1">
         <CardHeader>
           <CardTitle className="text-lg">Прогресс</CardTitle>
         </CardHeader>
@@ -137,46 +143,47 @@ export function Onboarding() {
         </CardContent>
       </Card>
 
-      {/* Document list */}
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">Документы</h2>
-        {onboarding.documents.map((doc) => (
-          <Card key={doc.id} className="border border-border/50">
-            <CardContent className="flex items-center gap-4 py-4">
-              <div className="shrink-0">
-                {doc.acknowledgedAt
-                  ? <CheckCircle2 className="h-6 w-6 text-green-500" />
-                  : <Circle className="h-6 w-6 text-muted-foreground" />
-                }
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{doc.title}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  {doc.contentText && <Badge variant="secondary" className="text-xs">Текст</Badge>}
-                  {doc.fileKey && <Badge variant="secondary" className="text-xs"><FileText className="h-3 w-3 mr-1" />Файл</Badge>}
-                  {doc.acknowledgedAt && (
-                    <span className="text-xs text-muted-foreground">Ознакомлен {formatDate(doc.acknowledgedAt)}</span>
-                  )}
+        {onboarding.documents.map((doc, index) => {
+          const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
+          return (
+            <Card key={doc.id} className={`section-card ${staggerClass}`}>
+              <CardContent className="flex items-center gap-4 py-4">
+                <div className="shrink-0">
+                  {doc.acknowledgedAt
+                    ? <CheckCircle2 className="h-6 w-6 text-green-500" />
+                    : <Circle className="h-6 w-6 text-muted-foreground" />
+                  }
                 </div>
-              </div>
-              {!doc.acknowledgedAt && (
-                <Button size="sm" variant="outline" onClick={() => setSelectedDoc(doc)}>
-                  <BookOpen className="h-4 w-4 mr-2" />
-                  Открыть
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{doc.title}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {doc.contentText && <Badge variant="secondary" className="text-xs">Текст</Badge>}
+                    {doc.fileKey && <Badge variant="secondary" className="text-xs"><FileText className="h-3 w-3 mr-1" />Файл</Badge>}
+                    {doc.acknowledgedAt && (
+                      <span className="text-xs text-muted-foreground">Ознакомлен {formatDate(doc.acknowledgedAt)}</span>
+                    )}
+                  </div>
+                </div>
+                {!doc.acknowledgedAt && (
+                  <Button size="sm" variant="outline" onClick={() => setSelectedDoc(doc)}>
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    Открыть
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
-      {/* Document modal */}
       {selectedDoc && !confirmDocId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+          <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col animate-scale-in">
             <div className="flex items-center justify-between p-6 border-b border-border/50">
               <h3 className="text-lg font-semibold">{selectedDoc.title}</h3>
-              <button onClick={() => setSelectedDoc(null)} className="text-muted-foreground hover:text-foreground transition-colors">✕</button>
+              <button onClick={() => setSelectedDoc(null)} className="interactive text-muted-foreground hover:text-foreground transition-colors">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               {selectedDoc.contentText && (
@@ -189,7 +196,6 @@ export function Onboarding() {
                     size="sm"
                     onClick={async () => {
                       try {
-                        console.log('[Onboarding] Getting access token for document:', selectedDoc.id)
                         const res = await fetch(`${API_BASE_URL}/onboarding/documents/${selectedDoc.id}/access-token`, {
                           method: 'POST',
                           headers: getAuthHeaders(),
@@ -199,14 +205,8 @@ export function Onboarding() {
                           throw new Error(error.error || 'Ошибка получения токена')
                         }
                         const { accessToken } = await res.json()
-                        console.log('[Onboarding] Access token received:', accessToken.substring(0, 8) + '...')
-                        
-                        // Replace localhost with host.docker.internal for OnlyOffice in Docker
                         const fileUrl = `${API_BASE_URL}/onboarding/documents/${selectedDoc.id}/file?token=${accessToken}`
                           .replace('localhost:5000', 'host.docker.internal:5000')
-                        
-                        console.log('[Onboarding] File URL for OnlyOffice:', fileUrl)
-                        console.log('[Onboarding] MIME type:', selectedDoc.mimeType)
                         setSelectedDoc(null)
                         setOnlyOfficeDoc({
                           id: selectedDoc.id,
@@ -216,7 +216,6 @@ export function Onboarding() {
                           acknowledged: selectedDoc.acknowledgedAt !== null,
                         })
                       } catch (err) {
-                        console.error('[Onboarding] Error getting access token:', err)
                         alert('Ошибка: ' + (err instanceof Error ? err.message : 'Неизвестная ошибка'))
                       }
                     }}
@@ -228,7 +227,7 @@ export function Onboarding() {
                     href={selectedDoc.fileUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-primary hover:underline text-sm"
+                    className="interactive inline-flex items-center gap-2 text-primary hover:underline text-sm"
                   >
                     <Download className="h-4 w-4" />
                     Скачать файл
@@ -244,10 +243,9 @@ export function Onboarding() {
         </div>
       )}
 
-      {/* Confirm modal */}
       {confirmDocId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 space-y-4 animate-scale-in">
             <h3 className="text-lg font-semibold">Подтверждение</h3>
             <p className="text-muted-foreground">Вы подтверждаете ознакомление с документом?</p>
             {ackError && <p className="text-sm text-destructive">{ackError}</p>}

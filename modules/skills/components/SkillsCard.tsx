@@ -111,7 +111,7 @@ export function SkillsCard({ skills, userId, isOwnProfile, onSkillsChange }: Pro
                 <span
                   key={skill}
                   onContextMenu={(e) => handleContextMenu(e, skill)}
-                  className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-transform hover:scale-105 cursor-pointer ${removingSkill === skill ? 'opacity-50' : ''} ${SKILL_COLORS[i % SKILL_COLORS.length]}`}
+                  className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-transform interactive cursor-pointer ${removingSkill === skill ? 'opacity-50' : ''} ${SKILL_COLORS[i % SKILL_COLORS.length]}`}
                 >
                   {removingSkill === skill && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
                   {skill}

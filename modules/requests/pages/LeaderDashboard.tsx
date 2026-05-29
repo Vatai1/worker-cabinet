@@ -1,8 +1,5 @@
-﻿import { useAuthStore } from '@/core/auth/store/authStore'
-import { useRequestsStore } from '@/modules/requests/store/requestsStore'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
-import { formatDate } from '@/shared/lib/utils'
 import {
   FileText,
   TrendingUp,
@@ -10,7 +7,11 @@ import {
   Clock,
   CheckCircle,
   CalendarCheck,
+  LayoutDashboard,
 } from 'lucide-react'
+import { useAuthStore } from '@/core/auth/store/authStore'
+import { useRequestsStore } from '@/modules/requests/store/requestsStore'
+import { formatDate } from '@/shared/lib/utils'
 
 export function LeaderDashboard() {
   const { user } = useAuthStore()
@@ -94,39 +95,38 @@ export function LeaderDashboard() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Welcome section */}
-      <div className="rounded-2xl gradient-primary p-8 text-white shadow-glow">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Добро пожаловать, {user?.firstName}! 👋
-        </h1>
-        <p className="mt-2 text-white/90 text-lg">
-          Обзор работы подразделения на сегодня
-        </p>
+      <div className="page-header">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-primary/10">
+            <LayoutDashboard className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-gradient">
+              Добро пожаловать, {user?.firstName}!
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Обзор работы подразделения на сегодня
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="page-grid">
         {stats.map((stat, index) => {
           const Icon = stat.icon
-          const gradients = [
-            'from-purple-500 to-purple-600',
-            'from-blue-500 to-blue-600',
-            'from-emerald-500 to-emerald-600',
-            'from-orange-500 to-orange-600',
-          ]
+          const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
           return (
-            <Card key={stat.title} className="group cursor-pointer overflow-hidden relative hover:scale-105 transition-transform duration-300" style={{ animationDelay: `${index * 100}ms` }}>
-              <div className={`absolute inset-0 bg-gradient-to-br ${gradients[index]} opacity-0 group-hover:opacity-5 transition-opacity duration-300`}></div>
+            <Card key={stat.title} className={`section-card hover-lift ${staggerClass}`}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                 <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   {stat.title}
                 </CardTitle>
-                <div className={`p-3 rounded-xl bg-gradient-to-br ${gradients[index]} shadow-lg`}>
-                  <Icon className="h-5 w-5 text-white" />
+                <div className="p-3 rounded-xl bg-primary/10">
+                  <Icon className="h-5 w-5 text-primary" />
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-4xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                <div className="text-3xl font-bold">
                   {stat.value}
                 </div>
                 <p className="text-sm text-muted-foreground mt-2 font-medium">
@@ -144,9 +144,8 @@ export function LeaderDashboard() {
         })}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Pending requests */}
-        <Card>
+      <div className="page-grid">
+        <Card className="section-card stagger-1">
           <CardHeader>
             <CardTitle>Требуют рассмотрения</CardTitle>
             <CardDescription>
@@ -166,7 +165,7 @@ export function LeaderDashboard() {
                         {getEmployeeName(request.userId)}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {request.type === 'vacation' ? 'Отпуск' : 
+                        {request.type === 'vacation' ? 'Отпуск' :
                          request.type === 'sick_leave' ? 'Больничный' :
                          request.type === 'remote_work' ? 'Удаленная работа' :
                          request.type === 'business_trip' ? 'Командировка' : 'Другое'}
@@ -191,8 +190,7 @@ export function LeaderDashboard() {
           </CardContent>
         </Card>
 
-        {/* Quick actions */}
-        <Card>
+        <Card className="section-card stagger-2">
           <CardHeader>
             <CardTitle>Быстрые действия</CardTitle>
             <CardDescription>
@@ -203,10 +201,10 @@ export function LeaderDashboard() {
             <div className="grid gap-3">
               <a
                 href="/manager"
-                className="group flex items-center gap-4 rounded-xl border-2 border-border/50 p-4 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 hover:scale-105"
+                className="interactive group flex items-center gap-4 rounded-xl border border-border/60 p-4 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-lg group-hover:shadow-xl transition-shadow">
-                  <FileText className="h-6 w-6 text-white" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                  <FileText className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold group-hover:text-primary transition-colors">Рассмотреть заявки</p>
@@ -221,10 +219,10 @@ export function LeaderDashboard() {
 
               <a
                 href="/vacation"
-                className="group flex items-center gap-4 rounded-xl border-2 border-border/50 p-4 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 hover:scale-105"
+                className="interactive group flex items-center gap-4 rounded-xl border border-border/60 p-4 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg group-hover:shadow-xl transition-shadow">
-                  <CalendarCheck className="h-6 w-6 text-white" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                  <CalendarCheck className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold group-hover:text-primary transition-colors">Календарь отпусков</p>
@@ -239,10 +237,10 @@ export function LeaderDashboard() {
 
               <a
                 href="/documents"
-                className="group flex items-center gap-4 rounded-xl border-2 border-border/50 p-4 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 hover:scale-105"
+                className="interactive group flex items-center gap-4 rounded-xl border border-border/60 p-4 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg group-hover:shadow-xl transition-shadow">
-                  <FileText className="h-6 w-6 text-white" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                  <FileText className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-semibold group-hover:text-primary transition-colors">Документы</p>
@@ -259,8 +257,7 @@ export function LeaderDashboard() {
         </Card>
       </div>
 
-      {/* Team vacation status */}
-      <Card>
+      <Card className="section-card stagger-3">
         <CardHeader>
           <CardTitle>Статус отпусков команды</CardTitle>
           <CardDescription>
@@ -286,7 +283,7 @@ export function LeaderDashboard() {
               return (
                 <div
                   key={subordinateId}
-                  className="flex items-center justify-between p-4 rounded-xl border-2 border-border/50 hover:border-primary/30 transition-all"
+                  className="flex items-center justify-between p-4 rounded-xl border border-border/60 hover:border-primary/30 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`h-10 w-10 rounded-full flex items-center justify-center ${

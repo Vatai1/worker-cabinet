@@ -1,16 +1,19 @@
-﻿import { useState, useRef } from 'react'
-import { useAuthStore } from '@/core/auth/store/authStore'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
+import { useState, useRef } from 'react'
+
 import { Button } from '@/shared/components/ui/Button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { Badge } from '@/shared/components/ui/Badge'
-import { formatDate, getErrorMessage } from '@/shared/lib/utils'
-import { Mail, Phone, Calendar, Briefcase, Building2, Edit2, Save, X, Camera, Loader2 } from 'lucide-react'
-import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { getAuthHeaders } from '@/shared/lib/authHeaders'
+import { useAuthStore } from '@/core/auth/store/authStore'
+
+import { Mail, Phone, Calendar, Briefcase, Building2, Edit2, Save, X, Camera, Loader2, User } from 'lucide-react'
+
 import { API_BASE_URL } from '@/shared/lib/api'
+import { getAuthHeaders } from '@/shared/lib/authHeaders'
+import { generateAvatarUrl } from '@/shared/lib/avatar'
+import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 
 export function Profile() {
   const { user, updateUser } = useAuthStore()
@@ -65,7 +68,7 @@ export function Profile() {
     setIsEditing(false)
   }
 
-  const handleChange = (field: keyof typeof editedUser, value: string) => {
+  const handleChange = (field: string, value: string) => {
     setEditedUser((prev) => (prev ? { ...prev, [field]: value } : null))
   }
 
@@ -74,8 +77,8 @@ export function Profile() {
     return `${user.firstName[0]}${user.lastName[0]}`
   }
 
-  const getStatusBadge = (status: typeof user.status) => {
-    const badges = {
+  const getStatusBadge = (status: string) => {
+    const badges: Record<string, { label: string; className: string }> = {
       active: { label: 'Активен', className: 'bg-green-100 text-green-800' },
       inactive: { label: 'Неактивен', className: 'bg-muted text-muted-foreground' },
       on_leave: { label: 'В отпуске', className: 'bg-yellow-100 text-yellow-800' },
@@ -86,26 +89,31 @@ export function Profile() {
   if (!user) return null
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Профиль</h1>
-          <p className="text-muted-foreground">
-            Управление вашей личной информацией
-          </p>
+    <div className="space-y-6 animate-fade-in">
+      <div className="page-header flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center h-10 w-10 bg-primary/10 rounded-xl text-primary">
+            <User className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Профиль</h1>
+            <p className="text-sm text-muted-foreground">
+              Управление вашей личной информацией
+            </p>
+          </div>
         </div>
         {!isEditing ? (
-          <Button onClick={() => setIsEditing(true)}>
+          <Button onClick={() => setIsEditing(true)} className="interactive">
             <Edit2 className="mr-2 h-4 w-4" />
             Редактировать
           </Button>
         ) : (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleCancel}>
+            <Button variant="outline" onClick={handleCancel} className="interactive">
               <X className="mr-2 h-4 w-4" />
               Отмена
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} className="interactive">
               <Save className="mr-2 h-4 w-4" />
               Сохранить
             </Button>
@@ -113,9 +121,8 @@ export function Profile() {
         )}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Profile card */}
-        <Card className="md:col-span-1">
+      <div className="page-grid grid gap-6 md:grid-cols-3">
+        <Card className="section-card md:col-span-1 stagger-1">
           <CardHeader className="text-center">
             <div className="relative mx-auto w-24 h-24">
               <Avatar className="h-24 w-24">
@@ -131,7 +138,7 @@ export function Profile() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={avatarUploading}
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+                className="interactive absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
                 aria-label="Изменить фото"
               >
                 {avatarUploading
@@ -160,20 +167,28 @@ export function Profile() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-3 text-sm">
-              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center justify-center w-7 h-7 bg-primary/10 rounded-lg">
+                <Building2 className="h-3.5 w-3.5 text-primary" />
+              </div>
               <span>{user.department}</span>
             </div>
             <div className="flex items-center gap-3 text-sm">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center justify-center w-7 h-7 bg-primary/10 rounded-lg">
+                <Calendar className="h-3.5 w-3.5 text-primary" />
+              </div>
               <span>Работает с {formatDate(user.hireDate)}</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Personal info */}
-        <Card className="md:col-span-2">
+        <Card className="section-card md:col-span-2 stagger-2">
           <CardHeader>
-            <CardTitle>Личная информация</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <div className="flex items-center justify-center h-6 w-6 bg-primary/10 rounded-lg">
+                <Mail className="h-3.5 w-3.5 text-primary" />
+              </div>
+              Личная информация
+            </CardTitle>
             <CardDescription>
               Основная информация о вашем профиле
             </CardDescription>
@@ -189,7 +204,7 @@ export function Profile() {
                     onChange={(e) => handleChange('lastName', e.target.value)}
                   />
                 ) : (
-                  <div className="flex items-center gap-2 rounded-md border p-3">
+                  <div className="flex items-center gap-2 rounded-lg border p-3">
                     <span className="text-sm">{user.lastName}</span>
                   </div>
                 )}
@@ -203,7 +218,7 @@ export function Profile() {
                     onChange={(e) => handleChange('firstName', e.target.value)}
                   />
                 ) : (
-                  <div className="flex items-center gap-2 rounded-md border p-3">
+                  <div className="flex items-center gap-2 rounded-lg border p-3">
                     <span className="text-sm">{user.firstName}</span>
                   </div>
                 )}
@@ -217,7 +232,7 @@ export function Profile() {
                     onChange={(e) => handleChange('middleName', e.target.value)}
                   />
                 ) : (
-                  <div className="flex items-center gap-2 rounded-md border p-3">
+                  <div className="flex items-center gap-2 rounded-lg border p-3">
                     <span className="text-sm">{user.middleName || '—'}</span>
                   </div>
                 )}
@@ -232,7 +247,7 @@ export function Profile() {
                     onChange={(e) => handleChange('birthDate', e.target.value)}
                   />
                 ) : (
-                  <div className="flex items-center gap-2 rounded-md border p-3">
+                  <div className="flex items-center gap-2 rounded-lg border p-3">
                     <span className="text-sm">{user.birthDate ? formatDate(user.birthDate) : '—'}</span>
                   </div>
                 )}
@@ -244,7 +259,7 @@ export function Profile() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <div className="flex items-center gap-2 rounded-md border p-3">
+                  <div className="flex items-center gap-2 rounded-lg border p-3">
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">{user.email}</span>
                   </div>
@@ -258,7 +273,7 @@ export function Profile() {
                       onChange={(e) => handleChange('phone', e.target.value)}
                     />
                   ) : (
-                    <div className="flex items-center gap-2 rounded-md border p-3">
+                    <div className="flex items-center gap-2 rounded-lg border p-3">
                       <Phone className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">{user.phone || '—'}</span>
                     </div>
@@ -272,14 +287,14 @@ export function Profile() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Должность</Label>
-                  <div className="flex items-center gap-2 rounded-md border p-3">
+                  <div className="flex items-center gap-2 rounded-lg border p-3">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">{user.position}</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Отдел</Label>
-                  <div className="flex items-center gap-2 rounded-md border p-3">
+                  <div className="flex items-center gap-2 rounded-lg border p-3">
                     <Building2 className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">{user.department}</span>
                   </div>

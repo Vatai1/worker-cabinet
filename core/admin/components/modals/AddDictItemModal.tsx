@@ -225,10 +225,10 @@ export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Prop
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-background rounded-2xl shadow-sm w-full max-w-md mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-1">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl gradient-primary">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 text-primary">
               <Icon className="h-5 w-5 text-white" />
             </div>
             <h2 className="text-xl font-semibold">

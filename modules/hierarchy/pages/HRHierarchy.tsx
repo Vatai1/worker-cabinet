@@ -319,7 +319,7 @@ function SelectDepartmentModal({
   )
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-primary" />
@@ -353,7 +353,7 @@ function SelectDepartmentModal({
                   selected?.id === dept.id ? 'bg-primary/10 border-l-2 border-primary' : 'hover:bg-muted/60'
                 }`}
               >
-                <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                   <Building2 className="h-4 w-4 text-white" />
                 </div>
                 <div>
@@ -417,7 +417,7 @@ function SelectEmployeeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <User className="h-5 w-5 text-primary" />
@@ -461,7 +461,7 @@ function SelectEmployeeModal({
                   selected?.id === emp.id ? 'bg-primary/10 border-l-2 border-primary' : 'hover:bg-muted/60'
                 }`}
               >
-                <div className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                   <span className="text-white text-xs font-semibold">
                     {emp.first_name[0]}{emp.last_name[0]}
                   </span>
@@ -508,7 +508,7 @@ function TextInputModal({
   const [text, setText] = useState(initialText)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <AlignLeft className="h-5 w-5 text-primary" />

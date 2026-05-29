@@ -1,9 +1,11 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Label } from '@/shared/components/ui/Label'
 import { Switch } from '@/shared/components/ui/Switch'
-import { Bell, Moon, Sun } from 'lucide-react'
 import { useUIStore } from '@/shared/store/uiStore'
+
+import { Bell, Moon, Sun, Settings as SettingsIcon } from 'lucide-react'
 
 export function Settings() {
   const [emailNotifications, setEmailNotifications] = useState(true)
@@ -11,19 +13,28 @@ export function Settings() {
   const { darkMode, toggleTheme } = useUIStore()
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Настройки</h1>
-        <p className="text-muted-foreground mt-2">
-          Управление настройками аккаунта и интерфейса
-        </p>
+    <div className="space-y-6 animate-fade-in">
+      <div className="page-header">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center h-10 w-10 bg-primary/10 rounded-xl text-primary">
+            <SettingsIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Настройки</h1>
+            <p className="text-sm text-muted-foreground">
+              Управление настройками аккаунта и интерфейса
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
+      <div className="page-grid grid gap-6 md:grid-cols-2">
+        <Card className="section-card stagger-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
+              <div className="flex items-center justify-center h-6 w-6 bg-primary/10 rounded-lg">
+                <Bell className="h-3.5 w-3.5 text-primary" />
+              </div>
               Уведомления
             </CardTitle>
             <CardDescription>
@@ -58,10 +69,12 @@ export function Settings() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="section-card stagger-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              {darkMode ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+              <div className="flex items-center justify-center h-6 w-6 bg-primary/10 rounded-lg">
+                {darkMode ? <Moon className="h-3.5 w-3.5 text-primary" /> : <Sun className="h-3.5 w-3.5 text-primary" />}
+              </div>
               Оформление
             </CardTitle>
             <CardDescription>

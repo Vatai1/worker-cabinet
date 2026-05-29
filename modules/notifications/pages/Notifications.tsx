@@ -105,23 +105,29 @@ export function Notifications() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Bell className="h-6 w-6" />
-            Уведомления
-            {unreadCount > 0 && (
-              <Badge variant="default" className="ml-1">{unreadCount}</Badge>
-            )}
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">История уведомлений и почтовых рассылок</p>
+      <div className="page-header">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10">
+              <Bell className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold flex items-center gap-2">
+                Уведомления
+                {unreadCount > 0 && (
+                  <Badge variant="default">{unreadCount}</Badge>
+                )}
+              </h1>
+              <p className="text-sm text-muted-foreground">История уведомлений и почтовых рассылок</p>
+            </div>
+          </div>
+          {unreadCount > 0 && (
+            <Button variant="outline" size="sm" onClick={markAllAsRead}>
+              <CheckCheck className="h-4 w-4 mr-1" />
+              Прочитать все
+            </Button>
+          )}
         </div>
-        {unreadCount > 0 && (
-          <Button variant="outline" size="sm" onClick={markAllAsRead}>
-            <CheckCheck className="h-4 w-4 mr-1" />
-            Прочитать все
-          </Button>
-        )}
       </div>
 
       {error && <p className="text-destructive text-sm">{error}</p>}
@@ -129,7 +135,7 @@ export function Notifications() {
       {loading ? (
         <p className="text-muted-foreground">Загрузка...</p>
       ) : notifications.length === 0 ? (
-        <div className="text-center py-24 text-muted-foreground">
+        <div className="text-center py-24 text-muted-foreground animate-fade-in">
           <Bell className="h-16 w-16 mx-auto mb-4 opacity-30" />
           <p className="text-lg font-medium">Нет уведомлений</p>
           <p className="text-sm mt-1">Здесь будут отображаться все ваши уведомления</p>
@@ -137,18 +143,19 @@ export function Notifications() {
       ) : (
         <>
           <div className="space-y-2">
-            {notifications.map((n) => {
+            {notifications.map((n, index) => {
               const isUnread = !n.read_at
               const icon = TYPE_ICONS[n.type] || '🔔'
               const label = TYPE_LABELS[n.type] || n.type
               const data = n.data || {}
               const subject = (data.subject as string) || label
               const message = (data.message as string) || ''
+              const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
 
               return (
                 <Card
                   key={n.id}
-                  className={`transition-colors cursor-pointer ${
+                  className={`section-card ${staggerClass} transition-colors cursor-pointer ${
                     isUnread ? 'border-primary/30 bg-primary/5' : ''
                   }`}
                   onClick={() => isUnread && markAsRead(n.id)}

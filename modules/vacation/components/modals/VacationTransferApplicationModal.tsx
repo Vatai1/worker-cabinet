@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { FileText, X, Download, Loader2, Plus, ChevronUp } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
@@ -235,13 +235,13 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-2xl mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] flex flex-col">
+      <div className="relative bg-background rounded-xl border border-border/60 shadow-sm w-full max-w-2xl mx-4 animate-scale-in max-h-[90vh] flex flex-col">
         <div className="p-6 pb-4">
           <div className="flex items-center gap-3 mb-1">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl gradient-primary">
-              <FileText className="h-5 w-5 text-white" />
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
+              <FileText className="h-5 w-5 text-primary" />
             </div>
-            <h2 className="text-xl font-semibold">Заявление о переносе отпуска</h2>
+            <h2 className="text-xl font-bold">Заявление о переносе отпуска</h2>
           </div>
           <p className="text-sm text-muted-foreground ml-12">
             Генерация документа из подтверждённых переносов
@@ -285,6 +285,7 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
                 variant="outline"
                 size="sm"
                 onClick={() => { setShowAddForm(v => !v); setFormError(null) }}
+                className="interactive"
               >
                 {showAddForm ? <ChevronUp className="h-3.5 w-3.5 mr-1.5" /> : <Plus className="h-3.5 w-3.5 mr-1.5" />}
                 {showAddForm ? 'Скрыть форму' : 'Добавить перенос'}
@@ -292,7 +293,7 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
             </div>
 
             {showAddForm && (
-              <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3">
+              <div className="rounded-xl border border-border/60 bg-muted/10 p-4 space-y-3 animate-slide-up">
                 {formError && (
                   <div className="p-2 rounded bg-destructive/10 border border-destructive/20 text-xs text-destructive">
                     {formError}
@@ -417,7 +418,7 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
                   return (
                     <label
                       key={t.id}
-                      className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                      className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
                         isApproved
                           ? selected.has(t.id)
                             ? 'border-primary/60 bg-primary/5'

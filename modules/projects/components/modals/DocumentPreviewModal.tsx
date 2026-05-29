@@ -116,7 +116,7 @@ export function DocumentPreviewModal({ open, onClose, document: doc }: DocumentP
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-7xl mx-4 flex flex-col h-[95vh] animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-7xl mx-4 flex flex-col h-[95vh] animate-in fade-in zoom-in duration-200">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border/60 shrink-0">
           <div className="flex items-center gap-3 flex-1 min-w-0">

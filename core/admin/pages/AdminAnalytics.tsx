@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
@@ -52,27 +52,29 @@ export function AnalyticsTab() {
   const chartColors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4', '#84cc16']
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg">
-          <BarChart3 className="h-6 w-6" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">Аналитика</h1>
-          <p className="text-sm text-muted-foreground">Графики и статистика системы</p>
-        </div>
-        <div className="ml-auto">
-          <select value={days} onChange={(e) => setDays(parseInt(e.target.value))} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
-            <option value={7}>7 дней</option>
-            <option value={30}>30 дней</option>
-            <option value={90}>90 дней</option>
-            <option value={365}>Год</option>
-          </select>
+    <div className="space-y-6 animate-fade-in">
+      <div className="page-header">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-primary/10">
+             <BarChart3 className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Аналитика</h1>
+            <p className="text-sm text-muted-foreground">Графики и статистика системы</p>
+          </div>
+          <div className="ml-auto">
+            <select value={days} onChange={(e) => setDays(parseInt(e.target.value))} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+              <option value={7}>7 дней</option>
+              <option value={30}>30 дней</option>
+              <option value={90}>90 дней</option>
+              <option value={365}>Год</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card>
+      <div className="page-grid grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="section-card stagger-1">
           <CardHeader><CardTitle className="text-base">Активность по дням</CardTitle></CardHeader>
           <CardContent>
             <div className="flex items-end gap-1 h-40">
@@ -82,7 +84,7 @@ export function AnalyticsTab() {
                     {d.count} — {d.date}
                   </span>
                   <div
-                    className="w-full bg-gradient-to-t from-indigo-500 to-violet-400 rounded-t transition-all group-hover:from-indigo-400 group-hover:to-violet-300"
+                    className="w-full bg-primary/70 rounded-t transition-all group-hover:bg-primary"
                     style={{ height: `${(parseInt(d.count) / maxDayCount) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }}
                   />
                 </div>
@@ -91,7 +93,7 @@ export function AnalyticsTab() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="section-card stagger-2">
           <CardHeader><CardTitle className="text-base">Размер отделов</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {data.departmentSize.map((d, i) => (
@@ -106,7 +108,7 @@ export function AnalyticsTab() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="section-card stagger-3">
           <CardHeader><CardTitle className="text-base">Типы действий</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {data.activityByType.map((d, i) => (
@@ -121,12 +123,12 @@ export function AnalyticsTab() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="section-card stagger-4">
           <CardHeader><CardTitle className="text-base">Самые активные пользователи</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {data.topUsers.map((d, i) => (
-              <div key={d.user_name} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/20">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white">
+              <div key={d.user_name} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
                   {i + 1}
                 </div>
                 <span className="text-sm flex-1 font-medium">{d.user_name}</span>
@@ -137,7 +139,7 @@ export function AnalyticsTab() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="section-card stagger-5">
           <CardHeader><CardTitle className="text-base">Новые пользователи по месяцам</CardTitle></CardHeader>
           <CardContent>
             {data.newUsersByMonth.length === 0 ? (
@@ -151,7 +153,7 @@ export function AnalyticsTab() {
                       <span className="absolute -top-6 text-[10px] bg-popover border border-border px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
                         {d.count}
                       </span>
-                      <div className="w-full bg-gradient-to-t from-emerald-500 to-teal-400 rounded-t" style={{ height: `${(parseInt(d.count) / maxVal) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }} />
+                      <div className="w-full bg-emerald-500 rounded-t" style={{ height: `${(parseInt(d.count) / maxVal) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }} />
                       <span className="text-[9px] text-muted-foreground">{new Date(d.month).toLocaleDateString('ru-RU', { month: 'short' })}</span>
                     </div>
                   )
@@ -161,7 +163,7 @@ export function AnalyticsTab() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="section-card stagger-6">
           <CardHeader><CardTitle className="text-base">Заявления на отпуск по месяцам</CardTitle></CardHeader>
           <CardContent>
             {data.vacationByMonth.length === 0 ? (
@@ -175,7 +177,7 @@ export function AnalyticsTab() {
                       <span className="absolute -top-6 text-[10px] bg-popover border border-border px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
                         {d.count}
                       </span>
-                      <div className="w-full bg-gradient-to-t from-amber-500 to-orange-400 rounded-t" style={{ height: `${(parseInt(d.count) / maxVal) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }} />
+                      <div className="w-full bg-amber-500 rounded-t" style={{ height: `${(parseInt(d.count) / maxVal) * 100}%`, minHeight: parseInt(d.count) > 0 ? 4 : 0 }} />
                       <span className="text-[9px] text-muted-foreground">{new Date(d.month).toLocaleDateString('ru-RU', { month: 'short' })}</span>
                     </div>
                   )

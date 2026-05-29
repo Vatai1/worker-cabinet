@@ -281,7 +281,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-7xl mx-4 flex flex-col h-[95vh]">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-7xl mx-4 flex flex-col h-[95vh]">
         <div className="flex items-center justify-between p-4 border-b border-border/60 shrink-0">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 shrink-0">
@@ -331,7 +331,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
 
         {showSaveConfirm && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
               <h3 className="text-lg font-semibold">Сохранить изменения</h3>
               <p className="text-muted-foreground">
                 Сохранить текущую версию документа «{doc.name}»?
@@ -351,7 +351,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
 
         {showConfirmModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
               <h3 className="text-lg font-semibold">Подтверждение ознакомления</h3>
               <p className="text-muted-foreground">
                 Вы подтверждаете, что ознакомились с документом «{doc.name}»?

@@ -1,14 +1,14 @@
-﻿import { useState, useEffect, useRef } from 'react'
-import { formatFileSize } from '@/shared/data/mockData'
-import { useAuthStore } from '@/core/auth/store/authStore'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
+import { Input } from '@/shared/components/ui/Input'
+import { FileText, Download, Search, Upload, Eye, X, Trash2, FolderOpen } from 'lucide-react'
+import { useAuthStore } from '@/core/auth/store/authStore'
+import { formatFileSize } from '@/shared/data/mockData'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { FileText, Download, Search, Upload, Eye, X, Trash2 } from 'lucide-react'
-import { Input } from '@/shared/components/ui/Input'
 
 interface UserDocument {
   id: string
@@ -47,7 +47,6 @@ export function Documents() {
         setDocuments([])
       }
     } catch (err: unknown) {
-      console.error('Error fetching documents:', err)
       setDocuments([])
     } finally {
       setLoading(false)
@@ -82,7 +81,7 @@ export function Documents() {
         headers: getAuthHeaders(),
       })
       if (!res.ok) throw new Error('Ошибка скачивания')
-      
+
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -103,7 +102,7 @@ export function Documents() {
         headers: getAuthHeaders(),
       })
       if (!res.ok) throw new Error('Ошибка предпросмотра')
-      
+
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       window.open(url, '_blank')
@@ -114,14 +113,14 @@ export function Documents() {
 
   const handleDelete = async (doc: UserDocument) => {
     if (!confirm(`Удалить документ "${doc.name}"?`)) return
-    
+
     try {
       const res = await fetch(`${API_BASE_URL}/user-documents/${doc.id}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       })
       if (!res.ok) throw new Error('Ошибка удаления')
-      
+
       setDocuments(prev => prev.filter(d => d.id !== doc.id))
     } catch (error) {
       alert('Не удалось удалить документ')
@@ -171,22 +170,29 @@ export function Documents() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Ваши документы</h1>
-          <p className="text-muted-foreground">
-            Личные документы: договоры, сертификаты и другие файлы
-          </p>
+      <div className="page-header">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10">
+              <FolderOpen className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">Ваши документы</h1>
+              <p className="text-sm text-muted-foreground">
+                Личные документы: договоры, сертификаты и другие файлы
+              </p>
+            </div>
+          </div>
+          {user?.role === 'manager' && (
+            <Button onClick={() => setUploadModalOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" />
+              Загрузить документ
+            </Button>
+          )}
         </div>
-        {user?.role === 'manager' && (
-          <Button onClick={() => setUploadModalOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Загрузить документ
-          </Button>
-        )}
       </div>
 
-      <Card>
+      <Card className="section-card stagger-1">
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="relative flex-1 max-w-md">
@@ -233,7 +239,7 @@ export function Documents() {
       </Card>
 
       {loading ? (
-        <Card>
+        <Card className="section-card stagger-2">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
               <FileText className="mx-auto h-12 w-12 text-muted-foreground animate-pulse" />
@@ -242,7 +248,7 @@ export function Documents() {
           </CardContent>
         </Card>
       ) : filteredDocuments.length === 0 ? (
-        <Card>
+        <Card className="section-card stagger-2">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
               <FileText className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
@@ -256,12 +262,13 @@ export function Documents() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredDocuments.map((doc) => {
+        <div className="page-grid">
+          {filteredDocuments.map((doc, index) => {
             const categoryBadge = getCategoryBadge(doc.category)
-            
+            const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
+
             return (
-              <Card key={doc.id} className="hover:shadow-md transition-shadow">
+              <Card key={doc.id} className={`section-card hover-lift ${staggerClass}`}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -293,19 +300,19 @@ export function Documents() {
                       </span>
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        className="flex-1" 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        className="flex-1"
+                        variant="outline"
+                        size="sm"
                         onClick={() => handlePreview(doc)}
                       >
                         <Eye className="mr-2 h-4 w-4" />
                         Просмотр
                       </Button>
-                      <Button 
-                        className="flex-1" 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        className="flex-1"
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleDownload(doc)}
                       >
                         <Download className="mr-2 h-4 w-4" />
@@ -313,10 +320,10 @@ export function Documents() {
                       </Button>
                     </div>
                     {user?.role === 'manager' && (
-                      <Button 
-                        className="w-full" 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        className="w-full"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDelete(doc)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -331,8 +338,8 @@ export function Documents() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+      <div className="page-grid">
+        <Card className="section-card stagger-1">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Всего документов</CardTitle>
           </CardHeader>
@@ -340,7 +347,7 @@ export function Documents() {
             <div className="text-2xl font-bold">{documents.length}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="section-card stagger-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Договоры</CardTitle>
           </CardHeader>
@@ -350,7 +357,7 @@ export function Documents() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="section-card stagger-3">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Сертификаты</CardTitle>
           </CardHeader>
@@ -360,7 +367,7 @@ export function Documents() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="section-card stagger-4">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Общий размер</CardTitle>
           </CardHeader>
@@ -374,7 +381,7 @@ export function Documents() {
 
       {uploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <Card className="w-full max-w-md mx-4">
+          <Card className="section-card w-full max-w-md mx-4">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Загрузить документ</CardTitle>
@@ -398,7 +405,7 @@ export function Documents() {
                   </p>
                 )}
               </div>
-              
+
               <div>
                 <label className="text-sm font-medium">Категория</label>
                 <select
@@ -412,7 +419,7 @@ export function Documents() {
                   <option value="other">Другое</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="text-sm font-medium">Описание</label>
                 <Input
@@ -422,7 +429,7 @@ export function Documents() {
                   className="mt-1"
                 />
               </div>
-              
+
               <div className="flex gap-2">
                 <Button
                   variant="outline"
