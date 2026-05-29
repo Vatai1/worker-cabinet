@@ -1107,19 +1107,29 @@ function SettingsTab() {
         )}
 
         <div className="grid gap-4">
-          {settings.map((setting) => (
+          {settings.map((setting) => {
+            const isBoolean = setting.value === 'true' || setting.value === 'false'
+            return (
             <div key={setting.key} className="flex flex-col sm:flex-row sm:items-center gap-2 p-4 rounded-xl border border-border/50">
               <div className="flex-1">
                 <p className="font-medium text-sm">{setting.description || setting.key}</p>
                 <p className="text-xs text-muted-foreground font-mono">{setting.key}</p>
               </div>
-              <Input
-                value={setting.value}
-                onChange={(e) => updateValue(setting.key, e.target.value)}
-                className="sm:w-64"
-              />
+              {isBoolean ? (
+                <Switch
+                  checked={setting.value === 'true'}
+                  onCheckedChange={(checked) => updateValue(setting.key, String(checked))}
+                />
+              ) : (
+                <Input
+                  value={setting.value}
+                  onChange={(e) => updateValue(setting.key, e.target.value)}
+                  className="sm:w-64"
+                />
+              )}
             </div>
-          ))}
+            )
+          })}
         </div>
 
         <div className="flex justify-end">
