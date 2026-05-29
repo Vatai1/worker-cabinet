@@ -101,6 +101,22 @@ app.get('/api/modules', async (req, res) => {
   }
 })
 
+app.get('/api/settings/public', async (req, res) => {
+  try {
+    const { query } = await import('./config/database.js')
+    const result = await query(
+      "SELECT key, value FROM system_settings WHERE key LIKE 'login_%' OR key = 'company_name'"
+    )
+    const settings = {}
+    for (const row of result.rows) {
+      settings[row.key] = row.value
+    }
+    res.json(settings)
+  } catch {
+    res.json({})
+  }
+})
+
 app.use(errorHandler)
 
 app.use((req, res) => {
