@@ -99,10 +99,10 @@ export function VacationApplicationModal({ open, onClose, defaultYear }: Props) 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-1">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl gradient-primary">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 text-primary">
               <FileText className="h-5 w-5 text-white" />
             </div>
             <h2 className="text-xl font-semibold">Заявление на отпуск</h2>

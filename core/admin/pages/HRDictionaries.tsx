@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { Building2, Wrench, Palmtree, Briefcase, FileText, Plus, Pencil, Trash2, X, Search, Users, MoreHorizontal, ExternalLink } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
@@ -13,11 +13,11 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { useModulesStore } from '@/shared/store/modulesStore'
 
 const TABS = [
-  { value: 'departments', label: 'Отделы', icon: Building2, color: 'text-blue-500', bgColor: 'bg-blue-50 dark:bg-blue-950/30' },
-  { value: 'skills', label: 'Навыки', icon: Wrench, color: 'text-violet-500', bgColor: 'bg-violet-50 dark:bg-violet-950/30' },
-  { value: 'vacation-types', label: 'Типы отпусков', icon: Palmtree, color: 'text-emerald-500', bgColor: 'bg-emerald-50 dark:bg-emerald-950/30' },
-  { value: 'positions', label: 'Должности', icon: Briefcase, color: 'text-amber-500', bgColor: 'bg-amber-50 dark:bg-amber-950/30' },
-  { value: 'doc-templates', label: 'Шаблоны документов', icon: FileText, color: 'text-rose-500', bgColor: 'bg-rose-50 dark:bg-rose-950/30' },
+  { value: 'departments', label: 'Отделы', icon: Building2, color: 'text-primary', bgColor: 'bg-primary/10' },
+  { value: 'skills', label: 'Навыки', icon: Wrench, color: 'text-primary', bgColor: 'bg-primary/10' },
+  { value: 'vacation-types', label: 'Типы отпусков', icon: Palmtree, color: 'text-primary', bgColor: 'bg-primary/10' },
+  { value: 'positions', label: 'Должности', icon: Briefcase, color: 'text-primary', bgColor: 'bg-primary/10' },
+  { value: 'doc-templates', label: 'Шаблоны документов', icon: FileText, color: 'text-primary', bgColor: 'bg-primary/10' },
 ]
 
 interface DictItem {
@@ -296,35 +296,37 @@ export function HRDictionaries() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Справочники</h1>
-          <p className="text-muted-foreground mt-1">
-            Управление справочниками системы · {items.length} записей
-          </p>
-        </div>
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            ref={searchRef}
-            className="pl-9"
-            placeholder="Поиск по всем справочникам..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
-            <button
-              onClick={() => { setSearch(''); searchRef.current?.focus() }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-muted text-muted-foreground"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
+      <div className="page-header">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold">Справочники</h1>
+            <p className="text-muted-foreground mt-1">
+              Управление справочниками системы · {items.length} записей
+            </p>
+          </div>
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              className="pl-9"
+              placeholder="Поиск по всем справочникам..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                onClick={() => { setSearch(''); searchRef.current?.focus() }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-muted text-muted-foreground interactive"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {isSearchActive ? (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-slide-up">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               {allDataLoading ? 'Поиск...' : `Найдено ${totalSearchResults} ${totalSearchResults === 1 ? 'запись' : totalSearchResults < 5 ? 'записи' : 'записей'} по запросу «${search}»`}
@@ -335,7 +337,7 @@ export function HRDictionaries() {
           </div>
 
           {searchResults.length === 0 && !allDataLoading && (
-            <div className="rounded-2xl border border-border/60 bg-card p-16 text-center">
+            <div className="section-card rounded-xl border border-border/60 bg-card p-16 text-center">
               <Search className="h-10 w-10 mx-auto text-muted-foreground/40" />
               <p className="mt-3 text-muted-foreground">Ничего не найдено по запросу «{search}»</p>
             </div>
@@ -345,10 +347,10 @@ export function HRDictionaries() {
             const Icon = group.tab.icon
             const groupCols = getColumns(group.type)
             return (
-              <div key={group.type} className="rounded-2xl border border-border/60 bg-card shadow-lg shadow-black/5 overflow-hidden">
+              <div key={group.type} className="section-card rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
                 <button
                   onClick={() => goToItem(group.type)}
-                  className="w-full flex items-center justify-between px-5 py-3.5 border-b border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors"
+                  className="w-full flex items-center justify-between px-5 py-3.5 border-b border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors interactive"
                 >
                   <div className="flex items-center gap-3">
                     <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${group.tab.bgColor}`}>
@@ -371,7 +373,7 @@ export function HRDictionaries() {
                   </thead>
                   <tbody className="divide-y divide-border/20">
                     {group.items.map((item) => (
-                      <tr key={item.id ?? item.name} className="hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => goToItem(group.type)}>
+                      <tr key={item.id ?? item.name} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => goToItem(group.type)}>
                         {groupCols.map((col) => (
                           <td key={col.key} className="py-2.5 px-5">
                             {col.key === 'name' ? highlightMatch(item.name, search) :
@@ -396,7 +398,7 @@ export function HRDictionaries() {
                 <button
                   key={t.value}
                   onClick={() => setTab(t.value)}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+                  className={`interactive flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
                     tab === t.value
                       ? 'bg-card text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
@@ -410,7 +412,7 @@ export function HRDictionaries() {
           </div>
 
           {error && (
-            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
               {error}
             </div>
           )}
@@ -422,7 +424,7 @@ export function HRDictionaries() {
             </Button>
           )}
 
-          <div className="rounded-2xl border border-border/60 bg-card shadow-lg shadow-black/5 overflow-hidden">
+          <div className="section-card rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -452,8 +454,8 @@ export function HRDictionaries() {
                     <tr>
                       <td colSpan={columns.length + 2} className="text-center py-16 text-muted-foreground">
                         <div className="flex flex-col items-center gap-3">
-                          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted">
-                            <activeTab.icon className={`h-6 w-6 ${activeTab.color}`} />
+                          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10">
+                            <activeTab.icon className="h-5 w-5 text-primary" />
                           </div>
                           <p>Список пуст</p>
                         </div>
@@ -463,7 +465,7 @@ export function HRDictionaries() {
                     filtered.map((item, idx) => (
                       <tr
                         key={item.id ?? item.name}
-                        className="group transition-colors hover:bg-muted/30"
+                        className="group transition-colors hover:bg-muted/50"
                         onContextMenu={(e) => {
                           if (!(canEdit || canDelete)) return
                           e.preventDefault()
@@ -522,13 +524,13 @@ export function HRDictionaries() {
         return (
           <div
             ref={contextMenuRef}
-            className="fixed z-50 min-w-[160px] rounded-lg border border-border/60 bg-card shadow-lg shadow-black/10 py-1"
+            className="fixed z-50 min-w-[160px] rounded-xl border border-border/60 bg-card shadow-sm py-1"
             style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
           >
             {tab === 'doc-templates' && item.file_key && (
               <button
                 onClick={() => { closeContextMenu(); setOnlyOfficeItem(item) }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/50 transition-colors interactive"
               >
                 <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                 Открыть в OnlyOffice
@@ -540,7 +542,7 @@ export function HRDictionaries() {
             {canEdit && (
               <button
                 onClick={() => { closeContextMenu(); handleEdit(item) }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/50 transition-colors interactive"
               >
                 <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                 Редактировать
@@ -549,7 +551,7 @@ export function HRDictionaries() {
             {canDelete && (
               <button
                 onClick={() => { closeContextMenu(); setDeleteTarget(item) }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors interactive"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 Удалить

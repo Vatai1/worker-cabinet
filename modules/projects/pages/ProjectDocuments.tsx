@@ -86,7 +86,7 @@ function NewFolderModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
             <FolderPlus className="h-4 w-4 text-primary" />
@@ -136,7 +136,7 @@ function RenameFolderModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
             <Folder className="h-4 w-4 text-primary" />
@@ -188,7 +188,7 @@ function RenameDocModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
             <FileIcon className="h-4 w-4 text-primary" />
@@ -240,7 +240,7 @@ function FolderInfoModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
         <div className="flex items-center gap-3 mb-6">
           <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10">
             <Folder className="h-6 w-6 text-amber-500" />
@@ -289,7 +289,7 @@ function DocInfoModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
         <div className="flex items-center gap-3 mb-6">
           <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10">
             <FileIcon className="h-6 w-6 text-primary" />
@@ -393,7 +393,7 @@ function UploadModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 animate-in fade-in zoom-in duration-200">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
             <Upload className="h-4 w-4 text-primary" />
@@ -494,7 +494,7 @@ function ConfirmDeleteModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 animate-in fade-in zoom-in duration-200">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-destructive/10">
             <AlertTriangle className="h-4 w-4 text-destructive" />

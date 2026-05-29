@@ -1,15 +1,15 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
-import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { Input } from '@/shared/components/ui/Input'
 import {
   FolderKanban, Plus, Search, Loader2, ChevronDown, ChevronUp,
   Calendar, Users, CircleDot, CheckCircle2, Clock, Crown,
 } from 'lucide-react'
 import { CreateProjectModal } from '@/modules/projects/components/modals/CreateProjectModal'
+import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAvatarColor } from '@/shared/lib/constants'
@@ -47,7 +47,6 @@ const STATUS_FILTERS = [
 
 function formatDateShort(dateStr?: string) {
   if (!dateStr) return null
-  // For YYYY-MM-DD format, parse as local date to avoid timezone shift
   if (!dateStr.includes('T')) {
     const [year, month, day] = dateStr.split('-').map(Number)
     const localDate = new Date(year, month - 1, day)
@@ -56,7 +55,6 @@ function formatDateShort(dateStr?: string) {
   return new Date(dateStr).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-// ── Project card with expand/collapse ──────────────────────────────────────
 function ProjectCard({ project }: { project: Project }) {
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
@@ -73,17 +71,15 @@ function ProjectCard({ project }: { project: Project }) {
   const extraParticipants = participants.length - PREVIEW_LIMIT
 
   return (
-    <Card className="overflow-hidden hover:border-primary/30 transition-colors duration-200">
-      {/* Collapsed header — always visible */}
+    <Card className="section-card overflow-hidden hover:border-primary/30 transition-colors duration-200">
       <button
-        className="w-full text-left"
+        className="interactive w-full text-left"
         onClick={() => setExpanded((v) => !v)}
       >
         <CardContent className="p-5">
           <div className="flex items-start gap-4">
-            {/* Icon */}
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl gradient-primary shrink-0 shadow-sm">
-              <FolderKanban className="h-5 w-5 text-white" />
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 shrink-0">
+              <FolderKanban className="h-5 w-5 text-primary" />
             </div>
 
             <div className="flex-1 min-w-0">
@@ -122,15 +118,13 @@ function ProjectCard({ project }: { project: Project }) {
         </CardContent>
       </button>
 
-      {/* Expanded details */}
       {expanded && (
-        <div className="border-t border-border/40 px-5 pb-5 pt-4 space-y-4 animate-in fade-in duration-200">
+        <div className="border-t border-border/40 px-5 pb-5 pt-4 space-y-4 animate-fade-in">
           {project.description && (
             <p className="text-sm text-muted-foreground">{project.description}</p>
           )}
 
           <div className="grid sm:grid-cols-2 gap-4">
-            {/* Leads */}
             {leads.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
@@ -148,7 +142,6 @@ function ProjectCard({ project }: { project: Project }) {
               </div>
             )}
 
-            {/* Participants */}
             {participants.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
@@ -171,6 +164,7 @@ function ProjectCard({ project }: { project: Project }) {
             <Button
               size="sm"
               variant="outline"
+              className="interactive"
               onClick={() => navigate(`/projects/${project.id}`)}
             >
               Подробнее →
@@ -205,7 +199,6 @@ function MemberRow({ member }: { member: ProjectMemberType }) {
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────
 export function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -232,7 +225,6 @@ export function Projects() {
 
   useEffect(() => { fetchProjects() }, [statusFilter])
 
-  // Client-side search for instant feedback
   const filtered = search
     ? projects.filter((p) =>
         p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -254,21 +246,24 @@ export function Projects() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <div className="page-header flex flex-col sm:flex-row sm:items-end justify-between gap-4 animate-slide-up">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Проекты</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-xl font-bold flex items-center gap-3">
+            <span className="flex items-center justify-center w-9 h-9 bg-primary/10 rounded-xl">
+              <FolderKanban className="h-5 w-5 text-primary" />
+            </span>
+            Проекты
+          </h1>
+          <p className="text-muted-foreground mt-1 ml-12">
             {loading ? 'Загрузка…' : `${projects.length} проектов`}
           </p>
         </div>
-        <Button className="gap-2 self-start sm:self-auto" onClick={() => setCreateOpen(true)}>
+        <Button className="gap-2 self-start sm:self-auto interactive" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" />
           Создать проект
         </Button>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -284,7 +279,7 @@ export function Projects() {
             <button
               key={f.value}
               onClick={() => setStatusFilter(f.value)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+              className={`interactive px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
                 statusFilter === f.value
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
@@ -296,15 +291,16 @@ export function Projects() {
         </div>
       </div>
 
-      {/* List */}
       {loading ? (
         <div className="flex items-center justify-center h-48">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : filtered.length > 0 ? (
-        <div className="space-y-3">
-          {filtered.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+        <div className="page-grid space-y-3">
+          {filtered.map((project, i) => (
+            <div key={project.id} className={`stagger-${Math.min(i + 1, 8)}`}>
+              <ProjectCard project={project} />
+            </div>
           ))}
         </div>
       ) : (
@@ -316,7 +312,7 @@ export function Projects() {
             {search || statusFilter ? 'Проектов не найдено' : 'Проектов пока нет'}
           </p>
           {!search && !statusFilter && (
-            <Button variant="outline" className="mt-4" onClick={() => setCreateOpen(true)}>
+            <Button variant="outline" className="mt-4 interactive" onClick={() => setCreateOpen(true)}>
               Создать первый проект
             </Button>
           )}

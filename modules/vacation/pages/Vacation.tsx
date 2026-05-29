@@ -282,7 +282,7 @@ export function Vacation() {
     }
   }
 
-  const handleCreateRestriction = async (restriction: Omit<any, 'id'>) => {
+  const handleCreateRestriction = async (restriction: Record<string, unknown>) => {
     if (!user) return
     try {
       await useVacationStore.getState().createRestriction(user.departmentId || '1', restriction)
@@ -364,7 +364,7 @@ export function Vacation() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center flex-wrap gap-4">
+      <div className="page-header flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <span className="text-4xl">✈️</span>
@@ -423,7 +423,7 @@ export function Vacation() {
       )}
 
       {balance && (
-        <Card className="overflow-hidden">
+        <Card className="section-card overflow-hidden">
           <div className="p-6 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
               <span className="p-2 bg-primary/10 rounded-lg">
@@ -434,16 +434,16 @@ export function Vacation() {
               Баланс отпускных дней
             </h2>
             <div className="grid grid-cols-3 gap-6">
-              <div className="text-center p-4 rounded-xl bg-card border border-border/50 shadow-sm hover:shadow-md transition-shadow">
-                <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">{balance.totalDays}</div>
+              <div className="text-center p-4 rounded-xl bg-card border border-border/50 hover-lift stagger-1">
+                <div className="text-4xl font-bold text-gradient">{balance.totalDays}</div>
                 <div className="text-sm text-muted-foreground mt-2 font-medium">Всего дней</div>
               </div>
-              <div className="text-center p-4 rounded-xl bg-card border border-border/50 shadow-sm hover:shadow-md transition-shadow">
-                <div className="text-4xl font-bold bg-gradient-to-r from-amber-600 to-amber-500 bg-clip-text text-transparent">{balance.usedDays}</div>
+              <div className="text-center p-4 rounded-xl bg-card border border-border/50 hover-lift stagger-2">
+                <div className="text-4xl font-bold text-gradient">{balance.usedDays}</div>
                 <div className="text-sm text-muted-foreground mt-2 font-medium">Использовано</div>
               </div>
-              <div className="text-center p-4 rounded-xl bg-card border border-border/50 shadow-sm hover:shadow-md transition-shadow">
-                <div className="text-4xl font-bold bg-gradient-to-r from-emerald-600 to-emerald-500 bg-clip-text text-transparent">{balance.availableDays}</div>
+              <div className="text-center p-4 rounded-xl bg-card border border-border/50 hover-lift stagger-3">
+                <div className="text-4xl font-bold text-gradient">{balance.availableDays}</div>
                 <div className="text-sm text-muted-foreground mt-2 font-medium">Доступно</div>
               </div>
             </div>
@@ -473,7 +473,7 @@ export function Vacation() {
         </div>
       )}
 
-      <Card>
+      <Card className="section-card">
         <div className="p-6">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Button variant="outline" size="icon" onClick={handlePrevYear}>
@@ -537,11 +537,11 @@ export function Vacation() {
       </Card>
 
       {isDepartmentManager && departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL).length > 0 && (
-        <Card>
+        <Card className="section-card">
           <div className="p-6">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <span className="p-2 bg-amber-500/10 rounded-lg">
-                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span className="p-2 bg-primary/10 rounded-lg">
+                <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </span>
@@ -560,7 +560,7 @@ export function Vacation() {
                       onClick={() => handleOpenDetailModal(request)}
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-white font-bold shadow-lg shrink-0">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary font-bold shrink-0">
                           {request.userFirstName[0]}{request.userLastName[0]}
                         </div>
                         <div className="flex-1">

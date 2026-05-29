@@ -18,7 +18,7 @@ interface Project {
 interface AddProjectModalProps {
   open: boolean
   onClose: () => void
-  onAdd: (project: Omit<Project, 'id'>) => void
+  onAdd: (project: Omit<Project, 'id'>) => void | Promise<void>
 }
 
 export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) {
@@ -88,7 +88,7 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative bg-background rounded-xl shadow-2xl w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-background rounded-xl shadow-sm w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center gap-2 mb-2">
             <Plus className="h-5 w-5 text-primary" />

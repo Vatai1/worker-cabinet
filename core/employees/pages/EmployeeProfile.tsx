@@ -1,21 +1,24 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
+
 import { Button } from '@/shared/components/ui/Button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
-import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { formatDate, getErrorMessage } from '@/shared/lib/utils'
-import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { AddProjectModal } from '@/core/admin/components/modals/AddProjectModal'
 import { SkillsCard } from '@/modules/skills/components/SkillsCard'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
-import { API_BASE_URL } from '@/shared/lib/api'
-import { getAvatarColor as getAvatarGradient } from '@/shared/lib/constants'
+
 import {
-  Mail, Phone, Calendar, Building2, Briefcase, ArrowLeft, Loader2,
-  User, Target,
+  Mail, Phone, Calendar, Building2, Briefcase,
+  User, Target, ChevronLeft, Sparkles,
 } from 'lucide-react'
+
+import { API_BASE_URL } from '@/shared/lib/api'
+import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { generateAvatarUrl } from '@/shared/lib/avatar'
+import { getAvatarColor as getAvatarGradient } from '@/shared/lib/constants'
+import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 
 interface EmployeeData {
   id: string
@@ -165,19 +168,24 @@ export function EmployeeProfile() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="space-y-8 animate-fade-in">
+        <div className="h-48 rounded-2xl gradient-primary animate-pulse" />
+        <div className="grid gap-4 md:grid-cols-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-40 rounded-2xl bg-muted/30 animate-pulse" />
+          ))}
+        </div>
       </div>
     )
   }
 
   if (error || !employee) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 animate-fade-in">
         <Link to="/employees">
-          <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" />Назад</Button>
+          <Button variant="outline"><ChevronLeft className="mr-2 h-4 w-4" />Назад</Button>
         </Link>
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+        <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-8 text-center">
           <p className="text-destructive font-medium">{error ?? 'Сотрудник не найден'}</p>
         </div>
       </div>
@@ -190,43 +198,48 @@ export function EmployeeProfile() {
   const fullName = [employee.lastName, employee.firstName, employee.middleName].filter(Boolean).join(' ')
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Back */}
-      <Link to="/employees">
-        <Button variant="outline" className="gap-2">
-          <ArrowLeft className="h-4 w-4" />
+    <div className="space-y-8 animate-fade-in">
+      <Link to="/employees" className="inline-block">
+        <Button variant="outline" size="sm" className="gap-2 interactive">
+          <ChevronLeft className="h-4 w-4" />
           Назад к списку
         </Button>
       </Link>
 
-      {/* Hero banner */}
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-6 text-white shadow-glow">
-        <div className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 0%, transparent 60%)' }}
-        />
-        <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-5">
-          <Avatar className="h-20 w-20 ring-4 ring-white/30 shrink-0">
-            <AvatarImage
-              src={employee.avatar || generateAvatarUrl(employee.id, employee.gender)}
-              alt={initials}
-            />
-            <AvatarFallback className={`bg-gradient-to-br ${avatarColor} text-white text-2xl font-bold`}>
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-6">
+          <div className="relative shrink-0">
+            <Avatar className="h-24 w-24 ring-4 ring-white/20 text-3xl">
+              <AvatarImage
+                src={employee.avatar || generateAvatarUrl(employee.id, employee.gender)}
+                alt={initials}
+              />
+              <AvatarFallback className={`bg-gradient-to-br ${avatarColor} text-white text-2xl font-bold`}>
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-[3px] border-primary ${status.dot}`} />
+          </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold">{fullName}</h1>
-            <p className="text-white/80 mt-0.5">{employee.position}</p>
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/20 backdrop-blur-sm`}>
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="h-4 w-4 text-white/60" />
+              <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Профиль сотрудника</span>
+            </div>
+            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">{fullName}</h1>
+            <p className="mt-1 text-white/60 text-sm font-medium">{employee.position}</p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-white/10 backdrop-blur-sm border border-white/10 text-white/80">
                 <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
                 {status.label}
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/20 backdrop-blur-sm">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-white/10 backdrop-blur-sm border border-white/10 text-white/80">
                 {roleLabels[employee.role] ?? employee.role}
               </span>
               {employee.department && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/20 backdrop-blur-sm">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-white/10 backdrop-blur-sm border border-white/10 text-white/80">
                   <Building2 className="h-3 w-3" />
                   {employee.department}
                 </span>
@@ -236,13 +249,13 @@ export function EmployeeProfile() {
         </div>
       </div>
 
-      {/* Информация о сотруднике */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Личные данные */}
-        <Card>
+      <div className="page-grid grid gap-4 md:grid-cols-2">
+        <Card className="hover-lift stagger-1 animate-slide-up">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <User className="h-4 w-4 text-primary" />
+              <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
+                <User className="h-4 w-4 text-primary" />
+              </div>
               Личная информация
             </CardTitle>
           </CardHeader>
@@ -254,23 +267,24 @@ export function EmployeeProfile() {
           </CardContent>
         </Card>
 
-        {/* Контакты */}
-        <Card>
+        <Card className="hover-lift stagger-2 animate-slide-up">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Mail className="h-4 w-4 text-primary" />
+              <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
+                <Mail className="h-4 w-4 text-primary" />
+              </div>
               Контакты
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
                 <Mail className="h-4 w-4 text-primary" />
               </div>
               <span className="break-all">{employee.email || '—'}</span>
             </div>
             <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
                 <Phone className="h-4 w-4 text-primary" />
               </div>
               <span>{employee.phone || '—'}</span>
@@ -278,17 +292,18 @@ export function EmployeeProfile() {
           </CardContent>
         </Card>
 
-        {/* Рабочая информация */}
-        <Card className="md:col-span-2">
+        <Card className="md:col-span-2 hover-lift stagger-3 animate-slide-up">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Briefcase className="h-4 w-4 text-primary" />
+              <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
+                <Briefcase className="h-4 w-4 text-primary" />
+              </div>
               Информация о работе
             </CardTitle>
           </CardHeader>
           <CardContent className="grid sm:grid-cols-2 gap-4">
             <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 shrink-0">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 shrink-0">
                 <Briefcase className="h-4 w-4 text-primary" />
               </div>
               <div>
@@ -297,7 +312,7 @@ export function EmployeeProfile() {
               </div>
             </div>
             <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 shrink-0">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 shrink-0">
                 <Building2 className="h-4 w-4 text-primary" />
               </div>
               <div>
@@ -305,77 +320,77 @@ export function EmployeeProfile() {
                 <div className="font-medium">{employee.department || '—'}</div>
               </div>
             </div>
-             <div className="flex items-center gap-3 text-sm">
-               <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 shrink-0">
-                 <Calendar className="h-4 w-4 text-primary" />
-               </div>
-               <div>
-                 <div className="text-xs text-muted-foreground">Дата найма</div>
-                 <div className="font-medium">{employee.hireDate ? formatDate(employee.hireDate) : '—'}</div>
-               </div>
-             </div>
-             <div className="flex items-start gap-3 text-sm sm:col-span-2">
-               <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 shrink-0">
-                 <Target className="h-4 w-4 text-primary" />
-               </div>
-               <div className="flex-1">
-                 <div className="text-xs text-muted-foreground">Зона ответственности</div>
-                 {editingResponsibility ? (
-                   <div className="mt-1">
-                     <textarea
-                       value={responsibilityText}
-                       onChange={(e) => setResponsibilityText(e.target.value)}
-                       maxLength={500}
-                       className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                       rows={3}
-                       autoFocus
-                       onBlur={handleSaveResponsibility}
-                       onKeyDown={(e) => {
-                         if (e.key === 'Escape') {
-                           handleCancelResponsibility()
-                         } else if (e.key === 'Enter' && e.ctrlKey) {
-                           handleSaveResponsibility()
-                         }
-                       }}
-                     />
-                     <div className="flex items-center justify-between mt-1">
-                       <div className="text-xs text-muted-foreground">
-                         {responsibilityText.length}/500 символов
-                       </div>
-                       <div className="flex gap-2">
-                         <Button
-                           type="button"
-                           variant="ghost"
-                           size="sm"
-                           onClick={handleCancelResponsibility}
-                           className="h-7 px-2 text-xs"
-                         >
-                           Отмена
-                         </Button>
-                         <Button
-                           type="button"
-                           size="sm"
-                           onClick={handleSaveResponsibility}
-                           className="h-7 px-2 text-xs"
-                           disabled={!responsibilityText.trim()}
-                         >
-                           Сохранить
-                         </Button>
-                       </div>
-                     </div>
-                   </div>
-                 ) : (
-                   <div
-                     onClick={handleStartEditingResponsibility}
-                     className={`mt-1 font-medium cursor-pointer hover:text-primary transition-colors ${isOwnProfile ? 'hover:bg-primary/5 rounded px-2 py-1' : ''}`}
-                   >
-                     {employee.responsibilityArea || '—'}
-                   </div>
-                 )}
-               </div>
-             </div>
-           </CardContent>
-         </Card>
+            <div className="flex items-center gap-3 text-sm">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 shrink-0">
+                <Calendar className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Дата найма</div>
+                <div className="font-medium">{employee.hireDate ? formatDate(employee.hireDate) : '—'}</div>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 text-sm sm:col-span-2">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 shrink-0">
+                <Target className="h-4 w-4 text-primary" />
+              </div>
+              <div className="flex-1">
+                <div className="text-xs text-muted-foreground">Зона ответственности</div>
+                {editingResponsibility ? (
+                  <div className="mt-1">
+                    <textarea
+                      value={responsibilityText}
+                      onChange={(e) => setResponsibilityText(e.target.value)}
+                      maxLength={500}
+                      className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      rows={3}
+                      autoFocus
+                      onBlur={handleSaveResponsibility}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          handleCancelResponsibility()
+                        } else if (e.key === 'Enter' && e.ctrlKey) {
+                          handleSaveResponsibility()
+                        }
+                      }}
+                    />
+                    <div className="flex items-center justify-between mt-1">
+                      <div className="text-xs text-muted-foreground">
+                        {responsibilityText.length}/500 символов
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCancelResponsibility}
+                          className="h-7 px-2 text-xs interactive"
+                        >
+                          Отмена
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleSaveResponsibility}
+                          className="h-7 px-2 text-xs interactive"
+                          disabled={!responsibilityText.trim()}
+                        >
+                          Сохранить
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={handleStartEditingResponsibility}
+                    className={`mt-1 font-medium ${isOwnProfile ? 'interactive cursor-pointer hover:text-primary transition-colors hover:bg-primary/5 rounded-lg px-2 py-1' : ''}`}
+                  >
+                    {employee.responsibilityArea || '—'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {isModuleEnabled('skills') && (
           <SkillsCard
@@ -387,7 +402,6 @@ export function EmployeeProfile() {
         )}
       </div>
 
-      {/* Modals */}
       <AddProjectModal
         open={isAddProjectModalOpen}
         onClose={() => setIsAddProjectModalOpen(false)}
@@ -399,11 +413,9 @@ export function EmployeeProfile() {
 
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div className="flex items-center justify-between text-sm py-1.5 border-b border-border/40 last:border-0">
+    <div className="flex items-center justify-between text-sm py-2 border-b border-border/30 last:border-0">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{value || '—'}</span>
     </div>
   )
 }
-
-

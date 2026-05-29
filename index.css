@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,403 +6,317 @@
 
 @layer base {
   :root {
-    --background: 220 20% 98%;
-    --foreground: 222 47% 11%;
+    --background: 220 18% 97%;
+    --foreground: 228 50% 6%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 228 50% 6%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 262 83% 58%;
+    --popover-foreground: 228 50% 6%;
+    --primary: 250 89% 65%;
     --primary-foreground: 0 0% 100%;
+    --primary-light: 250 89% 75%;
+    --primary-dark: 250 89% 50%;
     --secondary: 220 14% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 262 83% 58%;
+    --secondary-foreground: 228 50% 6%;
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 7% 42%;
+    --accent: 250 89% 65%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 262 83% 58%;
+    --ring: 250 89% 65%;
     --radius: 0.75rem;
-    --success: 142 76% 36%;
+    --success: 152 69% 35%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
+    --warning: 36 89% 52%;
     --warning-foreground: 0 0% 100%;
+    --sidebar-bg: 240 33% 99%;
+    --sidebar-border: 220 13% 92%;
+    --glow-color: 250 89% 65%;
   }
 
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
-    --card: 222 55% 7%;
-    --card-foreground: 213 31% 91%;
-    --popover: 222 55% 9%;
-    --popover-foreground: 213 31% 91%;
-    --primary: 262 80% 68%;
+    --background: 230 30% 6%;
+    --foreground: 215 40% 92%;
+    --card: 230 25% 9%;
+    --card-foreground: 215 40% 92%;
+    --popover: 230 25% 11%;
+    --popover-foreground: 215 40% 92%;
+    --primary: 250 95% 68%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 222 47% 12%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 222 47% 12%;
-    --muted-foreground: 215 16% 57%;
-    --accent: 262 80% 68%;
+    --primary-light: 250 95% 78%;
+    --primary-dark: 250 95% 55%;
+    --secondary: 228 22% 14%;
+    --secondary-foreground: 215 40% 92%;
+    --muted: 228 22% 14%;
+    --muted-foreground: 215 16% 52%;
+    --accent: 250 95% 68%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 65%;
+    --destructive: 0 72% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 222 35% 40%;
-    --input: 222 47% 10%;
-    --ring: 262 80% 68%;
-    --success: 142 70% 45%;
+    --border: 228 20% 18%;
+    --input: 228 22% 15%;
+    --ring: 250 95% 68%;
+    --success: 152 69% 42%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 55%;
+    --warning: 36 89% 56%;
     --warning-foreground: 0 0% 100%;
+    --sidebar-bg: 232 30% 5%;
+    --sidebar-border: 228 20% 14%;
+    --glow-color: 250 95% 68%;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color 0.3s, color 0.3s;
   }
   ::selection {
-    @apply bg-primary/20 text-foreground;
+    background: hsl(var(--primary) / 0.15);
+    color: inherit;
   }
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
+    background: hsl(var(--border));
+    border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/30;
+    background: hsl(var(--muted-foreground) / 0.3);
   }
 }
 
 @layer utilities {
   .gradient-primary {
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(262 90% 65%) 100%);
+    background: linear-gradient(135deg, hsl(var(--primary-dark)) 0%, hsl(var(--primary)) 50%, hsl(var(--primary-light)) 100%);
   }
-
+  .gradient-primary-subtle {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.08) 0%, hsl(var(--primary-light) / 0.04) 100%);
+  }
   .gradient-success {
-    background: linear-gradient(135deg, hsl(var(--success)) 0%, hsl(142 76% 45%) 100%);
+    background: linear-gradient(135deg, hsl(var(--success)) 0%, hsl(152 69% 42%) 100%);
   }
-
   .gradient-card {
-    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(220 20% 99%) 100%);
+    background: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--background)) 100%);
   }
-
-  .dark .gradient-card {
-    background: linear-gradient(135deg, hsl(222 55% 7%) 0%, hsl(222 47% 11%) 100%);
-  }
-
   .gradient-bg {
-    background: linear-gradient(135deg, hsl(220 20% 98%) 0%, hsl(262 83% 98%) 50%, hsl(220 20% 98%) 100%);
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--primary) / 0.04), transparent),
+      radial-gradient(ellipse 60% 40% at 80% 0%, hsl(280 80% 60% / 0.02), transparent),
+      hsl(var(--background));
   }
 
-  .dark .gradient-bg {
-    background: linear-gradient(135deg, hsl(224 71% 4%) 0%, hsl(262 47% 7%) 50%, hsl(224 71% 4%) 100%);
-  }
+  .glow { box-shadow: 0 0 20px hsl(var(--glow-color) / 0.15); }
+  .glow-lg { box-shadow: 0 0 40px hsl(var(--glow-color) / 0.2); }
+  .glow-sm { box-shadow: 0 0 10px hsl(var(--glow-color) / 0.1); }
 
-  .animate-in {
-    animation: slideIn 0.3s ease-out;
-  }
+  .animate-in { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-fade-in { animation: fadeIn 0.5s ease-out both; }
+  .animate-scale-in { animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-slide-right { animation: slideRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .animate-shimmer { animation: shimmer 2s linear infinite; }
+  .animate-pulse-soft { animation: pulseSoft 3s ease-in-out infinite; }
+  .animate-glow-pulse { animation: glowPulse 3s ease-in-out infinite; }
 
-  .animate-fade-in {
-    animation: fadeIn 0.5s ease-out;
-  }
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.1s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.2s; }
+  .stagger-5 { animation-delay: 0.25s; }
+  .stagger-6 { animation-delay: 0.3s; }
+  .stagger-7 { animation-delay: 0.35s; }
+  .stagger-8 { animation-delay: 0.4s; }
 
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
   }
-
   @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes slideRight {
+    from { opacity: 0; transform: translateX(-12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  @keyframes pulseSoft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  @keyframes glowPulse {
+    0%, 100% { box-shadow: 0 0 15px hsl(var(--glow-color) / 0.1); }
+    50% { box-shadow: 0 0 30px hsl(var(--glow-color) / 0.25); }
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  @keyframes gridMove {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(32px, 32px); }
+  }
+
+  .hover-lift {
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.12), 0 4px 12px -4px rgb(0 0 0 / 0.06);
+  }
+  .hover-lift:active {
+    transform: translateY(-1px);
+    transition-duration: 0.1s;
+  }
+
+  .hover-glow {
+    transition: box-shadow 0.3s ease;
+  }
+  .hover-glow:hover {
+    box-shadow: 0 0 20px hsl(var(--glow-color) / 0.15);
+  }
+
+  .interactive {
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .interactive:hover {
+    transform: translateY(-1px);
+  }
+  .interactive:active {
+    transform: translateY(0) scale(0.99);
+    transition-duration: 0.1s;
   }
 
   .glass {
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
-
   .dark .glass {
-    background: rgba(10, 14, 30, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(15, 18, 30, 0.7);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
 
-  .shadow-glow {
-    box-shadow: 0 0 20px rgba(162, 89, 255, 0.15);
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-light)) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
-  .dark .shadow-glow {
-    box-shadow: 0 0 25px rgba(162, 89, 255, 0.3);
+  .page-header {
+    margin-bottom: 1.5rem;
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
-  .shadow-glow-lg {
-    box-shadow: 0 0 40px rgba(162, 89, 255, 0.2);
+  .page-grid {
+    animation: fadeIn 0.6s ease-out 0.15s both;
   }
 
-  .dark .shadow-glow-lg {
-    box-shadow: 0 0 50px rgba(162, 89, 255, 0.35);
+  .section-card {
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .section-card:hover {
+    box-shadow: 0 8px 30px -8px rgb(0 0 0 / 0.08);
+    border-color: hsl(var(--primary) / 0.15);
   }
 
-  .pdf-document {
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    width: 100%;
+  .login-grid-bg {
+    background-image:
+      linear-gradient(hsl(0 0% 100% / 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(0 0% 100% / 0.05) 1px, transparent 1px);
+    background-size: 32px 32px;
+    animation: gridMove 8s linear infinite;
   }
 
-  .pdf-document canvas {
-    max-width: 100%;
-    height: auto !important;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  }
+  .pdf-document { display: flex; justify-content: center; align-items: flex-start; width: 100%; }
+  .pdf-document canvas { max-width: 100%; height: auto !important; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); }
+  .dark .pdf-document canvas { filter: invert(1) hue-rotate(180deg); }
 
-  .dark .pdf-document canvas {
-    filter: invert(1) hue-rotate(180deg);
-  }
-
-  .docx-content {
-    width: 100%;
-    height: 100%;
-  }
-
-  .docx-preview-wrapper {
-    width: 100%;
-    height: 100%;
-  }
-
-  .docx-preview {
-    width: 100%;
-    height: 100%;
-    font-family: 'Times New Roman', Times, 'Calibri', 'Arial', sans-serif !important;
-  }
+  .docx-content { width: 100%; height: 100%; }
+  .docx-preview-wrapper { width: 100%; height: 100%; }
+  .docx-preview { width: 100%; height: 100%; font-family: 'Times New Roman', Times, 'Calibri', 'Arial', sans-serif !important; }
 
   .docx-content del {
-    color: hsl(var(--destructive));
-    text-decoration: line-through;
-    text-decoration-color: hsl(var(--destructive));
-    text-decoration-thickness: 2px;
-    background-color: hsl(0 100% 50% / 0.25);
-    padding: 0.1em 0.2em;
-    border-radius: 2px;
+    color: hsl(var(--destructive)); text-decoration: line-through;
+    text-decoration-color: hsl(var(--destructive)); text-decoration-thickness: 2px;
+    background-color: hsl(0 100% 50% / 0.25); padding: 0.1em 0.2em; border-radius: 2px;
     transition: all 0.2s ease;
   }
-
-  .docx-content del:hover {
-    background-color: hsl(0 100% 50% / 0.35);
-    cursor: pointer;
-  }
-
+  .docx-content del:hover { background-color: hsl(0 100% 50% / 0.35); cursor: pointer; }
   .docx-content ins {
-    color: hsl(var(--success));
-    text-decoration: underline;
-    text-decoration-color: hsl(var(--success));
-    text-decoration-thickness: 2px;
-    background-color: hsl(142 76% 36% / 0.25);
-    padding: 0.1em 0.2em;
-    border-radius: 2px;
-    text-underline-offset: 2px;
-    transition: all 0.2s ease;
+    color: hsl(var(--success)); text-decoration: underline;
+    text-decoration-color: hsl(var(--success)); text-decoration-thickness: 2px;
+    background-color: hsl(142 76% 36% / 0.25); padding: 0.1em 0.2em; border-radius: 2px;
+    text-underline-offset: 2px; transition: all 0.2s ease;
   }
-
-  .docx-content ins:hover {
-    background-color: hsl(142 76% 36% / 0.35);
-    cursor: pointer;
-  }
-
-  .docx-content .docx-comment {
-    position: relative;
-    margin: 0.5em 0;
-    padding-left: 0;
-    border-left: none;
-    box-shadow: none;
-  }
-
+  .docx-content ins:hover { background-color: hsl(142 76% 36% / 0.35); cursor: pointer; }
+  .docx-content .docx-comment { position: relative; margin: 0.5em 0; padding-left: 0; border-left: none; box-shadow: none; }
   .docx-content .docx-comment::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background: hsl(38 92% 50%);
-    border-radius: 2px 0 0 2px;
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 4px; background: hsl(38 92% 50%); border-radius: 2px 0 0 2px;
   }
-
   .docx-content .docx-comment-marker {
-    position: absolute;
-    left: -24px;
-    top: 0;
-    background: hsl(38 92% 50%);
-    color: white;
-    font-weight: bold;
-    cursor: help;
-    padding: 0.15em 0.4em;
-    border-radius: 4px 2px 2px 4px;
-    font-size: 0.75em;
-    vertical-align: top;
-    line-height: 1;
-    min-width: 16px;
-    text-align: center;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    position: absolute; left: -24px; top: 0; background: hsl(38 92% 50%);
+    color: white; font-weight: bold; cursor: help; padding: 0.15em 0.4em;
+    border-radius: 4px 2px 2px 4px; font-size: 0.75em; vertical-align: top;
+    line-height: 1; min-width: 16px; text-align: center;
   }
-
   .docx-content .docx-comment-text {
-    background-color: hsl(38 92% 50% / 0.1);
-    border: 1px solid hsl(38 92% 50% / 0.3);
-    border-radius: 4px;
-    padding: 0.75em 1em;
-    margin-left: 0;
-    display: block;
-    margin-top: 0.25em;
+    background-color: hsl(38 92% 50% / 0.1); border: 1px solid hsl(38 92% 50% / 0.3);
+    border-radius: 4px; padding: 0.75em 1em; margin-left: 0; display: block; margin-top: 0.25em;
   }
-
-  .docx-content .docx-comment-text strong {
-    display: block;
-    font-size: 0.85em;
-    color: hsl(38 92% 50%);
-    margin-bottom: 0.25em;
-  }
-
-  .docx-content .docx-comment-text p {
-    margin: 0;
-    font-size: 0.9em;
-    line-height: 1.4;
-  }
-
+  .docx-content .docx-comment-text strong { display: block; font-size: 0.85em; color: hsl(38 92% 50%); margin-bottom: 0.25em; }
+  .docx-content .docx-comment-text p { margin: 0; font-size: 0.9em; line-height: 1.4; }
   .docx-content .docx-comment-meta {
-    font-size: 0.75em;
-    color: hsl(var(--muted-foreground));
-    margin-top: 0.5em;
-    padding-top: 0.5em;
-    border-top: 1px solid hsl(38 92% 50% / 0.2);
+    font-size: 0.75em; color: hsl(var(--muted-foreground)); margin-top: 0.5em;
+    padding-top: 0.5em; border-top: 1px solid hsl(38 92% 50% / 0.2);
   }
-
   .docx-content .docx-comment:hover .docx-comment-text {
-    background-color: hsl(38 92% 50% / 0.2);
-    border-color: hsl(38 92% 50% / 0.4);
+    background-color: hsl(38 92% 50% / 0.2); border-color: hsl(38 92% 50% / 0.4);
   }
-
-  .dark .docx-content .docx-comment-text {
-    background-color: hsl(38 92% 50% / 0.15);
-    border-color: hsl(38 92% 50% / 0.3);
-  }
-
-  .dark .docx-content .docx-comment:hover .docx-comment-text {
-    background-color: hsl(38 92% 50% / 0.25);
-    border-color: hsl(38 92% 50% / 0.4);
-  }
-
-  .docx-content .docx-comment:hover {
-    background-color: hsl(38 92% 50% / 0.4);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-    transform: translateY(-1px);
-  }
-
+  .dark .docx-content .docx-comment-text { background-color: hsl(38 92% 50% / 0.15); border-color: hsl(38 92% 50% / 0.3); }
+  .dark .docx-content .docx-comment:hover .docx-comment-text { background-color: hsl(38 92% 50% / 0.25); border-color: hsl(38 92% 50% / 0.4); }
+  .docx-content .docx-comment:hover { background-color: hsl(38 92% 50% / 0.4); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); transform: translateY(-1px); }
   .docx-content .docx-comment-marker {
-    background-color: hsl(38 92% 50%);
-    color: white;
-    font-weight: bold;
-    cursor: help;
-    padding: 0.1em 0.4em;
-    border-radius: 50%;
-    font-size: 0.8em;
-    margin-left: 0.25em;
-    vertical-align: super;
-    display: inline-block;
+    background-color: hsl(38 92% 50%); color: white; font-weight: bold; cursor: help;
+    padding: 0.1em 0.4em; border-radius: 50%; font-size: 0.8em; margin-left: 0.25em;
+    vertical-align: super; display: inline-block;
   }
-
-  .dark .docx-content del {
-    background-color: hsl(0 100% 50% / 0.35);
-  }
-
-  .dark .docx-content ins {
-    background-color: hsl(142 76% 36% / 0.35);
-  }
-
-  .dark .docx-content .docx-comment {
-    background-color: hsl(38 92% 50% / 0.35);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  }
-
-  .dark .docx-content .docx-comment:hover {
-    background-color: hsl(38 92% 50% / 0.45);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-  }
-
-  /* Разные цвета для разных авторов */
-  .docx-content del[data-author="1"] {
-    background-color: hsl(0 100% 50% / 0.25);
-  }
-
-  .docx-content del[data-author="2"] {
-    background-color: hsl(210 100% 50% / 0.25);
-  }
-
-  .docx-content del[data-author="3"] {
-    background-color: hsl(30 100% 50% / 0.25);
-  }
-
-  .docx-content del[data-author="4"] {
-    background-color: hsl(280 100% 50% / 0.25);
-  }
-
-  .docx-content ins[data-author="1"] {
-    background-color: hsl(142 76% 36% / 0.25);
-  }
-
-  .docx-content ins[data-author="2"] {
-    background-color: hsl(200 100% 50% / 0.25);
-  }
-
-  .docx-content ins[data-author="3"] {
-    background-color: hsl(45 100% 50% / 0.25);
-  }
-
-  .docx-content ins[data-author="4"] {
-    background-color: hsl(270 100% 50% / 0.25);
-  }
-
-  /* Скрытые изменения для фильтрации */
-  .docx-content del.hidden-change,
-  .docx-content ins.hidden-change {
-    opacity: 0.1;
-    text-decoration: none;
-    background-color: transparent;
-  }
-
-  .docx-content .docx-comment.hidden-comment {
-    opacity: 0.1;
-    border-left-color: transparent;
-  }
-
-  .dark .docx-content .docx-comment {
-    background-color: hsl(var(--primary) / 0.15);
-  }
+  .dark .docx-content del { background-color: hsl(0 100% 50% / 0.35); }
+  .dark .docx-content ins { background-color: hsl(142 76% 36% / 0.35); }
+  .dark .docx-content .docx-comment { background-color: hsl(38 92% 50% / 0.35); }
+  .dark .docx-content .docx-comment:hover { background-color: hsl(38 92% 50% / 0.45); }
+  .docx-content del[data-author="1"] { background-color: hsl(0 100% 50% / 0.25); }
+  .docx-content del[data-author="2"] { background-color: hsl(210 100% 50% / 0.25); }
+  .docx-content del[data-author="3"] { background-color: hsl(30 100% 50% / 0.25); }
+  .docx-content del[data-author="4"] { background-color: hsl(280 100% 50% / 0.25); }
+  .docx-content ins[data-author="1"] { background-color: hsl(142 76% 36% / 0.25); }
+  .docx-content ins[data-author="2"] { background-color: hsl(200 100% 50% / 0.25); }
+  .docx-content ins[data-author="3"] { background-color: hsl(45 100% 50% / 0.25); }
+  .docx-content ins[data-author="4"] { background-color: hsl(270 100% 50% / 0.25); }
+  .docx-content del.hidden-change, .docx-content ins.hidden-change { opacity: 0.1; text-decoration: none; background-color: transparent; }
+  .docx-content .docx-comment.hidden-comment { opacity: 0.1; border-left-color: transparent; }
+  .dark .docx-content .docx-comment { background-color: hsl(var(--primary) / 0.15); }
 }
-

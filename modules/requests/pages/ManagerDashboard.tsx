@@ -1,14 +1,14 @@
-﻿import { useState } from 'react'
-import { useRequestsStore } from '@/modules/requests/store/requestsStore'
-import { useAuthStore } from '@/core/auth/store/authStore'
-import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/mockData'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
+import { Check, X, Search, Users, Clock, CheckCircle, ClipboardList } from 'lucide-react'
+import { useRequestsStore } from '@/modules/requests/store/requestsStore'
+import { useAuthStore } from '@/core/auth/store/authStore'
+import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/mockData'
 import { formatDate, formatDateTime } from '@/shared/lib/utils'
-import { Check, X, Search, Users, Clock, CheckCircle } from 'lucide-react'
 
 export function ManagerDashboard() {
   const { user } = useAuthStore()
@@ -17,7 +17,6 @@ export function ManagerDashboard() {
   const [comment, setComment] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Получаем заявки от подчиненных
   const subordinateRequests = user?.subordinates
     ? requests.filter((r) => user.subordinates!.includes(r.userId))
     : []
@@ -34,7 +33,6 @@ export function ManagerDashboard() {
 
   const handleApprove = (requestId: string) => {
     updateRequestStatus(requestId, 'approved', comment || 'Одобрено руководителем')
-    
     setSelectedRequest(null)
     setComment('')
   }
@@ -44,15 +42,12 @@ export function ManagerDashboard() {
       alert('Пожалуйста, укажите причину отказа')
       return
     }
-
     updateRequestStatus(requestId, 'rejected', comment)
-    
     setSelectedRequest(null)
     setComment('')
   }
 
   const getEmployeeName = (userId: string) => {
-    // Mock данные - в реальном приложении будет запрос к API
     const employees: Record<string, { firstName: string; lastName: string }> = {
       '1': { firstName: 'Иван', lastName: 'Иванов' },
     }
@@ -62,19 +57,25 @@ export function ManagerDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Панель руководителя</h1>
-        <p className="text-muted-foreground">
-          Рассмотрение заявлений от сотрудников подразделения
-        </p>
+      <div className="page-header">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-primary/10">
+            <ClipboardList className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Панель руководителя</h1>
+            <p className="text-sm text-muted-foreground">
+              Рассмотрение заявлений от сотрудников подразделения
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Statistics */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+      <div className="page-grid">
+        <Card className="section-card stagger-1">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Users className="h-4 w-4" />
+              <Users className="h-4 w-4 text-primary" />
               Всего заявок
             </CardTitle>
           </CardHeader>
@@ -82,10 +83,10 @@ export function ManagerDashboard() {
             <div className="text-2xl font-bold">{subordinateRequests.length}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="section-card stagger-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4" />
+              <Clock className="h-4 w-4 text-primary" />
               На рассмотрении
             </CardTitle>
           </CardHeader>
@@ -93,10 +94,10 @@ export function ManagerDashboard() {
             <div className="text-2xl font-bold text-yellow-600">{pendingRequests.length}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="section-card stagger-3">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle className="h-4 w-4" />
+              <CheckCircle className="h-4 w-4 text-primary" />
               Одобрено
             </CardTitle>
           </CardHeader>
@@ -108,8 +109,7 @@ export function ManagerDashboard() {
         </Card>
       </div>
 
-      {/* Search */}
-      <Card>
+      <Card className="section-card stagger-4">
         <CardContent className="pt-6">
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -123,128 +123,130 @@ export function ManagerDashboard() {
         </CardContent>
       </Card>
 
-      {/* Pending Requests */}
       {pendingRequests.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-xl font-semibold">Требуют рассмотрения</h2>
-          {pendingRequests.map((request) => (
-            <Card key={request.id} className="border-yellow-200 bg-yellow-50/50">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-lg">
-                      {getRequestTypeLabel(request.type)}
-                    </CardTitle>
-                    <CardDescription>
-                      {getEmployeeName(request.userId)} • ID: {request.id}
-                    </CardDescription>
-                  </div>
-                  <Badge className="bg-yellow-100 text-yellow-800" variant="secondary">
-                    На рассмотрении
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium">Причина</p>
-                    <p className="text-sm text-muted-foreground">{request.reason}</p>
-                  </div>
-                  
-                  <div className="grid gap-4 md:grid-cols-2">
+          {pendingRequests.map((request, index) => {
+            const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
+            return (
+              <Card key={request.id} className={`section-card ${staggerClass} border-yellow-200 bg-yellow-50/50`}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm font-medium">Дата начала</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(request.startDate)}
-                      </p>
+                      <CardTitle className="text-lg">
+                        {getRequestTypeLabel(request.type)}
+                      </CardTitle>
+                      <CardDescription>
+                        {getEmployeeName(request.userId)} • ID: {request.id}
+                      </CardDescription>
                     </div>
+                    <Badge className="bg-yellow-100 text-yellow-800" variant="secondary">
+                      На рассмотрении
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium">Дата окончания</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(request.endDate)}
-                      </p>
+                      <p className="text-sm font-medium">Причина</p>
+                      <p className="text-sm text-muted-foreground">{request.reason}</p>
                     </div>
-                  </div>
 
-                  <div>
-                    <p className="text-sm font-medium">Создано</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDateTime(request.createdAt)}
-                    </p>
-                  </div>
-
-                  {selectedRequest === request.id ? (
-                    <div className="space-y-3 rounded-lg bg-card p-4 border">
-                      <div className="space-y-2">
-                        <Label htmlFor="comment">Комментарий (обязательно при отклонении)</Label>
-                        <textarea
-                          id="comment"
-                          className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          placeholder="Добавьте комментарий к решению..."
-                          value={comment}
-                          onChange={(e) => setComment(e.target.value)}
-                        />
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <p className="text-sm font-medium">Дата начала</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(request.startDate)}
+                        </p>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleApprove(request.id)}
-                          className="flex-1"
-                        >
-                          <Check className="mr-2 h-4 w-4" />
-                          Одобрить
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleReject(request.id)}
-                          className="flex-1"
-                        >
-                          <X className="mr-2 h-4 w-4" />
-                          Отклонить
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedRequest(null)
-                            setComment('')
-                          }}
-                        >
-                          Отмена
-                        </Button>
+                      <div>
+                        <p className="text-sm font-medium">Дата окончания</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(request.endDate)}
+                        </p>
                       </div>
                     </div>
-                  ) : (
-                    <Button
-                      size="sm"
-                      onClick={() => setSelectedRequest(request.id)}
-                    >
-                      Рассмотреть
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                    <div>
+                      <p className="text-sm font-medium">Создано</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDateTime(request.createdAt)}
+                      </p>
+                    </div>
+
+                    {selectedRequest === request.id ? (
+                      <div className="space-y-3 rounded-lg bg-card p-4 border">
+                        <div className="space-y-2">
+                          <Label htmlFor="comment">Комментарий (обязательно при отклонении)</Label>
+                          <textarea
+                            id="comment"
+                            className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            placeholder="Добавьте комментарий к решению..."
+                            value={comment}
+                            onChange={(e) => setComment(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleApprove(request.id)}
+                            className="flex-1"
+                          >
+                            <Check className="mr-2 h-4 w-4" />
+                            Одобрить
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleReject(request.id)}
+                            className="flex-1"
+                          >
+                            <X className="mr-2 h-4 w-4" />
+                            Отклонить
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedRequest(null)
+                              setComment('')
+                            }}
+                          >
+                            Отмена
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => setSelectedRequest(request.id)}
+                      >
+                        Рассмотреть
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
 
-      {/* All Requests */}
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Все заявления</h2>
         {filteredRequests.length === 0 ? (
-          <Card>
+          <Card className="section-card">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <p className="text-lg font-medium">Заявления не найдены</p>
             </CardContent>
           </Card>
         ) : (
-          filteredRequests.map((request) => {
+          filteredRequests.map((request, index) => {
             const statusBadge = getRequestStatusBadge(request.status)
-            
+            const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
+
             return (
-              <Card key={request.id} className={request.status === 'pending' ? 'border-yellow-200 bg-yellow-50/50' : ''}>
+              <Card key={request.id} className={`section-card ${staggerClass} ${request.status === 'pending' ? 'border-yellow-200 bg-yellow-50/50' : ''}`}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
@@ -266,7 +268,7 @@ export function ManagerDashboard() {
                       <p className="text-sm font-medium">Причина</p>
                       <p className="text-sm text-muted-foreground">{request.reason}</p>
                     </div>
-                    
+
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
                         <p className="text-sm font-medium">Дата начала</p>

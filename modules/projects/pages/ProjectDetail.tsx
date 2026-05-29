@@ -14,7 +14,6 @@ import {
 import { EditProjectModal } from '@/modules/projects/components/modals/EditProjectModal'
 import { AddMemberModal } from '@/modules/projects/components/modals/AddMemberModal'
 import { MemberProjectInfoModal } from '@/modules/projects/components/modals/MemberProjectInfoModal'
-import { ContextMenu } from '@/shared/components/ui/ContextMenu'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAvatarColor } from '@/shared/lib/constants'
@@ -49,14 +48,10 @@ const statusConfig = {
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return '—'
-  // Parse date string considering local timezone
   const date = new Date(dateStr)
-  // If the date string is in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS),
-  // we need to ensure we display the correct local date
   if (dateStr.includes('T')) {
     return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
   }
-  // For YYYY-MM-DD format, parse as local date to avoid timezone shift
   const [year, month, day] = dateStr.split('-').map(Number)
   const localDate = new Date(year, month - 1, day)
   return localDate.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -226,7 +221,6 @@ export function ProjectDetail() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Back */}
       <Link to="/projects">
         <Button variant="outline" className="gap-2">
           <ArrowLeft className="h-4 w-4" />
@@ -234,33 +228,28 @@ export function ProjectDetail() {
         </Button>
       </Link>
 
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-6 text-white shadow-glow">
-        <div
-          className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 0%, transparent 60%)' }}
-        />
+      <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm p-6 animate-slide-up">
         <div className="relative flex flex-col sm:flex-row items-start sm:items-center gap-5">
-          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm shrink-0">
-            <FolderKanban className="h-8 w-8 text-white" />
+          <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-primary/10 shrink-0">
+            <FolderKanban className="h-8 w-8 text-primary" />
           </div>
 
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold">{project.name}</h1>
+            <h1 className="text-xl font-bold">{project.name}</h1>
             {project.full_name && (
-              <p className="text-white/80 text-sm mt-1">{project.full_name}</p>
+              <p className="text-muted-foreground text-sm mt-1">{project.full_name}</p>
             )}
             <div className="flex flex-wrap items-center gap-2 mt-3">
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/20 backdrop-blur-sm`}>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-muted`}>
                 <StatusIcon className="h-3 w-3" />
                 {cfg.label}
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/20 backdrop-blur-sm">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-muted">
                 <Users className="h-3 w-3" />
                 {project.members.length} участников
               </span>
               {project.start_date && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/20 backdrop-blur-sm">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-muted">
                   <Calendar className="h-3 w-3" />
                   {formatDate(project.start_date)}
                   {project.end_date && ` — ${formatDate(project.end_date)}`}
@@ -273,7 +262,7 @@ export function ProjectDetail() {
             <div className="flex gap-2 shrink-0">
               <Button
                 size="sm"
-                className="bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-sm"
+                className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/30"
                 variant="outline"
                 onClick={() => setEditOpen(true)}
               >
@@ -282,7 +271,7 @@ export function ProjectDetail() {
               </Button>
               <Button
                 size="sm"
-                className="bg-white/20 hover:bg-red-500/40 text-white border-white/30 backdrop-blur-sm"
+                className="bg-destructive/10 hover:bg-destructive/20 text-destructive border-destructive/30"
                 variant="outline"
                 onClick={handleDelete}
                 disabled={deleting}
@@ -294,21 +283,19 @@ export function ProjectDetail() {
         </div>
       </div>
 
-      {/* Info cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <InfoChip icon={<CircleDot className={`h-4 w-4 ${cfg.color}`} />} label="Статус" value={cfg.label} />
-        <InfoChip icon={<Calendar className="h-4 w-4 text-primary" />} label="Начало" value={formatDate(project.start_date)} />
-        <InfoChip icon={<Calendar className="h-4 w-4 text-primary" />} label="Окончание" value={formatDate(project.end_date)} />
+      <div className="page-grid gap-4 sm:grid-cols-3">
+        <div className="stagger-1"><InfoChip icon={<CircleDot className={`h-4 w-4 ${cfg.color}`} />} label="Статус" value={cfg.label} /></div>
+        <div className="stagger-2"><InfoChip icon={<Calendar className="h-4 w-4 text-primary" />} label="Начало" value={formatDate(project.start_date)} /></div>
+        <div className="stagger-3"><InfoChip icon={<Calendar className="h-4 w-4 text-primary" />} label="Окончание" value={formatDate(project.end_date)} /></div>
       </div>
 
-      {/* Description + Documents button */}
       {project.description ? (
-        <Card>
+        <Card className="section-card">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Описание</CardTitle>
               <Link to={`/projects/${project.id}/documents`}>
-                <Button size="sm" variant="outline" className="gap-1.5">
+                <Button size="sm" variant="outline" className="interactive gap-1.5">
                   <FileText className="h-3.5 w-3.5" />
                   Документы
                 </Button>
@@ -322,7 +309,7 @@ export function ProjectDetail() {
       ) : (
         <div className="flex justify-end">
           <Link to={`/projects/${project.id}/documents`}>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="interactive gap-2">
               <FileText className="h-4 w-4" />
               Документы проекта
             </Button>
@@ -330,7 +317,6 @@ export function ProjectDetail() {
         </div>
       )}
 
-      {/* Roadmap */}
       <RoadmapSection
         projectId={project.id}
         canManage={canManage}
@@ -338,10 +324,8 @@ export function ProjectDetail() {
         projectEndDate={project.end_date}
       />
 
-      {/* Members */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Leads */}
-        <Card>
+      <div className="page-grid gap-4 md:grid-cols-2">
+        <Card className="section-card">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
@@ -350,7 +334,7 @@ export function ProjectDetail() {
                 <Badge variant="outline" className="ml-1 text-xs">{project.leads.length}</Badge>
               </CardTitle>
               {canManage && (
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddMemberOpen(true)}>
+                <Button size="sm" variant="outline" className="interactive gap-1.5" onClick={() => setAddMemberOpen(true)}>
                   <UserPlus className="h-3.5 w-3.5" />
                   Добавить
                 </Button>
@@ -375,8 +359,7 @@ export function ProjectDetail() {
           </CardContent>
         </Card>
 
-        {/* Participants */}
-        <Card>
+        <Card className="section-card">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
@@ -385,7 +368,7 @@ export function ProjectDetail() {
                 <Badge variant="outline" className="ml-1 text-xs">{project.participants.length}</Badge>
               </CardTitle>
               {canManage && (
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddMemberOpen(true)}>
+                <Button size="sm" variant="outline" className="interactive gap-1.5" onClick={() => setAddMemberOpen(true)}>
                   <UserPlus className="h-3.5 w-3.5" />
                   Добавить
                 </Button>
@@ -411,7 +394,6 @@ export function ProjectDetail() {
         </Card>
       </div>
 
-      {/* Modals */}
       {editOpen && (
         <EditProjectModal
           project={project}
@@ -436,13 +418,17 @@ export function ProjectDetail() {
         />
       )}
       {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={handleCloseContextMenu}
-          onViewProfile={handleViewProfile}
-          onViewRole={handleViewRole}
-        />
+        <div
+          className="fixed z-50 min-w-[180px] bg-background rounded-lg shadow-xl border border-border/50 py-1 animate-scale-in"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button onClick={() => { handleViewProfile(); handleCloseContextMenu() }} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+            Профиль
+          </button>
+          <button onClick={() => { handleViewRole(); handleCloseContextMenu() }} className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+            Роль в проекте
+          </button>
+        </div>
       )}
       {memberInfoOpen && selectedMember && (
         <MemberProjectInfoModal
@@ -459,7 +445,7 @@ export function ProjectDetail() {
 
 function InfoChip({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 p-4 rounded-xl border border-border/60 bg-card">
+    <div className="flex items-center gap-3 p-4 rounded-xl border border-border/60 bg-card shadow-sm hover-lift">
       <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 shrink-0">
         {icon}
       </div>
@@ -470,8 +456,6 @@ function InfoChip({ icon, label, value }: { icon: React.ReactNode; label: string
     </div>
   )
 }
-
-// ── Task Context Menu Popup ─────────────────────────────────────────────────
 
 function TaskCtxMenuPopup({
   x, y, onClose, onDetails,
@@ -494,7 +478,7 @@ function TaskCtxMenuPopup({
   return (
     <div
       ref={ref}
-      className="fixed z-50 min-w-[180px] bg-background rounded-lg shadow-2xl border border-border/50 py-1 animate-in fade-in zoom-in duration-100"
+      className="fixed z-50 min-w-[180px] bg-background rounded-lg shadow-xl border border-border/50 py-1 animate-in fade-in zoom-in duration-100"
       style={{ left: x, top: y }}
     >
       <button
@@ -551,8 +535,7 @@ function TaskDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-background rounded-2xl border border-border shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        {/* Header */}
+      <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md mx-4 overflow-hidden">
         <div
           className="h-1.5 w-full"
           style={{ backgroundColor: task.color || row?.color || '#6366f1' }}
@@ -572,9 +555,7 @@ function TaskDetailModal({
           </button>
         </div>
 
-        {/* Body */}
         <div className="px-5 pb-5 space-y-3">
-          {/* Row */}
           {row && (
             <div className="flex items-center gap-2 text-sm">
               <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
@@ -583,7 +564,6 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* Period */}
           <div className="flex items-center gap-2 text-sm">
             <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">Период:</span>
@@ -593,7 +573,6 @@ function TaskDetailModal({
             </span>
           </div>
 
-          {/* Status */}
           <div className="flex items-center gap-2 text-sm">
             <CircleDot className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">Статус:</span>
@@ -602,7 +581,6 @@ function TaskDetailModal({
             </span>
           </div>
 
-          {/* Priority */}
           {task.priority && (
             <div className="flex items-center gap-2 text-sm">
               <Flag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -613,7 +591,6 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* Milestone badge */}
           {task.is_milestone && (
             <div className="flex items-center gap-2 text-sm">
               <Diamond className="h-3.5 w-3.5 text-amber-500 shrink-0" />
@@ -621,7 +598,6 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* Description */}
           {task.description && (
             <div className="mt-3 p-3 rounded-xl bg-muted/50 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
               {task.description}
@@ -632,8 +608,6 @@ function TaskDetailModal({
     </div>
   )
 }
-
-// ── Roadmap Section (read-only Gantt preview) ──────────────────────────────
 
 const ROW_H_PREVIEW    = 40
 const MIN_CELL_W       = 44   // minimum column width (px)
@@ -752,7 +726,6 @@ function RoadmapSection({
   const completedTasks = tasks.filter((t) => t.status === 'completed').length
   const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
 
-  // Dynamic column widths
   const labelW = useMemo(() => {
     const maxLen = rows.reduce((m, r) => Math.max(m, r.title.length), 6)
     return Math.min(MAX_LABEL_W_PRV, Math.max(MIN_LABEL_W_PRV, maxLen * CHAR_W_PRV + 40))
@@ -775,7 +748,6 @@ function RoadmapSection({
             )}
           </CardTitle>
           <div className="flex items-center gap-2">
-            {/* View mode toggle */}
             <div className="flex rounded-lg border border-border overflow-hidden">
               <button
                 onClick={() => setViewMode('months')}
@@ -820,7 +792,6 @@ function RoadmapSection({
         )}
       </CardHeader>
       <CardContent className="p-0 pb-3">
-        {/* containerRef always in DOM so ResizeObserver fires on mount */}
         <div ref={containerRef} className="w-full">
         {loading ? (
           <div className="flex justify-center py-6">

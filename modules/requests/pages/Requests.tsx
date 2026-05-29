@@ -1,15 +1,15 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useRequestsStore } from '@/modules/requests/store/requestsStore'
-import { useAuthStore } from '@/core/auth/store/authStore'
-import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/mockData'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
-import { formatDate, formatDateTime } from '@/shared/lib/utils'
-import { Plus, Search, Download, X } from 'lucide-react'
 import { Input } from '@/shared/components/ui/Input'
 import { VacationRequestForm } from '@/modules/requests/components/forms/VacationRequestForm'
+import { Plus, Search, Download, X, FileText } from 'lucide-react'
+import { useRequestsStore } from '@/modules/requests/store/requestsStore'
+import { useAuthStore } from '@/core/auth/store/authStore'
+import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/mockData'
+import { formatDate, formatDateTime } from '@/shared/lib/utils'
 
 type RequestStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'cancelled'
 
@@ -22,21 +22,18 @@ export function Requests() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showForm, setShowForm] = useState(false)
 
-  // Проверяем параметр ?create=true в URL
   useEffect(() => {
     if (searchParams.get('create') === 'true') {
       setShowForm(true)
-      // Удаляем параметр из URL
       navigate('/requests', { replace: true })
     }
   }, [searchParams, navigate])
 
-  // Фильтруем заявки текущего пользователя
   const userRequests = user ? requests.filter((r) => r.userId === user.id) : []
 
   const filteredRequests = userRequests.filter((request) => {
     const matchesStatus = filterStatus === 'all' || request.status === filterStatus
-    const matchesSearch = searchQuery === '' || 
+    const matchesSearch = searchQuery === '' ||
       request.reason.toLowerCase().includes(searchQuery.toLowerCase()) ||
       getRequestTypeLabel(request.type).toLowerCase().includes(searchQuery.toLowerCase())
     return matchesStatus && matchesSearch
@@ -49,7 +46,6 @@ export function Requests() {
   }
 
   const handleDownload = (request: typeof requests[0]) => {
-    // Генерация простого текстового файла для демо
     const content = `
 ЗЯВЛЕНИЕ НА ОТПУСК
 
@@ -82,17 +78,24 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
   if (showForm) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Создать заявление</h1>
-            <p className="text-muted-foreground">
-              Заполните форму для подачи заявления на отпуск
-            </p>
+        <div className="page-header">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-primary/10">
+                <Plus className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold">Создать заявление</h1>
+                <p className="text-sm text-muted-foreground">
+                  Заполните форму для подачи заявления на отпуск
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => setShowForm(false)}>
+              <X className="mr-2 h-4 w-4" />
+              Отмена
+            </Button>
           </div>
-          <Button variant="outline" onClick={() => setShowForm(false)}>
-            <X className="mr-2 h-4 w-4" />
-            Отмена
-          </Button>
         </div>
         <VacationRequestForm onSuccess={() => setShowForm(false)} />
       </div>
@@ -101,21 +104,27 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Заявления</h1>
-          <p className="text-muted-foreground">
-            Управление вашими заявлениями и запросами
-          </p>
+      <div className="page-header">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10">
+              <FileText className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">Заявления</h1>
+              <p className="text-sm text-muted-foreground">
+                Управление вашими заявлениями и запросами
+              </p>
+            </div>
+          </div>
+          <Button onClick={() => setShowForm(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Создать заявление
+          </Button>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Создать заявление
-        </Button>
       </div>
 
-      {/* Filters */}
-      <Card>
+      <Card className="section-card stagger-1">
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="relative flex-1 max-w-md">
@@ -161,10 +170,9 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
         </CardContent>
       </Card>
 
-      {/* Requests list */}
       <div className="space-y-4">
         {filteredRequests.length === 0 ? (
-          <Card>
+          <Card className="section-card stagger-2">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <div className="text-center">
                 <p className="text-lg font-medium">Заявления не найдены</p>
@@ -177,11 +185,12 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
             </CardContent>
           </Card>
         ) : (
-          filteredRequests.map((request) => {
+          filteredRequests.map((request, index) => {
             const statusBadge = getRequestStatusBadge(request.status)
-            
+            const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
+
             return (
-              <Card key={request.id}>
+              <Card key={request.id} className={`section-card ${staggerClass}`}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
@@ -203,7 +212,7 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
                       <p className="text-sm font-medium">Причина</p>
                       <p className="text-sm text-muted-foreground">{request.reason}</p>
                     </div>
-                    
+
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
                         <p className="text-sm font-medium">Дата начала</p>
@@ -247,12 +256,10 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
 
                     <div className="flex gap-2">
                       {request.status === 'pending' && (
-                        <>
-                          <Button variant="destructive" size="sm" onClick={() => handleCancel(request.id)}>
-                            <X className="mr-2 h-4 w-4" />
-                            Отменить
-                          </Button>
-                        </>
+                        <Button variant="destructive" size="sm" onClick={() => handleCancel(request.id)}>
+                          <X className="mr-2 h-4 w-4" />
+                          Отменить
+                        </Button>
                       )}
                       {request.status === 'approved' && (
                         <Button variant="outline" size="sm" onClick={() => handleDownload(request)}>
@@ -269,9 +276,8 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
         )}
       </div>
 
-      {/* Statistics */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+      <div className="page-grid">
+        <Card className="section-card stagger-1">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Всего</CardTitle>
           </CardHeader>
@@ -279,7 +285,7 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
             <div className="text-2xl font-bold">{userRequests.length}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="section-card stagger-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">На рассмотрении</CardTitle>
           </CardHeader>
@@ -289,7 +295,7 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="section-card stagger-3">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Одобрено</CardTitle>
           </CardHeader>
@@ -299,7 +305,7 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="section-card stagger-4">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">Отклонено</CardTitle>
           </CardHeader>
