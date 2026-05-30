@@ -13,7 +13,7 @@ import { useModulesStore } from '@/shared/store/modulesStore'
 import {
   Mail, Phone, Building2, Briefcase,
   User, Target, ChevronLeft, Sparkles,
-  Clock, FolderKanban, Plus,
+  Clock, FolderKanban, Plus, MapPin,
 } from 'lucide-react'
 
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -45,6 +45,8 @@ interface EmployeeData {
   responsibility_area?: string
   gender?: 'male' | 'female' | 'other'
   avatar?: string
+  office?: string
+  cabinet?: string
 }
 
 interface Project {
@@ -125,6 +127,8 @@ export function EmployeeProfile() {
           skills:     data.skills     || [],
           projects:   data.projects   || [],
           responsibilityArea: data.responsibilityArea || data.responsibility_area,
+          office:  data.office,
+          cabinet: data.cabinet,
         })
       } catch (err: unknown) {
         setError(getErrorMessage(err))
@@ -276,6 +280,11 @@ export function EmployeeProfile() {
               <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
                 <Clock className="h-3.5 w-3.5" />{calculateWorkExperience(employee.hireDate)}
               </div>
+              {(employee.office || employee.cabinet) && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                  <MapPin className="h-3.5 w-3.5" />{[employee.office, employee.cabinet].filter(Boolean).join(', ')}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -328,6 +337,8 @@ export function EmployeeProfile() {
             <InfoRow label="Отдел" value={employee.department} />
             <InfoRow label="Дата найма" value={employee.hireDate ? formatDate(employee.hireDate) : undefined} />
             <InfoRow label="Стаж" value={calculateWorkExperience(employee.hireDate)} />
+            <InfoRow label="Офис" value={employee.office} />
+            <InfoRow label="Кабинет" value={employee.cabinet} />
           </CardContent>
         </Card>
       </div>
