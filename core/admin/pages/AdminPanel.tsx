@@ -318,31 +318,19 @@ export function AdminPanel() {
           ))}
         </nav>
 
-        <div className="min-w-0 relative">
-          {([
-            ['users', UsersTab],
-            ['roles', RolesTab],
-            ['departments', DepartmentsTab],
-            ['settings', SettingsTab],
-            ['audit', AuditTab],
-            ['analytics', AnalyticsTab],
-            ['health', HealthTab],
-            ['errors', ErrorsTab],
-            ['security', SecurityTab],
-            ['reports', ReportsTab],
-            ['dictionaries', DictionariesTab],
-            ['modules', ModulesTab],
-          ] as const).map(([id, Component]) => (
-            <div
-              key={id}
-              className={cn(
-                'transition-opacity duration-200 ease-in-out',
-                activeTab === id ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
-              )}
-            >
-              <Component />
-            </div>
-          ))}
+        <div className="min-w-0">
+          {activeTab === 'users' && <UsersTab />}
+          {activeTab === 'roles' && <RolesTab />}
+          {activeTab === 'departments' && <DepartmentsTab />}
+          {activeTab === 'settings' && <SettingsTab />}
+          {activeTab === 'audit' && <AuditTab />}
+          {activeTab === 'analytics' && <AnalyticsTab />}
+          {activeTab === 'health' && <HealthTab />}
+          {activeTab === 'errors' && <ErrorsTab />}
+          {activeTab === 'security' && <SecurityTab />}
+          {activeTab === 'reports' && <ReportsTab />}
+          {activeTab === 'dictionaries' && <DictionariesTab />}
+          {activeTab === 'modules' && <ModulesTab />}
         </div>
       </div>
     </div>
