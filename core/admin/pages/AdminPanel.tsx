@@ -13,10 +13,10 @@ import { Switch } from '@/shared/components/ui/Switch'
 import { ModuleSettingsModal } from '@/core/admin/components/modules/ModuleSettingsModal'
 import type { ModuleId } from '@/core/admin/components/modules/types'
 import {
-  Shield, Users, Key, Building2, Settings2, ScrollText, Search,
+  Users, Key, Building2, Settings2, ScrollText, Search,
   Loader2, Plus, Trash2, Edit3, Check, X, AlertTriangle, Activity,
   ChevronLeft, ChevronRight, RefreshCw, UserCog, Lock,
-  RotateCcw, Sliders, Clock, Globe,
+  RotateCcw, Sliders, Clock, Globe, Sparkles,
   ShieldCheck, ArrowRightLeft, Eye, ArrowUpDown,
   BarChart3, Download, FileText, Database,
   HardDrive, Server, AlertCircle, Unlock, UserPlus, Boxes,
@@ -252,33 +252,50 @@ export function AdminPanel() {
     } catch {}
   }
 
+  const allTabs = filteredGroups.flatMap((g) => g.tabs)
+  const activeTabInfo = allTabs.find((t) => t.id === activeTab)
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 page-header">
-        <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
-          <Shield className="h-5 w-5" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold">Администрирование</h1>
-          <p className="text-sm text-muted-foreground">Управление ролями, доступами и настройками</p>
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-white/5 rounded-full" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-2">
+            <Sparkles className="h-6 w-6 text-white/80" />
+            <h1 className="text-2xl font-bold text-white">Администрирование</h1>
+          </div>
+          <p className="text-sm text-white/60 mb-6">Управление ролями, доступами и настройками системы</p>
+          {stats && (
+            <div className="flex flex-wrap gap-3">
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
+                <Users className="h-3.5 w-3.5" />
+                <span className="font-semibold">{stats.totalUsers}</span> пользователей
+              </span>
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
+                <Key className="h-3.5 w-3.5" />
+                <span className="font-semibold">{stats.totalRoles}</span> ролей
+              </span>
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
+                <Building2 className="h-3.5 w-3.5" />
+                <span className="font-semibold">{stats.totalDepartments}</span> отделов
+              </span>
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
+                <Activity className="h-3.5 w-3.5" />
+                <span className="font-semibold">{stats.auditToday}</span> действий сегодня
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard icon={Users} label="Пользователей" value={stats.totalUsers} sub={`Активных: ${stats.activeUsers}`} />
-          <StatCard icon={Key} label="Ролей" value={stats.totalRoles} />
-          <StatCard icon={Building2} label="Отделов" value={stats.totalDepartments} />
-          <StatCard icon={Activity} label="Действий сегодня" value={stats.auditToday} />
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
-        <nav className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+        <nav className="space-y-3">
           {filteredGroups.map((group) => (
             <div key={group.label}>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1.5">{group.label}</p>
-              <div className="space-y-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 px-3 mb-1.5">{group.label}</p>
+              <div className="space-y-0.5 bg-card rounded-xl border border-border/40 p-1.5">
                 {group.tabs.map((tab) => {
                   const Icon = tab.icon
                   const isActive = activeTab === tab.id
@@ -287,30 +304,25 @@ export function AdminPanel() {
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={cn(
-                        'group flex items-center gap-3 w-full rounded-lg px-3 py-2 text-left transition-all duration-200',
+                        'group flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200',
                         isActive
-                          ? 'bg-primary/8 text-primary'
-                          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                       )}
                     >
-                      <div className={cn(
-                        'p-2 rounded-lg transition-all duration-200 shrink-0',
-                        isActive
-                          ? `bg-primary/10 text-primary`
-                          : 'bg-muted/50 text-muted-foreground group-hover:bg-muted',
-                      )}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
+                      <Icon className={cn(
+                        'h-4 w-4 shrink-0 transition-colors',
+                        isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
+                      )} />
+                      <div className="min-w-0 flex-1">
                         <p className={cn(
                           'text-sm font-medium truncate transition-colors',
-                          isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground',
+                          isActive ? 'text-primary-foreground' : '',
                         )}>
                           {tab.name}
                         </p>
-                        <p className="text-[10px] text-muted-foreground/70 truncate leading-tight">{tab.description}</p>
                       </div>
-                      {isActive && <div className="ml-auto w-1 h-4 rounded-full bg-primary shrink-0" />}
+                      {isActive && <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground/60 shrink-0" />}
                     </button>
                   )
                 })}
@@ -320,6 +332,17 @@ export function AdminPanel() {
         </nav>
 
         <div className="min-w-0">
+          {activeTabInfo && (
+            <div className="flex items-center gap-3 mb-4">
+              <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', activeTabInfo.color)}>
+                <activeTabInfo.icon className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">{activeTabInfo.name}</h2>
+                <p className="text-xs text-muted-foreground">{activeTabInfo.description}</p>
+              </div>
+            </div>
+          )}
           {activeTab === 'users' && <UsersTab />}
           {activeTab === 'roles' && <RolesTab />}
           {activeTab === 'departments' && <DepartmentsTab />}
@@ -335,28 +358,6 @@ export function AdminPanel() {
         </div>
       </div>
     </div>
-  )
-}
-
-function StatCard({ icon: Icon, label, value, sub }: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  value: number
-  sub?: string
-}) {
-  return (
-    <Card className="section-card">
-      <CardContent className="p-4 flex items-center gap-4">
-        <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
-          <Icon className="h-5 w-5" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold">{value}</p>
-          <p className="text-xs text-muted-foreground">{label}</p>
-          {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
-        </div>
-      </CardContent>
-    </Card>
   )
 }
 
