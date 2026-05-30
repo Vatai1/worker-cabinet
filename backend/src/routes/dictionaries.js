@@ -673,6 +673,33 @@ router.get('/doc-templates/:id/preview-token', authenticateToken, authorizeRoles
   res.json({ token, publicUrl })
 }))
 
+/**
+ * @swagger
+ * /dictionaries/doc-templates/{id}/public/{token}:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Публичный просмотр шаблона документа по JWT-токену
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID шаблона
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *         description: JWT preview-токен
+ *     responses:
+ *       200:
+ *         description: Файл шаблона (binary stream)
+ *       401:
+ *         description: Недействительный токен
+ *       403:
+ *         description: Токен не соответствует шаблону
+ *       404:
+ *         description: Шаблон или файл не найден
+ */
 router.get('/doc-templates/:id/public/:token', asyncHandler(async (req, res) => {
   const { id, token } = req.params
   let decoded
@@ -699,6 +726,37 @@ router.get('/doc-templates/:id/public/:token', asyncHandler(async (req, res) => 
 }))
 
 // POST /api/dictionaries/doc-templates/:id/save-from-url — save file from OnlyOffice downloadAs URL
+/**
+ * @swagger
+ * /dictionaries/doc-templates/{id}/save-from-url:
+ *   post:
+ *     tags: [Dictionaries]
+ *     summary: Сохранить файл шаблона из URL (OnlyOffice downloadAs)
+ *     description: 'Доступно для ролей: hr, admin'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [url]
+ *             properties:
+ *               url: { type: string, description: 'URL файла' }
+ *               fileType: { type: string, description: 'Расширение файла' }
+ *     responses:
+ *       200:
+ *         description: Файл сохранён
+ *       400:
+ *         description: URL не указан
+ *       404:
+ *         description: Шаблон не найден
+ */
 router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { url, fileType } = req.body
@@ -732,6 +790,29 @@ router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRole
 }))
 
 // POST /api/dictionaries/doc-templates/:id/callback — OnlyOffice save callback
+/**
+ * @swagger
+ * /dictionaries/doc-templates/{id}/callback:
+ *   post:
+ *     tags: [Dictionaries]
+ *     summary: OnlyOffice callback для сохранения документа
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: { type: integer, description: 'Статус (2=ready, 6=force save)' }
+ *               url: { type: string, description: 'URL для скачивания' }
+ *     responses:
+ *       200:
+ *         description: Callback обработан
+ */
 router.post('/doc-templates/:id/callback', asyncHandler(async (req, res) => {
   const { id } = req.params
   const { status, url } = req.body

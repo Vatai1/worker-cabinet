@@ -395,6 +395,31 @@ router.options('/documents/:id/file', (req, res) => {
   res.status(200).end()
 })
 
+/**
+ * @swagger
+ * /onboarding/documents/{id}/file:
+ *   get:
+ *     tags: [Onboarding]
+ *     summary: Скачать файл документа онбординга по access-токену
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID документа
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *         description: Access token (JWT)
+ *     responses:
+ *       200:
+ *         description: Файл документа (binary stream)
+ *       401:
+ *         description: Токен отсутствует или недействителен
+ *       404:
+ *         description: Документ или файл не найден
+ */
 router.get('/documents/:id/file', async (req, res) => {
   try {
     const { id } = req.params

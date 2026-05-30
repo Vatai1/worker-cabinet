@@ -39,6 +39,27 @@ router.get('/auth/url', asyncHandler(async (req, res) => {
   res.json({ url, connected: false })
 }))
 
+/**
+ * @swagger
+ * /calendar/auth/callback:
+ *   get:
+ *     tags: [Calendar]
+ *     summary: OAuth2 callback для Microsoft Outlook
+ *     parameters:
+ *       - in: query
+ *         name: code
+ *         required: true
+ *         schema: { type: string }
+ *         description: Authorization code
+ *       - in: query
+ *         name: state
+ *         required: true
+ *         schema: { type: string }
+ *         description: User ID (state parameter)
+ *     responses:
+ *       302:
+ *         description: Редирект на /calendar после успешной привязки или ошибки
+ */
 router.get('/auth/callback', asyncHandler(async (req, res) => {
   const { code, state } = req.query
   const userId = parseInt(String(state))

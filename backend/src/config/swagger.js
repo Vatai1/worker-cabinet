@@ -47,6 +47,8 @@ const options = {
             manager_id: { type: 'integer' },
             avatar: { type: 'string', nullable: true },
             responsibility_area: { type: 'string', nullable: true },
+            office: { type: 'string', nullable: true, description: 'Офис (адрес)' },
+            cabinet: { type: 'string', nullable: true, description: 'Кабинет/рабочее место' },
           },
         },
         LoginRequest: {
@@ -62,6 +64,8 @@ const options = {
           properties: {
             token: { type: 'string' },
             user: { $ref: '#/components/schemas/User' },
+            locked_until: { type: 'string', format: 'date-time', description: 'Дата разблокировки (если аккаунт заблокирован)' },
+            failed_login_count: { type: 'integer', description: 'Количество неудачных попыток входа' },
           },
         },
         VacationType: {
@@ -197,6 +201,8 @@ const options = {
       { name: 'Dictionaries', description: 'Справочники' },
       { name: 'Timesheet', description: 'Табель учёта рабочего времени' },
       { name: 'Calendar', description: 'Интеграция с календарём (Outlook/EWS)' },
+      { name: 'Notifications', description: 'Уведомления' },
+      { name: 'UserDocuments', description: 'Документы пользователя' },
       { name: 'Admin', description: 'Админ-панель: роли, доступы, пользователи, настройки, аудит' },
     ],
   },
