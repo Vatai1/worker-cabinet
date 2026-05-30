@@ -33,7 +33,6 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Отдел', icon: Building2, section: 'Работа', children: [
-    { name: 'Табель', href: '/timesheet', module: 'timesheet' },
     { name: 'Отпуск', href: '/vacation', module: 'vacation' },
     { name: 'Сотрудники', href: '/employees' },
   ]},
