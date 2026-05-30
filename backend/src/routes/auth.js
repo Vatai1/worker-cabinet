@@ -128,7 +128,12 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
  *           application/json:
  *             schema: { $ref: '#/components/schemas/LoginResponse' }
  *       401:
- *         description: Неверные учётные данные
+ *         description: 'Неверные учётные данные или аккаунт заблокирован (5+ неудачных попыток → 30 мин блокировка)'
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       429:
+ *         description: Слишком много попыток (rate limit)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }

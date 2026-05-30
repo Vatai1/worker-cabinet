@@ -1297,7 +1297,33 @@ router.put('/:id/folders/:folderId/move', authenticateToken, async (req, res) =>
  *       200:
  *         description: Документ удалён
  */
-// DELETE /api/projects/:id/documents/:documentId — delete document
+/**
+ * @swagger
+ * /projects/{id}/documents/{documentId}:
+ *   delete:
+ *     tags: [Projects]
+ *     summary: Удалить документ проекта
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID проекта
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID документа
+ *     responses:
+ *       200:
+ *         description: Документ удалён
+ *       403:
+ *         description: Нет прав
+ *       404:
+ *         description: Проект или документ не найден
+ */
 router.delete('/:id/documents/:documentId', authenticateToken, async (req, res) => {
   try {
     const { id, documentId } = req.params
@@ -1454,7 +1480,36 @@ router.get('/:id/documents/:documentId/preview-token', authenticateToken, async 
   }
 })
 
-// GET /api/projects/:id/documents/:documentId/public/:token — Public preview URL
+/**
+ * @swagger
+ * /projects/{id}/documents/{documentId}/public/{token}:
+ *   get:
+ *     tags: [Projects]
+ *     summary: Публичный просмотр документа проекта по JWT-токену
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID проекта
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID документа
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *         description: JWT preview-токен
+ *     responses:
+ *       200:
+ *         description: Файл документа (binary stream)
+ *       401:
+ *         description: Недействительный токен
+ *       404:
+ *         description: Документ не найден
+ */
 router.get('/:id/documents/:documentId/public/:token', async (req, res) => {
   try {
     const { id, documentId, token } = req.params
