@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
@@ -92,7 +93,7 @@ export function Documents() {
       window.URL.revokeObjectURL(url)
       a.remove()
     } catch (error) {
-      alert('Не удалось скачать файл')
+      toast.error('Не удалось скачать файл')
     }
   }
 
@@ -107,7 +108,7 @@ export function Documents() {
       const url = window.URL.createObjectURL(blob)
       window.open(url, '_blank')
     } catch (error) {
-      alert('Не удалось открыть файл для просмотра')
+      toast.error('Не удалось открыть файл для просмотра')
     }
   }
 
@@ -123,7 +124,7 @@ export function Documents() {
 
       setDocuments(prev => prev.filter(d => d.id !== doc.id))
     } catch (error) {
-      alert('Не удалось удалить документ')
+      toast.error('Не удалось удалить документ')
     }
   }
 
@@ -162,7 +163,7 @@ export function Documents() {
       setUploadCategory('other')
       setUploadDescription('')
     } catch (error: unknown) {
-      alert(getErrorMessage(error) || 'Не удалось загрузить документ')
+      toast.error(getErrorMessage(error) || 'Не удалось загрузить документ')
     } finally {
       setUploading(false)
     }
@@ -170,24 +171,35 @@ export function Documents() {
 
   return (
     <div className="space-y-6">
-      <div className="page-header">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary/10">
-              <FolderOpen className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Ваши документы</h1>
-              <p className="text-sm text-muted-foreground">
-                Личные документы: договоры, сертификаты и другие файлы
-              </p>
-            </div>
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="h-5 w-5 text-white/70" />
+            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Документы</span>
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Документы</h1>
+          <p className="mt-2 text-white/50 text-sm">Личные документы: договоры, сертификаты и другие файлы</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mt-6">
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+            <FileText className="h-3.5 w-3.5" />
+            {documents.length} документов
+          </div>
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+            <FolderOpen className="h-3.5 w-3.5" />
+            {new Set(documents.map(d => d.category)).size} категорий
           </div>
           {user?.role === 'manager' && (
-            <Button onClick={() => setUploadModalOpen(true)}>
-              <Upload className="mr-2 h-4 w-4" />
+            <button
+              onClick={() => setUploadModalOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/20 px-3 py-1.5 text-xs font-medium transition-colors"
+            >
+              <Upload className="h-3.5 w-3.5" />
               Загрузить документ
-            </Button>
+            </button>
           )}
         </div>
       </div>

@@ -40,7 +40,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-muted-foreground">Загрузка...</div>
+        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
       </div>
     )
   }
@@ -55,7 +55,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function HRRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
   const loading = useAuthStore((state) => state.loading)
-  if (loading) return null
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
   if (!['hr', 'admin'].includes(user?.role ?? ''))
     return <Navigate to="/dashboard" replace />
   return <>{children}</>
@@ -64,7 +64,7 @@ function HRRoute({ children }: { children: React.ReactNode }) {
 function ManagerRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
   const loading = useAuthStore((state) => state.loading)
-  if (loading) return null
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
   if (user?.role !== 'manager') return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
@@ -72,7 +72,7 @@ function ManagerRoute({ children }: { children: React.ReactNode }) {
 function OnboardingRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
   const loading = useAuthStore((state) => state.loading)
-  if (loading) return null
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
   if (user?.role !== 'onboarding') return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
@@ -80,7 +80,7 @@ function OnboardingRoute({ children }: { children: React.ReactNode }) {
 function BlockOnboardingRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
   const loading = useAuthStore((state) => state.loading)
-  if (loading) return null
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
   if (user?.role === 'onboarding') return <Navigate to="/onboarding" replace />
   return <>{children}</>
 }
@@ -88,7 +88,7 @@ function BlockOnboardingRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
   const loading = useAuthStore((state) => state.loading)
-  if (loading) return null
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
   if (user?.role !== 'admin') return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }

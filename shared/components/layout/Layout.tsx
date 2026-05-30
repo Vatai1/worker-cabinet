@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 
@@ -14,6 +15,7 @@ export function Layout() {
           </div>
         </main>
       </div>
+      <Toaster position="top-right" richColors closeButton />
     </div>
   )
 }

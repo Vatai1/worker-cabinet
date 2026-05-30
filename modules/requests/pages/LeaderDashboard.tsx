@@ -7,7 +7,7 @@ import {
   Clock,
   CheckCircle,
   CalendarCheck,
-  LayoutDashboard,
+  Shield,
 } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useRequestsStore } from '@/modules/requests/store/requestsStore'
@@ -95,19 +95,17 @@ export function LeaderDashboard() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="page-header">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-primary/10">
-            <LayoutDashboard className="h-5 w-5 text-primary" />
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield className="h-5 w-5 text-white/70" />
+            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Лидер</span>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-gradient">
-              Добро пожаловать, {user?.firstName}!
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Обзор работы подразделения на сегодня
-            </p>
-          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Панель лидера</h1>
+          <p className="mt-2 text-white/50 text-sm">Рассмотреть заявки, календарь отпусков, документы</p>
         </div>
       </div>
 

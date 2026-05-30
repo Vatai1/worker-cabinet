@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState, useMemo } from 'react'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
 import { Card } from '@/shared/components/ui/Card'
@@ -124,7 +125,7 @@ export function Vacation() {
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
       console.error('Error canceling request:', err)
-      alert('Ошибка при отмене заявки')
+      toast.error('Ошибка при отмене заявки')
     } finally {
       setShowCancelModal(false)
       setCancellingRequestId(null)
@@ -584,7 +585,7 @@ export function Vacation() {
               Заявки на согласовании
             </h2>
             {loading ? (
-              <div className="text-center py-8 text-muted-foreground">Загрузка...</div>
+              <div className="flex items-center justify-center py-8"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
             ) : (
               <div className="space-y-3">
                 {departmentRequests
@@ -674,7 +675,7 @@ export function Vacation() {
         >
           <div className="px-6 pb-6">
             {loading ? (
-              <div className="text-center py-8 text-muted-foreground">Загрузка...</div>
+              <div className="flex items-center justify-center py-8"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
             ) : currentUserRequests.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">Нет активных заявок</div>
             ) : (

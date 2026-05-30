@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { OnlyOfficePreviewModal } from '@/shared/components/OnlyOfficePreviewModal'
-import { CheckCircle2, Circle, FileText, Download, Loader2, BookOpen, Eye } from 'lucide-react'
+import { CheckCircle2, Circle, FileText, Download, Loader2, BookOpen, Eye, ClipboardCheck, Sparkles } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
@@ -99,8 +100,8 @@ export function Onboarding() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center py-12">
+        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
       </div>
     )
   }
@@ -113,14 +114,23 @@ export function Onboarding() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <div className="page-header">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-primary/10">
-            <BookOpen className="h-5 w-5 text-primary" />
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="h-5 w-5 text-white/70" />
+            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Онбординг</span>
           </div>
-          <div>
-            <h1 className="text-xl font-bold">Онбординг</h1>
-            <p className="text-sm text-muted-foreground">Добро пожаловать, {onboarding.firstName} {onboarding.lastName}!</p>
+          <h1 className="text-3xl font-extrabold tracking-tight">Онбординг</h1>
+          <p className="mt-2 text-white/50 text-sm">Добро пожаловать, {onboarding.firstName} {onboarding.lastName}! Ознакомьтесь с документами</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mt-6">
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+            <ClipboardCheck className="h-3.5 w-3.5" />{acknowledged} из {total} документов
+          </div>
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+            {percent}% выполнено
           </div>
         </div>
       </div>
@@ -179,7 +189,7 @@ export function Onboarding() {
       </div>
 
       {selectedDoc && !confirmDocId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col animate-scale-in">
             <div className="flex items-center justify-between p-6 border-b border-border/50">
               <h3 className="text-lg font-semibold">{selectedDoc.title}</h3>
@@ -216,7 +226,7 @@ export function Onboarding() {
                           acknowledged: selectedDoc.acknowledgedAt !== null,
                         })
                       } catch (err) {
-                        alert('Ошибка: ' + (err instanceof Error ? err.message : 'Неизвестная ошибка'))
+                        toast.error(err instanceof Error ? err.message : 'Неизвестная ошибка')
                       }
                     }}
                   >
@@ -244,7 +254,7 @@ export function Onboarding() {
       )}
 
       {confirmDocId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 space-y-4 animate-scale-in">
             <h3 className="text-lg font-semibold">Подтверждение</h3>
             <p className="text-muted-foreground">Вы подтверждаете ознакомление с документом?</p>

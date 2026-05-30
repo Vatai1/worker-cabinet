@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Clock, Sparkles } from 'lucide-react'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -71,7 +72,23 @@ export function HRTimesheet() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Табель — все отделы</h1>
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="h-5 w-5 text-white/70" />
+            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Табель</span>
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Табель — все отделы</h1>
+          <p className="mt-2 text-white/50 text-sm">Учёт рабочего времени по отделам</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mt-6">
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+            <Clock className="h-3.5 w-3.5" />{departments.length} отделов
+          </div>
+        </div>
+      </div>
 
       <div className="flex items-center gap-2 flex-wrap">
         <select
@@ -106,9 +123,14 @@ export function HRTimesheet() {
       {error && <div className="text-sm text-destructive">{error}</div>}
 
       {loading ? (
-        <div className="text-muted-foreground">Загрузка...</div>
+        <div className="flex items-center justify-center py-12">
+          <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+        </div>
       ) : !timesheet ? (
         <div className="flex flex-col items-center gap-4 py-16 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center">
+            <Clock className="h-8 w-8 text-muted-foreground" />
+          </div>
           <p className="text-muted-foreground">Табель не найден</p>
         </div>
       ) : (
