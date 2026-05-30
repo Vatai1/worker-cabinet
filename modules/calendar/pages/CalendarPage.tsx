@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { ChevronLeft, ChevronRight, ChevronDown, RefreshCw, Link2, Unlink, X, MapPin, Clock, User, Tag, Users, Globe, Lock, Eye, ExternalLink, Calendar, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, RefreshCw, Link2, Unlink, X, MapPin, Clock, User, Tag, Users, Globe, Lock, Eye, ExternalLink, Calendar, AlertCircle, Sparkles } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
@@ -460,6 +460,40 @@ export function CalendarPage() {
   return (
     <div className="cr">
       <style>{CSS}</style>
+      <div className="relative overflow-hidden gradient-primary text-white animate-slide-up" style={{flexShrink:0,padding:'16px 20px'}}>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="relative z-10 flex items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="h-3.5 w-3.5 text-white/60" />
+              <span className="text-white/40 text-[10px] font-medium uppercase tracking-wider">Расписание</span>
+            </div>
+            <h1 className="text-lg font-extrabold tracking-tight">Календарь</h1>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(olByDate[todayKey]?.length || 0) > 0 && (
+              <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                <Calendar className="h-3 w-3 text-white/50" />
+                {olByDate[todayKey]?.length} сегодня
+              </div>
+            )}
+            {activeVac.length > 0 && (
+              <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
+                {activeVac.length} отпуск{activeVac.length === 1 ? '' : activeVac.length < 5 ? 'а' : 'ов'}
+              </div>
+            )}
+            {(outlookConnected || ewsConnected) && (
+              <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-300" />
+                {ewsConnected ? 'Exchange' : 'Outlook'}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
       <div className="ch">
         <div style={{display:'flex',alignItems:'center',gap:4}}>
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="cib">
