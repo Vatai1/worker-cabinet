@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { Input } from '@/shared/components/ui/Input'
 import {
-  FolderKanban, Plus, Search, Loader2,
+  FolderKanban, Plus, Search,
   Calendar, Users, CircleDot, CheckCircle2, Clock,
-  ArrowRight, Layers,
+  ArrowRight, Sparkles, Crown,
 } from 'lucide-react'
 import { CreateProjectModal } from '@/modules/projects/components/modals/CreateProjectModal'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
@@ -33,9 +34,9 @@ export interface Project {
 }
 
 const statusConfig = {
-  active:    { label: 'Активный', icon: CircleDot,    color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30', dot: 'bg-emerald-500', bar: 'bg-gradient-to-r from-emerald-500 to-emerald-400' },
-  completed: { label: 'Завершён', icon: CheckCircle2, color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-50 dark:bg-blue-950/30',       dot: 'bg-blue-500',    bar: 'bg-gradient-to-r from-blue-500 to-blue-400' },
-  paused:    { label: 'На паузе', icon: Clock,        color: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-50 dark:bg-amber-950/30',     dot: 'bg-amber-500',   bar: 'bg-gradient-to-r from-amber-500 to-amber-400' },
+  active:    { label: 'Активный', icon: CircleDot,    color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10', dot: 'bg-emerald-500', bar: 'from-emerald-500/20 to-emerald-500/0' },
+  completed: { label: 'Завершён', icon: CheckCircle2, color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-500/10',    dot: 'bg-blue-500',    bar: 'from-blue-500/20 to-blue-500/0' },
+  paused:    { label: 'На паузе', icon: Clock,        color: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-500/10',   dot: 'bg-amber-500',   bar: 'from-amber-500/20 to-amber-500/0' },
 }
 
 const STATUS_FILTERS = [
@@ -45,15 +46,15 @@ const STATUS_FILTERS = [
   { value: 'completed', label: 'Завершённые' },
 ]
 
-const PROJECT_GRADIENTS = [
-  'from-violet-500/10 to-purple-500/5',
-  'from-blue-500/10 to-cyan-500/5',
-  'from-emerald-500/10 to-teal-500/5',
-  'from-rose-500/10 to-pink-500/5',
-  'from-amber-500/10 to-orange-500/5',
-  'from-indigo-500/10 to-blue-500/5',
-  'from-fuchsia-500/10 to-purple-500/5',
-  'from-sky-500/10 to-blue-500/5',
+const projectColors = [
+  { bg: 'bg-violet-500/10', text: 'text-violet-600 dark:text-violet-400', accent: 'from-violet-500/20 to-violet-500/0' },
+  { bg: 'bg-indigo-500/10', text: 'text-indigo-600 dark:text-indigo-400', accent: 'from-indigo-500/20 to-indigo-500/0' },
+  { bg: 'bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', accent: 'from-blue-500/20 to-blue-500/0' },
+  { bg: 'bg-cyan-500/10', text: 'text-cyan-600 dark:text-cyan-400', accent: 'from-cyan-500/20 to-cyan-500/0' },
+  { bg: 'bg-teal-500/10', text: 'text-teal-600 dark:text-teal-400', accent: 'from-teal-500/20 to-teal-500/0' },
+  { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', accent: 'from-emerald-500/20 to-emerald-500/0' },
+  { bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', accent: 'from-amber-500/20 to-amber-500/0' },
+  { bg: 'bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400', accent: 'from-rose-500/20 to-rose-500/0' },
 ]
 
 function formatDateShort(dateStr?: string) {
@@ -66,142 +67,13 @@ function formatDateShort(dateStr?: string) {
   return new Date(dateStr).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function getProgress(project: Project) {
-  if (project.status === 'completed') return 100
-  if (!project.start_date || !project.end_date) return null
-  const start = new Date(project.start_date).getTime()
-  const end = new Date(project.end_date).getTime()
-  const now = Date.now()
-  if (project.status === 'paused') return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)))
-  return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)))
-}
-
-function getDaysLeft(endDate?: string) {
-  if (!endDate) return null
-  const end = new Date(endDate).getTime()
-  const diff = Math.ceil((end - Date.now()) / 86400000)
-  if (diff < 0) return 'Просрочен'
-  if (diff === 0) return 'Сегодня'
-  if (diff === 1) return '1 день'
-  if (diff < 5) return `${diff} дня`
-  if (diff < 21) return `${diff} дней`
-  return `${diff} дн.`
-}
-
-function ProjectCard({ project, index }: { project: Project; index: number }) {
-  const navigate = useNavigate()
-  const cfg = statusConfig[project.status] ?? statusConfig.active
-  const leads = project.members.filter((m) => m.role === 'lead')
-  const gradient = PROJECT_GRADIENTS[index % PROJECT_GRADIENTS.length]
-  const progress = getProgress(project)
-  const daysLeft = project.status === 'active' ? getDaysLeft(project.end_date) : null
-
-  return (
-    <button
-      className={cn(
-        'group relative w-full text-left rounded-2xl border border-border/50 bg-card',
-        'hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5',
-        'transition-all duration-300 overflow-hidden',
-      )}
-      onClick={() => navigate(`/projects/${project.id}`)}
-    >
-      <div className={cn('absolute inset-x-0 top-0 h-1', cfg.bar)} />
-
-      <div className={cn('absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br', gradient)} />
-
-      <div className="relative p-5">
-        <div className="flex items-start gap-4">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10 shrink-0 group-hover:bg-primary/15 transition-colors">
-            <FolderKanban className="h-5 w-5 text-primary" />
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h3 className="font-semibold text-base group-hover:text-primary transition-colors truncate">
-                  {project.name}
-                </h3>
-                {project.full_name && (
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{project.full_name}</p>
-                )}
-              </div>
-              <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shrink-0', cfg.bg, cfg.color)}>
-                <span className={cn('w-1.5 h-1.5 rounded-full', cfg.dot)} />
-                {cfg.label}
-              </span>
-            </div>
-
-            {project.description && (
-              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{project.description}</p>
-            )}
-
-            {progress !== null && (
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-                  <span>Прогресс</span>
-                  <span className="font-medium">{progress}%</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden">
-                  <div
-                    className={cn('h-full rounded-full transition-all duration-500', cfg.bar)}
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between mt-3">
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                {(project.start_date || project.end_date) && (
-                  <span className="flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5" />
-                    {formatDateShort(project.start_date)}
-                    {project.end_date && ` — ${formatDateShort(project.end_date)}`}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/30">
-              <div className="flex items-center gap-2">
-                <div className="flex -space-x-2">
-                  {leads.slice(0, 2).map((m) => (
-                    <Avatar key={m.id} className="h-7 w-7 ring-2 ring-background">
-                      <AvatarImage src={m.avatar || generateAvatarUrl(m.id, m.gender)} alt={`${m.first_name} ${m.last_name}`} />
-                      <AvatarFallback className={cn('bg-gradient-to-br text-white text-[10px] font-semibold', getAvatarColor(m.id))}>
-                        {m.first_name?.[0]}{m.last_name?.[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                  ))}
-                  {project.member_count > 2 && (
-                    <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground ring-2 ring-background">
-                      +{project.member_count - 2}
-                    </div>
-                  )}
-                </div>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Users className="h-3 w-3" />
-                  {project.member_count}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {daysLeft && (
-                  <span className={cn(
-                    'text-xs font-medium',
-                    daysLeft === 'Просрочен' ? 'text-red-500' : 'text-muted-foreground'
-                  )}>
-                    {daysLeft === 'Просрочен' ? 'Просрочен' : `${daysLeft} ост.`}
-                  </span>
-                )}
-                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </button>
-  )
+function pluralize(n: number, one: string, few: string, many: string) {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod100 >= 11 && mod100 <= 19) return many
+  if (mod10 === 1) return one
+  if (mod10 >= 2 && mod10 <= 4) return few
+  return many
 }
 
 export function Projects() {
@@ -211,6 +83,7 @@ export function Projects() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const navigate = useNavigate()
 
   const fetchProjects = async () => {
     try {
@@ -241,130 +114,253 @@ export function Projects() {
     setProjects((prev) => [project, ...prev])
   }
 
-  const activeCount = projects.filter((p) => p.status === 'active').length
-  const pausedCount = projects.filter((p) => p.status === 'paused').length
-  const completedCount = projects.filter((p) => p.status === 'completed').length
+  const activeCount = useMemo(() => projects.filter((p) => p.status === 'active').length, [projects])
+  const pausedCount = useMemo(() => projects.filter((p) => p.status === 'paused').length, [projects])
+  const completedCount = useMemo(() => projects.filter((p) => p.status === 'completed').length, [projects])
+  const totalMembers = useMemo(() => projects.reduce((s, p) => s + p.member_count, 0), [projects])
+
+  const topProjects = useMemo(() =>
+    [...projects].sort((a, b) => b.member_count - a.member_count).slice(0, 3),
+    [projects]
+  )
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+      <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-8 text-center">
         <p className="text-destructive font-medium">{error}</p>
       </div>
     )
   }
 
+  if (loading) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="h-48 rounded-2xl gradient-primary animate-pulse" />
+        <div className="grid gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-32 rounded-2xl bg-muted/30 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (projects.length === 0) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-4 w-4 text-white/60" />
+              <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Управление</span>
+            </div>
+            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Проекты</h1>
+            <p className="mt-2 text-white/45 text-sm">Создавайте проекты и управляйте командной работой</p>
+          </div>
+        </div>
+        <div className="text-center py-20">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted/60 mb-4">
+            <FolderKanban className="h-7 w-7 text-muted-foreground/40" />
+          </div>
+          <p className="text-lg font-semibold text-muted-foreground/80">Проектов пока нет</p>
+          <p className="text-sm text-muted-foreground/50 mt-1">Создайте первый проект, чтобы начать работу</p>
+          <Button className="mt-4 gap-2" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Создать проект
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="page-header flex flex-col sm:flex-row sm:items-end justify-between gap-4 animate-slide-up">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-3">
-            <span className="flex items-center justify-center w-9 h-9 bg-primary/10 rounded-xl">
-              <Layers className="h-5 w-5 text-primary" />
-            </span>
-            Проекты
-          </h1>
-          <p className="text-muted-foreground mt-1 ml-12">
-            {loading ? 'Загрузка...' : `${projects.length} проектов`}
+    <div className="space-y-8 animate-fade-in">
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="h-4 w-4 text-white/60" />
+            <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Управление</span>
+          </div>
+          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Проекты</h1>
+          <p className="mt-2 text-white/45 text-sm">
+            {projects.length} {pluralize(projects.length, 'проект', 'проекта', 'проектов')} · {totalMembers} участников
           </p>
-        </div>
-        <Button className="gap-2 self-start sm:self-auto interactive" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Создать проект
-        </Button>
-      </div>
-
-      {!loading && projects.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="rounded-xl border border-border/50 bg-card p-3.5 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary">
-              <Layers className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-lg font-bold">{projects.length}</p>
-              <p className="text-[11px] text-muted-foreground">Всего</p>
-            </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            {activeCount > 0 && (
+              <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
+                <CircleDot className="h-3.5 w-3.5 text-emerald-300" />
+                {activeCount} активных
+              </div>
+            )}
+            {completedCount > 0 && (
+              <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
+                <CheckCircle2 className="h-3.5 w-3.5 text-blue-300" />
+                {completedCount} завершённых
+              </div>
+            )}
+            {pausedCount > 0 && (
+              <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
+                <Clock className="h-3.5 w-3.5 text-amber-300" />
+                {pausedCount} на паузе
+              </div>
+            )}
           </div>
-          <div className="rounded-xl border border-border/50 bg-card p-3.5 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
-              <CircleDot className="h-4 w-4" />
+          {topProjects.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-3">
+              {topProjects.map((p, i) => (
+                <button
+                  key={p.id}
+                  onClick={() => navigate(`/projects/${p.id}`)}
+                  className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/15 hover:text-white transition-all duration-200"
+                >
+                  <span className="text-white/40">#{i + 1}</span>
+                  {p.name}
+                  <span className="text-white/40 ml-1">{p.member_count}</span>
+                </button>
+              ))}
             </div>
-            <div>
-              <p className="text-lg font-bold">{activeCount}</p>
-              <p className="text-[11px] text-muted-foreground">Активных</p>
-            </div>
-          </div>
-          <div className="rounded-xl border border-border/50 bg-card p-3.5 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-              <Clock className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-lg font-bold">{pausedCount}</p>
-              <p className="text-[11px] text-muted-foreground">На паузе</p>
-            </div>
-          </div>
-          <div className="rounded-xl border border-border/50 bg-card p-3.5 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-              <CheckCircle2 className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-lg font-bold">{completedCount}</p>
-              <p className="text-[11px] text-muted-foreground">Завершённых</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            placeholder="Поиск по названию или описанию..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-1 p-1 rounded-xl bg-muted/60 w-fit self-start">
-          {STATUS_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={cn(
-                'interactive px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap',
-                statusFilter === f.value
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
+          )}
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+            <span className="text-sm font-medium">
+              {filtered.length} {pluralize(filtered.length, 'проект', 'проекта', 'проектов')}
+            </span>
+          </div>
+          <div className="flex gap-1 p-1 rounded-xl bg-muted/60">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
+                className={cn(
+                  'interactive px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap',
+                  statusFilter === f.value
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
-      ) : filtered.length > 0 ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((project, i) => (
-            <ProjectCard key={project.id} project={project} index={i} />
-          ))}
+        <div className="flex items-center gap-3">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+            <Input
+              className="pl-10 h-10"
+              placeholder="Поиск по названию или описанию..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Button className="shrink-0 gap-2" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Создать
+          </Button>
+        </div>
+      </div>
+
+      {filtered.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 page-grid">
+          {filtered.map((project, index) => {
+            const color = projectColors[index % projectColors.length]
+            const cfg = statusConfig[project.status] ?? statusConfig.active
+            const leads = project.members.filter((m) => m.role === 'lead')
+            const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
+            return (
+              <Card
+                key={project.id}
+                className={`hover-lift group cursor-pointer animate-slide-up ${staggerClass}`}
+                onClick={() => navigate(`/projects/${project.id}`)}
+              >
+                <CardContent className="p-0">
+                  <div className={`h-1.5 rounded-t-2xl bg-gradient-to-r ${cfg.bar}`} />
+                  <div className="p-5 pt-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className={`h-12 w-12 shrink-0 rounded-xl ${color.bg} flex items-center justify-center transition-transform duration-200 group-hover:scale-110`}>
+                        <FolderKanban className={`h-6 w-6 ${color.text}`} />
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground/0 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-200 mt-1" />
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-[15px] leading-tight group-hover:text-primary transition-colors duration-200 truncate">
+                          {project.name}
+                        </h3>
+                      </div>
+                      {project.full_name && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{project.full_name}</p>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2 min-h-[2.5rem]">
+                      {project.description || 'Без описания'}
+                    </p>
+
+                    <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
+                      <span className={cn('inline-flex items-center gap-1 rounded-md px-2 py-0.5', cfg.bg, cfg.color)}>
+                        <span className={cn('w-1.5 h-1.5 rounded-full', cfg.dot)} />
+                        {cfg.label}
+                      </span>
+                      {(project.start_date || project.end_date) && (
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {formatDateShort(project.start_date)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {leads.length > 0 && (
+                          <div className="flex -space-x-1.5">
+                            {leads.slice(0, 3).map((m) => (
+                              <Avatar key={m.id} className="h-6 w-6 ring-2 ring-background">
+                                <AvatarImage src={m.avatar || generateAvatarUrl(m.id, m.gender)} alt={`${m.first_name} ${m.last_name}`} />
+                                <AvatarFallback className={cn('bg-gradient-to-br text-white text-[9px] font-semibold', getAvatarColor(m.id))}>
+                                  {m.first_name?.[0]}{m.last_name?.[0]}
+                                </AvatarFallback>
+                              </Avatar>
+                            ))}
+                          </div>
+                        )}
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Users className="h-3 w-3" />
+                          {project.member_count}
+                        </span>
+                      </div>
+                      {leads.length > 0 && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Crown className="h-3 w-3 text-primary/50" />
+                          <span className="truncate max-w-[120px]">{leads[0].last_name}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       ) : (
-        <div className="text-center py-16">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-            <FolderKanban className="h-7 w-7 text-muted-foreground" />
+        <div className="text-center py-20">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted/60 mb-4">
+            <FolderKanban className="h-7 w-7 text-muted-foreground/40" />
           </div>
-          <p className="text-muted-foreground">
-            {search || statusFilter ? 'Проектов не найдено' : 'Проектов пока нет'}
+          <p className="text-sm text-muted-foreground/70">
+            {search || statusFilter ? 'Проекты не найдены по запросу' : 'Проекты не найдены'}
           </p>
-          {!search && !statusFilter && (
-            <Button variant="outline" className="mt-4 interactive" onClick={() => setCreateOpen(true)}>
-              Создать первый проект
-            </Button>
-          )}
         </div>
       )}
 
