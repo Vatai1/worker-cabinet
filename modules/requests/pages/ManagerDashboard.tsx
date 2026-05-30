@@ -4,7 +4,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
-import { Check, X, Search, Users, Clock, CheckCircle, ClipboardList } from 'lucide-react'
+import { Check, X, Search, Users, Clock, CheckCircle } from 'lucide-react'
 import { useRequestsStore } from '@/modules/requests/store/requestsStore'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/mockData'
@@ -57,16 +57,26 @@ export function ManagerDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="page-header">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-primary/10">
-            <ClipboardList className="h-5 w-5 text-primary" />
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-3">
+            <Users className="h-5 w-5 text-white/70" />
+            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Руководитель</span>
           </div>
-          <div>
-            <h1 className="text-xl font-bold">Панель руководителя</h1>
-            <p className="text-sm text-muted-foreground">
-              Рассмотрение заявлений от сотрудников подразделения
-            </p>
+          <h1 className="text-3xl font-extrabold tracking-tight">Панель руководителя</h1>
+          <p className="mt-2 text-white/50 text-sm">Рассмотрение заявлений от сотрудников подразделения</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mt-6">
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+            <Clock className="h-3.5 w-3.5" />
+            {pendingRequests.length} на рассмотрении
+          </div>
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+            <Users className="h-3.5 w-3.5" />
+            {subordinateRequests.length} всего заявок
           </div>
         </div>
       </div>

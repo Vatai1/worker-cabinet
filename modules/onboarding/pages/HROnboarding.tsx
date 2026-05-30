@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { useParams } from 'react-router-dom'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
@@ -11,7 +12,7 @@ import { Badge } from '@/shared/components/ui/Badge'
 import { OnlyOfficePreviewModal } from '@/shared/components/OnlyOfficePreviewModal'
 import {
   Plus, Trash2, Edit2, CheckCircle2, Circle, FileText, Loader2,
-  Users, BookOpen, Building2, X, Download, Eye,
+  Users, BookOpen, Building2, X, Download, Eye, ClipboardCheck, Sparkles,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -253,23 +254,39 @@ export function HROnboarding() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Онбординг</h1>
-          <p className="text-muted-foreground">Управление онбордингом сотрудников</p>
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="h-5 w-5 text-white/70" />
+            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Онбординг</span>
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Управление онбордингом</h1>
+          <p className="mt-2 text-white/50 text-sm">Управление онбордингом сотрудников</p>
         </div>
-        {tab === 'employees' && (
-          <Button onClick={() => setShowAddModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Добавить сотрудника
-          </Button>
-        )}
-        {tab === 'templates' && (
-          <Button onClick={() => { setEditTemplate(null); setShowTemplateModal(true) }}>
-            <Plus className="h-4 w-4 mr-2" />
-            Создать шаблон
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-3 mt-6">
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+            <ClipboardCheck className="h-3.5 w-3.5" />{records.length} записей
+          </div>
+          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+            <BookOpen className="h-3.5 w-3.5" />{templates.length} шаблонов
+          </div>
+        </div>
+        <div className="flex gap-3 mt-4">
+          {tab === 'employees' && (
+            <Button onClick={() => setShowAddModal(true)} className="bg-white/10 hover:bg-white/20 border border-white/20 text-white">
+              <Plus className="h-4 w-4 mr-2" />
+              Добавить сотрудника
+            </Button>
+          )}
+          {tab === 'templates' && (
+            <Button onClick={() => { setEditTemplate(null); setShowTemplateModal(true) }} className="bg-white/10 hover:bg-white/20 border border-white/20 text-white">
+              <Plus className="h-4 w-4 mr-2" />
+              Создать шаблон
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-1 border-b border-border/50">
@@ -292,7 +309,7 @@ export function HROnboarding() {
       {tab === 'employees' && (
         <div>
           {recordsLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            <div className="flex items-center justify-center py-12"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
           ) : records.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">Нет записей об онбординге</div>
           ) : (
@@ -357,7 +374,7 @@ export function HROnboarding() {
             </select>
           </div>
           {templatesLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            <div className="flex items-center justify-center py-12"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
           ) : templates.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">Нет шаблонов документов</div>
           ) : (
@@ -425,7 +442,7 @@ export function HROnboarding() {
               })
             } catch (err) {
               console.error('[HR] Error getting access token:', err)
-              alert('Ошибка: ' + (err instanceof Error ? err.message : 'Неизвестная ошибка'))
+              toast.error(err instanceof Error ? err.message : 'Неизвестная ошибка')
             }
           }}
         />
@@ -500,7 +517,7 @@ function OnboardingDetailModal({ detail, loading, onClose, onCancel, onOpenOnlyO
   onOpenOnlyOffice: (doc: { id: number; title: string; fileUrl: string; mimeType: string }) => void
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-scale-in">
         <div className="flex items-center justify-between p-6 border-b border-border/50">
           <h3 className="text-lg font-semibold">
@@ -509,7 +526,7 @@ function OnboardingDetailModal({ detail, loading, onClose, onCancel, onOpenOnlyO
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-6">
-          {loading && <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}
+          {loading && <div className="flex items-center justify-center py-12"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}
           {detail && !loading && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
@@ -639,7 +656,7 @@ function AddOnboardingModal({ departments, positions, templates, onTemplatesNeed
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-border/50">
           <h3 className="text-lg font-semibold">Добавить сотрудника на онбординг</h3>
@@ -777,7 +794,7 @@ function TemplateModal({ template, departments, positions, onClose, onSuccess }:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-border/50">
           <h3 className="text-lg font-semibold">{isEdit ? 'Редактировать шаблон' : 'Создать шаблон'}</h3>
@@ -854,7 +871,7 @@ function ConfirmModal({ title, message, confirmLabel, confirmVariant = 'default'
   onClose: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
         <h3 className="text-lg font-semibold">{title}</h3>
         <p className="text-muted-foreground">{message}</p>
