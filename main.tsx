@@ -1,4 +1,3 @@
-import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import '@xyflow/react/dist/style.css'
@@ -7,11 +6,7 @@ import App from './App'
 const rootEl = document.getElementById('root')!
 
 const root = createRoot(rootEl)
-root.render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+root.render(<App />)
 
 if (import.meta.hot) {
   import.meta.hot.on('vite:beforeUpdate', () => {
