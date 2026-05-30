@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Bell, CheckCheck, Mail, MailOpen, Clock, AlertCircle } from 'lucide-react'
+import { Bell, CheckCheck, Mail, MailOpen, Clock, AlertCircle, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
-import { Badge } from '@/shared/components/ui/Badge'
 import { formatDateTime, getErrorMessage } from '@/shared/lib/utils'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -105,28 +104,48 @@ export function Notifications() {
 
   return (
     <div className="space-y-6">
-      <div className="page-header">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary/10">
-              <Bell className="h-5 w-5 text-primary" />
-            </div>
+      <div className="relative overflow-hidden gradient-primary text-white rounded-xl animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="relative z-10 p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-xl font-bold flex items-center gap-2">
-                Уведомления
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="h-3.5 w-3.5 text-white/60" />
+                <span className="text-white/40 text-[10px] font-medium uppercase tracking-wider">Центр сообщений</span>
+              </div>
+              <h1 className="text-2xl font-extrabold tracking-tight">Уведомления</h1>
+              <p className="mt-1 text-white/50 text-sm">История уведомлений и почтовых рассылок</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex flex-wrap gap-2">
                 {unreadCount > 0 && (
-                  <Badge variant="default">{unreadCount}</Badge>
+                  <div className="flex items-center gap-1.5 rounded-lg bg-amber-400/20 backdrop-blur-sm border border-amber-400/20 px-2.5 py-1 text-[11px] font-medium text-amber-100">
+                    <Mail className="h-3 w-3 text-amber-300/70" />
+                    {unreadCount} непрочитанных
+                  </div>
                 )}
-              </h1>
-              <p className="text-sm text-muted-foreground">История уведомлений и почтовых рассылок</p>
+                {total > 0 && (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                    <Bell className="h-3 w-3 text-white/50" />
+                    {total} всего
+                  </div>
+                )}
+              </div>
+              {unreadCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  onClick={markAllAsRead}
+                >
+                  <CheckCheck className="h-3.5 w-3.5 mr-1.5" />
+                  Прочитать все
+                </Button>
+              )}
             </div>
           </div>
-          {unreadCount > 0 && (
-            <Button variant="outline" size="sm" onClick={markAllAsRead}>
-              <CheckCheck className="h-4 w-4 mr-1" />
-              Прочитать все
-            </Button>
-          )}
         </div>
       </div>
 
