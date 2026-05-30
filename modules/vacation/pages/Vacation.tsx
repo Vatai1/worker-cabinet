@@ -17,7 +17,7 @@ import type { VacationRequest } from '@/shared/types'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { ChevronLeft, ChevronRight, FileText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon } from 'lucide-react'
 import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
 import { VacationTransferApplicationModal } from '@/modules/vacation/components/modals/VacationTransferApplicationModal'
 
@@ -364,55 +364,91 @@ export function Vacation() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="page-header flex justify-between items-center flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <span className="text-4xl">✈️</span>
-            Отпуск
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            {isManager ? 'Управление отпусками сотрудников' : 'Управление вашими отпусками'}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {isManager && (
-            <Button
-              variant="outline"
-              onClick={() => setShowRestrictionModal(true)}
-              size="default"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-              Настроить пересечения
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => setShowApplicationModal(true)}
-            size="default"
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            Заявление на отпуск
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowTransferApplicationModal(true)}
-            size="default"
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            Заявление о переносе
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowHistoryModal(true)}
-            size="default"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            История заявок
-          </Button>
+      <div className="relative overflow-hidden gradient-primary text-white rounded-xl animate-slide-up">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="relative z-10 p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="h-3.5 w-3.5 text-white/60" />
+                <span className="text-white/40 text-[10px] font-medium uppercase tracking-wider">
+                  {isManager ? 'Управление' : 'Личный кабинет'}
+                </span>
+              </div>
+              <h1 className="text-2xl font-extrabold tracking-tight">Отпуск</h1>
+              <p className="mt-1 text-white/50 text-sm">
+                {isManager ? 'Управление отпусками сотрудников' : 'Управление вашими отпусками'}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex flex-wrap gap-2">
+                {balance && (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                    <Clock className="h-3 w-3 text-white/50" />
+                    {balance.availableDays} дн. доступно
+                  </div>
+                )}
+                {currentUserRequests.filter(r => r.status === VacationRequestStatus.ON_APPROVAL).length > 0 && (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-amber-400/20 backdrop-blur-sm border border-amber-400/20 px-2.5 py-1 text-[11px] font-medium text-amber-100">
+                    <HourglassIcon className="h-3 w-3 text-amber-300/70" />
+                    {currentUserRequests.filter(r => r.status === VacationRequestStatus.ON_APPROVAL).length} на согласовании
+                  </div>
+                )}
+                {currentUserRequests.filter(r => r.status === VacationRequestStatus.APPROVED).length > 0 && (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-emerald-400/20 backdrop-blur-sm border border-emerald-400/20 px-2.5 py-1 text-[11px] font-medium text-emerald-100">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-300/70" />
+                    {currentUserRequests.filter(r => r.status === VacationRequestStatus.APPROVED).length} согласовано
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {isManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                    onClick={() => setShowRestrictionModal(true)}
+                  >
+                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    Пересечения
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  onClick={() => setShowApplicationModal(true)}
+                >
+                  <FileText className="w-3.5 h-3.5 mr-1.5" />
+                  Заявление
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  onClick={() => setShowTransferApplicationModal(true)}
+                >
+                  <FileText className="w-3.5 h-3.5 mr-1.5" />
+                  Перенос
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  onClick={() => setShowHistoryModal(true)}
+                >
+                  <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  История
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
