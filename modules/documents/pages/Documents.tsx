@@ -381,7 +381,7 @@ export function Documents() {
 
       {uploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <Card className="section-card w-full max-w-md mx-4">
+          <Card className="section-card w-full max-w-md mx-4 animate-scale-in">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Загрузить документ</CardTitle>

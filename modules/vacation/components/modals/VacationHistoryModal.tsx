@@ -52,7 +52,7 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col animate-scale-in">
         <div className="p-6 border-b flex justify-between items-center bg-card">
           <div>
             <h2 className="text-xl font-semibold">История отпусков</h2>

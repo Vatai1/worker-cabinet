@@ -73,7 +73,7 @@ export function RestrictionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
         <div className="p-6 border-b flex justify-between items-center">
           <h2 className="text-xl font-semibold">Настроить пересечения отпусков</h2>
           <Button

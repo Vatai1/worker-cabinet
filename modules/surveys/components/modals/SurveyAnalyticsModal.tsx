@@ -33,7 +33,7 @@ export function SurveyAnalyticsModal({ open, onClose, surveyId, surveyTitle }: P
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-2xl mx-auto flex flex-col max-h-[85vh]">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-2xl mx-auto flex flex-col max-h-[85vh] animate-scale-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div>
             <h2 className="text-lg font-semibold">Аналитика</h2>

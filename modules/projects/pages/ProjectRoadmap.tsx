@@ -148,7 +148,7 @@ function TaskModal({ rows, cols, mode, task, defaultRowId, defaultStartCol, onSa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-lg" onClick={e=>e.stopPropagation()}>
+      <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-lg animate-scale-in" onClick={e=>e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2">
