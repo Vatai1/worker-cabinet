@@ -1381,6 +1381,14 @@ async function runMigrations() {
       await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_count INTEGER DEFAULT 0`)
       console.log('  ✓ failed_login_count column')
     } catch (e) {}
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS office VARCHAR(100)`)
+      console.log('  ✓ office column')
+    } catch (e) {}
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cabinet VARCHAR(50)`)
+      console.log('  ✓ cabinet column')
+    } catch (e) {}
 
     console.log('✅ Security tables created')
 

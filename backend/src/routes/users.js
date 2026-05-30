@@ -116,6 +116,9 @@ router.get('/search', authenticateToken, async (req, res) => {
         u.status,
         u.role,
         u.manager_id,
+        u.avatar,
+        u.office,
+        u.cabinet,
         m.first_name || ' ' || m.last_name as manager_name
       FROM users u
       LEFT JOIN departments d ON u.department_id = d.id
@@ -123,6 +126,7 @@ router.get('/search', authenticateToken, async (req, res) => {
       WHERE 1=1
     `
     
+
     const params = []
     
     if (departmentId) {
@@ -335,6 +339,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.manager_id,
         u.responsibility_area,
         u.avatar,
+        u.office,
+        u.cabinet,
         m.first_name || ' ' || m.last_name as manager_name,
         vb.total_days,
         vb.used_days,
@@ -730,6 +736,8 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
  *               middle_name: { type: string }
  *               phone: { type: string }
  *               responsibility_area: { type: string }
+ *               office: { type: string, description: 'Офис (адрес)' }
+ *               cabinet: { type: string, description: 'Кабинет/рабочее место' }
  *     responses:
  *       200:
  *         description: Профиль обновлён
@@ -748,7 +756,7 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
-    const { responsibility_area, phone, first_name, last_name, middle_name } = req.body
+    const { responsibility_area, phone, first_name, last_name, middle_name, office, cabinet } = req.body
     const currentUser = req.user
 
     // Проверка прав: только владелец профиля или admin
@@ -783,6 +791,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (middle_name !== undefined && typeof middle_name === 'string') {
       updates.push(`middle_name = $${paramIndex++}`)
       values.push(middle_name.trim())
+    }
+
+    if (office !== undefined && typeof office === 'string') {
+      updates.push(`office = $${paramIndex++}`)
+      values.push(office.trim())
+    }
+
+    if (cabinet !== undefined && typeof cabinet === 'string') {
+      updates.push(`cabinet = $${paramIndex++}`)
+      values.push(cabinet.trim())
     }
 
     if (updates.length === 0) {
