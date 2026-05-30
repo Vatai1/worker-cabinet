@@ -2490,15 +2490,9 @@ function ModulesTab() {
                               className={cn(
                                 'flex items-center gap-2 w-full px-4 py-2.5 rounded-lg text-sm mt-4 transition-colors duration-200 border',
                                 mod.is_enabled
-                                  ? 'text-[#E8E8ED] hover:text-[#FFFFFF]'
-                                  : 'text-[#6B7280] cursor-not-allowed',
+                                  ? 'bg-primary text-primary-foreground border-primary/20 hover:bg-primary/90'
+                                  : 'text-muted-foreground cursor-not-allowed border-transparent bg-transparent',
                               )}
-                              style={{
-                                backgroundColor: mod.is_enabled ? '#1A1D2B' : 'transparent',
-                                borderColor: '#252A3D',
-                              }}
-                              onMouseEnter={(e) => { if (mod.is_enabled) e.currentTarget.style.backgroundColor = '#252A3D' }}
-                              onMouseLeave={(e) => { if (mod.is_enabled) e.currentTarget.style.backgroundColor = '#1A1D2B' }}
                             >
                               <Settings className="w-4 h-4" />
                               Настройки
