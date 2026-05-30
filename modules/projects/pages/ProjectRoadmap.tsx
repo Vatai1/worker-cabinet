@@ -39,7 +39,7 @@ const PRIORITY_CFG: Record<Priority, { label: string; color: string; bg: string 
 }
 
 const STATUS_CFG = {
-  pending:     { label: 'Ожидает',  Icon: Clock,        dot: 'bg-slate-400' },
+  pending:     { label: 'Ожидает',  Icon: Clock,        dot: 'bg-muted-foreground/40' },
   in_progress: { label: 'В работе', Icon: CircleDot,    dot: 'bg-blue-500'  },
   completed:   { label: 'Завершён', Icon: CheckCircle2, dot: 'bg-emerald-500'},
 }
@@ -809,7 +809,7 @@ export function ProjectRoadmap() {
       <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
         <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-500"/>{STATUS_CFG.completed.label}</span>
         <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-blue-500"/>{STATUS_CFG.in_progress.label}</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-slate-400"/>{STATUS_CFG.pending.label}</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-muted-foreground/40"/>{STATUS_CFG.pending.label}</span>
         <span className="text-border">|</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-3.5 rounded-sm" style={{backgroundColor:PRIORITY_CFG.high.color}}/>Высокий</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-3.5 rounded-sm" style={{backgroundColor:PRIORITY_CFG.medium.color}}/>Средний</span>

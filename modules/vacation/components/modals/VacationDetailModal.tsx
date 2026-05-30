@@ -155,7 +155,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
                       </div>
                     )}
                     {history.comment && (
-                      <div className="text-gray-600 text-xs mt-1">
+                      <div className="text-muted-foreground text-xs mt-1">
                         {history.comment}
                       </div>
                     )}
