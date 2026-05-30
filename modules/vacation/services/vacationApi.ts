@@ -155,7 +155,7 @@ export const vacationApi = {
     return result
   },
 
-  async createRequest(userId: string, data: VacationFormData): Promise<VacationRequest> {
+  async createRequest(_userId: string, data: VacationFormData): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
@@ -191,7 +191,7 @@ export const vacationApi = {
     return mapDbRequestToApi(dbRequest)
   },
 
-  async approveRequest(requestId: string, managerId: string): Promise<VacationRequest> {
+  async approveRequest(requestId: string, _managerId: string): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/approve`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
@@ -202,7 +202,7 @@ export const vacationApi = {
 
   async rejectRequest(
     requestId: string,
-    managerId: string,
+    _managerId: string,
     reason: string
   ): Promise<VacationRequest> {
     const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/reject`, {

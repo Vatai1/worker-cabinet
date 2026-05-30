@@ -872,7 +872,7 @@ export function HRHierarchy() {
             Элементы
           </p>
 
-          {loading && <p className="text-sm text-muted-foreground">Загрузка...</p>}
+          {loading && <div className="space-y-2 p-4"><div className="h-8 w-full rounded bg-muted animate-pulse" /><div className="h-8 w-3/4 rounded bg-muted animate-pulse" /></div>}
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <div
@@ -923,7 +923,7 @@ export function HRHierarchy() {
         <div className="flex-1 relative" style={{ minHeight: 0 }}>
           {hierarchyLoading && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-              <div className="text-sm text-muted-foreground">Загрузка...</div>
+              <div className="space-y-2"><div className="h-6 w-full rounded bg-muted animate-pulse" /><div className="h-6 w-2/3 rounded bg-muted animate-pulse" /></div>
             </div>
           )}
           {!hierarchyLoading && nodes.length === 0 && (

@@ -51,7 +51,6 @@ router.get('/templates', authenticateToken, authorizeRoles('hr', 'admin'), async
     const result = await query(sql, params)
     res.json(result.rows)
   } catch (error) {
-    console.error('GET /onboarding/templates error:', error)
     res.status(500).json({ error: 'Ошибка загрузки шаблонов' })
   }
 })
@@ -119,7 +118,6 @@ router.post('/templates', authenticateToken, authorizeRoles('hr', 'admin'), uplo
     )
     res.status(201).json(result.rows[0])
   } catch (error) {
-    console.error('POST /onboarding/templates error:', error)
     res.status(500).json({ error: 'Ошибка создания шаблона' })
   }
 })
@@ -192,7 +190,6 @@ router.put('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), u
     )
     res.json(result.rows[0])
   } catch (error) {
-    console.error('PUT /onboarding/templates/:id error:', error)
     res.status(500).json({ error: 'Ошибка обновления шаблона' })
   }
 })
@@ -237,7 +234,6 @@ router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin')
     await query('DELETE FROM onboarding_templates WHERE id = $1', [id])
     res.json({ success: true })
   } catch (error) {
-    console.error('DELETE /onboarding/templates/:id error:', error)
     if (error.code === '23503') {
       return res.status(400).json({ error: 'Шаблон используется в онбординге' })
     }
@@ -319,7 +315,6 @@ router.get('/me', authenticateToken, authorizeRoles('onboarding'), async (req, r
       documents: documentsWithUrls,
     })
   } catch (error) {
-    console.error('GET /onboarding/me error:', error)
     res.status(500).json({ error: 'Ошибка загрузки онбординга' })
   }
 })
@@ -346,7 +341,6 @@ router.post('/documents/:id/access-token', authenticateToken, async (req, res) =
     const { id } = req.params
     const userId = req.user.id
 
-    console.log('[ACCESS TOKEN] Request for document:', id, 'by user:', userId)
 
     const docResult = await query(
       `SELECT eod.*, eo.user_id
@@ -357,7 +351,6 @@ router.post('/documents/:id/access-token', authenticateToken, async (req, res) =
     )
 
     if (docResult.rows.length === 0) {
-      console.log('[ACCESS TOKEN] Document not found:', id)
       return res.status(404).json({ error: 'Документ не найден' })
     }
 
@@ -367,7 +360,6 @@ router.post('/documents/:id/access-token', authenticateToken, async (req, res) =
     const isOwner = doc.user_id === userId
 
     if (!isHRorAdmin && !isOwner) {
-      console.log('[ACCESS TOKEN] Forbidden - user:', userId, 'role:', req.user.role)
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -380,10 +372,8 @@ router.post('/documents/:id/access-token', authenticateToken, async (req, res) =
       [accessToken, id, userId, expiresAt]
     )
 
-    console.log('[ACCESS TOKEN] Token created:', accessToken.substring(0, 8) + '...')
     res.json({ accessToken, expiresAt })
   } catch (error) {
-    console.error('POST /onboarding/documents/:id/access-token error:', error)
     res.status(500).json({ error: 'Ошибка создания токена' })
   }
 })
@@ -425,10 +415,8 @@ router.get('/documents/:id/file', async (req, res) => {
     const { id } = req.params
     const token = req.query.token
 
-    console.log('[FILE REQUEST] Document:', id, 'Token:', token ? token.substring(0, 8) + '...' : 'MISSING')
 
     if (!token) {
-      console.log('[FILE REQUEST] ERROR: Token required')
       return res.status(401).json({ error: 'Token required' })
     }
 
@@ -438,11 +426,9 @@ router.get('/documents/:id/file', async (req, res) => {
     )
 
     if (tokenResult.rows.length === 0) {
-      console.log('[FILE REQUEST] ERROR: Invalid or expired token')
       return res.status(403).json({ error: 'Invalid or expired token' })
     }
 
-    console.log('[FILE REQUEST] Token validated, deleting...')
     await query('DELETE FROM document_access_tokens WHERE token = $1', [token])
 
     const docResult = await query(
@@ -455,19 +441,15 @@ router.get('/documents/:id/file', async (req, res) => {
     )
 
     if (docResult.rows.length === 0) {
-      console.log('[FILE REQUEST] ERROR: Document not found')
       return res.status(404).json({ error: 'Документ не найден' })
     }
 
     const doc = docResult.rows[0]
-    console.log('[FILE REQUEST] Document found:', doc.title, 'File key:', doc.file_key)
 
     if (!doc.file_key) {
-      console.log('[FILE REQUEST] ERROR: No file key')
       return res.status(404).json({ error: 'Файл не найден' })
     }
 
-    console.log('[FILE REQUEST] Fetching from S3...')
     const s3Response = await getFromS3(doc.file_key)
     const stream = s3Response.Body
 
@@ -477,11 +459,9 @@ router.get('/documents/:id/file', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     
     stream.transformToByteArray().then(bytes => {
-      console.log('[FILE REQUEST] Sending file, size:', bytes.length)
       res.send(Buffer.from(bytes))
     })
   } catch (error) {
-    console.error('GET /onboarding/documents/:id/file error:', error)
     res.status(500).json({ error: 'Ошибка скачивания файла' })
   }
 })
@@ -563,7 +543,6 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('
       client.release()
     }
   } catch (error) {
-    console.error('POST /onboarding/me/documents/:id/acknowledge error:', error)
     res.status(500).json({ error: 'Ошибка подтверждения документа' })
   }
 })
@@ -603,7 +582,6 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
     )
     res.json(result.rows)
   } catch (error) {
-    console.error('GET /onboarding error:', error)
     res.status(500).json({ error: 'Ошибка загрузки онбордингов' })
   }
 })
@@ -692,7 +670,6 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
       client.release()
     }
   } catch (error) {
-    console.error('POST /onboarding error:', error)
     if (error.message?.includes('Email уже зарегистрирован') || error.code === '23505') {
       return res.status(400).json({ error: 'Email уже зарегистрирован' })
     }
@@ -783,7 +760,6 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
       documents: documentsWithUrls,
     })
   } catch (error) {
-    console.error('GET /onboarding/:id error:', error)
     res.status(500).json({ error: 'Ошибка загрузки онбординга' })
   }
 })
@@ -831,7 +807,6 @@ router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (r
       client.release()
     }
   } catch (error) {
-    console.error('DELETE /onboarding/:id error:', error)
     res.status(500).json({ error: 'Ошибка отмены онбординга' })
   }
 })

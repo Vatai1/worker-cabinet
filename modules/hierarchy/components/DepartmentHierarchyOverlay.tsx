@@ -395,7 +395,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
         <div className="flex-1 relative" style={{ minHeight: 0 }}>
           {hierarchyLoading && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-              <div className="text-sm text-muted-foreground">Загрузка...</div>
+              <div className="space-y-2"><div className="h-6 w-full rounded bg-muted animate-pulse" /><div className="h-6 w-2/3 rounded bg-muted animate-pulse" /></div>
             </div>
           )}
           {!hierarchyLoading && nodes.length === 0 && (

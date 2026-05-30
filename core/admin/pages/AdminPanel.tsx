@@ -1,6 +1,7 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { AnalyticsTab } from '@/core/admin/pages/AdminAnalytics'
@@ -731,7 +732,7 @@ function RolesTab() {
   }
 
   const deleteRole = async (id: number) => {
-    if (!confirm('Удалить эту роль?')) return
+    if (!await confirmDialog({ title: 'Удаление роли', message: 'Удалить эту роль?', confirmText: 'Удалить', variant: 'danger' })) return
     try {
       const res = await fetch(`${API_BASE_URL}/admin/roles/${id}`, {
         method: 'DELETE', headers: getAuthHeaders(),

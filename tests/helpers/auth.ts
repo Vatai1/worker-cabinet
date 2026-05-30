@@ -25,7 +25,7 @@ export async function loginViaAPI(page: Page, role: TestUserRole = 'employee') {
     domain: 'localhost',
     path: '/',
     sameSite: 'Lax',
-    maxAge: 604800,
+    expires: Date.now() / 1000 + 604800,
   }])
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 })

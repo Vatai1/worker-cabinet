@@ -5,7 +5,7 @@ import { Label } from '@/shared/components/ui/Label'
 import { Switch } from '@/shared/components/ui/Switch'
 import { X, Plus } from 'lucide-react'
 
-interface Project {
+export interface Project {
   id: string
   name: string
   role: string

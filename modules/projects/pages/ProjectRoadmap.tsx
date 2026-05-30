@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
@@ -528,7 +529,7 @@ export function ProjectRoadmap() {
   }
 
   const deleteRow = async (rowId:string) => {
-    if (!id||!confirm('Удалить строку и все её задачи?')) return
+    if (!id||!await confirmDialog({ title: 'Удаление строки', message: 'Удалить строку и все её задачи?', confirmText: 'Удалить', variant: 'danger' })) return
     const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/rows/${rowId}`,{method:'DELETE',headers:getAuthHeadersWithContentType()})
     if (res.ok) { setRows(p=>p.filter(r=>r.id!==rowId)); setTasks(p=>p.filter(t=>t.row_id!==rowId)) }
   }
@@ -552,7 +553,7 @@ export function ProjectRoadmap() {
   }
 
   const deleteTask = async (taskId:string) => {
-    if (!id||!confirm('Удалить задачу?')) return
+    if (!id||!await confirmDialog({ title: 'Удаление задачи', message: 'Удалить задачу?', confirmText: 'Удалить', variant: 'danger' })) return
     const res = await fetch(`${API_BASE_URL}/projects/${id}/roadmap/tasks/${taskId}`,{method:'DELETE',headers:getAuthHeadersWithContentType()})
     if (res.ok) setTasks(p=>p.filter(t=>t.id!==taskId))
   }

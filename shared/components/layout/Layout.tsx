@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 
 export function Layout() {
   return (
@@ -16,6 +17,7 @@ export function Layout() {
         </main>
       </div>
       <Toaster position="top-right" richColors closeButton />
+      <ConfirmDialog />
     </div>
   )
 }

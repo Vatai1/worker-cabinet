@@ -64,14 +64,12 @@ export const useAuthStore = create<AuthStore>()((set) => ({
       })
       useModulesStore.getState().fetchModules()
     } catch (error) {
-      console.error('[AuthStore] checkAuth error:', error)
       deleteCookie('auth_token')
       set({ isAuthenticated: false, user: null, token: null, loading: false })
     }
   },
   login: async (email: string, password: string) => {
     try {
-      console.log('[AuthStore] Attempting login for:', email)
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
@@ -80,15 +78,12 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         body: JSON.stringify({ email, password }),
       })
 
-      console.log('[AuthStore] Response status:', response.status)
       if (!response.ok) {
         const error = await response.json()
-        console.log('[AuthStore] Login error:', error)
         throw new Error(error.error || 'Неверный email или пароль')
       }
 
       const data = await response.json()
-      console.log('[AuthStore] Login successful:', data.user.email, '- Role:', data.user.role)
 
       setCookie('auth_token', data.token)
 
@@ -116,9 +111,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         token: data.token,
       })
       useModulesStore.getState().fetchModules()
-      console.log('[AuthStore] Token saved to cookie')
     } catch (error) {
-      console.log('[AuthStore] Login failed:', error)
       throw error
     }
   },

@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
@@ -183,7 +184,7 @@ export function ProjectDetail() {
   }
 
   const handleDelete = async () => {
-    if (!id || !confirm('Удалить проект?')) return
+    if (!id || !await confirmDialog({ title: 'Удаление проекта', message: 'Удалить проект? Это действие нельзя отменить.', confirmText: 'Удалить', variant: 'danger' })) return
     setDeleting(true)
     try {
       await fetch(`${API_BASE_URL}/projects/${id}`, { method: 'DELETE', headers: getAuthHeadersWithContentType() })

@@ -416,7 +416,6 @@ export function HROnboarding() {
           onCancel={(record) => setCancelTarget(record)}
           onOpenOnlyOffice={async (doc) => {
             try {
-              console.log('[HR] Getting access token for document:', doc.id)
               const res = await fetch(`${API_BASE_URL}/onboarding/documents/${doc.id}/access-token`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
@@ -426,14 +425,11 @@ export function HROnboarding() {
                 throw new Error(error.error || 'Ошибка получения токена')
               }
               const { accessToken } = await res.json()
-              console.log('[HR] Access token received:', accessToken.substring(0, 8) + '...')
               
               // Replace localhost with host.docker.internal for OnlyOffice in Docker
               const fileUrl = `${API_BASE_URL}/onboarding/documents/${doc.id}/file?token=${accessToken}`
                 .replace('localhost:5000', 'host.docker.internal:5000')
               
-              console.log('[HR] File URL for OnlyOffice:', fileUrl)
-              console.log('[HR] MIME type:', doc.mimeType)
               setOnlyOfficeDoc({ 
                 id: doc.id, 
                 name: doc.title, 
@@ -441,7 +437,6 @@ export function HROnboarding() {
                 mimeType: doc.mimeType
               })
             } catch (err) {
-              console.error('[HR] Error getting access token:', err)
               toast.error(err instanceof Error ? err.message : 'Неизвестная ошибка')
             }
           }}
