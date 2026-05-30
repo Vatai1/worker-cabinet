@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { Input } from '@/shared/components/ui/Input'
 import {
-  FolderKanban, Plus, Search, Loader2, ChevronDown, ChevronUp,
-  Calendar, Users, CircleDot, CheckCircle2, Clock, Crown,
+  FolderKanban, Plus, Search, Loader2,
+  Calendar, Users, CircleDot, CheckCircle2, Clock,
+  ArrowRight, Layers,
 } from 'lucide-react'
 import { CreateProjectModal } from '@/modules/projects/components/modals/CreateProjectModal'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAvatarColor } from '@/shared/lib/constants'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, cn } from '@/shared/lib/utils'
 import type { ProjectMember as ProjectMemberType } from '@/shared/types'
 
 export type { ProjectMemberType as ProjectMember }
@@ -33,9 +33,9 @@ export interface Project {
 }
 
 const statusConfig = {
-  active:    { label: 'Активный', icon: CircleDot,    variant: 'success' as const, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
-  completed: { label: 'Завершён', icon: CheckCircle2, variant: 'default' as const, color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950/30' },
-  paused:    { label: 'На паузе', icon: Clock,        variant: 'warning' as const, color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-950/30' },
+  active:    { label: 'Активный', icon: CircleDot,    color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30', dot: 'bg-emerald-500', bar: 'bg-gradient-to-r from-emerald-500 to-emerald-400' },
+  completed: { label: 'Завершён', icon: CheckCircle2, color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-50 dark:bg-blue-950/30',       dot: 'bg-blue-500',    bar: 'bg-gradient-to-r from-blue-500 to-blue-400' },
+  paused:    { label: 'На паузе', icon: Clock,        color: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-50 dark:bg-amber-950/30',     dot: 'bg-amber-500',   bar: 'bg-gradient-to-r from-amber-500 to-amber-400' },
 }
 
 const STATUS_FILTERS = [
@@ -43,6 +43,17 @@ const STATUS_FILTERS = [
   { value: 'active',    label: 'Активные' },
   { value: 'paused',    label: 'На паузе' },
   { value: 'completed', label: 'Завершённые' },
+]
+
+const PROJECT_GRADIENTS = [
+  'from-violet-500/10 to-purple-500/5',
+  'from-blue-500/10 to-cyan-500/5',
+  'from-emerald-500/10 to-teal-500/5',
+  'from-rose-500/10 to-pink-500/5',
+  'from-amber-500/10 to-orange-500/5',
+  'from-indigo-500/10 to-blue-500/5',
+  'from-fuchsia-500/10 to-purple-500/5',
+  'from-sky-500/10 to-blue-500/5',
 ]
 
 function formatDateShort(dateStr?: string) {
@@ -55,48 +66,92 @@ function formatDateShort(dateStr?: string) {
   return new Date(dateStr).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function ProjectCard({ project }: { project: Project }) {
+function getProgress(project: Project) {
+  if (project.status === 'completed') return 100
+  if (!project.start_date || !project.end_date) return null
+  const start = new Date(project.start_date).getTime()
+  const end = new Date(project.end_date).getTime()
+  const now = Date.now()
+  if (project.status === 'paused') return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)))
+  return Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)))
+}
+
+function getDaysLeft(endDate?: string) {
+  if (!endDate) return null
+  const end = new Date(endDate).getTime()
+  const diff = Math.ceil((end - Date.now()) / 86400000)
+  if (diff < 0) return 'Просрочен'
+  if (diff === 0) return 'Сегодня'
+  if (diff === 1) return '1 день'
+  if (diff < 5) return `${diff} дня`
+  if (diff < 21) return `${diff} дней`
+  return `${diff} дн.`
+}
+
+function ProjectCard({ project, index }: { project: Project; index: number }) {
   const navigate = useNavigate()
-  const [expanded, setExpanded] = useState(false)
-
   const cfg = statusConfig[project.status] ?? statusConfig.active
-  const StatusIcon = cfg.icon
   const leads = project.members.filter((m) => m.role === 'lead')
-  const participants = project.members.filter((m) => m.role === 'member')
-
-  const PREVIEW_LIMIT = 3
-  const previewLeads = leads.slice(0, PREVIEW_LIMIT)
-  const previewParticipants = participants.slice(0, PREVIEW_LIMIT)
-  const extraLeads = leads.length - PREVIEW_LIMIT
-  const extraParticipants = participants.length - PREVIEW_LIMIT
+  const gradient = PROJECT_GRADIENTS[index % PROJECT_GRADIENTS.length]
+  const progress = getProgress(project)
+  const daysLeft = project.status === 'active' ? getDaysLeft(project.end_date) : null
 
   return (
-    <Card className="section-card overflow-hidden hover:border-primary/30 transition-colors duration-200">
-      <button
-        className="interactive w-full text-left"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <CardContent className="p-5">
-          <div className="flex items-start gap-4">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 shrink-0">
-              <FolderKanban className="h-5 w-5 text-primary" />
-            </div>
+    <button
+      className={cn(
+        'group relative w-full text-left rounded-2xl border border-border/50 bg-card',
+        'hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5',
+        'transition-all duration-300 overflow-hidden',
+      )}
+      onClick={() => navigate(`/projects/${project.id}`)}
+    >
+      <div className={cn('absolute inset-x-0 top-0 h-1', cfg.bar)} />
 
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-base">{project.name}</h3>
-              {project.full_name && (
-                <p className="text-xs text-muted-foreground mt-0.5">{project.full_name}</p>
-              )}
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.color} w-fit mt-1`}>
-                <StatusIcon className="h-3 w-3" />
+      <div className={cn('absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br', gradient)} />
+
+      <div className="relative p-5">
+        <div className="flex items-start gap-4">
+          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10 shrink-0 group-hover:bg-primary/15 transition-colors">
+            <FolderKanban className="h-5 w-5 text-primary" />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="font-semibold text-base group-hover:text-primary transition-colors truncate">
+                  {project.name}
+                </h3>
+                {project.full_name && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{project.full_name}</p>
+                )}
+              </div>
+              <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shrink-0', cfg.bg, cfg.color)}>
+                <span className={cn('w-1.5 h-1.5 rounded-full', cfg.dot)} />
                 {cfg.label}
               </span>
+            </div>
 
-              {project.description && (
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{project.description}</p>
-              )}
+            {project.description && (
+              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{project.description}</p>
+            )}
 
-              <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-muted-foreground">
+            {progress !== null && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+                  <span>Прогресс</span>
+                  <span className="font-medium">{progress}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all duration-500', cfg.bar)}
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mt-3">
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 {(project.start_date || project.end_date) && (
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3.5 w-3.5" />
@@ -104,98 +159,48 @@ function ProjectCard({ project }: { project: Project }) {
                     {project.end_date && ` — ${formatDateShort(project.end_date)}`}
                   </span>
                 )}
-                <span className="flex items-center gap-1">
-                  <Users className="h-3.5 w-3.5" />
-                  {project.member_count} участн.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/30">
+              <div className="flex items-center gap-2">
+                <div className="flex -space-x-2">
+                  {leads.slice(0, 2).map((m) => (
+                    <Avatar key={m.id} className="h-7 w-7 ring-2 ring-background">
+                      <AvatarImage src={m.avatar || generateAvatarUrl(m.id, m.gender)} alt={`${m.first_name} ${m.last_name}`} />
+                      <AvatarFallback className={cn('bg-gradient-to-br text-white text-[10px] font-semibold', getAvatarColor(m.id))}>
+                        {m.first_name?.[0]}{m.last_name?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                  ))}
+                  {project.member_count > 2 && (
+                    <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground ring-2 ring-background">
+                      +{project.member_count - 2}
+                    </div>
+                  )}
+                </div>
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Users className="h-3 w-3" />
+                  {project.member_count}
                 </span>
               </div>
-            </div>
 
-            <div className="shrink-0 text-muted-foreground">
-              {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </div>
-          </div>
-        </CardContent>
-      </button>
-
-      {expanded && (
-        <div className="border-t border-border/40 px-5 pb-5 pt-4 space-y-4 animate-fade-in">
-          {project.description && (
-            <p className="text-sm text-muted-foreground">{project.description}</p>
-          )}
-
-          <div className="grid sm:grid-cols-2 gap-4">
-            {leads.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                  <Crown className="h-3.5 w-3.5 text-amber-500" />
-                  Руководители
-                </p>
-                <div className="space-y-2">
-                  {previewLeads.map((m) => (
-                    <MemberRow key={m.id} member={m} />
-                  ))}
-                  {extraLeads > 0 && (
-                    <p className="text-xs text-muted-foreground pl-1">+ ещё {extraLeads}</p>
-                  )}
-                </div>
+              <div className="flex items-center gap-3">
+                {daysLeft && (
+                  <span className={cn(
+                    'text-xs font-medium',
+                    daysLeft === 'Просрочен' ? 'text-red-500' : 'text-muted-foreground'
+                  )}>
+                    {daysLeft === 'Просрочен' ? 'Просрочен' : `${daysLeft} ост.`}
+                  </span>
+                )}
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
               </div>
-            )}
-
-            {participants.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                  <Users className="h-3.5 w-3.5" />
-                  Участники
-                </p>
-                <div className="space-y-2">
-                  {previewParticipants.map((m) => (
-                    <MemberRow key={m.id} member={m} />
-                  ))}
-                  {extraParticipants > 0 && (
-                    <p className="text-xs text-muted-foreground pl-1">+ ещё {extraParticipants} сотрудников</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end pt-1">
-            <Button
-              size="sm"
-              variant="outline"
-              className="interactive"
-              onClick={() => navigate(`/projects/${project.id}`)}
-            >
-              Подробнее →
-            </Button>
+            </div>
           </div>
         </div>
-      )}
-    </Card>
-  )
-}
-
-function MemberRow({ member }: { member: ProjectMemberType }) {
-  const color = getAvatarColor(member.id)
-  return (
-    <div className="flex items-center gap-2">
-      <Avatar className="h-7 w-7 shrink-0">
-        <AvatarImage
-          src={member.avatar || generateAvatarUrl(member.id, member.gender)}
-          alt={`${member.first_name} ${member.last_name}`}
-        />
-        <AvatarFallback className={`bg-gradient-to-br ${color} text-white text-xs font-semibold`}>
-          {member.first_name?.[0]}{member.last_name?.[0]}
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0">
-        <div className="text-sm font-medium truncate">
-          {member.last_name} {member.first_name}
-        </div>
-        <div className="text-xs text-muted-foreground truncate">{member.position}</div>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -236,6 +241,10 @@ export function Projects() {
     setProjects((prev) => [project, ...prev])
   }
 
+  const activeCount = projects.filter((p) => p.status === 'active').length
+  const pausedCount = projects.filter((p) => p.status === 'paused').length
+  const completedCount = projects.filter((p) => p.status === 'completed').length
+
   if (error) {
     return (
       <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
@@ -250,12 +259,12 @@ export function Projects() {
         <div>
           <h1 className="text-xl font-bold flex items-center gap-3">
             <span className="flex items-center justify-center w-9 h-9 bg-primary/10 rounded-xl">
-              <FolderKanban className="h-5 w-5 text-primary" />
+              <Layers className="h-5 w-5 text-primary" />
             </span>
             Проекты
           </h1>
           <p className="text-muted-foreground mt-1 ml-12">
-            {loading ? 'Загрузка…' : `${projects.length} проектов`}
+            {loading ? 'Загрузка...' : `${projects.length} проектов`}
           </p>
         </div>
         <Button className="gap-2 self-start sm:self-auto interactive" onClick={() => setCreateOpen(true)}>
@@ -264,12 +273,53 @@ export function Projects() {
         </Button>
       </div>
 
+      {!loading && projects.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-border/50 bg-card p-3.5 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <Layers className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{projects.length}</p>
+              <p className="text-[11px] text-muted-foreground">Всего</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-card p-3.5 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+              <CircleDot className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{activeCount}</p>
+              <p className="text-[11px] text-muted-foreground">Активных</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-card p-3.5 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+              <Clock className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{pausedCount}</p>
+              <p className="text-[11px] text-muted-foreground">На паузе</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-card p-3.5 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{completedCount}</p>
+              <p className="text-[11px] text-muted-foreground">Завершённых</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Поиск по названию или описанию…"
+            placeholder="Поиск по названию или описанию..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -279,11 +329,12 @@ export function Projects() {
             <button
               key={f.value}
               onClick={() => setStatusFilter(f.value)}
-              className={`interactive px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+              className={cn(
+                'interactive px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap',
                 statusFilter === f.value
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
-              }`}
+              )}
             >
               {f.label}
             </button>
@@ -296,11 +347,9 @@ export function Projects() {
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       ) : filtered.length > 0 ? (
-        <div className="page-grid space-y-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((project, i) => (
-            <div key={project.id} className={`stagger-${Math.min(i + 1, 8)}`}>
-              <ProjectCard project={project} />
-            </div>
+            <ProjectCard key={project.id} project={project} index={i} />
           ))}
         </div>
       ) : (
