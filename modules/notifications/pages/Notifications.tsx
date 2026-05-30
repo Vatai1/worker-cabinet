@@ -116,7 +116,7 @@ export function Notifications() {
                 <span className="text-white/40 text-[10px] font-medium uppercase tracking-wider">Центр сообщений</span>
               </div>
               <h1 className="text-2xl font-extrabold tracking-tight">Уведомления</h1>
-              <p className="mt-1 text-white/50 text-sm">История уведомлений и почтовых рассылок</p>
+              <p className="mt-1 text-white/50 text-sm">Все уведомления и почтовые рассылки в одном месте</p>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex flex-wrap gap-2">
