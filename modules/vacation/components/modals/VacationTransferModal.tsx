@@ -88,7 +88,7 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-lg mx-4">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-lg mx-4 animate-scale-in">
         <div className="p-6 border-b flex justify-between items-center">
           <h2 className="text-xl font-semibold">Перенос отпуска</h2>
           <button
