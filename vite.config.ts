@@ -27,11 +27,21 @@ function killPortPlugin(port: number) {
   }
 }
 
+function hmrFullReloadPlugin() {
+  return {
+    name: 'hmr-full-reload',
+    handleHotUpdate({ server }) {
+      server.ws.send({ type: 'full-reload' })
+      return []
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
-    plugins: [react(), killPortPlugin(3000)],
+    plugins: [react(), killPortPlugin(3000), hmrFullReloadPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './'),
