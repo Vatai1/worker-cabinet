@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
-import { AddProjectModal } from '@/core/admin/components/modals/AddProjectModal'
+import { AddProjectModal, type Project } from '@/core/admin/components/modals/AddProjectModal'
 import { SkillsCard } from '@/modules/skills/components/SkillsCard'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
@@ -47,17 +47,6 @@ interface EmployeeData {
   avatar?: string
   office?: string
   cabinet?: string
-}
-
-interface Project {
-  id: string
-  name: string
-  role: 'lead' | 'member'
-  status: 'active' | 'completed' | 'paused'
-  startDate?: string
-  endDate?: string
-  description?: string
-  joined_at?: string
 }
 
 const statusConfig = {
@@ -139,23 +128,25 @@ export function EmployeeProfile() {
     fetchEmployee()
   }, [id])
 
-  const handleAddProject = async (project: Omit<Project, 'id'>) => {
+  const handleAddProject: (project: Omit<Project, 'id'>) => void | Promise<void> = (project) => {
     if (!employee) return
 
     const newProject: Project = { ...project, id: `temp-${Date.now()}` }
     setEmployee({ ...employee, projects: [...(employee.projects || []), newProject] })
 
-    try {
-      await fetch(`${API_BASE_URL}/users/${id}/projects`, {
-        method: 'POST',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify(project),
-      })
-      toast.success('Проект добавлен')
-    } catch {
-      toast.error('Не удалось добавить проект')
-      setEmployee(employee)
-    }
+    ;(async () => {
+      try {
+        await fetch(`${API_BASE_URL}/users/${id}/projects`, {
+          method: 'POST',
+          headers: getAuthHeadersWithContentType(),
+          body: JSON.stringify(project),
+        })
+        toast.success('Проект добавлен')
+      } catch {
+        toast.error('Не удалось добавить проект')
+        setEmployee(employee)
+      }
+    })()
   }
 
   const handleStartEditingResponsibility = () => {

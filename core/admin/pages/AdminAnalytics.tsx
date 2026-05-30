@@ -135,7 +135,7 @@ export function AnalyticsTab() {
                 <Badge className="text-[10px]">{d.count} действий</Badge>
               </div>
             ))}
-            {data.topUsers.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Нет данных</p>}
+            {data.topUsers.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Нет данных для отображения</p>}
           </CardContent>
         </Card>
 
@@ -143,7 +143,7 @@ export function AnalyticsTab() {
           <CardHeader><CardTitle className="text-base">Новые пользователи по месяцам</CardTitle></CardHeader>
           <CardContent>
             {data.newUsersByMonth.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Нет данных</p>
+              <p className="text-sm text-muted-foreground text-center py-4">Нет данных для отображения</p>
             ) : (
               <div className="flex items-end gap-1 h-32">
                 {data.newUsersByMonth.map((d) => {
@@ -167,7 +167,7 @@ export function AnalyticsTab() {
           <CardHeader><CardTitle className="text-base">Заявления на отпуск по месяцам</CardTitle></CardHeader>
           <CardContent>
             {data.vacationByMonth.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Нет данных</p>
+              <p className="text-sm text-muted-foreground text-center py-4">Нет данных для отображения</p>
             ) : (
               <div className="flex items-end gap-1 h-32">
                 {data.vacationByMonth.map((d) => {

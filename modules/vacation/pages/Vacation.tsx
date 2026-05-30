@@ -95,7 +95,6 @@ export function Vacation() {
       fetchDepartmentRequests(user.departmentId || '1')
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
-      console.error('Error approving request:', err)
     }
   }
 
@@ -108,7 +107,6 @@ export function Vacation() {
       fetchDepartmentRequests(user.departmentId || '1')
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
-      console.error('Error rejecting request:', err)
     }
   }
 
@@ -124,7 +122,6 @@ export function Vacation() {
       setExpandedRequestId(null)
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
-      console.error('Error canceling request:', err)
       toast.error('Ошибка при отмене заявки')
     } finally {
       setShowCancelModal(false)
@@ -179,12 +176,10 @@ export function Vacation() {
   }
 
   const handleDateRangeSelect = (startDate: string | null, endDate: string | null) => {
-    console.log('handleDateRangeSelect called', { startDate, endDate })
 
     if (startDate && !endDate && startDate.startsWith('vr-')) {
       const requestId = startDate.replace('vr-', '')
       const request = departmentRequests.find(r => r.id === requestId)
-      console.log('Found request:', request)
       if (request) {
         handleOpenDetailModal(request)
       }
@@ -222,7 +217,6 @@ export function Vacation() {
       fetchDepartmentRequests(user.departmentId || '1')
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
-      console.error('Error creating request:', err)
     }
   }
 
@@ -256,7 +250,6 @@ export function Vacation() {
       fetchDepartmentRequests(user.departmentId || '1')
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
-      console.error('Error creating request:', err)
     }
   }
 
@@ -279,17 +272,15 @@ export function Vacation() {
       fetchUserRequests(user.id)
       fetchDepartmentRequests(user.departmentId || '1')
     } catch (err) {
-      console.error('Error adding comment:', err)
     }
   }
 
   const handleCreateRestriction = async (restriction: Record<string, unknown>) => {
     if (!user) return
     try {
-      await useVacationStore.getState().createRestriction(user.departmentId || '1', restriction)
+      await useVacationStore.getState().createRestriction(user.departmentId || '1', restriction as any)
       await fetchRestrictions(user.departmentId || '1')
     } catch (err) {
-      console.error('Error creating restriction:', err)
     }
   }
 
@@ -300,7 +291,6 @@ export function Vacation() {
         await fetchRestrictions(user.departmentId || '1')
       }
     } catch (err) {
-      console.error('Error deleting restriction:', err)
     }
   }
 
@@ -321,7 +311,6 @@ export function Vacation() {
   }
 
   const handleCheckRestrictions = async (userId: string, data: { startDate: string; endDate: string }) => {
-    console.log('[Vacation] handleCheckRestrictions called', { userId, startDate: data.startDate, endDate: data.endDate })
     const warnings = await useVacationStore.getState().checkRestrictions(userId, {
       startDate: data.startDate,
       endDate: data.endDate,
@@ -329,12 +318,10 @@ export function Vacation() {
       comment: '',
       hasTravel: false,
     })
-    console.log('[Vacation] warnings received:', warnings)
     setRestrictionWarnings(warnings)
   }
 
   const handleCheckRestrictionsCalendar = async (userId: string, data: { startDate: string; endDate: string }) => {
-    console.log('[Vacation] handleCheckRestrictionsCalendar called', { userId, startDate: data.startDate, endDate: data.endDate })
     const warnings = await useVacationStore.getState().checkRestrictions(userId, {
       startDate: data.startDate,
       endDate: data.endDate,
@@ -342,7 +329,6 @@ export function Vacation() {
       comment: '',
       hasTravel: false,
     })
-    console.log('[Vacation] warnings received (calendar):', warnings)
     setRestrictionWarningsCalendar(warnings)
   }
 

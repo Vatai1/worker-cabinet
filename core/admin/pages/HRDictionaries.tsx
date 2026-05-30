@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
-import { Building2, Wrench, Palmtree, Briefcase, FileText, Plus, Pencil, Trash2, X, Search, Users, MoreHorizontal, ExternalLink } from 'lucide-react'
+import { Building2, Wrench, Palmtree, Briefcase, FileText, Plus, Pencil, Trash2, X, Search, Users, MoreHorizontal, ExternalLink, FolderOpen } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
@@ -339,7 +339,7 @@ export function HRDictionaries() {
           {searchResults.length === 0 && !allDataLoading && (
             <div className="section-card rounded-xl border border-border/60 bg-card p-16 text-center">
               <Search className="h-10 w-10 mx-auto text-muted-foreground/40" />
-              <p className="mt-3 text-muted-foreground">Ничего не найдено по запросу «{search}»</p>
+              <p className="mt-3 text-muted-foreground text-center">Ничего не найдено по запросу «{search}»</p>
             </div>
           )}
 
@@ -446,7 +446,7 @@ export function HRDictionaries() {
                       <td colSpan={columns.length + 2} className="text-center py-16 text-muted-foreground">
                         <div className="flex flex-col items-center gap-2">
                           <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                          Загрузка...
+                          <div className="h-8 w-full rounded bg-muted animate-pulse" />
                         </div>
                       </td>
                     </tr>
@@ -457,7 +457,7 @@ export function HRDictionaries() {
                           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10">
                             <activeTab.icon className="h-5 w-5 text-primary" />
                           </div>
-                          <p>Список пуст</p>
+                          <div className="flex flex-col items-center py-6 text-muted-foreground"><FolderOpen className="h-8 w-8 mb-2 opacity-50" /><p>Список пуст</p></div>
                         </div>
                       </td>
                     </tr>

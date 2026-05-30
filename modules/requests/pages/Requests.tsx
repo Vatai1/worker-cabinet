@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
@@ -39,8 +40,8 @@ export function Requests() {
     return matchesStatus && matchesSearch
   })
 
-  const handleCancel = (id: string) => {
-    if (confirm('Вы уверены, что хотите отменить заявление?')) {
+  const handleCancel = async (id: string) => {
+    if (await confirmDialog({ title: 'Отмена заявления', message: 'Вы уверены, что хотите отменить заявление?', confirmText: 'Отменить', variant: 'warning' })) {
       cancelRequest(id)
     }
   }

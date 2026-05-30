@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Input } from '@/shared/components/ui/Input'
-import { FileText, Download, Search, Upload, Eye, X, Trash2, FolderOpen } from 'lucide-react'
+import { FileText, Download, Search, Upload, Eye, X, Trash2, FolderOpen, FileX } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { formatFileSize } from '@/shared/data/mockData'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
@@ -113,7 +114,7 @@ export function Documents() {
   }
 
   const handleDelete = async (doc: UserDocument) => {
-    if (!confirm(`Удалить документ "${doc.name}"?`)) return
+    if (!await confirmDialog({ title: 'Удаление документа', message: `Удалить документ "${doc.name}"?`, confirmText: 'Удалить', variant: 'danger' })) return
 
     try {
       const res = await fetch(`${API_BASE_URL}/user-documents/${doc.id}`, {
@@ -255,7 +256,11 @@ export function Documents() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
               <FileText className="mx-auto h-12 w-12 text-muted-foreground animate-pulse" />
-              <p className="mt-4 text-lg font-medium">Загрузка документов...</p>
+              <div className="mt-4 space-y-3">
+                <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+                <div className="h-24 w-full rounded-lg bg-muted animate-pulse" />
+                <div className="h-24 w-full rounded-lg bg-muted animate-pulse" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -264,7 +269,11 @@ export function Documents() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
               <FileText className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
-              <p className="mt-4 text-lg font-medium">Документы не найдены</p>
+              <div className="mt-4 flex flex-col items-center py-12 text-muted-foreground">
+                <FileX className="h-12 w-12 mb-3 opacity-50" />
+                <p className="text-lg font-medium">Документы не найдены</p>
+                <p className="text-sm mt-1">Попробуйте изменить фильтры или загрузить новый документ</p>
+              </div>
               <p className="text-sm text-muted-foreground">
                 {searchQuery || filterType !== 'all'
                   ? 'Попробуйте изменить параметры поиска или фильтры'
