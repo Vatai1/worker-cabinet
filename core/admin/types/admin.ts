@@ -34,6 +34,8 @@ export interface AdminUser {
   manager_first_name: string | null
   manager_last_name: string | null
   responsibility_area: string | null
+  office: string | null
+  cabinet: string | null
   created_at: string
 }
 

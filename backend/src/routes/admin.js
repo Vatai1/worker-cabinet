@@ -293,7 +293,7 @@ router.get('/users', asyncHandler(async (req, res) => {
   const usersResult = await query(`
     SELECT u.id, u.email, u.first_name, u.last_name, u.middle_name, u.position,
       u.status, u.role, u.department_id, u.hire_date, u.phone, u.avatar,
-      u.manager_id, u.responsibility_area, u.created_at,
+      u.manager_id, u.responsibility_area, u.office, u.cabinet, u.created_at,
       d.name as department_name,
       m.first_name as manager_first_name, m.last_name as manager_last_name
     FROM users u
@@ -462,7 +462,7 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
   const userCheck = await query('SELECT id FROM users WHERE id = $1', [id])
   if (userCheck.rows.length === 0) throw new NotFoundError('Пользователь не найден')
 
-  const allowedFields = ['first_name', 'last_name', 'middle_name', 'email', 'position', 'department_id', 'phone', 'manager_id', 'hire_date']
+  const allowedFields = ['first_name', 'last_name', 'middle_name', 'email', 'position', 'department_id', 'phone', 'manager_id', 'hire_date', 'office', 'cabinet']
   const updates = []
   const values = []
   let idx = 1
