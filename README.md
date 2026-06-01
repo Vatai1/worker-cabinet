@@ -76,6 +76,7 @@ Copy-Item .env.example .env
 - Просмотр загрузки отдела на календаре
 - Управление ограничениями на пересечение отпусков (блокировка всех)
 - Дашборд с текущими заявками
+- Табель: отправка данных за текущий день с проверкой заполненности
 
 ### Для HR / администраторов
 - Управление балансами отпускных дней по годам
@@ -85,6 +86,8 @@ Copy-Item .env.example .env
 - Визуальная иерархия организации (React Flow)
 - HR-справочники: должности, типы договоров, отделы, грейды, навыки и др.
 - Полный обзор отпусков по всем сотрудникам
+- Автосоздание табелей для всех отделов
+- Настраиваемая страница входа (заголовок, описание, демо-кнопки)
 
 ## Роли пользователей
 
@@ -120,15 +123,16 @@ Copy-Item .env.example .env
 
 ## Тестовые пользователи
 
-После запуска `seed` будут доступны следующие пользователи:
+После запуска `seed` будут доступны следующие пользователи (пароль: `password123`):
 
-| Email | Пароль | Роль |
-|-------|--------|------|
-| ivanov@example.com | password123 | Сотрудник |
-| petrov@example.com | password123 | Руководитель |
-| sidorov@example.com | password123 | Сотрудник |
-| ivanova@example.com | password123 | Сотрудник |
-| petrova@example.com | password123 | Сотрудник |
+| Email | Роль | Имя |
+|-------|------|-----|
+| admin@example.com | Администратор | Алексей Смирнов |
+| elena@example.com | HR | Елена Соколова |
+| petrov@example.com | Руководитель | Пётр Петров |
+| ivanov@example.com | Сотрудник | Иван Иванов |
+
+На странице входа доступны демо-кнопки для быстрого входа под каждой ролью.
 
 ## API
 
@@ -152,25 +156,33 @@ worker-cabinet/
 │   └── src/
 │       ├── routes/           # auth, vacation, users, departments, projects,
 │       │                     # surveys, onboarding, documents, notifications,
-│       │                     # hierarchy, dictionaries,
-│       │                     # timesheet, calendar
+│       │                     # hierarchy, dictionaries, timesheet, calendar
 │       ├── middleware/       # JWT auth, multer upload, rate limiter
 │       ├── services/         # Бизнес-логика
 │       ├── config/           # database.js, s3.js (MinIO), swagger.js
-│       └── db/               # migrate.js, seed.js
+│       ├── db/               # migrate.js, seed.js
 │       ├── public/           # Кастомный Swagger UI (api-docs.html)
 │       └── cron/             # Cron-задачи (автозаполнение табеля)
-├── components/
-│   ├── calendar/             # Компоненты календаря
-│   ├── layout/               # Header, Sidebar, Layout
-│   ├── modals/               # Модальные окна
-│   ├── forms/                # Формы
-│   └── ui/                   # Переиспользуемые примитивы
-├── pages/                    # По одному файлу на маршрут
-├── services/                 # API-клиенты
-├── store/                    # Zustand stores
-├── types/                    # TypeScript интерфейсы
-└── lib/                      # Утилиты: cn(), formatDate(), authHeaders, api.ts
+├── core/                     # Основные модули приложения
+│   ├── admin/                # Административная панель
+│   ├── auth/                 # Авторизация, страница входа
+│   └── settings/             # Настройки пользователя
+├── modules/                  # Бизнес-модули
+│   ├── vacation/             # Отпуска
+│   ├── surveys/              # Опросы
+│   ├── onboarding/           # Онбординг
+│   ├── timesheet/            # Табель рабочего времени
+│   ├── hierarchy/            # Иерархия организации
+│   ├── projects/             # Проекты
+│   ├── documents/            # Документы
+│   ├── notifications/        # Уведомления
+│   └── requests/             # Заявки
+├── shared/                   # Общие компоненты и утилиты
+│   ├── components/           # UI-примитивы, layout, timesheet grid
+│   ├── lib/                  # api.ts, authHeaders, utils
+│   ├── store/                # Zustand stores (auth, modules, siteSettings)
+│   └── pages/                # Общие страницы (HRPanel и др.)
+└── types/                    # TypeScript интерфейсы
 ```
 
 ## Тестирование
