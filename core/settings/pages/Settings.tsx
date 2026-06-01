@@ -20,12 +20,6 @@ export function Settings() {
   const { settings, loaded, fetchPublicSettings, updateSettings } = useSiteSettingsStore()
   const [loginTitle, setLoginTitle] = useState('')
   const [loginSubtitle, setLoginSubtitle] = useState('')
-  const [stat1Value, setStat1Value] = useState('')
-  const [stat1Label, setStat1Label] = useState('')
-  const [stat2Value, setStat2Value] = useState('')
-  const [stat2Label, setStat2Label] = useState('')
-  const [stat3Value, setStat3Value] = useState('')
-  const [stat3Label, setStat3Label] = useState('')
   const [demoButtons, setDemoButtons] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -39,12 +33,6 @@ export function Settings() {
     if (!loaded) return
     setLoginTitle(settings.login_title || '')
     setLoginSubtitle(settings.login_subtitle || '')
-    setStat1Value(settings.login_stat_1_value || '')
-    setStat1Label(settings.login_stat_1_label || '')
-    setStat2Value(settings.login_stat_2_value || '')
-    setStat2Label(settings.login_stat_2_label || '')
-    setStat3Value(settings.login_stat_3_value || '')
-    setStat3Label(settings.login_stat_3_label || '')
     setDemoButtons(settings.login_demo_buttons !== 'false')
   }, [loaded, settings])
 
@@ -56,12 +44,6 @@ export function Settings() {
       await updateSettings([
         { key: 'login_title', value: loginTitle },
         { key: 'login_subtitle', value: loginSubtitle },
-        { key: 'login_stat_1_value', value: stat1Value },
-        { key: 'login_stat_1_label', value: stat1Label },
-        { key: 'login_stat_2_value', value: stat2Value },
-        { key: 'login_stat_2_label', value: stat2Label },
-        { key: 'login_stat_3_value', value: stat3Value },
-        { key: 'login_stat_3_label', value: stat3Label },
         { key: 'login_demo_buttons', value: String(demoButtons) },
       ])
       setSaved(true)
@@ -178,27 +160,6 @@ export function Settings() {
                   onChange={(e) => setLoginSubtitle(e.target.value)}
                   placeholder="Единая платформа для..."
                 />
-              </div>
-            </div>
-
-            <div>
-              <p className="text-sm font-medium mb-3">Блок статистики</p>
-              <div className="grid gap-4 grid-cols-3">
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Блок 1</p>
-                  <Input value={stat1Value} onChange={(e) => setStat1Value(e.target.value)} placeholder="24" />
-                  <Input value={stat1Label} onChange={(e) => setStat1Label(e.target.value)} placeholder="дня отпуска" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Блок 2</p>
-                  <Input value={stat2Value} onChange={(e) => setStat2Value(e.target.value)} placeholder="156" />
-                  <Input value={stat2Label} onChange={(e) => setStat2Label(e.target.value)} placeholder="сотрудников" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Блок 3</p>
-                  <Input value={stat3Value} onChange={(e) => setStat3Value(e.target.value)} placeholder="12" />
-                  <Input value={stat3Label} onChange={(e) => setStat3Label(e.target.value)} placeholder="отделов" />
-                </div>
               </div>
             </div>
 
