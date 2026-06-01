@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/shared/components/ui/Button'
 import { TimesheetGrid, TimesheetEntry } from '@/shared/components/timesheet/TimesheetGrid'
 import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
-import { Sparkles, Users } from 'lucide-react'
+import { Sparkles, Users, Send, CheckCircle2 } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 
 interface Timesheet {
   id: number
@@ -84,7 +85,16 @@ export function ManagerTimesheet() {
     const todayEntries = timesheetData.entries.filter((e: TimesheetEntry) => e.date === todayStr)
     const emptyCells = todayEntries.filter((e: TimesheetEntry) => !e.code)
     if (emptyCells.length > 0) {
-      setError(`Заполните все ячейки за сегодня (${emptyCells.length} пустых)`)
+      const names = emptyCells.map((e: TimesheetEntry) => {
+        const emp = timesheetData.employees.find((em: { id: number }) => em.id === e.employee_id)
+        return emp ? `${emp.first_name} ${emp.last_name}` : `ID ${e.employee_id}`
+      })
+      await confirmDialog({
+        title: 'Не все ячейки заполнены',
+        message: `За сегодня не заполнено ${emptyCells.length} из ${todayEntries.length} записей:\n\n${names.join(', ')}\n\nСначала заполните все ячейки за сегодня.`,
+        confirmText: 'Понятно',
+        variant: 'warning',
+      })
       return
     }
     setSubmitting(true)
@@ -156,9 +166,25 @@ export function ManagerTimesheet() {
         <div className="space-y-4 animate-fade-in">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-sm text-muted-foreground">{timesheet.department_name}</span>
-            <Button onClick={handleSubmitToday} disabled={submitting}>
-              {submitting ? 'Отправка...' : 'Отправить за сегодня'}
-            </Button>
+            {(() => {
+              const today = new Date()
+              const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+              const todayEntries = (timesheetData?.entries ?? []).filter((e: TimesheetEntry) => e.date === todayStr)
+              const allSubmitted = todayEntries.length > 0 && todayEntries.every((e: TimesheetEntry) => e.is_submitted)
+
+              if (allSubmitted) {
+                return (
+                  <Button disabled className="opacity-60 cursor-not-allowed">
+                    <CheckCircle2 className="h-4 w-4 mr-1.5" /> Отправлено за сегодня
+                  </Button>
+                )
+              }
+              return (
+                <Button onClick={handleSubmitToday} disabled={submitting}>
+                  {submitting ? 'Отправка...' : <><Send className="h-4 w-4 mr-1.5" /> Отправить за сегодня</>}
+                </Button>
+              )
+            })()}
           </div>
 
           {timesheetData && (
