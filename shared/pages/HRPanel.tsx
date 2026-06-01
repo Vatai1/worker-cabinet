@@ -97,6 +97,31 @@ export function HRPanel() {
           <p className="text-sm font-medium">Все HR-модули отключены</p>
           <p className="text-xs mt-1">Включите модули в «Администрирование → Модули»</p>
         </div>
+      ) : safeActiveTab === 'timesheet' ? (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            {allTabs.map((tab) => {
+              const Icon = tab.icon
+              const isActive = safeActiveTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-border/40',
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {tab.name}
+                </button>
+              )
+            })}
+          </div>
+          <HRTimesheet />
+        </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
           <nav className="space-y-3">
