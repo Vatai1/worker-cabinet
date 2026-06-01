@@ -515,25 +515,26 @@ function UsersTab() {
         </div>
       </div>
 
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
-          <span className="text-sm font-medium">Выбрано: {selectedIds.size}</span>
-          <select value={bulkAction} onChange={e => setBulkAction(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
-            <option value="">Действие...</option>
-            <option value="activate">Активировать</option>
-            <option value="deactivate">Деактивировать</option>
-            <option value="setRole">Изменить роль</option>
+      <div className={cn(
+        'flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20 transition-all',
+        selectedIds.size > 0 ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 border-0 overflow-hidden',
+      )}>
+        <span className="text-sm font-medium">Выбрано: {selectedIds.size}</span>
+        <select value={bulkAction} onChange={e => setBulkAction(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+          <option value="">Действие...</option>
+          <option value="activate">Активировать</option>
+          <option value="deactivate">Деактивировать</option>
+          <option value="setRole">Изменить роль</option>
+        </select>
+        {bulkAction === 'setRole' && (
+          <select value={bulkRole} onChange={e => setBulkRole(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+            <option value="">Выберите роль...</option>
+            {roles.map(r => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
           </select>
-          {bulkAction === 'setRole' && (
-            <select value={bulkRole} onChange={e => setBulkRole(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
-              <option value="">Выберите роль...</option>
-              {roles.map(r => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
-            </select>
-          )}
-          <Button size="sm" onClick={executeBulkAction} disabled={!bulkAction || (bulkAction === 'setRole' && !bulkRole)}>Применить</Button>
-          <Button variant="ghost" size="sm" onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkRole('') }}><X className="h-4 w-4" /></Button>
-        </div>
-      )}
+        )}
+        <Button size="sm" onClick={executeBulkAction} disabled={!bulkAction || (bulkAction === 'setRole' && !bulkRole)}>Применить</Button>
+        <Button variant="ghost" size="sm" onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkRole('') }}><X className="h-4 w-4" /></Button>
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
