@@ -2220,6 +2220,8 @@ function DictionariesTab() {
   const [newSkill, setNewSkill] = useState('')
   const [newVacationName, setNewVacationName] = useState('')
   const [newVacationCode, setNewVacationCode] = useState('')
+  const [editPositionName, setEditPositionName] = useState<string | null>(null)
+  const [editPositionNewName, setEditPositionNewName] = useState('')
   const [editSkillId, setEditSkillId] = useState<number | null>(null)
   const [editSkillName, setEditSkillName] = useState('')
   const [editVacationId, setEditVacationId] = useState<number | null>(null)
@@ -2303,6 +2305,27 @@ function DictionariesTab() {
     } catch {}
   }
 
+  const renamePosition = async (oldName: string) => {
+    if (!editPositionNewName.trim() || editPositionNewName.trim() === oldName) { setEditPositionName(null); return }
+    try {
+      const res = await fetch(`${API_BASE_URL}/dictionaries/positions/rename`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ oldName, newName: editPositionNewName.trim() }),
+      })
+      if (res.ok) { setEditPositionName(null); fetchData() }
+      else { const d = await res.json(); setError(d.error) }
+    } catch (err) { setError(getErrorMessage(err)) }
+  }
+
+  const deletePosition = async (name: string) => {
+    try {
+      await fetch(`${API_BASE_URL}/dictionaries/positions/${encodeURIComponent(name)}`, {
+        method: 'DELETE', headers: getAuthHeaders(),
+      })
+      fetchData()
+    } catch {}
+  }
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
   if (!data) return null
 
@@ -2379,11 +2402,32 @@ function DictionariesTab() {
               )}
               {data.positions.map((p, i) => (
                 <div key={p.name} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/30 transition-colors group">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground/50 font-mono w-6">{i + 1}.</span>
-                    <span className="text-sm font-medium">{p.name}</span>
-                  </div>
-                  <Badge className="text-[10px]">{p.count} чел.</Badge>
+                  {editPositionName === p.name ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-xs text-muted-foreground/50 font-mono w-6">{i + 1}.</span>
+                      <Input value={editPositionNewName} onChange={e => setEditPositionNewName(e.target.value)} className="h-8 text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && renamePosition(p.name)} />
+                      <Button size="sm" variant="outline" onClick={() => renamePosition(p.name)}><Check className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditPositionName(null)}><X className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground/50 font-mono w-6">{i + 1}.</span>
+                        <span className="text-sm font-medium">{p.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className="text-[10px]">{p.count} чел.</Badge>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditPositionName(p.name); setEditPositionNewName(p.name) }} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => deletePosition(p.name)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
