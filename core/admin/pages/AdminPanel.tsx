@@ -560,13 +560,19 @@ function UsersTab() {
                   onClick={() => setDetailUser(user)}
                 >
                   <div
+                    role="checkbox"
+                    aria-checked={selected}
+                    tabIndex={0}
                     className={cn(
-                      'h-4.5 w-4.5 rounded flex items-center justify-center transition-all shrink-0 border-2',
-                      selected ? 'bg-primary border-primary' : 'border-muted-foreground/30 group-hover:border-muted-foreground/50',
+                      'h-[18px] w-[18px] rounded-md flex items-center justify-center transition-all shrink-0',
+                      selected
+                        ? 'bg-primary shadow-sm shadow-primary/20'
+                        : 'border-2 border-muted-foreground/25 group-hover:border-muted-foreground/40',
                     )}
                     onClick={e => { e.stopPropagation(); toggleSelect(user.id) }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSelect(user.id) } }}
                   >
-                    {selected && <Check className="h-3 w-3 text-primary-foreground" />}
+                    {selected && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
                   </div>
                   <div className={cn(
                     'h-9 w-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-colors',
