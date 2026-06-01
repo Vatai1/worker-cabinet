@@ -351,23 +351,16 @@ function UsersTab() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterRole, setFilterRole] = useState('')
-  const [editingUserId, setEditingUserId] = useState<number | null>(null)
-  const [editRole, setEditRole] = useState('')
   const [roles, setRoles] = useState<AdminRole[]>([])
-  const [resetPwdId, setResetPwdId] = useState<number | null>(null)
-  const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkAction, setBulkAction] = useState('')
   const [bulkRole, setBulkRole] = useState('')
+  const [detailUser, setDetailUser] = useState<AdminUser | null>(null)
 
-  useEffect(() => {
-    fetchRoles()
-  }, [])
+  useEffect(() => { fetchRoles() }, [])
 
-  useEffect(() => {
-    fetchUsers()
-  }, [page, search, filterRole])
+  useEffect(() => { fetchUsers() }, [page, search, filterRole])
 
   const fetchRoles = async () => {
     try {
@@ -377,8 +370,7 @@ function UsersTab() {
   }
 
   const fetchUsers = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
       const params = new URLSearchParams({ page: String(page), limit: '25' })
       if (search) params.set('search', search)
@@ -386,77 +378,89 @@ function UsersTab() {
       const res = await fetch(`${API_BASE_URL}/admin/users?${params}`, { headers: getAuthHeaders() })
       if (res.ok) {
         const data = await res.json()
-        setUsers(data.users)
-        setTotal(data.total)
+        setUsers(data.users); setTotal(data.total)
       }
     } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
   const changeRole = async (userId: number, role: string) => {
+    const user = users.find(u => u.id === userId)
+    const confirmed = await confirmDialog({
+      title: 'Изменить роль',
+      message: `Изменить роль ${user?.first_name} ${user?.last_name} на «${ROLE_LABELS[role] || role}»?`,
+      confirmText: 'Изменить',
+    })
+    if (!confirmed) return
     try {
       const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ role }),
       })
       if (res.ok) {
-        setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)))
-        setEditingUserId(null)
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u))
+        if (detailUser?.id === userId) setDetailUser(prev => prev ? { ...prev, role } : null)
       } else {
-        const data = await res.json()
-        setError(data.error || 'Ошибка')
+        const data = await res.json(); setError(data.error || 'Ошибка')
       }
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
   const changeStatus = async (userId: number, status: string) => {
+    const user = users.find(u => u.id === userId)
+    const confirmed = await confirmDialog({
+      title: status === 'active' ? 'Активировать' : 'Деактивировать',
+      message: `${status === 'active' ? 'Активировать' : 'Деактивировать'} ${user?.first_name} ${user?.last_name}?`,
+      confirmText: status === 'active' ? 'Активировать' : 'Деактивировать',
+      danger: status === 'inactive',
+    })
+    if (!confirmed) return
     try {
       const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/status`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ status }),
       })
       if (res.ok) {
-        setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, status: status as AdminUser['status'] } : u)))
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: status as AdminUser['status'] } : u))
+        if (detailUser?.id === userId) setDetailUser(prev => prev ? { ...prev, status: status as AdminUser['status'] } : null)
       }
     } catch {}
   }
 
-  const resetPassword = async (userId: number) => {
+  const resetPassword = async (userId: number, newPassword: string) => {
     if (!newPassword || newPassword.length < 6) { setError('Пароль минимум 6 символов'); return }
+    const confirmed = await confirmDialog({ title: 'Сбросить пароль', message: 'Установить новый пароль для этого пользователя?', confirmText: 'Сбросить', danger: true })
+    if (!confirmed) return
     try {
       const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/reset-password`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ newPassword }),
       })
-      if (res.ok) { setResetPwdId(null); setNewPassword('') }
-      else {
-        const data = await res.json()
-        setError(data.error || 'Ошибка')
-      }
+      if (res.ok) fetchUsers()
+      else { const data = await res.json(); setError(data.error || 'Ошибка') }
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
   const totalPages = Math.ceil(total / 25)
 
   const toggleSelect = (id: number) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
   }
 
   const toggleAll = () => {
-    if (selectedIds.size === users.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(users.map((u) => u.id)))
-    }
+    if (selectedIds.size === users.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(users.map(u => u.id)))
   }
 
   const executeBulkAction = async () => {
     if (selectedIds.size === 0) return
     const ids = Array.from(selectedIds)
+    const confirmed = await confirmDialog({
+      title: 'Массовое действие',
+      message: `Применить к ${ids.length} сотрудникам?`,
+      confirmText: 'Применить',
+    })
+    if (!confirmed) return
     try {
       if (bulkAction === 'activate') {
         const res = await fetch(`${API_BASE_URL}/admin/users/bulk-status`, {
@@ -483,188 +487,282 @@ function UsersTab() {
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
-  const exportUsers = () => {
-    window.open(`${API_BASE_URL}/admin/users/export`, '_blank')
-  }
+  const exportUsers = () => { window.open(`${API_BASE_URL}/admin/users/export`, '_blank') }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2"><UserCog className="h-5 w-5" /> Управление пользователями</CardTitle>
-            <CardDescription>Всего: {total}</CardDescription>
-          </div>
+    <div className="space-y-4">
+      {error && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+          <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Поиск по имени, email, должности..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="pl-9" />
+        </div>
+        <div className="flex gap-2">
+          <select value={filterRole} onChange={e => { setFilterRole(e.target.value); setPage(1) }} className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
+            <option value="">Все роли</option>
+            {roles.map(r => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
+          </select>
           <Button variant="outline" size="sm" onClick={exportUsers}>
-            <Download className="h-3.5 w-3.5 mr-1.5" /> Экспорт CSV
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Экспорт
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Поиск по имени, email, должности..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-              className="pl-9"
-            />
-          </div>
-          <select
-            value={filterRole}
-            onChange={(e) => { setFilterRole(e.target.value); setPage(1) }}
-            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
-          >
-            <option value="">Все роли</option>
-            {roles.map((r) => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
+      </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
+          <span className="text-sm font-medium">Выбрано: {selectedIds.size}</span>
+          <select value={bulkAction} onChange={e => setBulkAction(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+            <option value="">Действие...</option>
+            <option value="activate">Активировать</option>
+            <option value="deactivate">Деактивировать</option>
+            <option value="setRole">Изменить роль</option>
           </select>
+          {bulkAction === 'setRole' && (
+            <select value={bulkRole} onChange={e => setBulkRole(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+              <option value="">Выберите роль...</option>
+              {roles.map(r => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
+            </select>
+          )}
+          <Button size="sm" onClick={executeBulkAction} disabled={!bulkAction || (bulkAction === 'setRole' && !bulkRole)}>Применить</Button>
+          <Button variant="ghost" size="sm" onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkRole('') }}><X className="h-4 w-4" /></Button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+            <input type="checkbox" checked={selectedIds.size === users.length && users.length > 0} onChange={toggleAll} className="rounded" />
+            <span>Выбрать всех на странице</span>
+            <span className="ml-auto">{total} сотрудников</span>
+          </div>
+          <div className="space-y-1.5">
+            {users.map(user => {
+              const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
+              return (
+                <div
+                  key={user.id}
+                  className={cn(
+                    'flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer',
+                    selectedIds.has(user.id) ? 'bg-primary/5 border border-primary/20' : 'hover:bg-muted/30 border border-transparent',
+                  )}
+                  onClick={() => setDetailUser(user)}
+                >
+                  <input type="checkbox" checked={selectedIds.has(user.id)} onChange={() => toggleSelect(user.id)} onClick={e => e.stopPropagation()} className="rounded shrink-0" />
+                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+                    {user.first_name?.[0]}{user.last_name?.[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{fullName}</span>
+                      <Badge className={cn('text-[10px]', STATUS_COLORS[user.status])}>{STATUS_LABELS[user.status]}</Badge>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                      <span className="truncate">{user.position || user.email}</span>
+                      {user.department_name && <span>· {user.department_name}</span>}
+                    </div>
+                  </div>
+                  <button
+                    onClick={e => { e.stopPropagation(); changeRole(user.id, user.role) }}
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-border hover:bg-muted/50 transition-colors shrink-0"
+                  >
+                    {ROLE_LABELS[user.role] || user.role}
+                    <Edit3 className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-sm text-muted-foreground">
+            Показано {(page - 1) * 25 + 1}–{Math.min(page * 25, total)} из {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+            <span className="text-sm">{page} / {totalPages}</span>
+            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}><ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        </div>
+      )}
+
+      {detailUser && (
+        <UserDetailModal
+          user={detailUser}
+          roles={roles}
+          onClose={() => setDetailUser(null)}
+          onChangeRole={(role) => { changeRole(detailUser.id, role) }}
+          onChangeStatus={(status) => { changeStatus(detailUser.id, status) }}
+          onResetPassword={(pwd) => { resetPassword(detailUser.id, pwd) }}
+        />
+      )}
+    </div>
+  )
+}
+
+function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, onResetPassword }: {
+  user: AdminUser
+  roles: AdminRole[]
+  onClose: () => void
+  onChangeRole: (role: string) => void
+  onChangeStatus: (status: string) => void
+  onResetPassword: (password: string) => void
+}) {
+  const [activeSection, setActiveSection] = useState<'info' | 'role' | 'password'>('info')
+  const [newPassword, setNewPassword] = useState('')
+  const [selectedRole, setSelectedRole] = useState(user.role)
+  const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b border-border">
+          <div className="flex items-start gap-4">
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-lg font-bold text-primary shrink-0">
+              {user.first_name?.[0]}{user.last_name?.[0]}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-foreground text-lg">{fullName}</h3>
+              <p className="text-sm text-muted-foreground">{user.email}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge className={cn('text-[10px]', STATUS_COLORS[user.status])}>{STATUS_LABELS[user.status]}</Badge>
+                <Badge className="text-[10px] bg-primary/10 text-primary">{ROLE_LABELS[user.role] || user.role}</Badge>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-5 w-5" /></button>
+          </div>
         </div>
 
-        {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-            <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
-            <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
-          </div>
-        )}
+        <div className="flex border-b border-border">
+          {([
+            { id: 'info' as const, name: 'Профиль', icon: Users },
+            { id: 'role' as const, name: 'Роль', icon: ShieldCheck },
+            { id: 'password' as const, name: 'Пароль', icon: Lock },
+          ]).map(tab => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSection(tab.id)}
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium border-b-2 transition-colors',
+                  activeSection === tab.id
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.name}
+              </button>
+            )
+          })}
+        </div>
 
-        {selectedIds.size > 0 && (
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
-            <span className="text-sm font-medium">Выбрано: {selectedIds.size}</span>
-            <select value={bulkAction} onChange={(e) => setBulkAction(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
-              <option value="">Действие...</option>
-              <option value="activate">Активировать</option>
-              <option value="deactivate">Деактивировать</option>
-              <option value="setRole">Изменить роль</option>
-            </select>
-            {bulkAction === 'setRole' && (
-              <select value={bulkRole} onChange={(e) => setBulkRole(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
-                <option value="">Выберите роль...</option>
-                {roles.map((r) => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
-              </select>
-            )}
-            <Button size="sm" onClick={executeBulkAction} disabled={!bulkAction || (bulkAction === 'setRole' && !bulkRole)}>
-              Применить
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkRole('') }}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
+        <div className="flex-1 overflow-y-auto p-5">
+          {activeSection === 'info' && (
+            <div className="space-y-4">
+              <InfoRow label="Должность" value={user.position || '—'} />
+              <InfoRow label="Отдел" value={user.department_name || '—'} />
+              <InfoRow label="Телефон" value={user.phone || '—'} />
+              <InfoRow label="Дата приёма" value={user.hire_date || '—'} />
+              {user.manager_first_name && (
+                <InfoRow label="Руководитель" value={`${user.manager_last_name} ${user.manager_first_name}`} />
+              )}
+              <div className="pt-2 flex gap-2">
+                <Button
+                  size="sm"
+                  variant={user.status === 'active' ? 'outline' : 'default'}
+                  onClick={() => onChangeStatus(user.status === 'active' ? 'inactive' : 'active')}
+                >
+                  {user.status === 'active' ? (
+                    <><Lock className="h-3.5 w-3.5 mr-1.5" />Деактивировать</>
+                  ) : (
+                    <><Unlock className="h-3.5 w-3.5 mr-1.5" />Активировать</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
 
-        {loading ? (
-          <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="pb-3 pr-2 font-medium w-8">
-                    <input type="checkbox" checked={selectedIds.size === users.length && users.length > 0} onChange={toggleAll} className="rounded" />
-                  </th>
-                  <th className="pb-3 pr-4 font-medium">Сотрудник</th>
-                  <th className="pb-3 pr-4 font-medium">Email</th>
-                  <th className="pb-3 pr-4 font-medium">Должность</th>
-                  <th className="pb-3 pr-4 font-medium">Отдел</th>
-                  <th className="pb-3 pr-4 font-medium">Роль</th>
-                  <th className="pb-3 pr-4 font-medium">Статус</th>
-                  <th className="pb-3 font-medium">Действия</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {users.map((user) => (
-                  <tr key={user.id} className={cn('transition-colors', selectedIds.has(user.id) ? 'bg-primary/5' : 'hover:bg-muted/30')}>
-                    <td className="py-3 pr-2">
-                      <input type="checkbox" checked={selectedIds.has(user.id)} onChange={() => toggleSelect(user.id)} className="rounded" />
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className="font-medium">{user.last_name} {user.first_name}</div>
-                      {user.middle_name && <div className="text-xs text-muted-foreground">{user.middle_name}</div>}
-                    </td>
-                    <td className="py-3 pr-4 text-muted-foreground">{user.email}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{user.position}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{user.department_name || '—'}</td>
-                    <td className="py-3 pr-4">
-                      {editingUserId === user.id ? (
-                        <div className="flex items-center gap-1">
-                          <select
-                            value={editRole}
-                            onChange={(e) => setEditRole(e.target.value)}
-                            className="px-2 py-1 text-xs rounded border border-border bg-background"
-                          >
-                            {roles.map((r) => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
-                          </select>
-                          <button onClick={() => changeRole(user.id, editRole)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => setEditingUserId(null)} className="p-1 text-red-600 hover:bg-red-50 rounded"><X className="h-3.5 w-3.5" /></button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => { setEditingUserId(user.id); setEditRole(user.role) }}
-                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-border hover:bg-muted/50 transition-colors"
-                        >
-                          {ROLE_LABELS[user.role] || user.role}
-                          <Edit3 className="h-3 w-3 text-muted-foreground" />
-                        </button>
+          {activeSection === 'role' && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">Текущая роль: <span className="font-medium text-foreground">{ROLE_LABELS[user.role] || user.role}</span></p>
+              <div className="space-y-1.5">
+                {roles.map(r => {
+                  const isSelected = selectedRole === r.name
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => setSelectedRole(r.name)}
+                      className={cn(
+                        'w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left',
+                        isSelected ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/30 border border-transparent',
                       )}
-                    </td>
-                    <td className="py-3 pr-4">
-                      <button
-                        onClick={() => changeStatus(user.id, user.status === 'active' ? 'inactive' : 'active')}
-                        className="text-xs"
-                      >
-                        <Badge className={cn('text-[10px]', STATUS_COLORS[user.status])}>
-                          {STATUS_LABELS[user.status] || user.status}
-                        </Badge>
-                      </button>
-                    </td>
-                    <td className="py-3">
-                      {resetPwdId === user.id ? (
-                        <div className="flex items-center gap-1">
-                          <Input
-                            type="password"
-                            placeholder="Новый пароль"
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            className="h-7 text-xs w-32"
-                          />
-                          <button onClick={() => resetPassword(user.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => { setResetPwdId(null); setNewPassword('') }} className="p-1 text-red-600 hover:bg-red-50 rounded"><X className="h-3.5 w-3.5" /></button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setResetPwdId(user.id)}
-                          className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
-                          title="Сбросить пароль"
-                        >
-                          <Lock className="h-4 w-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                    >
+                      <div className={cn(
+                        'w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0',
+                        isSelected ? 'border-primary' : 'border-border',
+                      )}>
+                        {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{ROLE_LABELS[r.name] || r.name}</p>
+                        {r.description && <p className="text-xs text-muted-foreground">{r.description}</p>}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedRole !== user.role && (
+                <Button onClick={() => onChangeRole(selectedRole)} className="w-full">
+                  <ShieldCheck className="h-4 w-4 mr-1.5" />Изменить на «{ROLE_LABELS[selectedRole] || selectedRole}»
+                </Button>
+              )}
+            </div>
+          )}
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-4">
-            <p className="text-sm text-muted-foreground">
-              Показано {(page - 1) * 25 + 1}–{Math.min(page * 25, total)} из {total}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm">{page} / {totalPages}</span>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-                <ChevronRight className="h-4 w-4" />
+          {activeSection === 'password' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                <div className="flex items-center gap-2 text-amber-600 text-sm font-medium">
+                  <AlertTriangle className="h-4 w-4" />
+                  Внимание
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Пароль будет немедленно изменён. Пользователю потребуется войти заново.</p>
+              </div>
+              <Input
+                type="password"
+                placeholder="Новый пароль (минимум 6 символов)"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+              />
+              <Button onClick={() => { onResetPassword(newPassword); setNewPassword('') }} disabled={newPassword.length < 6} className="w-full" variant="destructive">
+                <RotateCcw className="h-4 w-4 mr-1.5" />Сбросить пароль
               </Button>
             </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-border/30">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium">{value}</span>
+    </div>
   )
 }
 
