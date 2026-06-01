@@ -566,10 +566,10 @@ function UsersTab() {
                 <div
                   key={user.id}
                   className={cn(
-                    'flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer group',
+                    'flex items-center gap-3 p-3 rounded-xl border cursor-pointer group',
                     selected
-                      ? 'bg-primary/8 ring-1 ring-primary/25 shadow-sm shadow-primary/5'
-                      : 'hover:bg-muted/40 border border-transparent hover:border-border/50',
+                      ? 'bg-primary/8 border-primary/25'
+                      : 'border-transparent hover:bg-muted/40 hover:border-border/50',
                   )}
                   onClick={() => setDetailUser(user)}
                 >
