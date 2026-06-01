@@ -94,6 +94,14 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
   const existing = await query('SELECT id FROM departments WHERE name = $1', [name.trim()])
   if (existing.rows.length > 0) throw new ConflictError('Отдел с таким названием уже существует')
 
+  if (manager_id) {
+    const alreadyManager = await query('SELECT d.id, d.name FROM departments d WHERE d.manager_id = $1', [manager_id])
+    if (alreadyManager.rows.length > 0) {
+      const dept = alreadyManager.rows[0]
+      throw new ConflictError(`Этот сотрудник уже является руководителем отдела «${dept.name}»`)
+    }
+  }
+
   const result = await query(
     'INSERT INTO departments (name, manager_id, description) VALUES ($1, $2, $3) RETURNING id, name, manager_id, description',
     [name.trim(), manager_id || null, description?.trim() || null]
@@ -139,6 +147,14 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
 
   const duplicate = await query('SELECT id FROM departments WHERE name = $1 AND id != $2', [name.trim(), id])
   if (duplicate.rows.length > 0) throw new ConflictError('Отдел с таким названием уже существует')
+
+  if (manager_id) {
+    const alreadyManager = await query('SELECT d.id, d.name FROM departments d WHERE d.manager_id = $1 AND d.id != $2', [manager_id, id])
+    if (alreadyManager.rows.length > 0) {
+      const dept = alreadyManager.rows[0]
+      throw new ConflictError(`Этот сотрудник уже является руководителем отдела «${dept.name}»`)
+    }
+  }
 
   const result = await query(
     'UPDATE departments SET name = $1, manager_id = $2, description = $3 WHERE id = $4 RETURNING id, name, manager_id, description',

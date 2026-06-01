@@ -907,6 +907,8 @@ function DepartmentsTab() {
 
   const createDept = async () => {
     if (!newName.trim()) { setError('Название обязательно'); return }
+    const confirmed = await confirmDialog({ title: 'Создать отдел', message: `Создать отдел «${newName.trim()}»?`, confirmText: 'Создать' })
+    if (!confirmed) return
     try {
       const res = await fetch(`${API_BASE_URL}/dictionaries/departments`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
@@ -918,6 +920,8 @@ function DepartmentsTab() {
   }
 
   const updateDept = async (id: number) => {
+    const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Сохранить изменения для отдела «${editName.trim()}»?`, confirmText: 'Сохранить' })
+    if (!confirmed) return
     try {
       const body: Record<string, unknown> = { name: editName.trim(), description: editDesc.trim() }
       if (editManagerId) body.manager_id = editManagerId
@@ -931,7 +935,9 @@ function DepartmentsTab() {
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
-  const deleteDept = async (id: number) => {
+  const deleteDept = async (id: number, name: string) => {
+    const confirmed = await confirmDialog({ title: 'Удалить отдел', message: `Удалить отдел «${name}»? Сотрудники будут отвязаны от отдела.`, confirmText: 'Удалить', danger: true })
+    if (!confirmed) return
     try {
       await fetch(`${API_BASE_URL}/dictionaries/departments/${id}`, {
         method: 'DELETE', headers: getAuthHeaders(),
@@ -1049,7 +1055,7 @@ function DepartmentsTab() {
                       <button onClick={() => startEdit(dept)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                         <Edit3 className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => deleteDept(dept.id)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                      <button onClick={() => deleteDept(dept.id, dept.name)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
