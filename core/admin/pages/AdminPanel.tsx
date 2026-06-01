@@ -908,7 +908,7 @@ function DepartmentsTab() {
   const createDept = async () => {
     if (!newName.trim()) { setError('Название обязательно'); return }
     try {
-      const res = await fetch(`${API_BASE_URL}/departments`, {
+      const res = await fetch(`${API_BASE_URL}/dictionaries/departments`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ name: newName.trim(), description: newDesc.trim(), manager_id: newManagerId }),
       })
@@ -922,7 +922,7 @@ function DepartmentsTab() {
       const body: Record<string, unknown> = { name: editName.trim(), description: editDesc.trim() }
       if (editManagerId) body.manager_id = editManagerId
       else body.manager_id = null
-      const res = await fetch(`${API_BASE_URL}/departments/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/dictionaries/departments/${id}`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify(body),
       })
@@ -933,7 +933,7 @@ function DepartmentsTab() {
 
   const deleteDept = async (id: number) => {
     try {
-      await fetch(`${API_BASE_URL}/departments/${id}`, {
+      await fetch(`${API_BASE_URL}/dictionaries/departments/${id}`, {
         method: 'DELETE', headers: getAuthHeaders(),
       })
       fetchDepartments()
