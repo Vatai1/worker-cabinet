@@ -1,7 +1,6 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
-import { Building2, Wrench, Palmtree, Briefcase, FileText, Plus, Pencil, Trash2, X, Search, Users, MoreHorizontal, ExternalLink, FolderOpen } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Building2, Wrench, Palmtree, Briefcase, FileText, Plus, Pencil, Trash2, X, Search, Users, FolderOpen, Sparkles, FileUp, Eye } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
-import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { AddDictItemModal } from '@/core/admin/components/modals/AddDictItemModal'
@@ -13,11 +12,11 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { useModulesStore } from '@/shared/store/modulesStore'
 
 const TABS = [
-  { value: 'departments', label: 'Отделы', icon: Building2, color: 'text-primary', bgColor: 'bg-primary/10' },
-  { value: 'skills', label: 'Навыки', icon: Wrench, color: 'text-primary', bgColor: 'bg-primary/10' },
-  { value: 'vacation-types', label: 'Типы отпусков', icon: Palmtree, color: 'text-primary', bgColor: 'bg-primary/10' },
-  { value: 'positions', label: 'Должности', icon: Briefcase, color: 'text-primary', bgColor: 'bg-primary/10' },
-  { value: 'doc-templates', label: 'Шаблоны документов', icon: FileText, color: 'text-primary', bgColor: 'bg-primary/10' },
+  { value: 'departments', label: 'Отделы', icon: Building2, gradient: 'from-blue-500 to-indigo-600', singular: 'отдел' },
+  { value: 'skills', label: 'Навыки', icon: Wrench, gradient: 'from-emerald-500 to-teal-600', singular: 'навык' },
+  { value: 'vacation-types', label: 'Типы отпусков', icon: Palmtree, gradient: 'from-amber-500 to-orange-600', singular: 'тип отпуска' },
+  { value: 'positions', label: 'Должности', icon: Briefcase, gradient: 'from-violet-500 to-purple-600', singular: 'должность' },
+  { value: 'doc-templates', label: 'Шаблоны документов', icon: FileText, gradient: 'from-pink-500 to-rose-600', singular: 'шаблон' },
 ]
 
 interface DictItem {
@@ -29,7 +28,6 @@ interface DictItem {
   request_count?: number
   manager_id?: number | null
   manager_name?: string
-  vacation_requests_blocked?: boolean
   description?: string
   purpose?: string
   download_count?: number
@@ -57,19 +55,7 @@ export function HRDictionaries() {
   const [editItem, setEditItem] = useState<DictItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DictItem | null>(null)
   const [onlyOfficeItem, setOnlyOfficeItem] = useState<DictItem | null>(null)
-  const [contextMenuId, setContextMenuId] = useState<number | null>(null)
-  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null)
-  const contextMenuRef = useRef<HTMLDivElement>(null)
-
-  const openContextMenu = (item: DictItem, x: number, y: number) => {
-    setContextMenuId(item.id!)
-    setContextMenuPos({ x, y })
-  }
-
-  const closeContextMenu = () => {
-    setContextMenuId(null)
-    setContextMenuPos(null)
-  }
+  const [hoveredId, setHoveredId] = useState<number | null>(null)
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -94,30 +80,8 @@ export function HRDictionaries() {
   useEffect(() => {
     setEditItem(null)
     setSearch('')
-    setContextMenuId(null)
     fetchItems()
   }, [fetchItems])
-
-  useEffect(() => {
-    if (contextMenuId === null) return
-    const handler = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        closeContextMenu()
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [contextMenuId])
-
-  useLayoutEffect(() => {
-    if (!contextMenuPos || !contextMenuRef.current) return
-    const menu = contextMenuRef.current
-    const { width, height } = menu.getBoundingClientRect()
-    let { x, y } = contextMenuPos
-    if (x + width > window.innerWidth) x = window.innerWidth - width - 8
-    if (y + height > window.innerHeight) y = window.innerHeight - height - 8
-    if (x !== contextMenuPos.x || y !== contextMenuPos.y) setContextMenuPos({ x, y })
-  }, [contextMenuPos])
 
   useEffect(() => {
     if (!search.trim()) return
@@ -148,23 +112,19 @@ export function HRDictionaries() {
   const searchResults = (() => {
     if (!isSearchActive) return []
     const q = search.toLowerCase()
-    const grouped: { type: string; tab: typeof TABS[number]; items: DictItem[] }[] = []
+    const grouped: { type: string; tabInfo: typeof TABS[number]; items: DictItem[] }[] = []
     for (const t of filteredTabs) {
       const typeItems = (allData[t.value] || []).filter(
         (item) => item.name.toLowerCase().includes(q) || (item.code && item.code.toLowerCase().includes(q))
       )
       if (typeItems.length > 0) {
-        grouped.push({ type: t.value, tab: t, items: typeItems })
+        grouped.push({ type: t.value, tabInfo: t, items: typeItems })
       }
     }
     return grouped
   })()
 
   const totalSearchResults = searchResults.reduce((sum, g) => sum + g.items.length, 0)
-
-  const handleEdit = (item: DictItem) => {
-    setEditItem(item)
-  }
 
   const handleDelete = async (item: DictItem) => {
     try {
@@ -191,89 +151,6 @@ export function HRDictionaries() {
   const canEdit = tab !== 'positions'
   const canDelete = tab !== 'positions'
 
-  const getColumns = (t: string) => {
-    switch (t) {
-      case 'departments':
-        return [
-          { key: 'name', label: 'Название' },
-          { key: 'manager_name', label: 'Руководитель' },
-          { key: 'employee_count', label: 'Сотрудников' },
-        ]
-      case 'skills':
-        return [
-          { key: 'name', label: 'Название' },
-          { key: 'user_count', label: 'Сотрудников' },
-        ]
-      case 'vacation-types':
-        return [
-          { key: 'code', label: 'Код' },
-          { key: 'name', label: 'Название' },
-          { key: 'request_count', label: 'Заявок' },
-        ]
-      case 'positions':
-        return [
-          { key: 'name', label: 'Должность' },
-          { key: 'employee_count', label: 'Сотрудников' },
-        ]
-      case 'doc-templates':
-        return [
-          { key: 'name', label: 'Название' },
-          { key: 'purpose', label: 'Назначение' },
-        ]
-      default:
-        return []
-    }
-  }
-
-  const columns = getColumns(tab)
-
-  const renderCellValue = (item: DictItem, key: string) => {
-    switch (key) {
-      case 'name':
-        return item.name || '—'
-      case 'code':
-        return item.code ? (
-          <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">{item.code}</code>
-        ) : '—'
-      case 'manager_name':
-        return item.manager_name ? (
-          <span className="text-muted-foreground">{item.manager_name}</span>
-        ) : <span className="text-muted-foreground/50">Не назначен</span>
-      case 'purpose':
-        return item.purpose ? (
-          <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">{item.purpose}</code>
-        ) : <span className="text-muted-foreground/50">—</span>
-      case 'download_count':
-        return (
-          <Badge variant="secondary" className="font-mono tabular-nums">
-            {item.download_count ?? 0}
-          </Badge>
-        )
-      case 'employee_count':
-        return (
-          <Badge variant="secondary" className="font-mono tabular-nums">
-            <Users className="h-3 w-3 mr-1" />
-            {item.employee_count ?? 0}
-          </Badge>
-        )
-      case 'user_count':
-        return (
-          <Badge variant="secondary" className="font-mono tabular-nums">
-            <Users className="h-3 w-3 mr-1" />
-            {item.user_count ?? 0}
-          </Badge>
-        )
-      case 'request_count':
-        return (
-          <Badge variant="secondary" className="font-mono tabular-nums">
-            {item.request_count ?? 0}
-          </Badge>
-        )
-      default:
-        return '—'
-    }
-  }
-
   const activeTab = TABS.find((t) => t.value === tab)!
 
   const goToItem = (type: string) => {
@@ -281,34 +158,87 @@ export function HRDictionaries() {
     setTab(type)
   }
 
-  const highlightMatch = (text: string, query: string) => {
-    if (!query) return text
-    const idx = text.toLowerCase().indexOf(query.toLowerCase())
-    if (idx === -1) return text
+  const renderCard = (item: DictItem, currentTab: string) => {
+    const tabConfig = TABS.find(t => t.value === currentTab)!
+    const Icon = tabConfig.icon
+    const initial = item.name.charAt(0).toUpperCase()
+
+    const infoLines: React.ReactNode[] = []
+    if (currentTab === 'departments') {
+      if (item.manager_name) infoLines.push(<span key="mgr" className="text-xs text-muted-foreground">{item.manager_name}</span>)
+      else infoLines.push(<span key="mgr" className="text-xs text-muted-foreground/50">Руководитель не назначен</span>)
+      infoLines.push(
+        <span key="cnt" className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <Users className="h-3 w-3" />{item.employee_count ?? 0}
+        </span>
+      )
+    }
+    if (currentTab === 'skills') {
+      infoLines.push(
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <Users className="h-3 w-3" />{item.user_count ?? 0} сотрудников
+        </span>
+      )
+    }
+    if (currentTab === 'vacation-types') {
+      if (item.code) infoLines.push(<code key="code" className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">{item.code}</code>)
+      infoLines.push(<span key="cnt" className="text-xs text-muted-foreground">{item.request_count ?? 0} заявок</span>)
+    }
+    if (currentTab === 'positions') {
+      infoLines.push(
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <Users className="h-3 w-3" />{item.employee_count ?? 0} сотрудников
+        </span>
+      )
+    }
+    if (currentTab === 'doc-templates') {
+      if (item.purpose) infoLines.push(<code key="purp" className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">{item.purpose}</code>)
+      else infoLines.push(<span key="purp" className="text-xs text-muted-foreground/50">Без назначения</span>)
+      if (item.file_key) infoLines.push(
+        <span key="file" className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+          <FileUp className="h-3 w-3" />Файл
+        </span>
+      )
+    }
+
     return (
-      <>
-        {text.slice(0, idx)}
-        <mark className="bg-yellow-200 dark:bg-yellow-800/60 rounded px-0.5">{text.slice(idx, idx + query.length)}</mark>
-        {text.slice(idx + query.length)}
-      </>
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        {currentTab === 'doc-templates' ? (
+          <div className={`flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br ${tabConfig.gradient} flex items-center justify-center text-white`}>
+            <Icon className="h-4 w-4" />
+          </div>
+        ) : (
+          <div className={`flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br ${tabConfig.gradient} flex items-center justify-center text-white font-bold text-sm`}>
+            {initial}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold truncate">{item.name}</p>
+          {infoLines.length > 0 && (
+            <div className="flex items-center gap-3 mt-0.5">{infoLines}</div>
+          )}
+        </div>
+      </div>
     )
   }
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="page-header">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold">Справочники</h1>
-            <p className="text-muted-foreground mt-1">
-              Управление справочниками системы · {items.length} записей
-            </p>
+      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-white/5 rounded-full" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-2">
+            <Sparkles className="h-6 w-6 text-white/80" />
+            <h1 className="text-2xl font-bold text-white">Справочники</h1>
           </div>
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
+          <p className="text-sm text-white/60 mb-6">Управление справочниками системы</p>
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+            <input
               ref={searchRef}
-              className="pl-9"
+              className="w-full rounded-xl bg-white/10 border border-white/10 pl-10 pr-9 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all"
               placeholder="Поиск по всем справочникам..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -316,9 +246,9 @@ export function HRDictionaries() {
             {search && (
               <button
                 onClick={() => { setSearch(''); searchRef.current?.focus() }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-muted text-muted-foreground interactive"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
@@ -326,240 +256,180 @@ export function HRDictionaries() {
       </div>
 
       {isSearchActive ? (
-        <div className="space-y-4 animate-slide-up">
+        <div className="space-y-4 animate-fade-in">
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               {allDataLoading ? 'Поиск...' : `Найдено ${totalSearchResults} ${totalSearchResults === 1 ? 'запись' : totalSearchResults < 5 ? 'записи' : 'записей'} по запросу «${search}»`}
             </p>
-            <Button variant="ghost" size="sm" onClick={() => setSearch('')}>
-              Сбросить поиск
-            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSearch('')}>Сбросить</Button>
           </div>
 
           {searchResults.length === 0 && !allDataLoading && (
-            <div className="section-card rounded-xl border border-border/60 bg-card p-16 text-center">
-              <Search className="h-10 w-10 mx-auto text-muted-foreground/40" />
-              <p className="mt-3 text-muted-foreground text-center">Ничего не найдено по запросу «{search}»</p>
+            <div className="rounded-2xl border border-border/40 bg-card p-16 text-center">
+              <Search className="h-12 w-12 mx-auto text-muted-foreground/30" />
+              <p className="mt-4 text-muted-foreground">Ничего не найдено по запросу «{search}»</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Попробуйте другой запрос</p>
             </div>
           )}
 
           {searchResults.map((group) => {
-            const Icon = group.tab.icon
-            const groupCols = getColumns(group.type)
+            const GIcon = group.tabInfo.icon
             return (
-              <div key={group.type} className="section-card rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
+              <div key={group.type} className="rounded-2xl border border-border/40 bg-card overflow-hidden">
                 <button
                   onClick={() => goToItem(group.type)}
-                  className="w-full flex items-center justify-between px-5 py-3.5 border-b border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors interactive"
+                  className="w-full flex items-center justify-between px-5 py-3.5 border-b border-border/30 bg-muted/20 hover:bg-muted/30 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${group.tab.bgColor}`}>
-                      <Icon className={`h-4 w-4 ${group.tab.color}`} />
+                    <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br ${group.tabInfo.gradient} text-white`}>
+                      <GIcon className="h-4 w-4" />
                     </div>
-                    <span className="font-semibold">{group.tab.label}</span>
+                    <span className="font-semibold">{group.tabInfo.label}</span>
                     <Badge variant="secondary">{group.items.length}</Badge>
                   </div>
                   <span className="text-xs text-muted-foreground">Перейти →</span>
                 </button>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/30 bg-muted/10">
-                      {groupCols.map((col) => (
-                        <th key={col.key} className="text-left py-2.5 px-5 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-                          {col.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/20">
-                    {group.items.map((item) => (
-                      <tr key={item.id ?? item.name} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => goToItem(group.type)}>
-                        {groupCols.map((col) => (
-                          <td key={col.key} className="py-2.5 px-5">
-                            {col.key === 'name' ? highlightMatch(item.name, search) :
-                             col.key === 'code' ? (item.code ? <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">{highlightMatch(item.code, search) as any}</code> : '—') :
-                             renderCellValue(item, col.key)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-0 md:gap-0">
+                  {group.items.map((item) => (
+                    <button
+                      key={item.id ?? item.name}
+                      onClick={() => goToItem(group.type)}
+                      className="flex items-center gap-4 px-5 py-3 hover:bg-muted/30 transition-colors text-left border-b border-border/10 last:border-b-0 md:border-r md:border-r-border/10 md:last:border-r-0"
+                    >
+                      {renderCard(item, group.type)}
+                    </button>
+                  ))}
+                </div>
               </div>
             )
           })}
         </div>
       ) : (
         <>
-          <div className="flex gap-1 rounded-xl bg-muted/50 p-1">
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
             {filteredTabs.map((t) => {
-              const Icon = t.icon
+              const TIcon = t.icon
+              const isActive = tab === t.value
               return (
                 <button
                   key={t.value}
                   onClick={() => setTab(t.value)}
-                  className={`interactive flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                    tab === t.value
-                      ? 'bg-card text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
-                  }`}
+                  className={`
+                    flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium transition-all whitespace-nowrap
+                    ${isActive
+                      ? `bg-gradient-to-r ${t.gradient} text-white shadow-sm`
+                      : 'bg-card border border-border/40 text-muted-foreground hover:text-foreground hover:border-border'
+                    }
+                  `}
                 >
-                  <Icon className={`h-4 w-4 ${tab === t.value ? t.color : ''}`} />
+                  <TIcon className="h-4 w-4" />
                   {t.label}
+                  {isActive && items.length > 0 && (
+                    <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${isActive ? 'bg-white/20' : 'bg-muted'}`}>
+                      {items.length}
+                    </span>
+                  )}
                 </button>
               )
             })}
           </div>
 
           {error && (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              {error}
-            </div>
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>
           )}
 
-          {canAdd && (
-            <Button onClick={() => setIsAddModalOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Добавить {activeTab.label.toLowerCase().replace('отделы', 'отдел').replace('навыки', 'навык').replace('типы отпусков', 'тип отпуска').replace('шаблоны документов', 'шаблон документа')}
-            </Button>
-          )}
-
-          <div className="section-card rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/50 bg-muted/30">
-                    <th className="text-left py-3.5 px-5 font-semibold text-muted-foreground w-10">#</th>
-                    {columns.map((col) => (
-                      <th key={col.key} className="text-left py-3.5 px-5 font-semibold text-muted-foreground">
-                        {col.label}
-                      </th>
-                    ))}
-                    {(canEdit || canDelete) && (
-                      <th className="w-12" />
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/30">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={columns.length + 2} className="text-center py-16 text-muted-foreground">
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                          <div className="h-8 w-full rounded bg-muted animate-pulse" />
-                        </div>
-                      </td>
-                    </tr>
-                  ) : filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={columns.length + 2} className="text-center py-16 text-muted-foreground">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10">
-                            <activeTab.icon className="h-5 w-5 text-primary" />
-                          </div>
-                          <div className="flex flex-col items-center py-6 text-muted-foreground"><FolderOpen className="h-8 w-8 mb-2 opacity-50" /><p>Список пуст</p></div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    filtered.map((item, idx) => (
-                      <tr
-                        key={item.id ?? item.name}
-                        className="group transition-colors hover:bg-muted/50"
-                        onContextMenu={(e) => {
-                          if (!(canEdit || canDelete)) return
-                          e.preventDefault()
-                          openContextMenu(item, e.clientX, e.clientY)
-                        }}
-                      >
-                        <td className="py-3.5 px-5 text-muted-foreground/50 font-mono text-xs">
-                          {idx + 1}
-                        </td>
-                          <>
-                            {columns.map((col) => (
-                              <td key={col.key} className="py-3.5 px-5">
-                                {renderCellValue(item, col.key)}
-                              </td>
-                            ))}
-                            <td className="py-3.5 px-5">
-                              {(canEdit || canDelete) && (
-                                <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
-                                      openContextMenu(item, rect.right, rect.bottom + 4)
-                                    }}
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-8 w-8"
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </td>
-                          </>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {filtered.length > 0 && (
-              <div className="border-t border-border/30 bg-muted/20 px-5 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-xl bg-gradient-to-br ${activeTab.gradient} text-white`}>
+                <activeTab.icon className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">{activeTab.label}</h2>
                 <p className="text-xs text-muted-foreground">
-                  Всего: {filtered.length} {filtered.length === 1 ? 'запись' : filtered.length < 5 ? 'записи' : 'записей'}
+                  {loading ? 'Загрузка...' : `${filtered.length} ${filtered.length === 1 ? 'запись' : filtered.length < 5 ? 'записи' : 'записей'}`}
                 </p>
               </div>
+            </div>
+            {canAdd && (
+              <Button onClick={() => setIsAddModalOpen(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Добавить {activeTab.singular}
+              </Button>
             )}
           </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border border-border/40 bg-card p-5 space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-muted animate-pulse" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-3/4 rounded bg-muted animate-pulse" />
+                      <div className="h-3 w-1/2 rounded bg-muted animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-2xl border border-border/40 bg-card p-16 text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted mb-4">
+                <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
+              </div>
+              <p className="text-lg font-medium text-muted-foreground">Список пуст</p>
+              <p className="text-sm text-muted-foreground/60 mt-1">
+                {canAdd ? `Нажмите «Добавить ${activeTab.singular}» чтобы создать` : 'Нет данных'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {filtered.map((item) => (
+                <div
+                  key={item.id ?? item.name}
+                  className="group relative rounded-2xl border border-border/40 bg-card p-4 hover:border-border hover:shadow-sm transition-all"
+                  onMouseEnter={() => item.id && setHoveredId(item.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                >
+                  {renderCard(item, tab)}
+
+                  {(canEdit || canDelete) && hoveredId === item.id && (
+                    <div className="absolute top-2 right-2 flex items-center gap-1 animate-fade-in">
+                      {tab === 'doc-templates' && item.file_key && (
+                        <button
+                          onClick={() => setOnlyOfficeItem(item)}
+                          className="p-1.5 rounded-lg bg-card border border-border/60 text-muted-foreground hover:text-foreground hover:border-border transition-colors shadow-sm"
+                          title="Открыть в OnlyOffice"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button
+                          onClick={() => setEditItem(item)}
+                          className="p-1.5 rounded-lg bg-card border border-border/60 text-muted-foreground hover:text-foreground hover:border-border transition-colors shadow-sm"
+                          title="Редактировать"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={() => setDeleteTarget(item)}
+                          className="p-1.5 rounded-lg bg-card border border-border/60 text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors shadow-sm"
+                          title="Удалить"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
-
-      {contextMenuId !== null && contextMenuPos && (() => {
-        const item = filtered.find((i) => i.id === contextMenuId)
-        if (!item) return null
-        return (
-          <div
-            ref={contextMenuRef}
-            className="fixed z-50 min-w-[160px] rounded-xl border border-border/60 bg-card shadow-sm py-1"
-            style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
-          >
-            {tab === 'doc-templates' && item.file_key && (
-              <button
-                onClick={() => { closeContextMenu(); setOnlyOfficeItem(item) }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/50 transition-colors interactive"
-              >
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                Открыть в OnlyOffice
-              </button>
-            )}
-            {(tab === 'doc-templates' && item.file_key) && (canEdit || canDelete) && (
-              <div className="my-1 border-t border-border/30" />
-            )}
-            {canEdit && (
-              <button
-                onClick={() => { closeContextMenu(); handleEdit(item) }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/50 transition-colors interactive"
-              >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                Редактировать
-              </button>
-            )}
-            {canDelete && (
-              <button
-                onClick={() => { closeContextMenu(); setDeleteTarget(item) }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors interactive"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Удалить
-              </button>
-            )}
-          </div>
-        )
-      })()}
 
       {deleteTarget && (
         <ConfirmModal
