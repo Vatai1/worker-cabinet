@@ -540,7 +540,21 @@ function UsersTab() {
       ) : (
         <div className="space-y-2">
           <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <input type="checkbox" checked={selectedIds.size === users.length && users.length > 0} onChange={toggleAll} className="rounded" />
+            <div
+              role="checkbox"
+              aria-checked={selectedIds.size === users.length && users.length > 0}
+              tabIndex={0}
+              className={cn(
+                'h-[18px] w-[18px] rounded-md flex items-center justify-center transition-all shrink-0',
+                selectedIds.size === users.length && users.length > 0
+                  ? 'bg-primary shadow-sm shadow-primary/20'
+                  : 'border-2 border-muted-foreground/25 hover:border-muted-foreground/40',
+              )}
+              onClick={toggleAll}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAll() } }}
+            >
+              {selectedIds.size === users.length && users.length > 0 && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
+            </div>
             <span>Выбрать всех на странице</span>
             <span className="ml-auto">{total} сотрудников</span>
           </div>
