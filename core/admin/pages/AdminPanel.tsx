@@ -21,7 +21,7 @@ import {
   BarChart3, Download, FileText, Database,
   HardDrive, Server, AlertCircle, Unlock, UserPlus, Boxes,
   TrendingUp, Clock3, FolderKanban, CalendarX, Settings,
-  Calendar, Zap,
+  Calendar, Zap, Briefcase, Wrench, Plane,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry, AdminStats } from '@/core/admin/types/admin'
 
@@ -2210,9 +2210,21 @@ function ReportsTab() {
 
 function DictionariesTab() {
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
-  const [data, setData] = useState<{ positions: { name: string; count: string }[]; vacationTypes: { id: number; code: string; name: string }[]; skills: { id: number; name: string }[] } | null>(null)
+  const [activeDict, setActiveDict] = useState<string>('positions')
+  const [data, setData] = useState<{
+    positions: { name: string; count: string }[]
+    vacationTypes: { id: number; code: string; name: string }[]
+    skills: { id: number; name: string }[]
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [newSkill, setNewSkill] = useState('')
+  const [newVacationName, setNewVacationName] = useState('')
+  const [newVacationCode, setNewVacationCode] = useState('')
+  const [editSkillId, setEditSkillId] = useState<number | null>(null)
+  const [editSkillName, setEditSkillName] = useState('')
+  const [editVacationId, setEditVacationId] = useState<number | null>(null)
+  const [editVacationName, setEditVacationName] = useState('')
+  const [editVacationCode, setEditVacationCode] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
@@ -2237,6 +2249,18 @@ function DictionariesTab() {
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
+  const updateSkill = async (id: number) => {
+    if (!editSkillName.trim()) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/dictionaries/skills/${id}`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ name: editSkillName.trim() }),
+      })
+      if (res.ok) { setEditSkillId(null); fetchData() }
+      else { const d = await res.json(); setError(d.error) }
+    } catch (err) { setError(getErrorMessage(err)) }
+  }
+
   const deleteSkill = async (id: number) => {
     try {
       await fetch(`${API_BASE_URL}/admin/dictionaries/skills/${id}`, {
@@ -2246,68 +2270,215 @@ function DictionariesTab() {
     } catch {}
   }
 
+  const addVacationType = async () => {
+    if (!newVacationName.trim() || !newVacationCode.trim()) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/dictionaries/vacation-types`, {
+        method: 'POST', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ name: newVacationName.trim(), code: newVacationCode.trim() }),
+      })
+      if (res.ok) { setNewVacationName(''); setNewVacationCode(''); fetchData() }
+      else { const d = await res.json(); setError(d.error) }
+    } catch (err) { setError(getErrorMessage(err)) }
+  }
+
+  const updateVacationType = async (id: number) => {
+    if (!editVacationName.trim()) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/dictionaries/vacation-types/${id}`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ name: editVacationName.trim(), code: editVacationCode.trim() }),
+      })
+      if (res.ok) { setEditVacationId(null); fetchData() }
+      else { const d = await res.json(); setError(d.error) }
+    } catch (err) { setError(getErrorMessage(err)) }
+  }
+
+  const deleteVacationType = async (id: number) => {
+    try {
+      await fetch(`${API_BASE_URL}/dictionaries/vacation-types/${id}`, {
+        method: 'DELETE', headers: getAuthHeaders(),
+      })
+      fetchData()
+    } catch {}
+  }
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
   if (!data) return null
 
+  const dictTabs = [
+    { id: 'positions', name: 'Должности', icon: Briefcase, color: 'from-blue-500 to-indigo-600', count: data.positions.length },
+    { id: 'vacationTypes', name: 'Типы отпусков', icon: Plane, color: 'from-emerald-500 to-teal-600', count: data.vacationTypes.length },
+  ]
+  if (isModuleEnabled('skills')) {
+    dictTabs.push({ id: 'skills', name: 'Навыки', icon: Wrench, color: 'from-violet-500 to-purple-600', count: data.skills.length })
+  }
+
+  const activeTab = dictTabs.find(t => t.id === activeDict) ?? dictTabs[0]
+  const ActiveIcon = activeTab.icon
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <Card>
-        <CardHeader><CardTitle className="text-base">Должности</CardTitle><CardDescription>Используются сотрудниками</CardDescription></CardHeader>
-        <CardContent>
-          <div className="space-y-1 max-h-80 overflow-y-auto">
-            {data.positions.map((p) => (
-              <div key={p.name} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20">
-                <span className="text-sm">{p.name}</span>
-                <Badge className="text-[10px]">{p.count}</Badge>
-              </div>
-            ))}
-            {data.positions.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Пусто</p>}
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-4">
+      {error && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+          <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        {dictTabs.map(tab => {
+          const Icon = tab.icon
+          const isActive = activeDict === tab.id
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveDict(tab.id)}
+              className={cn(
+                'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200',
+                isActive
+                  ? `bg-gradient-to-br ${tab.color} text-white shadow-sm`
+                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-border/40',
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {tab.name}
+              <span className={cn(
+                'text-xs px-1.5 py-0.5 rounded-full',
+                isActive ? 'bg-white/20' : 'bg-muted',
+              )}>{tab.count}</span>
+            </button>
+          )
+        })}
+      </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Типы отпусков</CardTitle><CardDescription>Системный справочник</CardDescription></CardHeader>
-        <CardContent>
-          <div className="space-y-1 max-h-80 overflow-y-auto">
-            {data.vacationTypes.map((vt) => (
-              <div key={vt.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20">
-                <span className="text-sm">{vt.name}</span>
-                <span className="text-[10px] font-mono text-muted-foreground">{vt.code}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {isModuleEnabled('skills') && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Навыки</CardTitle><CardDescription>Каталог навыков компании</CardDescription></CardHeader>
-          <CardContent className="space-y-3">
-            {error && (
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-xs">
-                <AlertTriangle className="h-3 w-3 shrink-0" /> {error}
-                <button onClick={() => setError(null)} className="ml-auto"><X className="h-3 w-3" /></button>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Input placeholder="Новый навык" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} className="h-8 text-sm" />
-              <Button size="sm" onClick={addSkill}><Plus className="h-3.5 w-3.5" /></Button>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', activeTab.color)}>
+              <ActiveIcon className="h-4 w-4" />
             </div>
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {data.skills.map((s) => (
-                <div key={s.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 group">
-                  <span className="text-sm">{s.name}</span>
-                  <button onClick={() => deleteSkill(s.id)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 className="h-3 w-3" />
-                  </button>
+            <div>
+              <CardTitle className="text-base">{activeTab.name}</CardTitle>
+              <CardDescription>
+                {activeDict === 'positions' && 'Должности сотрудников (из профиля)'}
+                {activeDict === 'vacationTypes' && 'Типы отпусков для системы'}
+                {activeDict === 'skills' && 'Каталог навыков компании'}
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {activeDict === 'positions' && (
+            <div className="space-y-0.5">
+              {data.positions.length === 0 && (
+                <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+                  <Briefcase className="h-8 w-8 opacity-20" />
+                  <p className="text-sm">Нет должностей</p>
+                </div>
+              )}
+              {data.positions.map((p, i) => (
+                <div key={p.name} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/30 transition-colors group">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground/50 font-mono w-6">{i + 1}.</span>
+                    <span className="text-sm font-medium">{p.name}</span>
+                  </div>
+                  <Badge className="text-[10px]">{p.count} чел.</Badge>
                 </div>
               ))}
-              {data.skills.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Пусто</p>}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+
+          {activeDict === 'vacationTypes' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Input placeholder="Название" value={newVacationName} onChange={e => setNewVacationName(e.target.value)} className="h-9 text-sm" />
+                <Input placeholder="Код" value={newVacationCode} onChange={e => setNewVacationCode(e.target.value)} className="h-9 text-sm w-24" />
+                <Button size="sm" onClick={addVacationType} disabled={!newVacationName.trim() || !newVacationCode.trim()}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
+                </Button>
+              </div>
+              <div className="space-y-0.5">
+                {data.vacationTypes.length === 0 && (
+                  <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+                    <Plane className="h-8 w-8 opacity-20" />
+                    <p className="text-sm">Нет типов отпусков</p>
+                  </div>
+                )}
+                {data.vacationTypes.map((vt) => (
+                  <div key={vt.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/30 transition-colors group">
+                    {editVacationId === vt.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input value={editVacationName} onChange={e => setEditVacationName(e.target.value)} className="h-8 text-sm" autoFocus />
+                        <Input value={editVacationCode} onChange={e => setEditVacationCode(e.target.value)} className="h-8 text-sm w-20" />
+                        <Button size="sm" variant="outline" onClick={() => updateVacationType(vt.id)}><Check className="h-3.5 w-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditVacationId(null)}><X className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{vt.code}</span>
+                          <span className="text-sm font-medium">{vt.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditVacationId(vt.id); setEditVacationName(vt.name); setEditVacationCode(vt.code) }} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => deleteVacationType(vt.id)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeDict === 'skills' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Input placeholder="Новый навык" value={newSkill} onChange={e => setNewSkill(e.target.value)} className="h-9 text-sm" onKeyDown={e => e.key === 'Enter' && addSkill()} />
+                <Button size="sm" onClick={addSkill} disabled={!newSkill.trim()}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
+                </Button>
+              </div>
+              <div className="space-y-0.5">
+                {data.skills.length === 0 && (
+                  <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+                    <Wrench className="h-8 w-8 opacity-20" />
+                    <p className="text-sm">Нет навыков</p>
+                  </div>
+                )}
+                {data.skills.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/30 transition-colors group">
+                    {editSkillId === s.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input value={editSkillName} onChange={e => setEditSkillName(e.target.value)} className="h-8 text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && updateSkill(s.id)} />
+                        <Button size="sm" variant="outline" onClick={() => updateSkill(s.id)}><Check className="h-3.5 w-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditSkillId(null)}><X className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium">{s.name}</span>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditSkillId(s.id); setEditSkillName(s.name) }} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => deleteSkill(s.id)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
