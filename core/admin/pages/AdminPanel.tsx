@@ -569,16 +569,9 @@ function UsersTab() {
                       <span className="truncate">{user.position || user.email}</span>
                       {user.department_name && <span>· {user.department_name}</span>}
                     </div>
-                  </div>
-                  <button
-                    onClick={e => { e.stopPropagation(); changeRole(user.id, user.role) }}
-                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-border hover:bg-muted/50 transition-colors shrink-0"
-                  >
-                    {ROLE_LABELS[user.role] || user.role}
-                    <Edit3 className="h-3 w-3 text-muted-foreground" />
-                  </button>
-                </div>
-              )
+                                      </div>
+                                    </div>
+                                  )
             })}
           </div>
         </div>
