@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Clock, Sparkles } from 'lucide-react'
-import { getAuthHeaders } from '@/shared/lib/authHeaders'
+import { Clock } from 'lucide-react'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { TimesheetGrid, TimesheetEntry } from '@/shared/components/timesheet/TimesheetGrid'
@@ -89,25 +89,7 @@ export function HRTimesheet() {
   useEffect(() => { loadTimesheet() }, [selectedDept, year, month])
 
   return (
-    <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="h-5 w-5 text-white/70" />
-            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Табель</span>
-          </div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Табель — все отделы</h1>
-          <p className="mt-2 text-white/50 text-sm">Учёт рабочего времени по отделам</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 mt-6">
-          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-            <Clock className="h-3.5 w-3.5" />{departments.length} отделов
-          </div>
-        </div>
-      </div>
-
+    <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <select
           value={selectedDept ?? ''}
