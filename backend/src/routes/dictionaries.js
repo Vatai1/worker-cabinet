@@ -478,6 +478,23 @@ router.get('/positions', authenticateToken, authorizeRoles('hr', 'admin'), async
   res.json(result.rows)
 }))
 
+router.put('/positions/rename', authenticateToken, authorizeRoles('admin'), asyncHandler(async (req, res) => {
+  const { oldName, newName } = req.body
+  if (!oldName?.trim() || !newName?.trim()) throw new ValidationError('Названия обязательны')
+  if (oldName.trim() === newName.trim()) throw new ValidationError('Названия совпадают')
+  const result = await query(
+    'UPDATE users SET position = $1 WHERE position = $2',
+    [newName.trim(), oldName.trim()]
+  )
+  res.json({ success: true, updated: result.rowCount })
+}))
+
+router.delete('/positions/:name', authenticateToken, authorizeRoles('admin'), asyncHandler(async (req, res) => {
+  const name = decodeURIComponent(req.params.name)
+  await query('UPDATE users SET position = NULL WHERE position = $1', [name])
+  res.json({ success: true })
+}))
+
 /**
  * @swagger
  * /dictionaries/doc-templates:
