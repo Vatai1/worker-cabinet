@@ -190,41 +190,6 @@ export function Projects() {
           <p className="mt-2 text-white/45 text-sm">
             {projects.length} {pluralize(projects.length, 'проект', 'проекта', 'проектов')} · {totalMembers} участников
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            {activeCount > 0 && (
-              <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-                <CircleDot className="h-3.5 w-3.5 text-emerald-300" />
-                {activeCount} активных
-              </div>
-            )}
-            {completedCount > 0 && (
-              <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-                <CheckCircle2 className="h-3.5 w-3.5 text-blue-300" />
-                {completedCount} завершённых
-              </div>
-            )}
-            {pausedCount > 0 && (
-              <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-                <Clock className="h-3.5 w-3.5 text-amber-300" />
-                {pausedCount} на паузе
-              </div>
-            )}
-          </div>
-          {topProjects.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-3">
-              {topProjects.map((p, i) => (
-                <button
-                  key={p.id}
-                  onClick={() => navigate(`/projects/${p.id}`)}
-                  className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/15 hover:text-white transition-all duration-200"
-                >
-                  <span className="text-white/40">#{i + 1}</span>
-                  {p.name}
-                  <span className="text-white/40 ml-1">{p.member_count}</span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 

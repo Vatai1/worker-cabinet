@@ -114,26 +114,6 @@ export function Employees() {
           <p className="mt-2 text-white/45 text-sm">
             {user?.department ? `Отдел: ${user.department}` : 'Все сотрудники компании'}
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-              <Users className="h-3.5 w-3.5 text-white/50" />
-              {stats.total} чел.
-            </div>
-            <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-              <UserCheck className="h-3.5 w-3.5 text-emerald-300" />
-              {stats.active} активных
-            </div>
-            {stats.onLeave > 0 && (
-              <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-                <span className="text-amber-300 text-[10px]">●</span>
-                {stats.onLeave} в отпуске
-              </div>
-            )}
-            <div className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-              <Building2 className="h-3.5 w-3.5 text-white/50" />
-              {stats.departments} {stats.departments === 1 ? 'отдел' : stats.departments < 5 ? 'отдела' : 'отделов'}
-            </div>
-          </div>
         </div>
       </div>
 

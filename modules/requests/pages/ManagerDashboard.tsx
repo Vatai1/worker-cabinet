@@ -69,16 +69,6 @@ export function ManagerDashboard() {
           <h1 className="text-3xl font-extrabold tracking-tight">Панель руководителя</h1>
           <p className="mt-2 text-white/50 text-sm">Рассмотрение заявлений от сотрудников подразделения</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 mt-6">
-          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-            <Clock className="h-3.5 w-3.5" />
-            {pendingRequests.length} на рассмотрении
-          </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-            <Users className="h-3.5 w-3.5" />
-            {subordinateRequests.length} всего заявок
-          </div>
-        </div>
       </div>
 
       <div className="page-grid">
