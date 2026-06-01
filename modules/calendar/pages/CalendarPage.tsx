@@ -460,7 +460,7 @@ export function CalendarPage() {
   return (
     <div className="cr">
       <style>{CSS}</style>
-      <div className="relative overflow-hidden gradient-primary text-white animate-slide-up rounded-b-2xl" style={{flexShrink:0,padding:'20px 24px',minHeight:0}}>
+      <div className="relative overflow-hidden gradient-primary text-white animate-slide-up rounded-2xl" style={{flexShrink:0,padding:'20px 24px',minHeight:0}}>
         <div className="absolute -top-20 -right-20 w-48 h-48 bg-white/5 rounded-full" />
         <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-white/5 rounded-full" />
         <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-white/3 rounded-full blur-2xl" />
