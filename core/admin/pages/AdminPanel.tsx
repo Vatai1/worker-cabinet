@@ -643,7 +643,7 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
       .catch(() => {})
     fetch(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() })
       .then(r => r.json())
-      .then(data => setPositions(data.positions || []))
+      .then(data => setPositions((Array.isArray(data) ? data : data.positions || []).map((p: { name: string }) => p.name)))
       .catch(() => {})
   }, [])
 
