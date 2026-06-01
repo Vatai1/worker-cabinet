@@ -631,12 +631,19 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
     cabinet: user.cabinet || '',
   })
   const [saving, setSaving] = useState(false)
+  const [showDeptPicker, setShowDeptPicker] = useState(false)
+  const [showPositionPicker, setShowPositionPicker] = useState(false)
+  const [positions, setPositions] = useState<string[]>([])
   const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(data => setDepartments(data.departments || data))
+      .catch(() => {})
+    fetch(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(data => setPositions(data.positions || []))
       .catch(() => {})
   }, [])
 
@@ -746,22 +753,59 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1.5">Должность</label>
-                <Input
-                  placeholder="Должность"
-                  value={editForm.position}
-                  onChange={e => setEditForm(f => ({ ...f, position: e.target.value }))}
-                />
+                <button
+                  onClick={() => setShowPositionPicker(true)}
+                  className="w-full flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                    <span className={editForm.position ? 'text-foreground' : 'text-muted-foreground'}>
+                      {editForm.position || 'Выбрать должность...'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {editForm.position && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={e => { e.stopPropagation(); setEditForm(f => ({ ...f, position: '' })) }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); setEditForm(f => ({ ...f, position: '' })) } }}
+                        className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </button>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Отдел</label>
-                <select
-                  value={String(editForm.department_id)}
-                  onChange={e => setEditForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : '' }))}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                <button
+                  onClick={() => setShowDeptPicker(true)}
+                  className="w-full flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors text-left"
                 >
-                  <option value="">Без отдела</option>
-                  {departments.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
-                </select>
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    <span className={editForm.department_id ? 'text-foreground' : 'text-muted-foreground'}>
+                      {editForm.department_id ? departments.find(d => d.id === Number(editForm.department_id))?.name || 'Отдел' : 'Выбрать отдел...'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {editForm.department_id && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={e => { e.stopPropagation(); setEditForm(f => ({ ...f, department_id: '' })) }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); setEditForm(f => ({ ...f, department_id: '' })) } }}
+                        className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </button>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Телефон</label>
@@ -855,6 +899,23 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
           )}
         </div>
       </div>
+
+      {showDeptPicker && (
+        <DepartmentPickerModal
+          departments={departments}
+          selectedId={editForm.department_id ? Number(editForm.department_id) : null}
+          onSelect={id => { setEditForm(f => ({ ...f, department_id: id ?? '' })); setShowDeptPicker(false) }}
+          onClose={() => setShowDeptPicker(false)}
+        />
+      )}
+      {showPositionPicker && (
+        <PositionPickerModal
+          positions={positions}
+          selected={editForm.position}
+          onSelect={pos => { setEditForm(f => ({ ...f, position: pos })); setShowPositionPicker(false) }}
+          onClose={() => setShowPositionPicker(false)}
+        />
+      )}
     </div>
   )
 }
@@ -1295,6 +1356,151 @@ function DepartmentsTab() {
           onClose={() => setShowPicker(null)}
         />
       )}
+    </div>
+  )
+}
+
+function DepartmentPickerModal({ departments, selectedId, onSelect, onClose }: {
+  departments: { id: number; name: string }[]
+  selectedId: number | null
+  onSelect: (id: number | null) => void
+  onClose: () => void
+}) {
+  const [search, setSearch] = useState('')
+
+  const filtered = departments.filter(d => {
+    if (!search.trim()) return true
+    return d.name.toLowerCase().includes(search.toLowerCase())
+  })
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-border">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-foreground">Выбор отдела</h3>
+            <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              autoFocus
+              placeholder="Поиск отдела..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2">
+          <button
+            onClick={() => onSelect(null)}
+            className={cn(
+              'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
+              selectedId === null ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/40',
+            )}
+          >
+            <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground shrink-0">
+              <X className="h-4 w-4" />
+            </div>
+            <span className="text-sm text-muted-foreground">Без отдела</span>
+          </button>
+          {filtered.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">{search ? 'Ничего не найдено' : 'Нет отделов'}</div>
+          ) : (
+            <div className="space-y-0.5 mt-1">
+              {filtered.map(d => (
+                <button
+                  key={d.id}
+                  onClick={() => onSelect(d.id)}
+                  className={cn(
+                    'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
+                    selectedId === d.id ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/40',
+                  )}
+                >
+                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-500/5 flex items-center justify-center text-blue-600 shrink-0">
+                    <Building2 className="h-4 w-4" />
+                  </div>
+                  <span className="text-sm font-medium">{d.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {search && (
+          <div className="p-3 border-t border-border text-xs text-muted-foreground text-center">
+            Найдено: {filtered.length} из {departments.length}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PositionPickerModal({ positions, selected, onSelect, onClose }: {
+  positions: string[]
+  selected: string
+  onSelect: (position: string) => void
+  onClose: () => void
+}) {
+  const [search, setSearch] = useState('')
+
+  const filtered = positions.filter(p => {
+    if (!search.trim()) return true
+    return p.toLowerCase().includes(search.toLowerCase())
+  })
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-border">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-foreground">Выбор должности</h3>
+            <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              autoFocus
+              placeholder="Поиск должности..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2">
+          {filtered.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              {search ? 'Ничего не найдено' : 'Нет должностей'}
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {filtered.map(pos => (
+                <button
+                  key={pos}
+                  onClick={() => onSelect(pos)}
+                  className={cn(
+                    'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
+                    selected === pos ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/40',
+                  )}
+                >
+                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500/20 to-violet-500/5 flex items-center justify-center text-violet-600 shrink-0">
+                    <Briefcase className="h-4 w-4" />
+                  </div>
+                  <span className="text-sm font-medium">{pos}</span>
+                  {selected === pos && <Check className="h-4 w-4 text-primary ml-auto" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {search && (
+          <div className="p-3 border-t border-border text-xs text-muted-foreground text-center">
+            Найдено: {filtered.length} из {positions.length}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
