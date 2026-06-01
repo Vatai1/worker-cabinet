@@ -22,6 +22,7 @@ import {
   HardDrive, Server, AlertCircle, Unlock, UserPlus, Boxes,
   TrendingUp, Clock3, FolderKanban, CalendarX, Settings,
   Calendar, Zap, Briefcase, Wrench, Plane,
+  Pencil, Save,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry, AdminStats } from '@/core/admin/types/admin'
 
@@ -618,10 +619,56 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
   onChangeStatus: (status: string) => void
   onResetPassword: (password: string) => void
 }) {
-  const [activeSection, setActiveSection] = useState<'info' | 'role' | 'password'>('info')
+  const [activeSection, setActiveSection] = useState<'info' | 'edit' | 'role' | 'password'>('info')
   const [newPassword, setNewPassword] = useState('')
   const [selectedRole, setSelectedRole] = useState(user.role)
+  const [departments, setDepartments] = useState<{ id: number; name: string }[]>([])
+  const [editForm, setEditForm] = useState({
+    position: user.position || '',
+    department_id: user.department_id ?? '',
+    phone: user.phone || '',
+    office: user.office || '',
+    cabinet: user.cabinet || '',
+  })
+  const [saving, setSaving] = useState(false)
   const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(data => setDepartments(data.departments || data))
+      .catch(() => {})
+  }, [])
+
+  const saveEdit = async () => {
+    const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Обновить данные ${user.first_name} ${user.last_name}?`, confirmText: 'Сохранить' })
+    if (!confirmed) return
+    setSaving(true)
+    try {
+      const body: Record<string, unknown> = {
+        position: editForm.position,
+        phone: editForm.phone,
+        office: editForm.office,
+        cabinet: editForm.cabinet,
+      }
+      if (editForm.department_id !== '') body.department_id = Number(editForm.department_id)
+      else body.department_id = null
+      const res = await fetch(`${API_BASE_URL}/admin/users/${user.id}`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        onClose()
+      } else {
+        const d = await res.json()
+        throw new Error(d.error || 'Ошибка')
+      }
+    } catch (err) {
+      alert(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
@@ -646,6 +693,7 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
         <div className="flex border-b border-border">
           {([
             { id: 'info' as const, name: 'Профиль', icon: Users },
+            { id: 'edit' as const, name: 'Изменить', icon: Pencil },
             { id: 'role' as const, name: 'Роль', icon: ShieldCheck },
             { id: 'password' as const, name: 'Пароль', icon: Lock },
           ]).map(tab => {
@@ -691,6 +739,60 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
                   )}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {activeSection === 'edit' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Должность</label>
+                <Input
+                  placeholder="Должность"
+                  value={editForm.position}
+                  onChange={e => setEditForm(f => ({ ...f, position: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Отдел</label>
+                <select
+                  value={String(editForm.department_id)}
+                  onChange={e => setEditForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : '' }))}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                >
+                  <option value="">Без отдела</option>
+                  {departments.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Телефон</label>
+                <Input
+                  placeholder="+7 (___) ___-__-__"
+                  value={editForm.phone}
+                  onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Офис</label>
+                  <Input
+                    placeholder="Адрес офиса"
+                    value={editForm.office}
+                    onChange={e => setEditForm(f => ({ ...f, office: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Кабинет</label>
+                  <Input
+                    placeholder="Номер кабинета"
+                    value={editForm.cabinet}
+                    onChange={e => setEditForm(f => ({ ...f, cabinet: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <Button onClick={saveEdit} disabled={saving} className="w-full">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
+                Сохранить
+              </Button>
             </div>
           )}
 
