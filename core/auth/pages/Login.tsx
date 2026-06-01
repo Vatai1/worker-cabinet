@@ -50,15 +50,8 @@ export function Login() {
   }
 
   const showDemo = loaded ? settings.login_demo_buttons !== 'false' : true
-  const showStats = loaded ? settings.login_show_stats !== 'false' : true
   const title = settings.login_title || 'Личный кабинет сотрудника'
   const subtitle = settings.login_subtitle || 'Единая платформа для управления персоналом, отпусками и документами'
-  const s1v = settings.login_stat_1_value || '24'
-  const s1l = settings.login_stat_1_label || 'дня отпуска'
-  const s2v = settings.login_stat_2_value || '156'
-  const s2l = settings.login_stat_2_label || 'сотрудников'
-  const s3v = settings.login_stat_3_value || '12'
-  const s3l = settings.login_stat_3_label || 'отделов'
 
   return (
     <div className="flex min-h-screen relative overflow-hidden">
@@ -74,22 +67,6 @@ export function Login() {
           </div>
           <h1 className="text-4xl font-extrabold mb-3 leading-tight">{title}</h1>
           <p className="text-white/70 text-lg leading-relaxed">{subtitle}</p>
-          {showStats && (
-          <div className="grid grid-cols-3 gap-4 mt-10">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 ring-1 ring-white/10">
-              <p className="text-3xl font-extrabold">{s1v}</p>
-              <p className="text-white/60 text-xs mt-1">{s1l}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 ring-1 ring-white/10">
-              <p className="text-3xl font-extrabold">{s2v}</p>
-              <p className="text-white/60 text-xs mt-1">{s2l}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 ring-1 ring-white/10">
-              <p className="text-3xl font-extrabold">{s3v}</p>
-              <p className="text-white/60 text-xs mt-1">{s3l}</p>
-            </div>
-          </div>
-          )}
         </div>
       </div>
 
