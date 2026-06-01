@@ -545,10 +545,10 @@ function UsersTab() {
               aria-checked={selectedIds.size === users.length && users.length > 0}
               tabIndex={0}
               className={cn(
-                'h-[18px] w-[18px] rounded-md flex items-center justify-center transition-all shrink-0',
+                'h-[18px] w-[18px] rounded-md flex items-center justify-center shrink-0 border-2 transition-colors',
                 selectedIds.size === users.length && users.length > 0
-                  ? 'bg-primary shadow-sm shadow-primary/20'
-                  : 'border-2 border-muted-foreground/25 hover:border-muted-foreground/40',
+                  ? 'bg-primary border-primary'
+                  : 'border-muted-foreground/25 hover:border-muted-foreground/40',
               )}
               onClick={toggleAll}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAll() } }}
@@ -578,10 +578,10 @@ function UsersTab() {
                     aria-checked={selected}
                     tabIndex={0}
                     className={cn(
-                      'h-[18px] w-[18px] rounded-md flex items-center justify-center transition-all shrink-0',
+                      'h-[18px] w-[18px] rounded-md flex items-center justify-center shrink-0 border-2 transition-colors',
                       selected
-                        ? 'bg-primary shadow-sm shadow-primary/20'
-                        : 'border-2 border-muted-foreground/25 group-hover:border-muted-foreground/40',
+                        ? 'bg-primary border-primary'
+                        : 'border-muted-foreground/25 group-hover:border-muted-foreground/40',
                     )}
                     onClick={e => { e.stopPropagation(); toggleSelect(user.id) }}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSelect(user.id) } }}
