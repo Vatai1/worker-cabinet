@@ -269,14 +269,14 @@ export function CalendarPage() {
     const fd=(new Date(y,m,1).getDay()+6)%7
     const prevDim=new Date(y,m,0).getDate()
     return (
-      <div style={{padding:16}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+      <div style={{padding:20}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
           <button onClick={()=>setMiniMonth(new Date(y,m-1,1))} className="cmn"><ChevronLeft size={14}/></button>
           <span style={{fontSize:13,fontWeight:700,color:TX,letterSpacing:'-0.01em'}}>{MONTHS[m]} {y}</span>
           <button onClick={()=>setMiniMonth(new Date(y,m+1,1))} className="cmn"><ChevronRight size={14}/></button>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)'}}>
-          {WD.map(d=><div key={d} style={{textAlign:'center',fontSize:10,fontWeight:600,color:TX2,letterSpacing:'0.04em',paddingBottom:6}}>{d}</div>)}
+          {WD.map(d=><div key={d} style={{textAlign:'center',fontSize:10,fontWeight:600,color:TX2,letterSpacing:'0.04em',paddingBottom:8}}>{d}</div>)}
           {Array.from({length:fd}).map((_,i)=><button key={'p'+i} className="cmc" style={{color:TX3,opacity:0.3}}>{prevDim-fd+i+1}</button>)}
           {Array.from({length:dim},(_,i)=>i+1).map(day=>{
             const dk=y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0')
@@ -284,9 +284,9 @@ export function CalendarPage() {
             const has=(vacByDate[dk]?.length||0)+(olByDate[dk]?.length||0)>0
             return (
               <button key={day} onClick={()=>{setFocus(new Date(y,m,day));setSelectedDate(dk)}} className="cmc"
-                style={isT&&!isS?{background:RED,color:'#fff',fontWeight:700}:isS?{boxShadow:'0 0 0 2px '+BLUE,fontWeight:600,color:TX}:has?{fontWeight:600,color:TX}:{color:TX2}}>
+                style={isT&&!isS?{boxShadow:'0 0 0 2px '+RED,color:RED,fontWeight:600}:isS?{background:'hsl(var(--primary) / 0.12)',fontWeight:600,color:'hsl(var(--primary))'}:has?{fontWeight:600,color:TX}:{color:TX2}}>
                 {day}
-                {has&&!isT&&!isS&&<span style={{position:'absolute',bottom:2,left:'50%',transform:'translateX(-50%)',width:3,height:3,borderRadius:'50%',background:BLUE}}/>}
+                {has&&!isT&&!isS&&<span style={{position:'absolute',bottom:2,left:'50%',transform:'translateX(-50%)',width:4,height:4,borderRadius:'50%',background:BLUE}}/>}
               </button>
             )
           })}
@@ -302,7 +302,7 @@ export function CalendarPage() {
         {mini()}
         <div className="css">
           <div className="csl">КАЛЕНДАРИ</div>
-          <div style={{display:'flex',flexDirection:'column',gap:2}}>
+          <div style={{display:'flex',flexDirection:'column',gap:3}}>
             {[
               {on:showVac,set:()=>setShowVac(!showVac),col:GREEN,lbl:'Отпуска'},
               {on:showPend,set:()=>setShowPend(!showPend),col:PURPLE,lbl:'На согласовании'},
@@ -310,22 +310,22 @@ export function CalendarPage() {
             ].map(t=>(
               <div key={t.lbl} className="ctr" onClick={t.set}>
                 <div className="ctt" style={{background:t.on?t.col:TX3}}>
-                  <div className="cth" style={{transform:t.on?'translateX(14px)':'translateX(0)'}}/>
+                  <div className="cth" style={{transform:t.on?'translateX(16px)':'translateX(0)'}}/>
                 </div>
-                <div style={{width:8,height:8,borderRadius:2,background:t.col,flexShrink:0}}/>
-                <span style={{fontSize:12,color:TX}}>{t.lbl}</span>
+                <div style={{width:10,height:10,borderRadius:3,background:t.col,flexShrink:0}}/>
+                <span style={{fontSize:13,color:TX}}>{t.lbl}</span>
               </div>
             ))}
           </div>
         </div>
         <div className="css">
           <div className="csl">ИНТЕГРАЦИЯ</div>
-          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:8}}>
-            <div style={{fontSize:11,fontWeight:600,color:TX}}>Exchange (EWS)</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:600,color:TX}}>Exchange (EWS)</div>
             {ewsConnected ? (
               <div style={{display:'flex',flexDirection:'column',gap:4}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:GREEN}}>
-                  <span style={{width:5,height:5,borderRadius:'50%',background:GREEN,display:'inline-block'}}/> {ewsForm.username}
+                  <span style={{width:6,height:6,borderRadius:'50%',background:GREEN,display:'inline-block'}}/> {ewsForm.username}
                 </div>
                 <button onClick={disconnectEws} className="cob cob2"><Unlink size={12}/> Отключить</button>
               </div>
@@ -333,11 +333,11 @@ export function CalendarPage() {
               <button onClick={()=>setShowEwsModal(true)} className="coc"><Link2 size={14}/> Подключить</button>
             )}
           </div>
-          <div style={{fontSize:11,fontWeight:600,color:TX,marginBottom:4}}>Outlook Online</div>
+          <div style={{fontSize:12,fontWeight:600,color:TX,marginBottom:6}}>Outlook Online</div>
           {outlookConnected ? (
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
               <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:GREEN}}>
-                <span style={{width:5,height:5,borderRadius:'50%',background:GREEN,display:'inline-block'}}/> Синхронизировано
+                <span style={{width:6,height:6,borderRadius:'50%',background:GREEN,display:'inline-block'}}/> Синхронизировано
               </div>
               <button onClick={doSync} className="cob">Синхронизировать</button>
               <button onClick={disconnectOL} className="cob cob2"><Unlink size={12}/> Отключить</button>
@@ -495,7 +495,7 @@ export function CalendarPage() {
         </div>
       </div>
       <div className="ch">
-        <div style={{display:'flex',alignItems:'center',gap:4}}>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="cib">
             <ChevronDown size={14} style={{color:TX2,transition:'transform 0.2s',transform:sidebarOpen?'rotate(180deg)':'rotate(0)'}}/>
           </button>
@@ -504,7 +504,7 @@ export function CalendarPage() {
           <button onClick={()=>nav(1)} className="cib"><ChevronRight size={18}/></button>
           <h1 className="cti">{title}</h1>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div className="cts">
             {(['month','week','day'] as ViewMode[]).map(m=>(
               <button key={m} onClick={()=>{setView(m);setAnimKey(k=>k+1);setSlideDir(0)}}
@@ -971,62 +971,67 @@ export function CalendarPage() {
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 :root{
-  --cal-bg:#F5F5F7;--cal-surface:#FFFFFF;--cal-surface-h:#F0F0F2;
-  --cal-tx:#1D1D1F;--cal-tx2:#6E6E73;--cal-tx3:#AEAEB2;
-  --cal-bd:rgba(0,0,0,0.08);--cal-bl:rgba(0,0,0,0.05);
-  --cal-hover:rgba(0,0,0,0.03);--cal-cell:rgba(0,0,0,0.02);
-  --cal-toggled-thumb:#fff;--cal-pill-shadow:rgba(0,0,0,0.1);
+  --cal-bg:hsl(var(--background));--cal-surface:hsl(var(--card));--cal-surface-h:hsl(var(--secondary));
+  --cal-tx:hsl(var(--foreground));--cal-tx2:hsl(var(--muted-foreground));--cal-tx3:hsl(var(--border));
+  --cal-bd:hsl(var(--border));--cal-bl:hsl(var(--border) / 0.5);
+  --cal-hover:hsl(var(--muted) / 0.7);--cal-cell:hsl(var(--muted) / 0.5);
+  --cal-toggled-thumb:#fff;--cal-pill-shadow:hsl(var(--foreground) / 0.08);
+  --cal-accent:hsl(var(--primary));--cal-accent-fg:hsl(var(--primary-foreground));
+  --cal-accent-subtle:hsl(var(--primary) / 0.1);
 }
 .dark{
-  --cal-bg:#0A0A0F;--cal-surface:#14141A;--cal-surface-h:#1C1C24;
-  --cal-tx:#F5F5F7;--cal-tx2:#6E6E73;--cal-tx3:#48484A;
-  --cal-bd:rgba(255,255,255,0.06);--cal-bl:rgba(255,255,255,0.04);
-  --cal-hover:rgba(255,255,255,0.04);--cal-cell:rgba(255,255,255,0.015);
-  --cal-toggled-thumb:#fff;--cal-pill-shadow:rgba(0,0,0,0.3);
+  --cal-bg:hsl(var(--background));--cal-surface:hsl(var(--card));--cal-surface-h:hsl(var(--secondary));
+  --cal-tx:hsl(var(--foreground));--cal-tx2:hsl(var(--muted-foreground));--cal-tx3:hsl(var(--border));
+  --cal-bd:hsl(var(--border));--cal-bl:hsl(var(--border) / 0.5);
+  --cal-hover:hsl(var(--muted) / 0.7);--cal-cell:hsl(var(--muted) / 0.5);
+  --cal-toggled-thumb:#fff;--cal-pill-shadow:hsl(var(--foreground) / 0.2);
+  --cal-accent:hsl(var(--primary));--cal-accent-fg:hsl(var(--primary-foreground));
+  --cal-accent-subtle:hsl(var(--primary) / 0.15);
 }
-.cr{display:flex;flex-direction:column;height:calc(100vh - 80px);background:var(--cal-bg);color:var(--cal-tx);font-family:'Inter',system-ui,sans-serif;animation:cfi .3s ease-out}
-.ch{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--cal-bd);flex-shrink:0}
-.cib{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:none;background:transparent;color:var(--cal-tx2);cursor:pointer;transition:all .15s}
-.cib:hover{background:var(--cal-surface-h);color:var(--cal-tx)}
-.cib:disabled{opacity:.4;cursor:default}
-.ctb{font-size:12px;font-weight:500;color:var(--cal-tx2);background:none;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;transition:all .15s}
+.cr{display:flex;flex-direction:column;height:calc(100vh - 80px);background:var(--cal-bg);color:var(--cal-tx);font-family:'Inter',system-ui,sans-serif;animation:cfi .35s cubic-bezier(.16,1,.3,1)}
+.ch{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--cal-bd);flex-shrink:0;background:var(--cal-surface)}
+.cib{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;border:none;background:transparent;color:var(--cal-tx2);cursor:pointer;transition:all .2s cubic-bezier(.16,1,.3,1)}
+.cib:hover{background:var(--cal-surface-h);color:var(--cal-tx);transform:scale(1.05)}
+.cib:active{transform:scale(.95)}
+.cib:disabled{opacity:.4;cursor:default;transform:none}
+.ctb{font-size:12px;font-weight:500;color:var(--cal-tx2);background:none;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;transition:all .2s cubic-bezier(.16,1,.3,1)}
 .ctb:hover{background:var(--cal-surface-h);color:var(--cal-tx)}
-.cti{font-size:18px;font-weight:700;letter-spacing:-.02em;margin-left:8px;color:var(--cal-tx)}
-.cts{display:flex;background:var(--cal-surface);border-radius:8px;padding:2px;border:1px solid var(--cal-bd)}
-.cta{font-size:11px;font-weight:500;padding:5px 14px;border-radius:6px;border:none;background:transparent;color:var(--cal-tx2);cursor:pointer;transition:all .2s}
-.cta:hover{color:var(--cal-tx)}
-.ctaa{background:var(--cal-surface-h);color:var(--cal-tx);font-weight:600}
-.cs{width:260px;flex-shrink:0;border-right:1px solid var(--cal-bd);background:var(--cal-surface);overflow-y:auto}
-.css{padding:12px 16px;border-top:1px solid var(--cal-bd)}
-.csl{font-size:11px;font-weight:600;color:var(--cal-tx2);letter-spacing:.05em;margin-bottom:8px}
-.cmn{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;border:none;background:transparent;color:var(--cal-tx2);cursor:pointer;transition:all .15s}
+.cti{font-size:17px;font-weight:700;letter-spacing:-.03em;margin-left:10px;color:var(--cal-tx);font-feature-settings:'cv02','cv03','cv04','cv11'}
+.cts{display:flex;background:var(--cal-surface);border-radius:10px;padding:3px;border:1px solid var(--cal-bd);gap:2px}
+.cta{font-size:12px;font-weight:500;padding:6px 16px;border-radius:8px;border:none;background:transparent;color:var(--cal-tx2);cursor:pointer;transition:all .25s cubic-bezier(.16,1,.3,1)}
+.cta:hover{color:var(--cal-tx);background:var(--cal-hover)}
+.ctaa{background:var(--cal-surface-h);color:var(--cal-tx);font-weight:600;box-shadow:0 1px 3px hsl(var(--foreground) / 0.06)}
+.cs{width:268px;flex-shrink:0;border-right:1px solid var(--cal-bd);background:var(--cal-surface);overflow-y:auto;scrollbar-width:thin}
+.css{padding:14px 16px;border-top:1px solid var(--cal-bd)}
+.csl{font-size:10px;font-weight:700;color:var(--cal-tx3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.cmn{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;border:none;background:transparent;color:var(--cal-tx2);cursor:pointer;transition:all .2s cubic-bezier(.16,1,.3,1)}
 .cmn:hover{background:var(--cal-surface-h);color:var(--cal-tx)}
-.cmc{position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:12px;border-radius:50%;border:none;background:transparent;cursor:pointer;margin:1px auto;transition:all .15s}
-.cmc:hover{background:var(--cal-hover)}
-.ctr{display:flex;align-items:center;gap:8px;padding:6px 4px;border-radius:6px;cursor:pointer;transition:background .15s;user-select:none}
+.cmc{position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;border-radius:50%;border:none;background:transparent;cursor:pointer;margin:1px auto;transition:all .2s cubic-bezier(.16,1,.3,1)}
+.cmc:hover{background:var(--cal-hover);transform:scale(1.08)}
+.ctr{display:flex;align-items:center;gap:10px;padding:7px 6px;border-radius:8px;cursor:pointer;transition:all .2s cubic-bezier(.16,1,.3,1);user-select:none}
 .ctr:hover{background:var(--cal-hover)}
-.ctt{width:30px;height:16px;border-radius:8px;position:relative;transition:background .25s;flex-shrink:0}
-.cth{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--cal-toggled-thumb);transition:transform .25s cubic-bezier(.4,0,.2,1)}
-.cob{font-size:11px;color:var(--cal-tx2);background:none;border:1px solid var(--cal-bd);padding:5px 10px;border-radius:6px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:4px;width:fit-content}
-.cob:hover{background:var(--cal-surface-h);color:var(--cal-tx);border-color:var(--cal-bd)}
-.cob2{color:var(--cal-tx3);border-color:transparent}
-.cob2:hover{color:#FF3B30}
-.coc{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:#007AFF;background:none;border:none;cursor:pointer;padding:8px 0;transition:all .2s}
-.coc:hover{text-shadow:0 0 20px rgba(0,122,255,0.25)}
+.ctt{width:34px;height:18px;border-radius:9px;position:relative;transition:background .3s cubic-bezier(.16,1,.3,1);flex-shrink:0;box-shadow:inset 0 1px 2px hsl(var(--foreground) / 0.08)}
+.cth{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--cal-toggled-thumb);transition:transform .3s cubic-bezier(.68,-.55,.27,1.55);box-shadow:0 1px 3px hsl(var(--foreground) / 0.15)}
+.cob{font-size:11px;color:var(--cal-tx2);background:var(--cal-surface);border:1px solid var(--cal-bd);padding:6px 12px;border-radius:8px;cursor:pointer;transition:all .2s cubic-bezier(.16,1,.3,1);display:flex;align-items:center;gap:5px;width:fit-content}
+.cob:hover{background:var(--cal-surface-h);color:var(--cal-tx);border-color:var(--cal-tx3);box-shadow:0 1px 3px hsl(var(--foreground) / 0.04)}
+.cob2{color:var(--cal-tx3);border-color:transparent;background:transparent}
+.cob2:hover{color:#FF3B30;background:hsl(0 72% 51% / 0.06);border-color:transparent;box-shadow:none}
+.coc{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--cal-accent);background:none;border:none;cursor:pointer;padding:8px 0;transition:all .2s cubic-bezier(.16,1,.3,1)}
+.coc:hover{opacity:.8}
 .cm{flex:1;overflow:auto}
 .ct{display:flex;flex-direction:column;overflow:hidden}
-.cmc2{min-height:100px;border-bottom:1px solid var(--cal-bl);border-right:1px solid var(--cal-bl);padding:6px;cursor:pointer;transition:background .15s}
+.cmc2{min-height:100px;border-bottom:1px solid var(--cal-bl);border-right:1px solid var(--cal-bl);padding:6px;cursor:pointer;transition:background .2s cubic-bezier(.16,1,.3,1)}
 .cmc2:hover{background:var(--cal-hover)}
-.cp{font-size:11px;line-height:16px;padding:0 6px;border-radius:4px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:transform .15s;box-shadow:0 1px 2px var(--cal-pill-shadow)}
-.cp:hover{transform:scale(1.02)}
-.cte{position:absolute;left:3px;right:3px;border-radius:6px;padding:4px 8px;overflow:hidden;z-index:10;color:#fff;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 2px 8px var(--cal-pill-shadow)}
-.cte:hover{transform:scale(1.02);box-shadow:0 4px 12px var(--cal-pill-shadow)}
+.cp{font-size:11px;line-height:16px;padding:1px 8px;border-radius:9999px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:all .2s cubic-bezier(.16,1,.3,1);box-shadow:0 1px 2px var(--cal-pill-shadow)}
+.cp:hover{transform:scale(1.03);box-shadow:0 2px 6px var(--cal-pill-shadow)}
+.cte{position:absolute;left:3px;right:3px;border-radius:8px;padding:5px 10px;overflow:hidden;z-index:10;color:#fff;cursor:pointer;transition:all .2s cubic-bezier(.16,1,.3,1);box-shadow:0 2px 6px var(--cal-pill-shadow)}
+.cte:hover{transform:scale(1.015);box-shadow:0 4px 14px var(--cal-pill-shadow);z-index:11}
 .cspin{animation:csp .8s linear infinite}
 .ca{animation-duration:.25s;animation-timing-function:ease-out;animation-fill-mode:both}
-@keyframes cfi{from{opacity:0}to{opacity:1}}
+@keyframes cfi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 @keyframes calFade{from{opacity:0}to{opacity:1}}
-@keyframes calSlideL{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
-@keyframes calSlideR{from{opacity:0;transform:translateX(-30px)}to{opacity:1;transform:translateX(0)}}
+@keyframes calSlideL{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes calSlideR{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
 @keyframes csp{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @media(max-width:1024px){.cs{display:none}}
 `
