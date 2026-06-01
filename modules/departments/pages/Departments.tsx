@@ -92,21 +92,6 @@ export function Departments() {
           <p className="mt-2 text-white/45 text-sm">
             {departments.length} {departments.length === 1 ? 'отдел' : 'отделов'} · {totalEmployees} сотрудников в компании
           </p>
-          {topDepts.length > 0 && (
-            <div className="mt-6 flex flex-wrap gap-3">
-              {topDepts.map((d, i) => (
-                <button
-                  key={d.id}
-                  onClick={() => navigate(`/departments/${d.id}`)}
-                  className="flex items-center gap-2 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/15 hover:text-white transition-all duration-200"
-                >
-                  <span className="text-white/40">#{i + 1}</span>
-                  {d.name}
-                  <span className="text-white/40 ml-1">{d.employee_count}</span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 

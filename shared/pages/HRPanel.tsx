@@ -87,27 +87,7 @@ export function HRPanel() {
             <Sparkles className="h-6 w-6 text-white/80" />
             <h1 className="text-2xl font-bold text-white">HR-панель</h1>
           </div>
-          <p className="text-sm text-white/60 mb-6">Управление персоналом и процессами</p>
-          {stats && (
-            <div className="flex flex-wrap gap-3">
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
-                <Users className="h-3.5 w-3.5" />
-                <span className="font-semibold">{stats.totalUsers}</span> сотрудников
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
-                <ClipboardList className="h-3.5 w-3.5" />
-                <span className="font-semibold">{stats.activeSurveys ?? 0}</span> активных опросов
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
-                <Plane className="h-3.5 w-3.5" />
-                <span className="font-semibold">{stats.pendingVacations ?? 0}</span> заявок на отпуск
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
-                <Network className="h-3.5 w-3.5" />
-                <span className="font-semibold">{stats.totalDepartments}</span> отделов
-              </span>
-            </div>
-          )}
+          <p className="text-sm text-white/60">Управление персоналом и процессами</p>
         </div>
       </div>
 

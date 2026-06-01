@@ -267,27 +267,7 @@ export function AdminPanel() {
             <Sparkles className="h-6 w-6 text-white/80" />
             <h1 className="text-2xl font-bold text-white">Администрирование</h1>
           </div>
-          <p className="text-sm text-white/60 mb-6">Управление ролями, доступами и настройками системы</p>
-          {stats && (
-            <div className="flex flex-wrap gap-3">
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
-                <Users className="h-3.5 w-3.5" />
-                <span className="font-semibold">{stats.totalUsers}</span> пользователей
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
-                <Key className="h-3.5 w-3.5" />
-                <span className="font-semibold">{stats.totalRoles}</span> ролей
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
-                <Building2 className="h-3.5 w-3.5" />
-                <span className="font-semibold">{stats.totalDepartments}</span> отделов
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm text-white/90">
-                <Activity className="h-3.5 w-3.5" />
-                <span className="font-semibold">{stats.auditToday}</span> действий сегодня
-              </span>
-            </div>
-          )}
+          <p className="text-sm text-white/60">Управление ролями, доступами и настройками системы</p>
         </div>
       </div>
 
