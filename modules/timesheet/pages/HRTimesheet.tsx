@@ -52,7 +52,25 @@ export function HRTimesheet() {
       const res = await fetch(`${API_BASE_URL}/timesheet`, { headers: getAuthHeaders() })
       if (!res.ok) throw new Error('Ошибка загрузки')
       const list: Timesheet[] = await res.json()
-      const found = list.find(t => t.department_id === selectedDept && t.year === year && t.month === month) ?? null
+      let found = list.find(t => t.department_id === selectedDept && t.year === year && t.month === month) ?? null
+
+      if (!found && user?.role === 'admin') {
+        try {
+          const createRes = await fetch(`${API_BASE_URL}/timesheet/auto-create`, {
+            method: 'POST',
+            headers: getAuthHeadersWithContentType(),
+            body: JSON.stringify({ year, month }),
+          })
+          if (createRes.ok || createRes.status === 201) {
+            const list2Res = await fetch(`${API_BASE_URL}/timesheet`, { headers: getAuthHeaders() })
+            if (list2Res.ok) {
+              const list2: Timesheet[] = await list2Res.json()
+              found = list2.find(t => t.department_id === selectedDept && t.year === year && t.month === month) ?? null
+            }
+          }
+        } catch {}
+      }
+
       setTimesheet(found)
       if (found) {
         const res2 = await fetch(`${API_BASE_URL}/timesheet/${found.id}`, { headers: getAuthHeaders() })

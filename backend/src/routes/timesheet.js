@@ -11,6 +11,46 @@ const router = express.Router()
 router.use(authenticateToken)
 router.use(authorizeRoles('manager', 'hr', 'admin'))
 
+router.post('/auto-create', authorizeRoles('admin', 'hr'), async (req, res) => {
+  const { year, month } = req.body
+  const now = new Date()
+  const y = year || now.getFullYear()
+  const m = month || (now.getMonth() + 1)
+
+  try {
+    const depts = await query('SELECT id FROM departments')
+    const existing = await query(
+      'SELECT department_id FROM timesheets WHERE year = $1 AND month = $2',
+      [y, m]
+    )
+    const existingSet = new Set(existing.rows.map(r => r.department_id))
+    const toCreate = depts.rows.filter(d => !existingSet.has(d.id))
+
+    if (toCreate.length === 0) {
+      return res.json({ created: 0, message: 'Все табели уже существуют' })
+    }
+
+    let created = 0
+    for (const dept of toCreate) {
+      await query(
+        'INSERT INTO timesheets (department_id, year, month, created_by) VALUES ($1, $2, $3, $4)',
+        [dept.id, y, m, req.user.id]
+      )
+      created++
+    }
+
+    res.status(201).json({
+      created,
+      total: depts.rows.length,
+      alreadyExisted: existingSet.size,
+      message: `Создано ${created} табел${created === 1 ? 'ь' : created < 5 ? 'я' : 'ей'} за ${String(m).padStart(2, '0')}.${y}`
+    })
+  } catch (error) {
+    console.error('Error auto-creating timesheets:', error)
+    res.status(500).json({ error: 'Ошибка при создании табелей' })
+  }
+})
+
 async function getManagerDepartmentId(userId) {
   const byManagerId = await query(
     `SELECT id FROM departments WHERE manager_id = $1 LIMIT 1`,

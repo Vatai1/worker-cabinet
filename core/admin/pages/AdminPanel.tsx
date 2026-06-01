@@ -21,6 +21,7 @@ import {
   BarChart3, Download, FileText, Database,
   HardDrive, Server, AlertCircle, Unlock, UserPlus, Boxes,
   TrendingUp, Clock3, FolderKanban, CalendarX, Settings,
+  Calendar, Zap,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry, AdminStats } from '@/core/admin/types/admin'
 
@@ -1046,6 +1047,8 @@ function SettingsTab() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [tsCreating, setTsCreating] = useState(false)
+  const [tsResult, setTsResult] = useState<string | null>(null)
 
   useEffect(() => { fetchSettings() }, [])
 
@@ -1074,62 +1077,131 @@ function SettingsTab() {
     setSettings((prev) => prev.map((s) => (s.key === key ? { ...s, value } : s)))
   }
 
+  const handleAutoCreateTimesheets = async () => {
+    setTsCreating(true)
+    setTsResult(null)
+    setError(null)
+    try {
+      const now = new Date()
+      const res = await fetch(`${API_BASE_URL}/timesheet/auto-create`, {
+        method: 'POST',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ year: now.getFullYear(), month: now.getMonth() + 1 }),
+      })
+      const data = await res.json()
+      if (res.ok || res.status === 201) {
+        setTsResult(data.message || `Создано: ${data.created}`)
+      } else {
+        setError(data.error || 'Ошибка')
+      }
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setTsCreating(false)
+    }
+  }
+
+  const tsAutoEnabled = settings.find(s => s.key === 'timesheet_auto_create')
+  const tsAutoOn = tsAutoEnabled?.value === 'true'
+
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Settings2 className="h-5 w-5" /> Системные настройки</CardTitle>
-        <CardDescription>Глобальные параметры приложения</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-            <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
-          </div>
-        )}
-        {success && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-sm">
-            <Check className="h-4 w-4 shrink-0" /> Настройки сохранены
-          </div>
-        )}
-
-        <div className="grid gap-4">
-          {settings.map((setting) => {
-            const isBoolean = setting.value === 'true' || setting.value === 'false'
-            return (
-            <div key={setting.key} className="flex flex-col sm:flex-row sm:items-center gap-2 p-4 rounded-xl border border-border/50">
-              <div className="flex-1">
-                <p className="font-medium text-sm">{setting.description || setting.key}</p>
-                <p className="text-xs text-muted-foreground font-mono">{setting.key}</p>
-              </div>
-              {isBoolean ? (
-                <Switch
-                  checked={setting.value === 'true'}
-                  onCheckedChange={(checked) => updateValue(setting.key, String(checked))}
-                />
-              ) : (
-                <Input
-                  value={setting.value}
-                  onChange={(e) => updateValue(setting.key, e.target.value)}
-                  className="sm:w-64"
-                />
-              )}
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Settings2 className="h-5 w-5" /> Системные настройки</CardTitle>
+          <CardDescription>Глобальные параметры приложения</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
             </div>
-            )
-          })}
-        </div>
+          )}
+          {success && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-sm">
+              <Check className="h-4 w-4 shrink-0" /> Настройки сохранены
+            </div>
+          )}
 
-        <div className="flex justify-end">
-          <Button onClick={saveSettings} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
-            Сохранить
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+          <div className="grid gap-4">
+            {settings.map((setting) => {
+              const isBoolean = setting.value === 'true' || setting.value === 'false'
+              return (
+              <div key={setting.key} className="flex flex-col sm:flex-row sm:items-center gap-2 p-4 rounded-xl border border-border/50">
+                <div className="flex-1">
+                  <p className="font-medium text-sm">{setting.description || setting.key}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{setting.key}</p>
+                </div>
+                {isBoolean ? (
+                  <Switch
+                    checked={setting.value === 'true'}
+                    onCheckedChange={(checked) => updateValue(setting.key, String(checked))}
+                  />
+                ) : (
+                  <Input
+                    value={setting.value}
+                    onChange={(e) => updateValue(setting.key, e.target.value)}
+                    className="sm:w-64"
+                  />
+                )}
+              </div>
+              )
+            })}
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={saveSettings} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+              Сохранить
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" /> Табели
+          </CardTitle>
+          <CardDescription>Автоматическое создание табелей рабочего времени</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+            <div>
+              <p className="font-medium text-sm">Автосоздание табелей</p>
+              <p className="text-xs text-muted-foreground">Автоматически создавать табели для всех отделов за текущий месяц при первом обращении</p>
+            </div>
+            <Switch
+              checked={tsAutoOn}
+              onCheckedChange={(checked) => {
+                if (tsAutoEnabled) {
+                  updateValue('timesheet_auto_create', String(checked))
+                } else {
+                  setSettings(prev => [...prev, { key: 'timesheet_auto_create', value: String(checked), description: 'Автосоздание табелей', updated_at: '' }])
+                }
+              }}
+            />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button onClick={handleAutoCreateTimesheets} disabled={tsCreating} variant={tsAutoOn ? 'default' : 'outline'}>
+              {tsCreating ? (
+                <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Создание...</>
+              ) : (
+                <><Zap className="h-4 w-4 mr-1.5" /> Создать табели за текущий месяц</>
+              )}
+            </Button>
+            {tsResult && (
+              <span className="text-sm text-emerald-600 dark:text-emerald-400">{tsResult}</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
