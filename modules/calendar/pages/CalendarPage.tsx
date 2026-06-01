@@ -460,10 +460,10 @@ export function CalendarPage() {
   return (
     <div className="cr">
       <style>{CSS}</style>
-      <div className="relative overflow-hidden gradient-primary text-white animate-slide-up" style={{flexShrink:0,padding:'16px 20px'}}>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+      <div className="relative overflow-hidden gradient-primary text-white animate-slide-up rounded-b-2xl" style={{flexShrink:0,padding:'20px 24px',minHeight:0}}>
+        <div className="absolute -top-20 -right-20 w-48 h-48 bg-white/5 rounded-full" />
+        <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-white/5 rounded-full" />
+        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-white/3 rounded-full blur-2xl" />
         <div className="relative z-10 flex items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
