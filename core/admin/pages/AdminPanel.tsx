@@ -544,20 +544,36 @@ function UsersTab() {
             <span>Выбрать всех на странице</span>
             <span className="ml-auto">{total} сотрудников</span>
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {users.map(user => {
               const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
+              const selected = selectedIds.has(user.id)
               return (
                 <div
                   key={user.id}
                   className={cn(
-                    'flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer',
-                    selectedIds.has(user.id) ? 'bg-primary/5 border border-primary/20' : 'hover:bg-muted/30 border border-transparent',
+                    'flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer group',
+                    selected
+                      ? 'bg-primary/8 ring-1 ring-primary/25 shadow-sm shadow-primary/5'
+                      : 'hover:bg-muted/40 border border-transparent hover:border-border/50',
                   )}
                   onClick={() => setDetailUser(user)}
                 >
-                  <input type="checkbox" checked={selectedIds.has(user.id)} onChange={() => toggleSelect(user.id)} onClick={e => e.stopPropagation()} className="rounded shrink-0" />
-                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+                  <div
+                    className={cn(
+                      'h-4.5 w-4.5 rounded flex items-center justify-center transition-all shrink-0 border-2',
+                      selected ? 'bg-primary border-primary' : 'border-muted-foreground/30 group-hover:border-muted-foreground/50',
+                    )}
+                    onClick={e => { e.stopPropagation(); toggleSelect(user.id) }}
+                  >
+                    {selected && <Check className="h-3 w-3 text-primary-foreground" />}
+                  </div>
+                  <div className={cn(
+                    'h-9 w-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-colors',
+                    selected
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-gradient-to-br from-primary/20 to-primary/5 text-primary',
+                  )}>
                     {user.first_name?.[0]}{user.last_name?.[0]}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -569,9 +585,9 @@ function UsersTab() {
                       <span className="truncate">{user.position || user.email}</span>
                       {user.department_name && <span>· {user.department_name}</span>}
                     </div>
-                                      </div>
-                                    </div>
-                                  )
+                  </div>
+                </div>
+              )
             })}
           </div>
         </div>
