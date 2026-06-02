@@ -20,6 +20,7 @@ import timesheetRoutes from './routes/timesheet.js'
 import calendarRoutes from './routes/calendar.js'
 import notificationsRoutes from './routes/notifications.js'
 import adminRoutes from './routes/admin.js'
+import assistantRoutes from './routes/assistant.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { errorHandler } from './middleware/errors.js'
 import * as rabbitmq from './config/rabbitmq.js'
@@ -85,6 +86,7 @@ app.use('/api/timesheet', timesheetRoutes)
 app.use('/api/calendar', calendarRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/assistant', assistantRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

@@ -144,7 +144,7 @@ export function NotificationsSettings({ activeTab }: Props) {
                   type="button"
                   onClick={handleCheckSmtp}
                   disabled={smtpChecking}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-[#3B82F6] bg-transparent transition-colors duration-200 hover:bg-[rgba(59,130,246,0.1)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-primary bg-transparent transition-colors duration-200 hover:bg-primary/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RefreshCw className={cn('w-4 h-4', smtpChecking && 'animate-spin')} />
                   {smtpChecking ? 'Проверка...' : 'Проверить соединение'}
@@ -254,11 +254,11 @@ export function NotificationsSettings({ activeTab }: Props) {
     return (
       <div className="space-y-4">
         {TEMPLATES.map((tmpl) => (
-          <div key={tmpl.id} className="rounded-xl border border-[#252A3D]" style={{ backgroundColor: '#161822' }}>
+          <div key={tmpl.id} className="rounded-xl border border-border bg-card">
             {editingTemplate === tmpl.id ? (
               <div className="p-4 space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-[#FFFFFF]">{tmpl.name}</span>
+                  <span className="text-sm font-medium text-foreground">{tmpl.name}</span>
                 </div>
                 <SettingField label="Тема письма">
                   <SettingInput
@@ -272,31 +272,29 @@ export function NotificationsSettings({ activeTab }: Props) {
                     value={templateBody}
                     onChange={(e) => setTemplateBody(e.target.value)}
                     rows={5}
-                    className="w-full rounded-lg border border-[#252A3D] bg-[#0B0E14] px-3.5 py-2.5 text-sm text-[#E8E8ED] placeholder:text-[#6B7280] transition-all duration-200 focus:outline-none focus:border-[#8B5CF6] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.15)] hover:border-[#3B82F6] resize-none"
+                    className="w-full rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 hover:border-primary resize-none"
                   />
-                  <p className="text-xs text-[#6B7280] mt-1">Доступные переменные: {'{{user_name}}'}, {'{{event_title}}'}, {'{{date}}'}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Доступные переменные: {'{{user_name}}'}, {'{{event_title}}'}, {'{{date}}'}</p>
                 </SettingField>
                 <div className="flex items-center gap-2 pt-2">
                   <button
                     type="button"
                     onClick={handleSaveTemplate}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-[#FFFFFF] transition-colors duration-200 hover:bg-[#7C3AED] active:bg-[#6D28D9]"
-                    style={{ backgroundColor: '#8B5CF6' }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/80 active:bg-primary bg-primary"
                   >
                     Сохранить
                   </button>
                   <button
                     type="button"
                     onClick={handleCancelTemplate}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-[#E8E8ED] border border-[#252A3D] transition-colors duration-200 hover:bg-[#252A3D]"
-                    style={{ backgroundColor: '#1A1D2B' }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-foreground border border-border transition-colors duration-200 hover:bg-secondary bg-secondary"
                   >
                     Отменить
                   </button>
                   <button
                     type="button"
                     onClick={() => handleResetTemplate(tmpl.id)}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-[#6B7280] transition-colors duration-200 hover:text-[#E8E8ED] hover:bg-[#252A3D]"
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground hover:bg-secondary"
                   >
                     Сбросить по умолчанию
                   </button>
@@ -304,11 +302,11 @@ export function NotificationsSettings({ activeTab }: Props) {
               </div>
             ) : (
               <div className="flex items-center justify-between p-4">
-                <span className="text-sm text-[#E8E8ED]">{tmpl.name}</span>
+                <span className="text-sm text-foreground">{tmpl.name}</span>
                 <button
                   type="button"
                   onClick={() => handleEditTemplate(tmpl.id)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-[#3B82F6] bg-transparent transition-colors duration-200 hover:bg-[rgba(59,130,246,0.1)]"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-primary bg-transparent transition-colors duration-200 hover:bg-primary/10"
                 >
                   <Eye className="w-4 h-4" />
                   Редактировать
@@ -413,34 +411,28 @@ export function NotificationsSettings({ activeTab }: Props) {
           />
         </div>
 
-        <div className="rounded-xl border border-[#1E2130] overflow-hidden">
+        <div className="rounded-xl border border-border overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr style={{ backgroundColor: '#1A1D2B' }}>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Время</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Получатель</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Канал</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Тип</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Статус</th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]"></th>
+              <tr className="bg-secondary">
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Время</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Получатель</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Канал</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Тип</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Статус</th>
+                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"></th>
               </tr>
             </thead>
             <tbody>
               {filteredLogs.map((log, i) => (
                 <tr
                   key={i}
-                  className="transition-colors duration-150"
-                  style={{
-                    backgroundColor: '#161822',
-                    borderBottom: '1px solid #1E2130',
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#1A1D2B' }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#161822' }}
+                  className="bg-card border-b border-border transition-colors duration-150 hover:bg-secondary"
                 >
-                  <td className="px-4 py-3 text-sm text-[#E8E8ED]">{log.time}</td>
-                  <td className="px-4 py-3 text-sm text-[#E8E8ED]">{log.recipient}</td>
-                  <td className="px-4 py-3 text-sm text-[#E8E8ED]">{log.channel}</td>
-                  <td className="px-4 py-3 text-sm text-[#E8E8ED]">{log.type}</td>
+                  <td className="px-4 py-3 text-sm text-foreground">{log.time}</td>
+                  <td className="px-4 py-3 text-sm text-foreground">{log.recipient}</td>
+                  <td className="px-4 py-3 text-sm text-foreground">{log.channel}</td>
+                  <td className="px-4 py-3 text-sm text-foreground">{log.type}</td>
                   <td className="px-4 py-3">
                     <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', STATUS_STYLES[log.status])}>
                       {STATUS_LABELS[log.status]}
@@ -450,7 +442,7 @@ export function NotificationsSettings({ activeTab }: Props) {
                     {log.status === 'error' && (
                       <button
                         type="button"
-                        className="flex items-center gap-1.5 ml-auto px-3 py-1.5 rounded-lg text-sm text-[#3B82F6] bg-transparent transition-colors duration-200 hover:bg-[rgba(59,130,246,0.1)]"
+                        className="flex items-center gap-1.5 ml-auto px-3 py-1.5 rounded-lg text-sm text-primary bg-transparent transition-colors duration-200 hover:bg-primary/10"
                       >
                         <Send className="w-3.5 h-3.5" />
                         Повторить отправку
@@ -461,7 +453,7 @@ export function NotificationsSettings({ activeTab }: Props) {
               ))}
               {filteredLogs.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-[#6B7280]">
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
                     Нет записей
                   </td>
                 </tr>

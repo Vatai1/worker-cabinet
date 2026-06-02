@@ -562,159 +562,217 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
   }
 })
 
-/**
- * @swagger
- * /vacation/requests/{id}/approve:
- *   post:
- *     ta
 
-... [OUTPUT TRUNCATED - 28836 chars omitted out of 78836 total] ...
-
-n({ error: 'Можно переносить только согласованные заявки' })
-    }
-
-    const parseLocalDate = (dateStr) => {
-      const [year, month, day] = dateStr.split('-').map(Number)
-      return new Date(year, month - 1, day)
-    }
-
-    const newStart = parseLocalDate(newStartDate)
-    const newEnd = parseLocalDate(newEndDate)
-    const newYear = newStart.getFullYear()
-
-    if (newYear !== originalYear) {
-      await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'Перенос возможен только в пределах одного года' })
-    }
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    if (newStart < today) {
-      await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'Нельзя переносить на прошедшую дату' })
-    }
-
-    if (newEnd < newStart) {
-      await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'Дата окончания не может быть раньше даты начала' })
-    }
-
-    const newDuration = Math.floor((newEnd - newStart) / (1000 * 60 * 60 * 24)) + 1
-
-    const overlapResult = await client.query(
-      `SELECT vr.id FROM vacation_requests vr
-        JOIN request_statuses rs ON vr.status_id = rs.id
-        WHERE vr.user_id = $1
-        AND vr.id != $2
-        AND rs.code IN ('on_approval', 'approved')
-        AND (
-          (vr.start_date <= $3 AND vr.end_date >= $3)
-          OR (vr.start_date <= $4 AND vr.end_date >= $4)
-          OR (vr.start_date >= $3 AND vr.end_date <= $4)
-        )`,
-      [userId, id, newStartDate, newEndDate]
+router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  const { id } = req.params
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+    const request = await client.query(
+      `SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id]
     )
+    if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
+    if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
-    if (overlapResult.rows.length > 0) {
-      await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'Пересечение с существующей заявкой' })
-    }
-
-    const balanceResult = await client.query(
-      'SELECT * FROM vacation_balances WHERE user_id = $1 AND year = $2',
-      [userId, originalYear]
-    )
-    const balance = balanceResult.rows[0]
-
-    const durationDiff = newDuration - originalRequest.duration
-
-    if (durationDiff > 0 && balance.available_days < durationDiff) {
-      await client.query('ROLLBACK')
-      return res.status(400).json({
-        error: 'Недостаточно дней на балансе',
-        available: balance?.available_days || 0,
-        required: durationDiff
-      })
-    }
-
-    const newRequestResult = await client.query(
-      `INSERT INTO vacation_requests
-        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination,
-         reference_document, status_id, transferred_from_id, transfer_note)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-                (SELECT id FROM request_statuses WHERE code = 'on_approval'), $10, $11)
-        RETURNING *`,
-      [
-        userId,
-        newStartDate,
-        newEndDate,
-        newDuration,
-        originalRequest.vacation_type_id,
-        reason,
-        originalRequest.has_travel,
-        originalRequest.travel_destination,
-        originalRequest.reference_document,
-        id,
-        note || null
-      ]
-    )
-
-    const newRequest = newRequestResult.rows[0]
+    const origYear = new Date(request.rows[0].start_date).getFullYear()
+    await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1), used_days = used_days + $1 WHERE user_id = $2 AND year = $3',
+      [request.rows[0].duration, request.rows[0].user_id, origYear])
 
     await client.query(
-      `UPDATE vacation_requests
-       SET transfer_requested_at = CURRENT_TIMESTAMP,
-           transfer_reason = $1
-       WHERE id = $2`,
-      [reason, id]
+      `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2)`,
+      [id, req.user.id])
+
+    const result = await client.query(
+      `UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'), reviewed_at = NOW(), reviewed_by = $1 WHERE id = $2 RETURNING *`,
+      [req.user.id, id])
+
+    await client.query('COMMIT')
+    res.json({ ...result.rows[0], status: 'approved' })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    res.status(500).json({ error: 'Ошибка согласования' })
+  } finally {
+    client.release()
+  }
+})
+
+router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  const { id } = req.params
+  const { reason } = req.body
+  if (!reason?.trim()) return res.status(400).json({ error: 'Укажите причину отклонения' })
+
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+    const request = await client.query(
+      `SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id]
+    )
+    if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
+    if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
+
+    const origYear = new Date(request.rows[0].start_date).getFullYear()
+    await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
+      [request.rows[0].duration, request.rows[0].user_id, origYear])
+
+    await client.query(
+      `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, comment) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
+      [id, req.user.id, reason])
+
+    const result = await client.query(
+      `UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'rejected'), rejection_reason = $1, reviewed_at = NOW(), reviewed_by = $2 WHERE id = $3 RETURNING *`,
+      [reason, req.user.id, id])
+
+    await client.query('COMMIT')
+    res.json({ ...result.rows[0], status: 'rejected' })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    res.status(500).json({ error: 'Ошибка отклонения' })
+  } finally {
+    client.release()
+  }
+})
+
+router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
+  const { id } = req.params
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+    const request = await client.query(
+      `SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id]
+    )
+    if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
+    if (request.rows[0].user_id !== req.user.id && req.user.role === 'employee') { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Forbidden' }) }
+    if (!['on_approval', 'approved'].includes(request.rows[0].status)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Нельзя отменить эту заявку' }) }
+
+    const origYear = new Date(request.rows[0].start_date).getFullYear()
+    if (request.rows[0].status === 'approved') {
+      await client.query('UPDATE vacation_balances SET used_days = GREATEST(0, used_days - $1) WHERE user_id = $2 AND year = $3',
+        [request.rows[0].duration, request.rows[0].user_id, origYear])
+    } else {
+      await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
+        [request.rows[0].duration, request.rows[0].user_id, origYear])
+    }
+
+    await client.query(
+      `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2)`,
+      [id, req.user.id])
+
+    const result = await client.query(
+      `UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), reviewed_at = NOW(), reviewed_by = $1 WHERE id = $2 RETURNING *`,
+      [req.user.id, id])
+
+    await client.query('COMMIT')
+    res.json({ ...result.rows[0], status: 'cancelled_by_employee' })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    res.status(500).json({ error: 'Ошибка отмены' })
+  } finally {
+    client.release()
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/requests/{id}/transfer:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Запросить перенос отпуска
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [newStartDate, newEndDate, reason]
+ *             properties:
+ *               newStartDate: { type: string, format: date }
+ *               newEndDate: { type: string, format: date }
+ *               reason: { type: string }
+ *     responses:
+ *       201:
+ *         description: Заявка на перенос создана
+ */
+router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
+  const client = await getClient()
+
+  try {
+    const { id } = req.params
+    const { newStartDate, newEndDate, reason } = req.body
+    const userId = req.user.id
+
+    if (!newStartDate || !newEndDate || !reason?.trim()) {
+      return res.status(400).json({ error: 'Укажите новые даты и причину переноса' })
+    }
+
+    await client.query('BEGIN')
+
+    const originalResult = await client.query(
+      `SELECT vr.*, rs.code as status
+       FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       WHERE vr.id = $1 AND vr.user_id = $2`,
+      [id, userId]
     )
 
-    if (durationDiff !== 0) {
-      await client.query(
-        `UPDATE vacation_balances
-         SET used_days = used_days + $1,
-             reserved_days = reserved_days + $2
-         WHERE user_id = $3 AND year = $4`,
-        [-originalRequest.duration, newDuration, userId, originalYear]
-      )
-    } else {
-      await client.query(
-        `UPDATE vacation_balances
-         SET used_days = used_days - $1,
-             reserved_days = reserved_days + $1
-         WHERE user_id = $2 AND year = $3`,
-        [originalRequest.duration, userId, originalYear]
-      )
+    if (originalResult.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Заявка не найдена' })
     }
+
+    const original = originalResult.rows[0]
+
+    if (original.status !== 'approved') {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Можно переносить только согласованные заявки' })
+    }
+
+    const newDuration = Math.ceil(
+      (new Date(newEndDate) - new Date(newStartDate)) / (1000 * 60 * 60 * 24)
+    ) + 1
+
+    const insertResult = await client.query(
+      `INSERT INTO vacation_requests
+        (user_id, vacation_type_id, start_date, end_date, duration, status_id, transfer_reason, transferred_from_id, transfer_requested_at)
+       VALUES ($1, $2, $3::date, $4::date, $5, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $6, $7, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [original.user_id, original.vacation_type_id, newStartDate, newEndDate, newDuration, reason, id]
+    )
 
     await client.query(
       `INSERT INTO vacation_request_status_history
         (request_id, status_id, changed_by, comment)
-        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $2, $3)`,
-      [newRequest.id, userId, `Перенос из заявки #${id}: ${reason}`]
+       VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $2, $3)`,
+      [insertResult.rows[0].id, userId, `Запрос на перенос от заявки #${id}`]
     )
-
-    await fillVacationTimesheetEntries(client, userId, newRequest.start_date, newRequest.end_date)
 
     await client.query('COMMIT')
 
     const fullResult = await client.query(
-      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
+      `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name, rs.code as status
        FROM vacation_requests vr
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
+       JOIN request_statuses rs ON vr.status_id = rs.id
        WHERE vr.id = $1`,
-      [newRequest.id]
+      [insertResult.rows[0].id]
     )
 
     res.status(201).json(fullResult.rows[0])
   } catch (error) {
     await client.query('ROLLBACK')
-    res.status(500).json({ error: 'Failed to request vacation transfer' })
+    res.status(500).json({ error: 'Ошибка создания заявки на перенос' })
   } finally {
     client.release()
   }
 })
+
 
 /**
  * @swagger
@@ -1229,7 +1287,7 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
          FROM vacation_requests vr
          JOIN vacation_types vt ON vr.vacation_type_id = vt.id
          JOIN request_statuses rs ON vr.status_id = rs.id
-         WHERE vr.user_id = $1 AND EXTRACT(YEAR FROM vr.start_date) = $2
+         WHERE vr.user_id = $1 AND EXTRACT(YEAR FROM vr.start_date) = $2 AND rs.code = 'approved'
          ORDER BY vr.start_date`,
         [userId, year]
       ),
@@ -1414,6 +1472,262 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
     res.send(output)
   } catch (error) {
     res.status(500).json({ error: 'Ошибка генерации документа' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/restrictions:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Получить ограничения по отпуску для отдела
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: departmentId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Список ограничений
+ */
+router.get('/restrictions', authenticateToken, async (req, res) => {
+  try {
+    const { departmentId } = req.query
+    if (!departmentId) {
+      return res.status(400).json({ error: 'Укажите departmentId' })
+    }
+
+    const result = await query(
+      `SELECT vr.*, d.name as department_name, u.first_name, u.last_name
+       FROM vacation_restrictions vr
+       JOIN departments d ON vr.department_id = d.id
+       JOIN users u ON vr.created_by = u.id
+       WHERE vr.department_id = $1
+       ORDER BY vr.created_at DESC`,
+      [departmentId]
+    )
+
+    const restrictions = result.rows.map(r => ({
+      id: r.id,
+      departmentId: r.department_id,
+      type: r.restriction_type,
+      employeeIds: r.employee_ids.map(String),
+      maxConcurrent: r.max_concurrent,
+      description: r.description,
+      createdAt: r.created_at,
+      createdBy: String(r.created_by),
+      createdByName: `${r.last_name} ${r.first_name}`,
+    }))
+
+    res.json(restrictions)
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось получить ограничения' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/restrictions:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Создать ограничение по отпуску
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [departmentId, type]
+ *             properties:
+ *               departmentId: { type: integer }
+ *               type: { type: string, enum: [pair, group] }
+ *               user1Id: { type: integer }
+ *               user2Id: { type: integer }
+ *               maxConcurrent: { type: integer }
+ *               description: { type: string }
+ *     responses:
+ *       201:
+ *         description: Ограничение создано
+ */
+router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  try {
+    const { departmentId, type, user1Id, user2Id, maxConcurrent, description } = req.body
+    const createdBy = req.user.id
+
+    if (!departmentId || !type) {
+      return res.status(400).json({ error: 'Укажите departmentId и type' })
+    }
+
+    let employeeIds = []
+    let maxConc = maxConcurrent || null
+
+    if (type === 'pair') {
+      if (!user1Id || !user2Id) {
+        return res.status(400).json({ error: 'Для парного ограничения укажите user1Id и user2Id' })
+      }
+      employeeIds = [parseInt(user1Id), parseInt(user2Id)]
+      maxConc = null
+    } else if (type === 'group') {
+      maxConc = maxConcurrent || 1
+      const deptUsers = await query(
+        'SELECT id FROM users WHERE department_id = $1',
+        [departmentId]
+      )
+      employeeIds = deptUsers.rows.map(u => u.id)
+    }
+
+    const result = await query(
+      `INSERT INTO vacation_restrictions (department_id, restriction_type, employee_ids, max_concurrent, description, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [departmentId, type, employeeIds, maxConc, description || null, createdBy]
+    )
+
+    const r = result.rows[0]
+    const user = await query('SELECT first_name, last_name FROM users WHERE id = $1', [createdBy])
+
+    res.status(201).json({
+      id: r.id,
+      departmentId: r.department_id,
+      type: r.restriction_type,
+      employeeIds: r.employee_ids.map(String),
+      maxConcurrent: r.max_concurrent,
+      description: r.description,
+      createdAt: r.created_at,
+      createdBy: String(r.created_by),
+      createdByName: `${user.rows[0].last_name} ${user.rows[0].first_name}`,
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось создать ограничение' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/restrictions/{id}:
+ *   delete:
+ *     tags: [Vacation]
+ *     summary: Удалить ограничение по отпуску
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Ограничение удалено
+ */
+router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const result = await query('DELETE FROM vacation_restrictions WHERE id = $1 RETURNING *', [id])
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ограничение не найдено' })
+    }
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось удалить ограничение' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/check-restrictions:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Проверить даты отпуска на ограничения
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, startDate, endDate]
+ *             properties:
+ *               userId: { type: integer }
+ *               startDate: { type: string, format: date }
+ *               endDate: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Список нарушений ограничений
+ */
+router.post('/check-restrictions', authenticateToken, async (req, res) => {
+  try {
+    const { userId, startDate, endDate } = req.body
+
+    if (!userId || !startDate || !endDate) {
+      return res.status(400).json({ error: 'Укажите userId, startDate и endDate' })
+    }
+
+    const userResult = await query('SELECT department_id FROM users WHERE id = $1', [userId])
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Пользователь не найден' })
+    }
+    const departmentId = userResult.rows[0].department_id
+
+    const restrictions = await query(
+      'SELECT * FROM vacation_restrictions WHERE department_id = $1',
+      [departmentId]
+    )
+
+    const violations = []
+
+    for (const restriction of restrictions.rows) {
+      if (restriction.restriction_type === 'pair') {
+        const otherUserId = restriction.employee_ids.find(id => id !== parseInt(userId))
+        if (!otherUserId) continue
+
+        const overlap = await query(
+          `SELECT 1 FROM vacation_requests vr
+           JOIN request_statuses rs ON vr.status_id = rs.id
+           WHERE vr.user_id = $1
+           AND rs.code IN ('on_approval', 'approved')
+           AND vr.start_date <= $3 AND vr.end_date >= $2`,
+          [otherUserId, startDate, endDate]
+        )
+        if (overlap.rows.length > 0) {
+          const otherUser = await query('SELECT first_name, last_name FROM users WHERE id = $1', [otherUserId])
+          violations.push({
+            field: 'restriction',
+            message: `Невозможно: ${(otherUser.rows[0]?.last_name || '')} уже в отпуске в эти даты (парное ограничение)`,
+          })
+        }
+      } else if (restriction.restriction_type === 'group') {
+        const otherUsers = restriction.employee_ids.filter(id => id !== parseInt(userId))
+        let concurrentCount = 0
+
+        for (const otherId of otherUsers) {
+          const overlap = await query(
+            `SELECT 1 FROM vacation_requests vr
+             JOIN request_statuses rs ON vr.status_id = rs.id
+             WHERE vr.user_id = $1
+             AND rs.code IN ('on_approval', 'approved')
+             AND vr.start_date <= $3 AND vr.end_date >= $2`,
+            [otherId, startDate, endDate]
+          )
+          if (overlap.rows.length > 0) concurrentCount++
+        }
+
+        if (concurrentCount >= (restriction.max_concurrent || 1)) {
+          violations.push({
+            field: 'restriction',
+            message: `Превышен лимит одновременных отпусков в отделе (макс. ${restriction.max_concurrent || 1})`,
+          })
+        }
+      }
+    }
+
+    res.json(violations)
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось проверить ограничения' })
   }
 })
 

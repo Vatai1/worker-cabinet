@@ -79,9 +79,9 @@ export function HRPanel() {
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
-        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-white/5 rounded-full" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/2 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/5 rounded-full" />
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
             <Sparkles className="h-6 w-6 text-white/80" />

@@ -106,9 +106,9 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-3">
             <FileText className="h-5 w-5 text-white/70" />
@@ -118,21 +118,21 @@ ${request.reviewerComment ? `Комментарий: ${request.reviewerComment}`
           <p className="mt-2 text-white/50 text-sm">Управление вашими заявлениями и запросами</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 mt-6">
-          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
             <FileText className="h-3.5 w-3.5" />
             {userRequests.length} всего
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
             <Clock className="h-3.5 w-3.5" />
             {userRequests.filter((r) => r.status === 'pending').length} на рассмотрении
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
             <CheckCircle className="h-3.5 w-3.5" />
             {userRequests.filter((r) => r.status === 'approved').length} одобрено
           </div>
           <button
             onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/20 px-3 py-1.5 text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-card/10 text-white hover:bg-card/20 px-3 py-1.5 text-xs font-medium transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             Создать заявление

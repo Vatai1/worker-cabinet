@@ -207,8 +207,7 @@ export function AuthSettings({ activeTab }: Props) {
       <div>
         <button
           onClick={() => {}}
-          className="px-4 py-2.5 rounded-lg text-sm font-medium text-[#FFFFFF] transition-colors duration-200 hover:bg-[#DC2626]"
-          style={{ backgroundColor: '#EF4444' }}
+          className="px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground transition-colors duration-200 hover:bg-destructive/90 bg-destructive"
         >
           Завершить все сессии кроме текущей
         </button>
@@ -259,10 +258,7 @@ export function AuthSettings({ activeTab }: Props) {
       <div>
         <button
           onClick={() => {}}
-          className="px-4 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200"
-          style={{ color: '#3B82F6', backgroundColor: 'transparent' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(59,130,246,0.1)' }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent' }}
+          className="px-4 py-2.5 rounded-lg text-sm font-medium text-primary transition-colors duration-200 hover:bg-primary/10"
         >
           Проверить соединение
         </button>
@@ -286,37 +282,31 @@ export function AuthSettings({ activeTab }: Props) {
     return (
       <div className="space-y-6">
         <SettingSection title="Провайдеры SSO">
-          <div className="rounded-lg border border-[#252A3D] overflow-hidden">
+          <div className="rounded-lg border border-border overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#1E2130]" style={{ backgroundColor: '#11131A' }}>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[#6B7280] uppercase tracking-wider">Провайдер</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-[#6B7280] uppercase tracking-wider">Client ID</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-[#6B7280] uppercase tracking-wider">Действия</th>
+                <tr className="border-b border-border bg-popover">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Провайдер</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Client ID</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Действия</th>
                 </tr>
               </thead>
               <tbody>
                 {settings.ssoProviders.map((provider, index) => (
-                  <tr key={index} className="border-b border-[#1E2130] last:border-b-0">
-                    <td className="px-4 py-3 text-[#E8E8ED]">{provider.name}</td>
-                    <td className="px-4 py-3 text-[#6B7280]">***</td>
+                  <tr key={index} className="border-b border-border last:border-b-0">
+                    <td className="px-4 py-3 text-foreground">{provider.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">***</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => {}}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-200"
-                          style={{ color: '#3B82F6', backgroundColor: 'transparent' }}
-                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(59,130,246,0.1)' }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent' }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-primary transition-colors duration-200 hover:bg-primary/10"
                         >
                           Редактировать
                         </button>
                         <button
                           onClick={() => handleRemoveProvider(index)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-200"
-                          style={{ color: '#EF4444', backgroundColor: 'transparent' }}
-                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(239,68,68,0.1)' }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent' }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-destructive transition-colors duration-200 hover:bg-destructive/10"
                         >
                           Удалить
                         </button>
@@ -329,7 +319,7 @@ export function AuthSettings({ activeTab }: Props) {
           </div>
 
           {addingProvider ? (
-            <div className="space-y-4 rounded-lg border border-[#252A3D] p-4" style={{ backgroundColor: '#0B0E14' }}>
+            <div className="space-y-4 rounded-lg border border-border p-4 bg-background">
               <SettingField label="Название">
                 <SettingInput value={newProvider.name} onChange={(v) => setNewProvider({ ...newProvider, name: v })} />
               </SettingField>
@@ -356,15 +346,13 @@ export function AuthSettings({ activeTab }: Props) {
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={handleAddProvider}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-[#FFFFFF] transition-colors duration-200 hover:bg-[#7C3AED]"
-                  style={{ backgroundColor: '#8B5CF6' }}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90 bg-primary"
                 >
                   Добавить
                 </button>
                 <button
                   onClick={() => { setAddingProvider(false); setNewProvider(EMPTY_SSO_PROVIDER) }}
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-[#E8E8ED] border border-[#252A3D] transition-colors duration-200 hover:bg-[#252A3D]"
-                  style={{ backgroundColor: '#1A1D2B' }}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-foreground border border-border transition-colors duration-200 hover:bg-muted bg-muted"
                 >
                   Отмена
                 </button>
@@ -373,8 +361,7 @@ export function AuthSettings({ activeTab }: Props) {
           ) : (
             <button
               onClick={() => setAddingProvider(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-[#8B5CF6] border border-[#252A3D] transition-colors duration-200 hover:bg-[#252A3D]"
-              style={{ backgroundColor: 'transparent' }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-primary border border-border transition-colors duration-200 hover:bg-muted"
             >
               <Plus className="w-4 h-4" />
               Добавить провайдера

@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react'
 import type { VacationRequest } from '@/shared/types'
+import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { VACATION_TYPES } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
 import { format } from 'date-fns'
@@ -18,6 +19,7 @@ interface VacationDetailModalProps {
 }
 
 export function VacationDetailModal({ isOpen, request, onClose, onApprove, onReject, loading, intersectionWarnings = [], onTransfer }: VacationDetailModalProps) {
+  useModalOpen(isOpen)
   const [showRejectInput, setShowRejectInput] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
 
@@ -90,16 +92,16 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
           )}
 
           {intersectionWarnings.length > 0 && (
-            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+            <div className="p-3 rounded-lg bg-[hsl(var(--warning)/0.1)] border border-[hsl(var(--warning)/0.25)]">
               <div className="text-sm">
-                <div className="font-medium mb-2 flex items-center gap-2 text-amber-800">
+                <div className="font-medium mb-2 flex items-center gap-2 text-[hsl(var(--warning))]">
                   <span>⚠️</span>
                   Пересечение с другими отпусками
                 </div>
                 {intersectionWarnings.map((warning, index) => (
-                  <div key={index} className="text-amber-700 mb-2 last:mb-0">
+                  <div key={index} className="text-[hsl(var(--warning)/0.85)] mb-2 last:mb-0">
                     <div className="font-medium">{warning.employeeName}</div>
-                    <div className="text-xs text-amber-600">{warning.dates}</div>
+                    <div className="text-xs text-[hsl(var(--warning)/0.7)]">{warning.dates}</div>
                   </div>
                 ))}
               </div>
@@ -116,7 +118,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
           {request.referenceDocument && (
             <div>
               <div className="text-sm text-muted-foreground mb-1">Справка</div>
-              <div className="text-sm bg-blue-50 text-blue-900 rounded-lg p-3">
+              <div className="text-sm bg-primary/10 rounded-lg p-3">
                 📄 {request.referenceDocument}
               </div>
             </div>

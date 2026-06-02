@@ -370,7 +370,7 @@ export function CalendarPage() {
             return (
               <div key={dk} onClick={()=>{setFocus(new Date(y,m,day));setSelectedDate(dk);setView('day')}} className="cmc2" style={{background:we?WE_BG:undefined}}>
                 <div style={{display:'flex',justifyContent:'center',marginBottom:4}}>
-                  <span style={{fontSize:14,fontWeight:isT?700:500,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?RED:'transparent',color:isT?'#fff':isS?BLUE:TX,boxShadow:isS&&!isT?'0 0 0 2px '+BLUE:'none'}}>{day}</span>
+                  <span style={{fontSize:14,fontWeight:isT?700:500,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',background:isT?RED:'transparent',color:isT?'#fff':isS?'hsl(var(--primary))':TX,boxShadow:isS&&!isT?'0 0 0 2px hsl(var(--primary))':'none'}}>{day}</span>
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:1}}>
                   {it.slice(0,3).map(i=><div key={i.key} className="cp" style={{background:i.bg}} onContextMenu={e=>{e.preventDefault();e.stopPropagation();setCtxMenu({x:e.clientX,y:e.clientY,event:i})}}>{i.label}</div>)}
@@ -461,9 +461,9 @@ export function CalendarPage() {
     <div className="cr">
       <style>{CSS}</style>
       <div className="relative overflow-hidden gradient-primary text-white animate-slide-up rounded-2xl" style={{flexShrink:0,padding:'20px 24px',minHeight:0}}>
-        <div className="absolute -top-20 -right-20 w-48 h-48 bg-white/5 rounded-full" />
-        <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-white/5 rounded-full" />
-        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-white/3 rounded-full blur-2xl" />
+        <div className="absolute -top-20 -right-20 w-48 h-48 bg-card/5 rounded-full" />
+        <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-card/5 rounded-full" />
+        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/3 rounded-full blur-2xl" />
         <div className="relative z-10 flex items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -474,19 +474,19 @@ export function CalendarPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {(olByDate[todayKey]?.length || 0) > 0 && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
                 <Calendar className="h-3 w-3 text-white/50" />
                 {olByDate[todayKey]?.length} сегодня
               </div>
             )}
             {activeVac.length > 0 && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
                 {activeVac.length} отпуск{activeVac.length === 1 ? '' : activeVac.length < 5 ? 'а' : 'ов'}
               </div>
             )}
             {(outlookConnected || ewsConnected) && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-300" />
                 {ewsConnected ? 'Exchange' : 'Outlook'}
               </div>
@@ -555,7 +555,7 @@ export function CalendarPage() {
 
             <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}>
               <button onClick={()=>setShowEwsModal(false)} style={{padding:'7px 16px',borderRadius:6,border:'1px solid var(--cal-bd)',background:'transparent',color:TX2,fontSize:12,cursor:'pointer'}}>Отмена</button>
-              <button onClick={connectEws} disabled={ewsSaving} style={{padding:'7px 16px',borderRadius:6,border:'none',background:BLUE,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',opacity:ewsSaving?0.6:1}}>
+              <button onClick={connectEws} disabled={ewsSaving} style={{padding:'7px 16px',borderRadius:6,border:'none',background:'hsl(var(--primary))',color:'hsl(var(--primary-foreground))',fontSize:12,fontWeight:600,cursor:'pointer',opacity:ewsSaving?0.6:1}}>
                 {ewsSaving?'Подключение...':'Подключить'}
               </button>
             </div>
@@ -677,7 +677,7 @@ export function CalendarPage() {
                       {onlineUrl && (
                         <div style={{display:'flex',alignItems:'center',gap:10}}>
                           <Link2 size={16} style={{color:TX2,flexShrink:0}}/>
-                          <a href={onlineUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:13,color:BLUE,textDecoration:'none',wordBreak:'break-all'}}>{onlineUrl}</a>
+                          <a href={onlineUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:13,color:'hsl(var(--primary))',textDecoration:'none',wordBreak:'break-all'}}>{onlineUrl}</a>
                         </div>
                       )}
 
@@ -795,7 +795,7 @@ export function CalendarPage() {
                             {ev.onlineMeeting.joinUrl && (
                               <div style={{display:'flex',alignItems:'center',gap:6}}>
                                 <Link2 size={13} style={{color:TX2,flexShrink:0}}/>
-                                <a href={ev.onlineMeeting.joinUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:BLUE,textDecoration:'none',wordBreak:'break-all'}}>Присоединиться</a>
+                                <a href={ev.onlineMeeting.joinUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:'hsl(var(--primary))',textDecoration:'none',wordBreak:'break-all'}}>Присоединиться</a>
                               </div>
                             )}
                             {ev.onlineMeeting.conferenceId && (

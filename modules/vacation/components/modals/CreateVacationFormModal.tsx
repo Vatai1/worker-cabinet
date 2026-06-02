@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
 import { X, FileText, Upload, AlertTriangle } from 'lucide-react'
@@ -39,6 +40,7 @@ export function CreateVacationFormModal({
   userId,
   onCheckRestrictions,
 }: CreateVacationFormModalProps) {
+  useModalOpen(isOpen)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
@@ -363,9 +365,9 @@ export function CreateVacationFormModal({
           )}
 
           {countsInCounter && duration > 0 && (
-            <div className={`p-3 rounded-lg ${hasEnoughDays ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30'}`}>
+            <div className={`p-3 rounded-lg ${hasEnoughDays ? 'bg-[hsl(var(--success)/0.1)] border border-[hsl(var(--success)/0.25)]' : 'bg-[hsl(var(--destructive)/0.1)] border border-[hsl(var(--destructive)/0.25)]'}`}>
               <div className="text-sm">
-                <div className="font-medium mb-1">
+                <div className={`font-medium mb-1 ${hasEnoughDays ? 'text-[hsl(var(--success))]' : 'text-[hsl(var(--destructive))]'}`}>
                   {hasEnoughDays ? '✅ Достаточно дней' : '⚠️ Недостаточно дней'}
                 </div>
                 <div className="text-muted-foreground">
@@ -381,17 +383,17 @@ export function CreateVacationFormModal({
           )}
 
           {restrictionWarnings.length > 0 && (
-            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30">
+            <div className="p-3 rounded-lg bg-[hsl(var(--warning)/0.1)] border border-[hsl(var(--warning)/0.25)]">
               <div className="text-sm">
-                <div className="font-medium mb-2 flex items-center gap-2 text-amber-800 dark:text-amber-400">
+                <div className="font-medium mb-2 flex items-center gap-2 text-[hsl(var(--warning))]">
                   <AlertTriangle className="h-4 w-4" />
                   ⚠️ Внимание
                 </div>
                 {restrictionWarnings.map((warning, index) => (
-                  <div key={index} className="text-amber-700 dark:text-amber-300 mb-2 last:mb-0">
+                  <div key={index} className="text-[hsl(var(--warning)/0.85)] mb-2 last:mb-0">
                     <div>{warning.message}</div>
                     {warning.details?.conflictingEmployee && (
-                      <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      <div className="text-xs text-[hsl(var(--warning)/0.7)] mt-1">
                         Даты: {warning.details.conflictingEmployee.dates}
                       </div>
                     )}

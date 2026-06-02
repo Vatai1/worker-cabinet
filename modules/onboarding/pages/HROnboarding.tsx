@@ -255,8 +255,8 @@ export function HROnboarding() {
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="h-5 w-5 text-white/70" />
@@ -266,22 +266,22 @@ export function HROnboarding() {
           <p className="mt-2 text-white/50 text-sm">Управление онбордингом сотрудников</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 mt-6">
-          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
             <ClipboardCheck className="h-3.5 w-3.5" />{records.length} записей
           </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
             <BookOpen className="h-3.5 w-3.5" />{templates.length} шаблонов
           </div>
         </div>
         <div className="flex gap-3 mt-4">
           {tab === 'employees' && (
-            <Button onClick={() => setShowAddModal(true)} className="bg-white/10 hover:bg-white/20 border border-white/20 text-white">
+            <Button onClick={() => setShowAddModal(true)} className="bg-card/10 hover:bg-card/20 border border-white/20 text-white">
               <Plus className="h-4 w-4 mr-2" />
               Добавить сотрудника
             </Button>
           )}
           {tab === 'templates' && (
-            <Button onClick={() => { setEditTemplate(null); setShowTemplateModal(true) }} className="bg-white/10 hover:bg-white/20 border border-white/20 text-white">
+            <Button onClick={() => { setEditTemplate(null); setShowTemplateModal(true) }} className="bg-card/10 hover:bg-card/20 border border-white/20 text-white">
               <Plus className="h-4 w-4 mr-2" />
               Создать шаблон
             </Button>

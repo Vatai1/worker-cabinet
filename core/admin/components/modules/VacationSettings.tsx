@@ -169,17 +169,17 @@ function ApprovalTab({ settings, set }: TabProps) {
         <div className="space-y-2">
           {settings.approvalStages.map((stage, index) => (
             <div key={index} className="flex items-center gap-2">
-              <span className="text-xs text-[#6B7280] w-6 shrink-0">{index + 1}.</span>
+              <span className="text-xs text-muted-foreground w-6 shrink-0">{index + 1}.</span>
               <input
                 type="text"
                 value={stage}
                 onChange={(e) => updateStage(index, e.target.value)}
-                className="flex-1 rounded-lg border border-[#252A3D] bg-[#0B0E14] px-3.5 py-2.5 text-sm text-[#E8E8ED] placeholder:text-[#6B7280] transition-all duration-200 focus:outline-none focus:border-[#8B5CF6] focus:shadow-[0_0_0_3px_rgba(139,92,246,0.15)] hover:border-[#3B82F6]"
+                className="flex-1 rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 hover:border-primary"
               />
               <button
                 type="button"
                 onClick={() => removeStage(index)}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-[#6B7280] hover:text-[#EF4444] hover:bg-[#252A3D] transition-colors duration-200 shrink-0"
+                className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-secondary transition-colors duration-200 shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -188,7 +188,7 @@ function ApprovalTab({ settings, set }: TabProps) {
           <button
             type="button"
             onClick={addStage}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-[#8B5CF6] hover:bg-[#8B5CF6]/10 transition-colors duration-200 w-full"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-colors duration-200 w-full"
           >
             <Plus className="w-4 h-4" />
             Добавить этап
@@ -249,8 +249,8 @@ function LimitsTab({ settings, set }: TabProps) {
       <SettingDivider />
 
       <SettingSection title="Дополнительные дни">
-        <div className="rounded-lg border border-[#252A3D] overflow-hidden">
-          <div className="grid grid-cols-[1fr_100px_40px] gap-2 px-3.5 py-2.5 text-xs font-medium text-[#6B7280] uppercase tracking-wider" style={{ backgroundColor: '#11131A' }}>
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="grid grid-cols-[1fr_100px_40px] gap-2 px-3.5 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-secondary">
             <span>Правило</span>
             <span className="text-center">Дни</span>
             <span />
@@ -259,8 +259,8 @@ function LimitsTab({ settings, set }: TabProps) {
             <div
               key={index}
               className={cn(
-                'grid grid-cols-[1fr_100px_40px] gap-2 px-3.5 py-2 items-center border-t border-[#1E2130]',
-                index % 2 === 0 ? 'bg-transparent' : 'bg-[#11131A]/50',
+                'grid grid-cols-[1fr_100px_40px] gap-2 px-3.5 py-2 items-center border-t border-border',
+                index % 2 === 0 ? 'bg-transparent' : 'bg-secondary/50',
               )}
             >
               <input
@@ -268,18 +268,18 @@ function LimitsTab({ settings, set }: TabProps) {
                 value={rule.label}
                 onChange={(e) => updateRule(index, 'label', e.target.value)}
                 placeholder="Название правила"
-                className="rounded-md border border-[#252A3D] bg-[#0B0E14] px-2.5 py-1.5 text-sm text-[#E8E8ED] placeholder:text-[#6B7280] transition-all duration-200 focus:outline-none focus:border-[#8B5CF6] hover:border-[#3B82F6]"
+                className="rounded-md border border-border bg-card px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-200 focus:outline-none focus:border-primary hover:border-primary"
               />
               <input
                 type="number"
                 value={String(rule.days)}
                 onChange={(e) => updateRule(index, 'days', Number(e.target.value))}
-                className="rounded-md border border-[#252A3D] bg-[#0B0E14] px-2.5 py-1.5 text-sm text-[#E8E8ED] text-center transition-all duration-200 focus:outline-none focus:border-[#8B5CF6] hover:border-[#3B82F6]"
+                className="rounded-md border border-border bg-card px-2.5 py-1.5 text-sm text-foreground text-center transition-all duration-200 focus:outline-none focus:border-primary hover:border-primary"
               />
               <button
                 type="button"
                 onClick={() => removeRule(index)}
-                className="flex items-center justify-center w-8 h-8 rounded-md text-[#6B7280] hover:text-[#EF4444] hover:bg-[#252A3D] transition-colors duration-200"
+                className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-secondary transition-colors duration-200"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -289,7 +289,7 @@ function LimitsTab({ settings, set }: TabProps) {
         <button
           type="button"
           onClick={addRule}
-          className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-[#8B5CF6] hover:bg-[#8B5CF6]/10 transition-colors duration-200"
+          className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-colors duration-200"
         >
           <Plus className="w-4 h-4" />
           Добавить правило

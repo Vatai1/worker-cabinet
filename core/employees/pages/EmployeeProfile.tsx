@@ -221,9 +221,9 @@ export function EmployeeProfile() {
       </Link>
 
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
         <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-6">
           <div className="relative shrink-0">
             <Avatar className="h-24 w-24 ring-4 ring-white/20 text-3xl shadow-2xl">
@@ -245,17 +245,17 @@ export function EmployeeProfile() {
             <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">{fullName}</h1>
             <p className="mt-1 text-white/60 text-sm font-medium">{employee.position}</p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium ${status.bg} bg-white/10`}>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium ${status.bg} bg-card/10`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
                 {status.label}
               </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-white/10 backdrop-blur-sm border border-white/10 text-white/80">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-card/10 backdrop-blur-sm border border-white/10 text-white/80">
                 {roleLabels[employee.role] ?? employee.role}
               </span>
               {employee.department && (
                 <Link
                   to={employee.departmentId ? `/departments/${employee.departmentId}` : '/departments'}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-white/10 backdrop-blur-sm border border-white/10 text-white/80 hover:bg-white/20 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-card/10 backdrop-blur-sm border border-white/10 text-white/80 hover:bg-card/20 transition-colors"
                 >
                   <Building2 className="h-3 w-3" />
                   {employee.department}
@@ -265,14 +265,14 @@ export function EmployeeProfile() {
           </div>
           <div className="hidden lg:flex flex-col items-end gap-1 shrink-0">
             <div className="flex flex-wrap justify-end gap-2">
-              <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
                 <FolderKanban className="h-3.5 w-3.5" />{activeProjects} активных проектов
               </div>
-              <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
                 <Clock className="h-3.5 w-3.5" />{calculateWorkExperience(employee.hireDate)}
               </div>
               {(employee.office || employee.cabinet) && (
-                <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
                   <MapPin className="h-3.5 w-3.5" />{[employee.office, employee.cabinet].filter(Boolean).join(', ')}
                 </div>
               )}

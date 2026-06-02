@@ -1,5 +1,6 @@
 ﻿import { useState, useMemo } from 'react'
 import { getVacationRequestStatusBadge } from '@/modules/vacation/data/mockVacationData'
+import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
 import { X, Calendar, FileText, Filter, RotateCcw } from 'lucide-react'
 
@@ -10,6 +11,7 @@ interface VacationHistoryModalProps {
 }
 
 export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHistoryModalProps) {
+  useModalOpen(isOpen)
   const [selectedYear, setSelectedYear] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
 

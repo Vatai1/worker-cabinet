@@ -78,6 +78,24 @@
     -moz-osx-font-smoothing: grayscale;
     transition: background-color 0.3s, color 0.3s;
   }
+  input, textarea, select {
+    @apply bg-background text-foreground;
+  }
+  input::placeholder, textarea::placeholder {
+    @apply text-muted-foreground;
+  }
+  select option {
+    @apply bg-card text-foreground;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0);
+  }
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+  .dark input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
   ::selection {
     background: hsl(var(--primary) / 0.15);
     color: inherit;

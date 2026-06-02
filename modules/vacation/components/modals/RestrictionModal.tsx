@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react'
 import { Button } from '@/shared/components/ui/Button'
+import { useModalOpen } from '@/shared/hooks/useModalOpen'
 
 interface Restriction {
   id: string
@@ -26,6 +27,7 @@ export function RestrictionModal({
   onDeleteRestriction,
   onClose,
 }: RestrictionModalProps) {
+  useModalOpen(isOpen)
   const [restrictionType, setRestrictionType] = useState<'pair' | 'group'>('pair')
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
   const [maxConcurrent, setMaxConcurrent] = useState<number>(1)

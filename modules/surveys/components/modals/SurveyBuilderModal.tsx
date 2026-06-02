@@ -390,7 +390,7 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
                 onClick={() => setAnonymous((v) => !v)}
                 className={`w-10 h-6 rounded-full transition-colors relative ${anonymous ? 'bg-primary' : 'bg-muted'}`}
               >
-                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${anonymous ? 'translate-x-5' : 'translate-x-1'}`} />
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-card transition-transform shadow-sm ${anonymous ? 'translate-x-5' : 'translate-x-1'}`} />
               </button>
             </div>
 

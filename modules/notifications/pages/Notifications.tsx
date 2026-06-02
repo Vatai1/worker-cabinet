@@ -105,9 +105,9 @@ export function Notifications() {
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden gradient-primary text-white rounded-xl animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
         <div className="relative z-10 p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -127,7 +127,7 @@ export function Notifications() {
                   </div>
                 )}
                 {total > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                  <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
                     <Bell className="h-3 w-3 text-white/50" />
                     {total} всего
                   </div>
@@ -137,7 +137,7 @@ export function Notifications() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
                   onClick={markAllAsRead}
                 >
                   <CheckCheck className="h-3.5 w-3.5 mr-1.5" />

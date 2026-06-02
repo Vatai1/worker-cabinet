@@ -124,8 +124,8 @@ export function SurveyPage() {
       </Link>
 
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-6 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-36 h-36 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-0 right-0 w-48 h-48 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-36 h-36 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="h-4 w-4 text-white/60" />
@@ -134,12 +134,12 @@ export function SurveyPage() {
           <h1 className="text-xl lg:text-2xl font-extrabold tracking-tight">{survey.title}</h1>
           {survey.description && <p className="mt-1.5 text-white/55 text-sm">{survey.description}</p>}
           <div className="mt-4 flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white/10 border border-white/10 text-white/80">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-card/10 border border-white/10 text-white/80">
               <ClipboardList className="h-3 w-3 text-white/50" />
               {totalQuestions} {totalQuestions === 1 ? 'вопрос' : totalQuestions < 5 ? 'вопроса' : 'вопросов'}
             </span>
             {survey.deadline && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white/10 border border-white/10 text-white/80">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-card/10 border border-white/10 text-white/80">
                 <Clock className="h-3 w-3 text-white/50" />
                 До {formatDate(survey.deadline)}
               </span>
@@ -151,9 +151,9 @@ export function SurveyPage() {
                 <span>Прогресс</span>
                 <span>{answeredCount} из {totalQuestions}</span>
               </div>
-              <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-1.5 rounded-full bg-card/10 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-white/60 transition-all duration-500"
+                  className="h-full rounded-full bg-card/60 transition-all duration-500"
                   style={{ width: `${totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0}%` }}
                 />
               </div>

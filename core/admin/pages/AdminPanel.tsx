@@ -22,11 +22,11 @@ import {
   HardDrive, Server, AlertCircle, Unlock, UserPlus, Boxes,
   TrendingUp, Clock3, FolderKanban, CalendarX, Settings,
   Calendar, Zap, Briefcase, Wrench, Plane,
-  Pencil, Save,
+  Pencil, Save, Bot,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry, AdminStats } from '@/core/admin/types/admin'
 
-type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'analytics' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries' | 'modules'
+type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'analytics' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries' | 'modules' | 'assistant'
 
 interface TabItem {
   id: TabId
@@ -64,6 +64,7 @@ const TAB_GROUPS: TabGroup[] = [
       { id: 'modules', name: 'Модули', icon: Boxes, description: 'Включение/отключение разделов', color: 'from-orange-500 to-amber-600' },
       { id: 'dictionaries', name: 'Справочники', icon: ScrollText, description: 'Должности, навыки, типы', color: 'from-pink-500 to-rose-600' },
       { id: 'settings', name: 'Настройки', icon: Settings2, description: 'Параметры системы', color: 'from-slate-500 to-gray-600' },
+      { id: 'assistant', name: 'Ассистент', icon: Bot, description: 'AI-ассистент, модель, промпт', color: 'from-violet-500 to-purple-600' },
     ],
   },
   {
@@ -260,9 +261,9 @@ export function AdminPanel() {
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
-        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-white/5 rounded-full" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/2 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/5 rounded-full" />
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
             <Sparkles className="h-6 w-6 text-white/80" />
@@ -337,6 +338,7 @@ export function AdminPanel() {
           {activeTab === 'reports' && <ReportsTab />}
           {activeTab === 'dictionaries' && <DictionariesTab />}
           {activeTab === 'modules' && <ModulesTab />}
+          {activeTab === 'assistant' && <AssistantSettingsTab />}
         </div>
       </div>
     </div>
@@ -1787,6 +1789,127 @@ function SettingsTab() {
   )
 }
 
+// ===================== ASSISTANT SETTINGS TAB =====================
+
+function AssistantSettingsTab() {
+  const [settings, setSettings] = useState<SystemSetting[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  useEffect(() => { fetchSettings() }, [])
+
+  const fetchSettings = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
+      if (res.ok) {
+        const all = await res.json()
+        setSettings(all.filter((s: SystemSetting) => s.key.startsWith('assistant_')))
+      }
+    } catch {} finally { setLoading(false) }
+  }
+
+  const saveSettings = async () => {
+    setSaving(true); setError(null); setSuccess(false)
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/settings`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ settings: settings.map((s) => ({ key: s.key, value: s.value })) }),
+      })
+      if (res.ok) setSuccess(true)
+      else { const data = await res.json(); setError(data.error || 'Ошибка') }
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setSaving(false) }
+  }
+
+  const updateValue = (key: string, value: string) => {
+    setSettings((prev) => prev.map((s) => (s.key === key ? { ...s, value } : s)))
+  }
+
+  const configured = settings.some(s => s.key === 'assistant_api_url' && s.value) && settings.some(s => s.key === 'assistant_api_key' && s.value)
+
+  if (loading) {
+    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="h-5 w-5" /> Настройки AI-ассистента
+          </CardTitle>
+          <CardDescription>
+            Подключение OpenAI-совместимого API для чат-бота в разделе "Ассистент"
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+            </div>
+          )}
+          {success && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-sm">
+              <Check className="h-4 w-4 shrink-0" /> Настройки сохранены
+            </div>
+          )}
+
+          <div className="grid gap-4">
+            {settings.map((setting) => {
+              const isKey = setting.key === 'assistant_api_key'
+              const isPrompt = setting.key === 'assistant_system_prompt'
+              return (
+                <div key={setting.key} className="flex flex-col sm:flex-row sm:items-start gap-2 p-4 rounded-xl border border-border/50">
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{setting.description || setting.key}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{setting.key}</p>
+                  </div>
+                  {isKey ? (
+                    <Input
+                      type="password"
+                      value={setting.value}
+                      onChange={(e) => updateValue(setting.key, e.target.value)}
+                      placeholder="sk-..."
+                      className="sm:w-80"
+                    />
+                  ) : isPrompt ? (
+                    <textarea
+                      value={setting.value}
+                      onChange={(e) => updateValue(setting.key, e.target.value)}
+                      rows={3}
+                      className="sm:w-96 rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                    />
+                  ) : (
+                    <Input
+                      value={setting.value}
+                      onChange={(e) => updateValue(setting.key, e.target.value)}
+                      className="sm:w-80"
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className={`flex items-center gap-2 text-sm ${configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+              <div className={`w-2 h-2 rounded-full ${configured ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              {configured ? 'Подключено' : 'Не настроено — заполните API URL и API ключ'}
+            </div>
+            <Button onClick={saveSettings} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+              Сохранить
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 // ===================== AUDIT TAB =====================
 
 function AuditTab() {
@@ -2970,7 +3093,7 @@ function DictionariesTab() {
               {tab.name}
               <span className={cn(
                 'text-xs px-1.5 py-0.5 rounded-full',
-                isActive ? 'bg-white/20' : 'bg-muted',
+                isActive ? 'bg-card/20' : 'bg-muted',
               )}>{tab.count}</span>
             </button>
           )
@@ -3317,7 +3440,7 @@ function ModulesTab() {
                                 )}
                               >
                                 <div className={cn(
-                                  'absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-all duration-300',
+                                  'absolute top-0.5 w-6 h-6 rounded-full bg-card shadow-sm transition-all duration-300',
                                   mod.is_enabled ? 'left-[22px]' : 'left-0.5',
                                 )} />
                                 {isLoading && (

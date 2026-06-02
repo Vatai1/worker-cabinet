@@ -34,16 +34,16 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 lg:p-10 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-56 h-56 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
-        <div className="absolute top-[20%] right-[15%] w-3 h-3 rounded-full bg-white/20 animate-float" />
-        <div className="absolute bottom-[25%] right-[30%] w-2 h-2 rounded-full bg-white/15 animate-float stagger-3" />
-        <div className="absolute top-[60%] right-[60%] w-2.5 h-2.5 rounded-full bg-white/10 animate-float stagger-5" />
+        <div className="absolute top-0 right-0 w-80 h-80 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-56 h-56 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
+        <div className="absolute top-[20%] right-[15%] w-3 h-3 rounded-full bg-card/20 animate-float" />
+        <div className="absolute bottom-[25%] right-[30%] w-2 h-2 rounded-full bg-card/15 animate-float stagger-3" />
+        <div className="absolute top-[60%] right-[60%] w-2.5 h-2.5 rounded-full bg-card/10 animate-float stagger-5" />
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="h-5 w-5 text-white/70" />
-            <Badge className="bg-white/12 text-white border-white/15 text-xs backdrop-blur-sm">Добро пожаловать</Badge>
+            <Badge className="bg-card/12 text-white border-white/15 text-xs backdrop-blur-sm">Добро пожаловать</Badge>
           </div>
           <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight">Привет, {user?.firstName}!</h1>
           <p className="mt-3 text-white/45 text-sm lg:text-base max-w-md">Вот обзор вашей информации на {new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</p>
