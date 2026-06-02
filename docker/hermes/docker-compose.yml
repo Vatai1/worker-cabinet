@@ -1,0 +1,17 @@
+services:
+  hermes-agent:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-agent
+    restart: unless-stopped
+    volumes:
+      - ${USERPROFILE}/.hermes:/opt/data
+    environment:
+      - HERMES_UID=10000
+      - HERMES_GID=10000
+      - API_SERVER_ENABLED=true
+      - API_SERVER_KEY=wc-assistant-secret-2026
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_CORS_ORIGINS=http://localhost:3000,http://localhost:5000
+    ports:
+      - "127.0.0.1:8642:8642"
+    command: ["gateway", "run"]
