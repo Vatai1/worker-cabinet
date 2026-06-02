@@ -8,7 +8,7 @@ import {
   LayoutDashboard, User, FileText, FolderOpen, FolderKanban,
   LogOut, Menu, X, Users, Plane, Settings, Sun, Moon,
   ChevronDown, FileStack, Building2, ClipboardList,
-  Calendar, Shield, Bell, Crown,
+  Calendar, Shield, Bell, Crown, Bot,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -25,12 +25,14 @@ interface NavItem {
 
 const getOnboardingNavigation = (): NavItem[] => [
   { name: 'Онбординг', href: '/onboarding', icon: ClipboardList, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
   { name: 'Сотрудники', href: '/employees', icon: Users, section: 'Основное' },
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Основное' },
 ]
 
 const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Отдел', icon: Building2, section: 'Работа', children: [
     { name: 'Отпуск', href: '/vacation', module: 'vacation' },
@@ -49,6 +51,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
 
 const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/leader', icon: Users, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Отдел', icon: Building2, section: 'Управление', children: [
     { name: 'Табель', href: '/leader/timesheet', module: 'timesheet' },
@@ -68,6 +71,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
 
 const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'HR-панель', href: '/hr', icon: Users, section: 'Основное' },
   { name: 'Сотрудники', href: '/employees', icon: Users, section: 'Управление' },
@@ -84,6 +88,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
 
 const getAdminNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Администрирование', href: '/admin', icon: Shield, section: 'Основное' },
   { name: 'HR-панель', href: '/hr', icon: Users, section: 'Основное' },
@@ -109,7 +114,7 @@ const roleLabels: Record<string, string> = {
 
 export function Sidebar() {
   const { user, logout } = useAuthStore()
-  const { sidebarOpen, toggleSidebar, darkMode, toggleTheme } = useUIStore()
+  const { sidebarOpen, toggleSidebar, darkMode, toggleTheme, openModals } = useUIStore()
   const { isModuleEnabled, modulesLoaded } = useModulesStore()
   const navigate = useNavigate()
   const location = useLocation()
@@ -171,13 +176,13 @@ export function Sidebar() {
 
   return (
     <>
-      {sidebarOpen && (
+      {sidebarOpen && !openModals && (
         <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden animate-fade-in" onClick={toggleSidebar} />
       )}
 
       <aside className={cn(
-        'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-sidebar-border bg-sidebar-bg transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:translate-x-0',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-sidebar-border bg-sidebar-bg transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:translate-x-0',
+        openModals ? '-translate-x-full' : sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         <div className="relative overflow-hidden px-5 pt-5 pb-4">
           <div className="absolute inset-0 gradient-primary opacity-[0.04]" />

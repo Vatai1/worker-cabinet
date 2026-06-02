@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect } from 'react'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
+import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
 import { Upload, FileText, X, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
@@ -42,6 +43,7 @@ export function CreateVacationModal({
   restrictionWarnings = [],
   onCheckRestrictions,
 }: CreateVacationModalProps) {
+  useModalOpen(isOpen)
   const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
   const [hasTravel, setHasTravel] = useState(false)
   const [comment, setComment] = useState('')

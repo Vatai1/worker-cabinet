@@ -32,6 +32,7 @@ import { CalendarPage } from '@/modules/calendar/pages/CalendarPage'
 import { Notifications } from '@/modules/notifications/pages/Notifications'
 import { AdminPanel } from '@/core/admin/pages/AdminPanel'
 import { HRPanel } from '@/shared/pages/HRPanel'
+import { Assistant } from '@/modules/assistant/pages/Assistant'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -170,6 +171,7 @@ function App() {
               <Route path="hr/onboarding/:id" element={<ModuleGuard module="onboarding"><HRRoute><HROnboarding /></HRRoute></ModuleGuard>} />
               <Route path="leader/timesheet" element={<ModuleGuard module="timesheet"><ManagerRoute><ManagerTimesheet /></ManagerRoute></ModuleGuard>} />
               <Route path="admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+              <Route path="assistant" element={<BlockOnboardingRoute><Assistant /></BlockOnboardingRoute>} />
             </Route>
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>

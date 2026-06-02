@@ -225,9 +225,9 @@ export function HRDictionaries() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
-        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-white/5 rounded-full" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/2 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/5 rounded-full" />
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
             <Sparkles className="h-6 w-6 text-white/80" />
@@ -238,7 +238,7 @@ export function HRDictionaries() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
             <input
               ref={searchRef}
-              className="w-full rounded-xl bg-white/10 border border-white/10 pl-10 pr-9 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all"
+              className="w-full rounded-xl bg-card/10 border border-white/10 pl-10 pr-9 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all"
               placeholder="Поиск по всем справочникам..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -325,7 +325,7 @@ export function HRDictionaries() {
                   <TIcon className="h-4 w-4" />
                   {t.label}
                   {isActive && items.length > 0 && (
-                    <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${isActive ? 'bg-white/20' : 'bg-muted'}`}>
+                    <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${isActive ? 'bg-card/20' : 'bg-muted'}`}>
                       {items.length}
                     </span>
                   )}

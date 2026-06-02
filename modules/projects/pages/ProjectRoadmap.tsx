@@ -34,9 +34,9 @@ const TASK_COLORS = [
 ]
 
 const PRIORITY_CFG: Record<Priority, { label: string; color: string; bg: string }> = {
-  low:    { label: 'Низкий',  color: '#22c55e', bg: 'bg-green-100 text-green-700' },
-  medium: { label: 'Средний', color: '#f59e0b', bg: 'bg-amber-100 text-amber-700' },
-  high:   { label: 'Высокий', color: '#ef4444', bg: 'bg-red-100   text-red-700'   },
+  low:    { label: 'Низкий',  color: '#22c55e', bg: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+  medium: { label: 'Средний', color: '#f59e0b', bg: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  high:   { label: 'Высокий', color: '#ef4444', bg: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
 }
 
 const STATUS_CFG = {
@@ -170,7 +170,7 @@ function TaskModal({ rows, cols, mode, task, defaultRowId, defaultStartCol, onSa
           <label className="flex items-center gap-3 p-3 rounded-xl border border-border cursor-pointer hover:bg-muted/50 transition-colors">
             <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${isMilestone?'bg-primary':'bg-muted-foreground/30'}`}
               onClick={()=>setIsMile(!isMilestone)}>
-              <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${isMilestone?'translate-x-4':''}`}/>
+              <div className={`w-5 h-5 rounded-full bg-card shadow transition-transform ${isMilestone?'translate-x-4':''}`}/>
             </div>
             <div>
               <div className="text-sm font-medium">Веха (Milestone)</div>

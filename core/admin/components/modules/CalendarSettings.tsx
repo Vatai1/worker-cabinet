@@ -220,18 +220,17 @@ export function CalendarSettings({ activeTab }: Props) {
             {settings.categories.map((cat, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#252A3D]"
-                style={{ backgroundColor: '#161822' }}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border bg-card"
               >
                 <span
                   className="w-3 h-3 rounded-full shrink-0"
                   style={{ backgroundColor: cat.color }}
                 />
-                <span className="flex-1 text-sm text-[#E8E8ED] truncate">{cat.name}</span>
+                <span className="flex-1 text-sm text-foreground truncate">{cat.name}</span>
                 <button
                   type="button"
                   onClick={() => removeCategory(idx)}
-                  className="shrink-0 p-1 rounded text-[#6B7280] hover:text-[#EF4444] transition-colors"
+                  className="shrink-0 p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -240,21 +239,21 @@ export function CalendarSettings({ activeTab }: Props) {
           </div>
 
           {showAddCat ? (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 p-3 rounded-lg border border-[#252A3D]" style={{ backgroundColor: '#161822' }}>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 p-3 rounded-lg border border-border bg-card">
               <div className="flex-1">
-                <label className="block text-xs text-[#6B7280] mb-1">Название</label>
+                <label className="block text-xs text-muted-foreground mb-1">Название</label>
                 <input
                   type="text"
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addCategory()}
                   placeholder="Название категории"
-                  className="w-full rounded-lg border border-[#252A3D] bg-[#0B0E14] px-3 py-2 text-sm text-[#E8E8ED] placeholder:text-[#6B7280] focus:outline-none focus:border-[#8B5CF6]"
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#6B7280] mb-1">Цвет</label>
+                <label className="block text-xs text-muted-foreground mb-1">Цвет</label>
                 <div className="flex items-center gap-1.5">
                   {PRESET_COLORS.map((c) => (
                     <button
@@ -265,7 +264,7 @@ export function CalendarSettings({ activeTab }: Props) {
                         'w-6 h-6 rounded-full transition-all',
                         newCatColor === c ? 'ring-2 ring-white ring-offset-2 scale-110' : 'hover:scale-110',
                       )}
-                      style={{ backgroundColor: c, ['--tw-ring-offset-color' as string]: '#161822' } as React.CSSProperties}
+                      style={{ backgroundColor: c, ['--tw-ring-offset-color' as string]: 'hsl(var(--card))' } as React.CSSProperties}
                     />
                   ))}
                 </div>
@@ -274,16 +273,14 @@ export function CalendarSettings({ activeTab }: Props) {
                 <button
                   type="button"
                   onClick={addCategory}
-                  className="px-3 py-2 rounded-lg text-sm font-medium text-white transition-colors"
-                  style={{ backgroundColor: '#8B5CF6' }}
+                  className="px-3 py-2 rounded-lg text-sm font-medium text-primary-foreground transition-colors bg-primary"
                 >
                   Добавить
                 </button>
                 <button
                   type="button"
                   onClick={() => { setShowAddCat(false); setNewCatName('') }}
-                  className="px-3 py-2 rounded-lg text-sm text-[#E8E8ED] border border-[#252A3D] transition-colors hover:bg-[#252A3D]"
-                  style={{ backgroundColor: '#1A1D2B' }}
+                  className="px-3 py-2 rounded-lg text-sm text-foreground border border-border transition-colors hover:bg-secondary bg-secondary"
                 >
                   Отмена
                 </button>
@@ -293,7 +290,7 @@ export function CalendarSettings({ activeTab }: Props) {
             <button
               type="button"
               onClick={() => setShowAddCat(true)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-[#252A3D] text-sm text-[#6B7280] hover:text-[#E8E8ED] hover:border-[#8B5CF6] transition-colors w-full"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary transition-colors w-full"
             >
               <Plus className="w-4 h-4" />
               Добавить категорию
@@ -357,29 +354,29 @@ export function CalendarSettings({ activeTab }: Props) {
     return (
       <div className="space-y-6">
         <SettingSection title="Права доступа по ролям">
-          <div className="rounded-lg border border-[#252A3D] overflow-hidden">
+          <div className="rounded-lg border border-border overflow-hidden">
             <table className="w-full">
               <thead>
-                <tr style={{ backgroundColor: '#1A1D2B' }}>
-                  <th className="text-left px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-[#6B7280]">Роль</th>
-                  <th className="text-left px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-[#6B7280]">Право</th>
-                  <th className="text-left px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-[#6B7280]">Доступ</th>
+                <tr className="bg-secondary">
+                  <th className="text-left px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Роль</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Право</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Доступ</th>
                 </tr>
               </thead>
               <tbody>
                 {PERMISSION_ROWS.map((row) => (
                   <React.Fragment key={row.action}>
-                    <tr className="border-t border-[#1E2130] transition-colors hover:bg-[#1A1D2B]" style={{ backgroundColor: '#161822' }}>
-                      <td className="px-4 py-2 text-sm text-[#8B5CF6] font-medium">Admin</td>
-                      <td className="px-4 py-2 text-sm text-[#E8E8ED] row-span-3 align-top" rowSpan={3}>{row.action}</td>
+                    <tr className="border-t border-border transition-colors hover:bg-secondary bg-card">
+                      <td className="px-4 py-2 text-sm text-primary font-medium">Admin</td>
+                      <td className="px-4 py-2 text-sm text-foreground row-span-3 align-top" rowSpan={3}>{row.action}</td>
                       <td className="px-4 py-2">{row.admin ? <span style={{ color: '#10B981' }}>✅</span> : <span style={{ color: '#EF4444' }}>❌</span>}</td>
                     </tr>
-                    <tr className="transition-colors hover:bg-[#1A1D2B]" style={{ backgroundColor: '#161822' }}>
-                      <td className="px-4 py-2 text-sm text-[#6B7280]">Менеджер</td>
+                    <tr className="transition-colors hover:bg-secondary bg-card">
+                      <td className="px-4 py-2 text-sm text-muted-foreground">Менеджер</td>
                       <td className="px-4 py-2">{row.manager ? <span style={{ color: '#10B981' }}>✅</span> : <span style={{ color: '#EF4444' }}>❌</span>}</td>
                     </tr>
-                    <tr className="transition-colors hover:bg-[#1A1D2B]" style={{ backgroundColor: '#161822' }}>
-                      <td className="px-4 py-2 text-sm text-[#6B7280]">Пользователь</td>
+                    <tr className="transition-colors hover:bg-secondary bg-card">
+                      <td className="px-4 py-2 text-sm text-muted-foreground">Пользователь</td>
                       <td className="px-4 py-2">{row.user ? <span style={{ color: '#10B981' }}>✅</span> : <span style={{ color: '#EF4444' }}>❌</span>}</td>
                     </tr>
                   </React.Fragment>

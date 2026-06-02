@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { X, Settings2 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { useModuleSettingsStore } from '@/core/admin/store/moduleSettingsStore'
@@ -54,6 +55,7 @@ interface Props {
 }
 
 export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
+  useModalOpen(isOpen)
   const [activeTab, setActiveTab] = useState<string>(MODULE_TABS[moduleId][0].id)
   const [mobileTabOpen, setMobileTabOpen] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -148,8 +150,8 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
     <div
       ref={overlayRef}
       onClick={(e) => { if (e.target === overlayRef.current) handleClose() }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.6)', animation: closing ? 'modalOverlayOut 0.2s ease forwards' : 'none' }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60"
+      style={{ animation: closing ? 'modalOverlayOut 0.2s ease forwards' : 'none' }}
     >
       <style>{`
         @keyframes modalIn {
@@ -168,33 +170,32 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
 
       <div
         ref={contentRef}
-        className="relative flex flex-col overflow-hidden rounded-2xl border border-[#252A3D] shadow-[0_24px_48px_rgba(0,0,0,0.6)]"
+        className="relative flex flex-col overflow-hidden rounded-2xl border border-border shadow-2xl bg-card"
         style={{
-          backgroundColor: '#161822',
           width: 'min(960px, calc(100vw - 32px))',
           height: 'min(92vh, 880px)',
           animation: closing ? 'modalOut 0.2s ease forwards' : 'modalIn 0.2s ease-out',
         }}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1E2130]" style={{ backgroundColor: '#1A1D2B' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg text-lg" style={{ backgroundColor: `${info.color}20` }}>
               {info.emoji}
             </div>
             <div>
-              <h2 className="text-base font-bold text-[#FFFFFF]">Настройки модуля «{info.name}»</h2>
+              <h2 className="text-base font-bold text-foreground">Настройки модуля «{info.name}»</h2>
             </div>
           </div>
           <button
             onClick={handleClose}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-[#6B7280] hover:text-[#E8E8ED] hover:bg-[#252A3D] transition-colors duration-200"
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-200"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="flex flex-1 min-h-0">
-          <nav className="hidden md:flex flex-col w-[180px] shrink-0 border-r border-[#1E2130] overflow-y-auto" style={{ backgroundColor: '#11131A' }}>
+          <nav className="hidden md:flex flex-col w-[180px] shrink-0 border-r border-border overflow-y-auto bg-popover">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -202,39 +203,39 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
                 className={cn(
                   'relative flex items-center px-4 py-3 text-sm text-left transition-all duration-200',
                   activeTab === tab.id
-                    ? 'text-[#FFFFFF] bg-[#1A1D2B]'
-                    : 'text-[#6B7280] hover:text-[#E8E8ED] hover:bg-[#1A1D2B]/50',
+                    ? 'text-foreground bg-muted'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
                 )}
               >
                 {activeTab === tab.id && (
-                  <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-[#8B5CF6]" />
+                  <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-primary" />
                 )}
                 {tab.name}
               </button>
             ))}
           </nav>
 
-          <div className="md:hidden border-b border-[#1E2130] px-4 py-2" style={{ backgroundColor: '#11131A' }}>
+          <div className="md:hidden border-b border-border px-4 py-2 bg-popover">
             <div className="relative">
               <button
                 onClick={() => setMobileTabOpen(!mobileTabOpen)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-[#E8E8ED] bg-[#1A1D2B] border border-[#252A3D]"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-foreground bg-muted border border-border"
               >
                 <span className="flex items-center gap-2">
-                  <Settings2 className="w-4 h-4 text-[#8B5CF6]" />
+                  <Settings2 className="w-4 h-4 text-primary" />
                   {tabs.find(t => t.id === activeTab)?.name}
                 </span>
                 <svg className={cn('w-4 h-4 transition-transform', mobileTabOpen && 'rotate-180')} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
               </button>
               {mobileTabOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-[#252A3D] overflow-hidden z-10 shadow-lg" style={{ backgroundColor: '#1A1D2B' }}>
+                <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-border overflow-hidden z-10 shadow-lg bg-muted">
                   {tabs.map((tab) => (
                     <button
                       key={tab.id}
                       onClick={() => { setActiveTab(tab.id); setMobileTabOpen(false) }}
                       className={cn(
                         'w-full text-left px-3 py-2 text-sm transition-colors',
-                        activeTab === tab.id ? 'text-[#FFFFFF] bg-[#252A3D]' : 'text-[#6B7280] hover:text-[#E8E8ED]',
+                        activeTab === tab.id ? 'text-foreground bg-muted' : 'text-muted-foreground hover:text-foreground',
                       )}
                     >
                       {tab.name}
@@ -248,7 +249,7 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
           <div className="flex-1 overflow-y-auto p-6">
             {loading ? (
               <div className="flex items-center justify-center h-32">
-                <div className="w-6 h-6 border-2 border-[#8B5CF6] border-t-transparent rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
             ) : (
               renderContent()
@@ -256,19 +257,17 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#1E2130]" style={{ backgroundColor: '#161822' }}>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-card">
           <button
             onClick={handleClose}
-            className="px-5 py-2.5 rounded-lg text-sm font-medium text-[#E8E8ED] border border-[#252A3D] transition-colors duration-200 hover:bg-[#252A3D]"
-            style={{ backgroundColor: '#1A1D2B' }}
+            className="px-5 py-2.5 rounded-lg text-sm font-medium text-foreground border border-border transition-colors duration-200 hover:bg-muted bg-muted"
           >
             Отмена
           </button>
           <button
             onClick={handleSave}
             disabled={saving || !isDirty}
-            className="px-5 py-2.5 rounded-lg text-sm font-medium text-[#FFFFFF] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#7C3AED] active:bg-[#6D28D9]"
-            style={{ backgroundColor: '#8B5CF6' }}
+            className="px-5 py-2.5 rounded-lg text-sm font-medium text-primary-foreground transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 active:bg-primary/80 bg-primary"
           >
             {saving ? 'Сохранение...' : 'Сохранить изменения'}
           </button>
@@ -276,21 +275,19 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
 
         {showDirtyWarning && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-2xl">
-            <div className="mx-4 max-w-sm w-full rounded-xl border border-[#252A3D] p-6 text-center" style={{ backgroundColor: '#1A1D2B' }}>
-              <h3 className="text-base font-bold text-[#FFFFFF] mb-2">Несохранённые изменения</h3>
-              <p className="text-sm text-[#6B7280] mb-5">У вас есть несохранённые изменения. Вы уверены, что хотите закрыть без сохранения?</p>
+            <div className="mx-4 max-w-sm w-full rounded-xl border border-border p-6 text-center bg-muted">
+              <h3 className="text-base font-bold text-foreground mb-2">Несохранённые изменения</h3>
+              <p className="text-sm text-muted-foreground mb-5">У вас есть несохранённые изменения. Вы уверены, что хотите закрыть без сохранения?</p>
               <div className="flex gap-3 justify-center">
                 <button
                   onClick={() => setShowDirtyWarning(false)}
-                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-[#E8E8ED] border border-[#252A3D] transition-colors hover:bg-[#252A3D]"
-                  style={{ backgroundColor: '#1A1D2B' }}
+                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-foreground border border-border transition-colors hover:bg-muted bg-muted"
                 >
                   Продолжить редактирование
                 </button>
                 <button
                   onClick={handleDiscardAndClose}
-                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#DC2626]"
-                  style={{ backgroundColor: '#EF4444' }}
+                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-primary-foreground transition-colors hover:bg-destructive/90 bg-destructive"
                 >
                   Не сохранять
                 </button>

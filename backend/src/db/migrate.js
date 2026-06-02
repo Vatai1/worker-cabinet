@@ -285,6 +285,16 @@ async function runMigrations() {
       )
     `).catch(e => console.log('  - vacation_restrictions:', e.message))
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS assistant_messages (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - assistant_messages:', e.message))
+
     console.log('✅ Tables created')
 
     // Step 2.5: Add new columns to existing tables
@@ -1329,6 +1339,10 @@ async function runMigrations() {
       { key: 'login_stat_3_label', value: 'отделов', desc: 'Статистика 3 — подпись' },
       { key: 'login_demo_buttons', value: 'true', desc: 'Показывать демо-кнопки быстрого входа' },
       { key: 'login_show_stats', value: 'true', desc: 'Показывать блок статистики на странице входа' },
+      { key: 'assistant_api_url', value: '', desc: 'API URL ассистента (OpenAI-совместимый)' },
+      { key: 'assistant_api_key', value: '', desc: 'API ключ ассистента' },
+      { key: 'assistant_model', value: 'gpt-4o-mini', desc: 'Модель AI ассистента' },
+      { key: 'assistant_system_prompt', value: 'Ты — кадровый ассистент. Помогай сотрудникам с вопросами о кадрах, отпусках, документах. Отвечай на русском языке.', desc: 'Системный промпт ассистента' },
     ]
     for (const s of settings) {
       await db.query(

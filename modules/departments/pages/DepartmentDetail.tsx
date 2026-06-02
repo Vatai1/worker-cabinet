@@ -107,11 +107,11 @@ export function DepartmentDetail() {
       </div>
 
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-5">
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/15 shrink-0">
+          <div className="w-14 h-14 bg-card/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/15 shrink-0">
             <Users className="h-7 w-7 text-white" />
           </div>
           <div className="flex-1 min-w-0">

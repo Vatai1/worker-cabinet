@@ -72,6 +72,7 @@ export function Vacation() {
       if (isManager) {
         fetchAllRequests()
         fetchRestrictions(user.departmentId || '1')
+        fetchDepartmentRequests(user.departmentId || '1')
       } else {
         fetchDepartmentRequests(user.departmentId || '1')
       }
@@ -352,9 +353,9 @@ export function Vacation() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="relative overflow-hidden gradient-primary text-white rounded-xl animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-white/3 rounded-full blur-2xl" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
         <div className="relative z-10 p-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
@@ -372,7 +373,7 @@ export function Vacation() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <div className="flex flex-wrap gap-2">
                 {balance && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                  <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
                     <Clock className="h-3 w-3 text-white/50" />
                     {balance.availableDays} дн. доступно
                   </div>
@@ -395,7 +396,7 @@ export function Vacation() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                    className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
                     onClick={() => setShowRestrictionModal(true)}
                   >
                     <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -407,7 +408,7 @@ export function Vacation() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
                   onClick={() => setShowApplicationModal(true)}
                 >
                   <FileText className="w-3.5 h-3.5 mr-1.5" />
@@ -416,7 +417,7 @@ export function Vacation() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
                   onClick={() => setShowTransferApplicationModal(true)}
                 >
                   <FileText className="w-3.5 h-3.5 mr-1.5" />
@@ -425,7 +426,7 @@ export function Vacation() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
                   onClick={() => setShowHistoryModal(true)}
                 >
                   <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -841,8 +842,8 @@ export function Vacation() {
           isOpen={showDetailModal}
           request={detailRequest}
           onClose={handleCloseDetailModal}
-          onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && user?.id === String(detailRequest?.departmentManagerId) ? handleApprove : undefined}
-          onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && user?.id === String(detailRequest?.departmentManagerId) ? handleReject : undefined}
+          onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isDepartmentManager ? handleApprove : undefined}
+          onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isDepartmentManager ? handleReject : undefined}
           loading={loading}
           intersectionWarnings={intersectionWarnings}
           onTransfer={detailRequest && user?.id === detailRequest?.userId && detailRequest?.status === VacationRequestStatus.APPROVED ? handleTransferClick : undefined}

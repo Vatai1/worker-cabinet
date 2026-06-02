@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
+import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
 import { formatDate } from '@/shared/lib/utils'
 import type { VacationRequest } from '@/shared/types'
@@ -13,6 +14,7 @@ interface VacationTransferModalProps {
 }
 
 export function VacationTransferModal({ isOpen, request, onClose, onSubmit, loading }: VacationTransferModalProps) {
+  useModalOpen(isOpen)
   const [newStartDate, setNewStartDate] = useState('')
   const [newEndDate, setNewEndDate] = useState('')
   const [reason, setReason] = useState('')
