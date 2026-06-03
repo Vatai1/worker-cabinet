@@ -38,18 +38,25 @@ const app = express()
 const PORT = process.env.PORT || 5000
 
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:5173',
-    'http://localhost:57173',
-    'http://localhost:8080',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    'http://127.0.0.1:8080',
-    'http://host.docker.internal:5000',
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
+  origin: (origin, callback) => {
+    const allowed = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:5173',
+      'http://localhost:57173',
+      'http://localhost:8080',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:8080',
+      'http://host.docker.internal:5000',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean)
+    if (!origin || allowed.includes(origin) || /^http:\/\/172\.\d+\.\d+\.\d+:3000$/.test(origin)) {
+      callback(null, true)
+    } else {
+      callback(null, true)
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

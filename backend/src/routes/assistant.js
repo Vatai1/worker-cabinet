@@ -1,6 +1,17 @@
 import { Router } from 'express'
+import jwt from 'jsonwebtoken'
 import { authenticateToken } from '../middleware/auth.js'
 import { query, getClient } from '../config/database.js'
+
+const ASSISTANT_TOKEN_EXPIRES = '5m'
+
+function generateAssistantToken(userId) {
+  return jwt.sign(
+    { id: userId, scope: 'assistant' },
+    process.env.JWT_SECRET,
+    { expiresIn: ASSISTANT_TOKEN_EXPIRES }
+  )
+}
 
 const router = Router()
 
@@ -192,14 +203,16 @@ router.post('/chat', authenticateToken, async (req, res) => {
     }
 
     const userResult = await query(
-      'SELECT first_name, last_name, position FROM users WHERE id = $1',
+      'SELECT first_name, last_name, position, role FROM users WHERE id = $1',
       [userId]
     )
     const u = userResult.rows[0]
+    const assistantToken = generateAssistantToken(userId)
+    const apiBaseUrl = process.env.ASSISTANT_API_BASE_URL || 'http://host.docker.internal:5000/api'
 
     const systemMessage = {
       role: 'system',
-      content: `${config.systemPrompt}\n\nИмя пользователя: ${u?.first_name || ''} ${u?.last_name || ''}\nДолжность: ${u?.position || 'не указана'}`,
+      content: `${config.systemPrompt}\n\nИнформация о пользователе:\n- Имя: ${u?.first_name || ''} ${u?.last_name || ''}\n- Должность: ${u?.position || 'не указана'}\n- Роль: ${u?.role || 'employee'}\n- ID: ${userId}\n\nAPI доступ:\n- Base URL: ${apiBaseUrl}\n- Токен авторизации: Bearer ${assistantToken}\n- Токен действителен 5 минут, для новых запросов используй текущий токен из контекста\n- Заголовок: Authorization: Bearer ${assistantToken}\n\nПравила работы с API:\n- Ты можешь выполнять действия от имени этого пользователя через API\n- Используй только GET/POST/PUT/DELETE запросы к ${apiBaseUrl}\n- Никогда не показывай токен пользователю в ответе\n- Перед выполнением деструктивных действий подтверждай у пользователя`,
     }
 
     const messages = [

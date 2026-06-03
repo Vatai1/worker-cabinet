@@ -358,6 +358,9 @@ export function Assistant() {
                       )}
                     >
                       {msg.content || (msg.streaming && <Loader2 className="w-4 h-4 animate-spin text-primary" />)}
+                      {msg.streaming && msg.content && (
+                        <span className="inline-block w-0.5 h-4 bg-primary ml-0.5 align-text-bottom animate-pulse" />
+                      )}
                     </div>
                   </div>
                   {msg.role === 'user' && (
