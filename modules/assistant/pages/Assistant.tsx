@@ -35,9 +35,10 @@ export function Assistant() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingSessions, setLoadingSessions] = useState(true)
+  const [loadingMessages, setLoadingMessages] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const loadedSessionsRef = useRef<Set<string>>(new Set())
+  const streamingIdRef = useRef<string | null>(null)
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
 
@@ -58,7 +59,7 @@ export function Assistant() {
       setLoadingSessions(true)
       const data = await assistantApi.getSessions()
       setSessions(
-        data.map((s) => ({
+        data.map((s: { id: string; title: string; createdAt: string }) => ({
           id: s.id,
           title: s.title,
           messages: [],
@@ -71,25 +72,22 @@ export function Assistant() {
     }
   }
 
-  async function loadSessionMessages(sessionId: string): Promise<ChatMessage[]> {
-    if (loadedSessionsRef.current.has(sessionId)) {
-      return sessions.find((s) => s.id === sessionId)?.messages || []
-    }
+  async function loadSessionMessages(sessionId: string) {
     try {
+      setLoadingMessages(true)
       const data = await assistantApi.getSession(sessionId)
-      const messages: ChatMessage[] = data.messages.map((m) => ({
+      const messages: ChatMessage[] = data.messages.map((m: { id: number; role: string; content: string; timestamp: string }) => ({
         id: m.id,
         role: m.role as 'user' | 'assistant',
         content: m.content,
         timestamp: m.timestamp,
       }))
-      loadedSessionsRef.current.add(sessionId)
       setSessions((prev) =>
         prev.map((s) => (s.id === sessionId ? { ...s, messages } : s))
       )
-      return messages
     } catch {
-      return []
+    } finally {
+      setLoadingMessages(false)
     }
   }
 
@@ -110,7 +108,6 @@ export function Assistant() {
 
   const deleteSession = async (id: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== id))
-    loadedSessionsRef.current.delete(id)
     if (activeSessionId === id) {
       const remaining = sessions.filter((s) => s.id !== id)
       setActiveSessionId(remaining.length > 0 ? remaining[0].id : null)
@@ -121,7 +118,9 @@ export function Assistant() {
   const selectSession = async (id: string) => {
     setActiveSessionId(id)
     setError(null)
-    await loadSessionMessages(id)
+    if (streamingIdRef.current !== id) {
+      await loadSessionMessages(id)
+    }
   }
 
   const handleSend = async () => {
@@ -160,6 +159,8 @@ export function Assistant() {
       streaming: true,
       toolCalls: [],
     }
+
+    streamingIdRef.current = sessionId
 
     setSessions((prev) =>
       prev.map((s) => {
@@ -218,10 +219,6 @@ export function Assistant() {
           return { ...s, messages: msgs }
         })
       )
-
-      if (isNewSession) {
-        loadedSessionsRef.current.add(sessionId)
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Произошла ошибка')
       setSessions((prev) =>
@@ -236,6 +233,7 @@ export function Assistant() {
       }
     } finally {
       setLoading(false)
+      streamingIdRef.current = null
       inputRef.current?.focus()
     }
   }
@@ -312,13 +310,18 @@ export function Assistant() {
         ) : (
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {activeSession.messages.length === 0 && (
+              {loadingMessages && (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {!loadingMessages && activeSession.messages.length === 0 && (
                 <div className="flex items-center gap-3 p-4 rounded-xl bg-muted/30 text-sm text-muted-foreground">
                   <Bot className="w-5 h-5 text-primary shrink-0" />
                   Привет{user?.firstName ? `, ${user.firstName}` : ''}! Чем могу помочь?
                 </div>
               )}
-              {activeSession.messages.map((msg: ChatMessage) => (
+              {!loadingMessages && activeSession.messages.map((msg: ChatMessage) => (
                 <div
                   key={msg.id}
                   className={cn('flex gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}
