@@ -1797,6 +1797,7 @@ function AssistantSettingsTab() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [hermesStatus, setHermesStatus] = useState<'unknown' | 'running' | 'stopped'>('unknown')
 
   useEffect(() => { fetchSettings() }, [])
 
@@ -1828,6 +1829,28 @@ function AssistantSettingsTab() {
     setSettings((prev) => prev.map((s) => (s.key === key ? { ...s, value } : s)))
   }
 
+  const checkHermes = async () => {
+    try {
+      const port = settings.find(s => s.key === 'assistant_hermes_port')?.value || '8642'
+      const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(3000) })
+      if (res.ok) { setHermesStatus('running') } else { setHermesStatus('stopped') }
+    } catch { setHermesStatus('stopped') }
+  }
+
+  const toggleHermes = () => {
+    const enabled = settings.find(s => s.key === 'assistant_hermes_enabled')
+    if (!enabled) return
+    const newVal = enabled.value === 'true' ? 'false' : 'true'
+    updateValue('assistant_hermes_enabled', newVal)
+    if (newVal === 'true') {
+      const port = settings.find(s => s.key === 'assistant_hermes_port')?.value || '8642'
+      const apiKey = settings.find(s => s.key === 'assistant_hermes_api_key')?.value || 'wc-assistant-secret'
+      updateValue('assistant_api_url', `http://127.0.0.1:${port}/v1/chat/completions`)
+      updateValue('assistant_api_key', apiKey)
+    }
+  }
+
+  const hermesEnabled = settings.find(s => s.key === 'assistant_hermes_enabled')?.value === 'true'
   const configured = settings.some(s => s.key === 'assistant_api_url' && s.value) && settings.some(s => s.key === 'assistant_api_key' && s.value)
 
   if (loading) {
@@ -1842,7 +1865,7 @@ function AssistantSettingsTab() {
             <Bot className="h-5 w-5" /> Настройки AI-ассистента
           </CardTitle>
           <CardDescription>
-            Подключение OpenAI-совместимого API для чат-бота в разделе "Ассистент"
+            Подключение OpenAI-совместимого API для чат-бота в разделе «Ассистент»
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1857,8 +1880,79 @@ function AssistantSettingsTab() {
             </div>
           )}
 
+          <div className="p-4 rounded-xl border border-border/50 bg-muted/20 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-900/30">
+                  <Boxes className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Hermes Agent (встроенный)</p>
+                  <p className="text-xs text-muted-foreground">Docker-контейнер nousresearch/hermes-agent</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={checkHermes}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  {hermesStatus === 'running' && <span className="text-emerald-600">Запущен</span>}
+                  {hermesStatus === 'stopped' && <span className="text-red-500">Остановлен</span>}
+                  {hermesStatus === 'unknown' && 'Проверить'}
+                </button>
+                <div
+                  onClick={toggleHermes}
+                  className={cn(
+                    'relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer transition-colors',
+                    hermesEnabled ? 'bg-primary' : 'bg-muted'
+                  )}
+                >
+                  <span className={cn(
+                    'inline-block h-4 w-4 rounded-full bg-white transition-transform',
+                    hermesEnabled ? 'translate-x-6' : 'translate-x-1'
+                  )} />
+                </div>
+              </div>
+            </div>
+
+            {hermesEnabled && (
+              <div className="grid gap-3 pt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">Порт</p>
+                    <p className="text-xs text-muted-foreground">Порт API Server внутри контейнера</p>
+                  </div>
+                  <Input
+                    value={settings.find(s => s.key === 'assistant_hermes_port')?.value || ''}
+                    onChange={(e) => updateValue('assistant_hermes_port', e.target.value)}
+                    className="sm:w-40"
+                    placeholder="8642"
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">API ключ</p>
+                    <p className="text-xs text-muted-foreground">Ключ для доступа к API Server</p>
+                  </div>
+                  <Input
+                    type="password"
+                    value={settings.find(s => s.key === 'assistant_hermes_api_key')?.value || ''}
+                    onChange={(e) => updateValue('assistant_hermes_api_key', e.target.value)}
+                    className="sm:w-64"
+                    placeholder="wc-assistant-secret"
+                  />
+                </div>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/40 text-xs text-muted-foreground">
+                  <Zap className="h-3.5 w-3.5 shrink-0" />
+                  Запуск: <code className="bg-background px-1.5 py-0.5 rounded text-[11px]">docker compose up -d hermes-agent</code>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid gap-4">
-            {settings.map((setting) => {
+            {settings.filter(s => !s.key.startsWith('assistant_hermes_')).map((setting) => {
               const isKey = setting.key === 'assistant_api_key'
               const isPrompt = setting.key === 'assistant_system_prompt'
               return (

@@ -1356,6 +1356,9 @@ async function runMigrations() {
       { key: 'assistant_api_key', value: '', desc: 'API ключ ассистента' },
       { key: 'assistant_model', value: 'gpt-4o-mini', desc: 'Модель AI ассистента' },
       { key: 'assistant_system_prompt', value: 'Ты — кадровый ассистент. Помогай сотрудникам с вопросами о кадрах, отпусках, документах. Отвечай на русском языке.', desc: 'Системный промпт ассистента' },
+      { key: 'assistant_hermes_enabled', value: 'false', desc: 'Использовать встроенный Hermes Agent (Docker)' },
+      { key: 'assistant_hermes_port', value: '8642', desc: 'Порт Hermes Agent' },
+      { key: 'assistant_hermes_api_key', value: '', desc: 'API ключ для Hermes Agent API Server' },
     ]
     for (const s of settings) {
       await db.query(
