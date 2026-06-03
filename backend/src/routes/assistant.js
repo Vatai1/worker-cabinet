@@ -6,7 +6,7 @@ const router = Router()
 
 async function getAssistantConfig() {
   const result = await query(
-    `SELECT key, value FROM system_settings WHERE key IN ('assistant_api_url', 'assistant_api_key', 'assistant_model', 'assistant_system_prompt')`
+    `SELECT key, value FROM system_settings WHERE key LIKE 'assistant_%'`
   )
   const map = Object.fromEntries(result.rows.map(r => [r.key, r.value]))
   return {
@@ -14,6 +14,9 @@ async function getAssistantConfig() {
     apiKey: map.assistant_api_key || '',
     model: map.assistant_model || 'gpt-4o-mini',
     systemPrompt: map.assistant_system_prompt || 'Ты — кадровый ассистент. Помогай сотрудникам с вопросами о кадрах, отпусках, документах. Отвечай на русском языке.',
+    temperature: parseFloat(map.assistant_temperature) || 0.7,
+    maxTokens: parseInt(map.assistant_max_tokens) || 2048,
+    historyLimit: parseInt(map.assistant_history_limit) || 20,
   }
 }
 
@@ -201,7 +204,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
 
     const messages = [
       systemMessage,
-      ...history.slice(-20).map((m) => ({ role: m.role, content: m.content })),
+      ...history.slice(-config.historyLimit).map((m) => ({ role: m.role, content: m.content })),
       { role: 'user', content: message },
     ]
 
@@ -214,8 +217,8 @@ router.post('/chat', authenticateToken, async (req, res) => {
       body: JSON.stringify({
         model: config.model,
         messages,
-        max_tokens: 2048,
-        temperature: 0.7,
+        max_tokens: config.maxTokens,
+        temperature: config.temperature,
         stream: true,
       }),
     })
