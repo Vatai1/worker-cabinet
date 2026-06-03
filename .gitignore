@@ -1,77 +1,66 @@
-# Dependencies
-node_modules/
+
+!.vscode/extensions.json
+.cache
+.DS_Store
+.env
+.env.*.local
+.env.local
+.env.onlyoffice
+.idea
+.kilo/
+.nyc_output
 .pnp
 .pnp.js
-
-# Build outputs
-dist/
-dist-ssr/
-*.local
-
-# Vite
+.superpowers/
+.temp
 .vite/
-
-# Editor directories and files
 .vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Logs
-logs
+.worktrees/
+*.local
 *.log
+*.njsproj
+*.ntvs*
+*.save
+*.sln
+*.suo
+*.sw?
+*.tsbuildinfo
+/blob-report/
+/playwright-report/
+/playwright/.auth/
+/playwright/.cache/
+/test-results/
+# Build outputs
+# Debug/test files
+# Dependencies
+# Editor directories and files
+# Environment variables
+# Logs
+# Misc
+# OS
+# Playwright
+# Testing
+# Tool artifacts
+# Uploads
+# Vite
+backend/uploads/
+coverage
+dist-ssr/
+dist/
+docker/hermes/data/
+err.txt
+lerna-debug.log*
+logs
+logs/
+node_modules/
 npm-debug.log*
+nul
+out.txt
+pnpm-debug.log*
+REFACTORING_SUMMARY.md
+server.pid
+test-onlyoffice.html
+Thumbs.db
+vite.config.d.ts
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-coverage
-.nyc_output
-
-# Misc
-.cache
-.temp
-*.tsbuildinfo
-server.pid
-logs/
-*.save
-vite.config.d.ts
-
-# Tool artifacts
-.superpowers/
-.kilo/
-nul
-err.txt
-out.txt
-
-# Debug/test files
-test-onlyoffice.html
-.env.onlyoffice
-REFACTORING_SUMMARY.md
-
-# Uploads
-backend/uploads/
-.worktrees/
-
-# Playwright
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
-/playwright/.auth/

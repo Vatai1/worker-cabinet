@@ -154,9 +154,9 @@ services:
     container_name: worker-cabinet-hermes
     restart: unless-stopped
     volumes:
-      - ${HOME:-~}/.hermes:/opt/data
+      - ./docker/hermes/data:/opt/data
     env_file:
-      - path: ${HOME:-~}/.hermes/.env
+      - path: ./docker/hermes/data/.env
         required: false
     environment:
       - HERMES_UID=${HERMES_UID:-1000}
