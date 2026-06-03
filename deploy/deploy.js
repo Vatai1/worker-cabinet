@@ -186,8 +186,8 @@ async function setupEnv() {
 }
 
 async function startServices() {
-  log.info('Запуск сервисов (PostgreSQL, MinIO, OnlyOffice)...')
-  await runCommand('docker-compose', ['up', '-d', 'postgres', 'minio', 'onlyoffice', 'rabbitmq'])
+  log.info('Запуск сервисов (PostgreSQL, MinIO, OnlyOffice, Hermes Agent)...')
+  await runCommand('docker-compose', ['up', '-d', 'postgres', 'minio', 'onlyoffice', 'rabbitmq', 'hermes-agent'])
   log.success('Сервисы запущены')
 
   log.info('Ожидание готовности PostgreSQL...')
