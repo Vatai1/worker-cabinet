@@ -1728,4 +1728,97 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
   res.json(result.rows[0].settings)
 }))
 
+router.post('/assistant/hermes-config', asyncHandler(async (req, res) => {
+  const keys = [
+    'assistant_hermes_provider', 'assistant_hermes_model', 'assistant_hermes_provider_api_key',
+    'assistant_hermes_provider_base_url', 'assistant_hermes_toolsets', 'assistant_hermes_approvals',
+    'assistant_hermes_max_turns', 'assistant_hermes_port', 'assistant_hermes_api_key',
+  ]
+  const result = await query(
+    `SELECT key, value FROM system_settings WHERE key = ANY($1)`, [keys]
+  )
+  const map = Object.fromEntries(result.rows.map(r => [r.key, r.value]))
+
+  const provider = map.assistant_hermes_provider || 'zai'
+  const model = map.assistant_hermes_model || 'glm-5.1'
+  const apiKey = map.assistant_hermes_provider_api_key || ''
+  const baseUrl = map.assistant_hermes_provider_base_url || ''
+  const toolsets = (map.assistant_hermes_toolsets || 'web,terminal,file,browser').split(',').map(t => t.trim()).filter(Boolean)
+  const approvals = map.assistant_hermes_approvals || 'manual'
+  const maxTurns = parseInt(map.assistant_hermes_max_turns) || 150
+
+  const envVars = {}
+  const providerEnvMap = {
+    openrouter: 'OPENROUTER_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    deepseek: 'DEEPSEEK_API_KEY',
+    xai: 'XAI_API_KEY',
+    google: 'GOOGLE_API_KEY',
+    zai: 'GLM_API_KEY',
+  }
+  const envKey = providerEnvMap[provider] || `${provider.toUpperCase()}_API_KEY`
+  if (apiKey) envVars[envKey] = apiKey
+  if (provider === 'zai' && baseUrl) {
+    envVars.GLM_BASE_URL = baseUrl
+  } else if (baseUrl) {
+    envVars[`${provider.toUpperCase()}_BASE_URL`] = baseUrl
+  }
+
+  const config = {
+    model: {
+      default: model,
+      provider,
+      ...(baseUrl ? { base_url: baseUrl } : {}),
+    },
+    toolsets,
+    agent: {
+      max_turns: maxTurns,
+      tool_use_enforcement: 'auto',
+    },
+    approvals: { mode: approvals },
+    terminal: { backend: 'local', timeout: 180 },
+    compression: { enabled: true, threshold: 0.5, target_ratio: 0.2 },
+    security: { redact_secrets: true },
+  }
+
+  const hermesHome = process.env.HOME + '/.hermes'
+  const fs = await import('fs')
+  const path = await import('path')
+  const yaml = await import('js-yaml')
+
+  const configPath = path.join(hermesHome, 'config.yaml')
+  const existingConfig = fs.existsSync(configPath)
+    ? yaml.load(fs.readFileSync(configPath, 'utf8')) || {}
+    : {}
+  const mergedConfig = { ...existingConfig, ...config }
+  fs.writeFileSync(configPath, yaml.dump(mergedConfig, { lineWidth: -1 }))
+
+  const envPath = path.join(hermesHome, '.env')
+  let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
+  for (const [key, val] of Object.entries(envVars)) {
+    const escaped = val.replace(/"/g, '\\"')
+    const regex = new RegExp(`^${key}=.*$`, 'm')
+    if (regex.test(envContent)) {
+      envContent = envContent.replace(regex, `${key}=${escaped}`)
+    } else {
+      envContent += `\n${key}=${escaped}`
+    }
+  }
+  envContent = envContent.trim() + '\n'
+  fs.writeFileSync(envPath, envContent)
+
+  const { execSync } = await import('child_process')
+  try {
+    execSync('docker restart worker-cabinet-hermes', { timeout: 30000 })
+  } catch (e) {
+    return res.json({ success: true, restarted: false, warning: 'Контейнер не найден или не перезапущен' })
+  }
+
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    'hermes_config_update', 'system', null, { provider, model, toolsets }, req.ip)
+
+  res.json({ success: true, restarted: true })
+}))
+
 export default router
