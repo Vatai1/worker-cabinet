@@ -216,6 +216,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
         messages,
         max_tokens: 2048,
         temperature: 0.7,
+        stream: true,
       }),
     })
 
@@ -225,13 +226,59 @@ router.post('/chat', authenticateToken, async (req, res) => {
       return res.status(502).json({ error: 'Ошибка связи с AI-сервисом' })
     }
 
-    const aiData = await aiResponse.json()
-    const responseText = aiData.choices?.[0]?.message?.content || 'Не удалось получить ответ'
+    const aiContentType = aiResponse.headers.get('content-type') || ''
 
-    await query(
-      `INSERT INTO assistant_messages (session_id, user_id, role, content) VALUES ($1, $2, 'assistant', $3)`,
-      [sessionId, userId, responseText]
-    )
+    if (!aiContentType.includes('text/event-stream')) {
+      const aiData = await aiResponse.json()
+      const responseText = aiData.choices?.[0]?.message?.content || 'Не удалось получить ответ'
+
+      await query(
+        `INSERT INTO assistant_messages (session_id, user_id, role, content) VALUES ($1, $2, 'assistant', $3)`,
+        [sessionId, userId, responseText]
+      )
+
+      return res.json({ response: responseText })
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+
+    let fullResponse = ''
+    const reader = aiResponse.body.getReader()
+    const decoder = new TextDecoder()
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        res.write(chunk)
+
+        const lines = chunk.split('\n')
+        for (const line of lines) {
+          if (!line.startsWith('data: ') || line === 'data: [DONE]') continue
+          try {
+            const data = JSON.parse(line.slice(6))
+            const content = data.choices?.[0]?.delta?.content
+            if (content) fullResponse += content
+          } catch {}
+        }
+      }
+    } catch (error) {
+      console.error('Stream read error:', error.message)
+    }
+
+    res.write('data: [DONE]\n\n')
+
+    if (fullResponse) {
+      await query(
+        `INSERT INTO assistant_messages (session_id, user_id, role, content) VALUES ($1, $2, 'assistant', $3)`,
+        [sessionId, userId, fullResponse]
+      )
+    }
 
     const updatedSession = await query(
       `SELECT title FROM assistant_sessions WHERE id = $1`,
@@ -246,7 +293,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
       )
     }
 
-    res.json({ response: responseText })
+    res.end()
   } catch (error) {
     console.error('Assistant error:', error.message)
     res.status(500).json({ error: 'Внутренняя ошибка сервера' })

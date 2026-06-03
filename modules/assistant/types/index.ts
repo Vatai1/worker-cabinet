@@ -3,6 +3,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date | string
+  streaming?: boolean
+  toolCalls?: string[]
 }
 
 export interface ChatSession {

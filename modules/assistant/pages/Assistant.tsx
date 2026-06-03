@@ -1,10 +1,27 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Trash2, Plus, MessageSquare, Bot, User, Loader2, AlertCircle } from 'lucide-react'
+import { Send, Trash2, Plus, MessageSquare, Bot, User, Loader2, AlertCircle, Wrench } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { assistantApi } from '@/modules/assistant/services/assistantApi'
 import { cn } from '@/shared/lib/utils'
 import type { ChatMessage, ChatSession } from '@/modules/assistant/types'
+
+const TOOL_LABELS: Record<string, string> = {
+  web_search: 'Поиск в интернете',
+  browser_navigate: 'Открытие страницы',
+  browser_snapshot: 'Чтение страницы',
+  browser_click: 'Клик по элементу',
+  browser_type: 'Ввод текста',
+  terminal: 'Выполнение команды',
+  read_file: 'Чтение файла',
+  write_file: 'Запись файла',
+  execute_code: 'Выполнение кода',
+  delegate_task: 'Делегирование задачи',
+}
+
+function getToolLabel(name: string): string {
+  return TOOL_LABELS[name] || name.replace(/_/g, ' ')
+}
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
@@ -134,11 +151,21 @@ export function Assistant() {
       timestamp: new Date(),
     }
 
+    const streamingMsgId = generateId()
+    const streamingMsg: ChatMessage = {
+      id: streamingMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      streaming: true,
+      toolCalls: [],
+    }
+
     setSessions((prev) =>
       prev.map((s) => {
         if (s.id !== sessionId) return s
         const title = s.messages.length === 0 ? text.slice(0, 40) + (text.length > 40 ? '...' : '') : s.title
-        return { ...s, title, messages: [...s.messages, userMessage] }
+        return { ...s, title, messages: [...s.messages, userMessage, streamingMsg] }
       })
     )
     setInput('')
@@ -147,23 +174,49 @@ export function Assistant() {
 
     try {
       const session = sessions.find((s) => s.id === sessionId)
-      const history = (session?.messages || []).map((m) => ({ role: m.role, content: m.content }))
+      const history = (session?.messages || []).map((m: ChatMessage) => ({ role: m.role, content: m.content }))
 
-      const response = await assistantApi.sendMessage(text, sessionId, history)
-
-      const assistantMessage: ChatMessage = {
-        id: generateId(),
-        role: 'assistant',
-        content: response,
-        timestamp: new Date(),
-      }
+      const response = await assistantApi.sendMessageStream(text, sessionId, history, {
+        onText: (chunk: string) => {
+          setSessions((prev) =>
+            prev.map((s) => {
+              if (s.id !== sessionId) return s
+              const msgs = [...s.messages]
+              const idx = msgs.findIndex((m: ChatMessage) => m.id === streamingMsgId)
+              if (idx !== -1) {
+                msgs[idx] = { ...msgs[idx], content: msgs[idx].content + chunk }
+              }
+              return { ...s, messages: msgs }
+            })
+          )
+        },
+        onToolCall: (name: string) => {
+          setSessions((prev) =>
+            prev.map((s) => {
+              if (s.id !== sessionId) return s
+              const msgs = [...s.messages]
+              const idx = msgs.findIndex((m: ChatMessage) => m.id === streamingMsgId)
+              if (idx !== -1) {
+                const existing = msgs[idx].toolCalls || []
+                msgs[idx] = { ...msgs[idx], toolCalls: [...existing, name] }
+              }
+              return { ...s, messages: msgs }
+            })
+          )
+        },
+      })
 
       setSessions((prev) =>
-        prev.map((s) =>
-          s.id === sessionId
-            ? { ...s, messages: [...s.messages, assistantMessage] }
-            : s
-        )
+        prev.map((s) => {
+          if (s.id !== sessionId) return s
+          const msgs = [...s.messages]
+          const idx = msgs.findIndex((m: ChatMessage) => m.id === streamingMsgId)
+          if (idx !== -1) {
+            const finalContent = response || msgs[idx].content || 'Не удалось получить ответ'
+            msgs[idx] = { ...msgs[idx], content: finalContent, streaming: false }
+          }
+          return { ...s, messages: msgs }
+        })
       )
 
       if (isNewSession) {
@@ -171,6 +224,12 @@ export function Assistant() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Произошла ошибка')
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== sessionId) return s
+          return { ...s, messages: s.messages.filter((m: ChatMessage) => m.id !== streamingMsgId) }
+        })
+      )
       if (isNewSession) {
         setSessions((prev) => prev.filter((s) => s.id !== sessionId))
         setActiveSessionId(null)
@@ -259,7 +318,7 @@ export function Assistant() {
                   Привет{user?.firstName ? `, ${user.firstName}` : ''}! Чем могу помочь?
                 </div>
               )}
-              {activeSession.messages.map((msg) => (
+              {activeSession.messages.map((msg: ChatMessage) => (
                 <div
                   key={msg.id}
                   className={cn('flex gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}
@@ -269,15 +328,34 @@ export function Assistant() {
                       <Bot className="w-4 h-4 text-primary" />
                     </div>
                   )}
-                  <div
-                    className={cn(
-                      'max-w-[70%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap',
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-card border border-border'
+                  <div className={cn('max-w-[70%] flex flex-col gap-1.5')}>
+                    {msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <div className="flex flex-col gap-1">
+                        {msg.toolCalls.map((tool: string, i: number) => (
+                          <div
+                            key={i}
+                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded-lg px-2.5 py-1.5 w-fit"
+                          >
+                            <Wrench className="w-3 h-3" />
+                            {getToolLabel(tool)}
+                            {(msg.streaming && i === msg.toolCalls!.length - 1) && (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  >
-                    {msg.content}
+                    <div
+                      className={cn(
+                        'rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap',
+                        msg.role === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-card border border-border',
+                        msg.streaming && !msg.content && 'px-3 py-2'
+                      )}
+                    >
+                      {msg.content || (msg.streaming && <Loader2 className="w-4 h-4 animate-spin text-primary" />)}
+                    </div>
                   </div>
                   {msg.role === 'user' && (
                     <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0 mt-1">
@@ -286,16 +364,6 @@ export function Assistant() {
                   )}
                 </div>
               ))}
-              {loading && (
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                    <Bot className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="bg-card border border-border rounded-2xl px-4 py-3">
-                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  </div>
-                </div>
-              )}
               {error && (
                 <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-3">
                   <AlertCircle className="w-4 h-4 shrink-0" />
