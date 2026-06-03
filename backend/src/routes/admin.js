@@ -1733,6 +1733,7 @@ router.post('/assistant/hermes-config', asyncHandler(async (req, res) => {
     'assistant_hermes_provider', 'assistant_hermes_model', 'assistant_hermes_provider_api_key',
     'assistant_hermes_provider_base_url', 'assistant_hermes_toolsets', 'assistant_hermes_approvals',
     'assistant_hermes_max_turns', 'assistant_hermes_port', 'assistant_hermes_api_key',
+    'assistant_search_backend', 'assistant_searxng_url',
   ]
   const result = await query(
     `SELECT key, value FROM system_settings WHERE key = ANY($1)`, [keys]
@@ -1746,6 +1747,8 @@ router.post('/assistant/hermes-config', asyncHandler(async (req, res) => {
   const toolsets = (map.assistant_hermes_toolsets || 'web,terminal,file,browser').split(',').map(t => t.trim()).filter(Boolean)
   const approvals = map.assistant_hermes_approvals || 'manual'
   const maxTurns = parseInt(map.assistant_hermes_max_turns) || 150
+  const searchBackend = map.assistant_search_backend || 'searxng'
+  const searxngUrl = map.assistant_searxng_url || 'http://localhost:8080'
 
   const envVars = {}
   const providerEnvMap = {
@@ -1764,6 +1767,9 @@ router.post('/assistant/hermes-config', asyncHandler(async (req, res) => {
   } else if (baseUrl) {
     envVars[`${provider.toUpperCase()}_BASE_URL`] = baseUrl
   }
+  if (searchBackend === 'searxng' && searxngUrl) {
+    envVars.SEARXNG_URL = searxngUrl
+  }
 
   const config = {
     model: {
@@ -1780,6 +1786,7 @@ router.post('/assistant/hermes-config', asyncHandler(async (req, res) => {
     terminal: { backend: 'local', timeout: 180 },
     compression: { enabled: true, threshold: 0.5, target_ratio: 0.2 },
     security: { redact_secrets: true },
+    web: { search_backend: searchBackend },
   }
 
   const hermesHome = process.env.HOME + '/.hermes'

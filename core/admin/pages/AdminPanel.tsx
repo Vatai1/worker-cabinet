@@ -2027,6 +2027,42 @@ function AssistantSettingsTab() {
                 </div>
               </div>
 
+              <div className="space-y-2 p-3 rounded-lg bg-muted/30 border border-border/40">
+                <p className="text-sm font-medium">Поиск</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Поисковый движок</p>
+                    <select
+                      value={getValue('assistant_search_backend')}
+                      onChange={(e) => updateValue('assistant_search_backend', e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+                    >
+                      <option value="searxng">SearXNG (Яндекс + Google + DDG)</option>
+                      <option value="ddgs">DuckDuckGo (бесплатно)</option>
+                      <option value="tavily">Tavily (API ключ)</option>
+                      <option value="brave-free">Brave Search (API ключ)</option>
+                    </select>
+                  </div>
+                  {getValue('assistant_search_backend') !== 'ddgs' && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        {getValue('assistant_search_backend') === 'searxng' ? 'URL SearXNG' : 'API ключ'}
+                      </p>
+                      {getValue('assistant_search_backend') === 'searxng' ? (
+                        <Input value={getValue('assistant_searxng_url')} onChange={(e) => updateValue('assistant_searxng_url', e.target.value)} placeholder="http://localhost:8080" />
+                      ) : (
+                        <Input type="password" placeholder="tvly-..." />
+                      )}
+                    </div>
+                  )}
+                </div>
+                {getValue('assistant_search_backend') === 'searxng' && (
+                  <p className="text-[11px] text-muted-foreground">
+                    SearXNG запускается как контейнер <code className="bg-background px-1 py-0.5 rounded">docker compose up -d searxng</code>. Яндекс включён как основной движок.
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Одобрение команд</p>

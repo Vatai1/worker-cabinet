@@ -1366,6 +1366,8 @@ async function runMigrations() {
       { key: 'assistant_hermes_toolsets', value: 'web,terminal,file,browser', desc: 'Инструменты Hermes (через запятую)' },
       { key: 'assistant_hermes_approvals', value: 'manual', desc: 'Режим одобрения команд (manual, smart, off)' },
       { key: 'assistant_hermes_max_turns', value: '150', desc: 'Максимум итераций агента' },
+      { key: 'assistant_search_backend', value: 'searxng', desc: 'Поисковый движок (searxng, ddgs, tavily, brave-free)' },
+      { key: 'assistant_searxng_url', value: 'http://localhost:8080', desc: 'URL SearXNG инстанса' },
       { key: 'assistant_temperature', value: '0.7', desc: 'Температура (креативность ответов, 0.0-2.0)' },
       { key: 'assistant_max_tokens', value: '2048', desc: 'Максимум токенов в ответе' },
       { key: 'assistant_history_limit', value: '20', desc: 'Количество сообщений истории, отправляемых в контекст' },

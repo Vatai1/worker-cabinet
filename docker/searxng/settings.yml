@@ -1,0 +1,64 @@
+use_default_settings: true
+
+general:
+  instance_name: "Worker Cabinet Search"
+  debug: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "ru"
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: "worker-cabinet-searxng-secret-change-me"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false
+  image_proxy: true
+
+engines:
+  - name: yandex
+    engine: yandex
+    shortcut: ya
+    disabled: false
+    language: ru-RU
+
+  - name: google
+    engine: google
+    shortcut: go
+    disabled: false
+
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false
+
+  - name: wikidata
+    engine: wikidata
+    shortcut: wd
+    disabled: false
+
+ui:
+  static_use_hash: true
+  default_locale: "ru"
+  query_in_title: false
+  infinite_scroll: false
+  center_alignment: true
+  default_theme: "simple"
+  theme_args:
+    simple_style: "dark"
+
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 15.0
+  useragent_suffix: ""
+  proxies: {}
+  source_ips: []
