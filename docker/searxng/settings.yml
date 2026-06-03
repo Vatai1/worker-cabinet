@@ -21,30 +21,28 @@ server:
 
 engines:
   - name: yandex
-    engine: yandex
-    shortcut: ya
     disabled: false
-    language: ru-RU
 
   - name: google
-    engine: google
-    shortcut: go
     disabled: false
 
   - name: duckduckgo
-    engine: duckduckgo
-    shortcut: ddg
     disabled: false
 
   - name: wikipedia
-    engine: wikipedia
-    shortcut: wp
     disabled: false
 
   - name: wikidata
-    engine: wikidata
-    shortcut: wd
     disabled: false
+
+  - name: bing
+    disabled: true
+
+  - name: yahoo
+    disabled: true
+
+  - name: mojeek
+    disabled: true
 
 ui:
   static_use_hash: true
@@ -59,6 +57,3 @@ ui:
 outgoing:
   request_timeout: 10.0
   max_request_timeout: 15.0
-  useragent_suffix: ""
-  proxies: {}
-  source_ips: []

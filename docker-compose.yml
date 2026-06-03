@@ -180,7 +180,7 @@ services:
     volumes:
       - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8888:8080"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
       interval: 15s
