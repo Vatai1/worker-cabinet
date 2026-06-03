@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
-    plugins: [react(), killPortPlugin(3000), hmrFullReloadPlugin()],
+    plugins: [react(), killPortPlugin(3000)],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './'),

@@ -8,6 +8,14 @@ import { getTimesheetExportData } from '../lib/timesheetExport.js'
 
 const router = express.Router()
 
+const VACATION_TYPE_TO_CODE = {
+  annual_paid: 'ОТ',
+  additional: 'ОТ',
+  veteran: 'ОТ',
+  unpaid: 'ОС',
+  educational: 'ДО',
+}
+
 router.use(authenticateToken)
 router.use(authorizeRoles('manager', 'hr', 'admin'))
 
@@ -264,6 +272,82 @@ router.get('/:id', async (req, res) => {
        ORDER BY last_name, first_name`,
       [tsResult.rows[0].department_id]
     )
+
+    const ts = tsResult.rows[0]
+    const mm = String(ts.month).padStart(2, '0')
+    const daysInTs = new Date(ts.year, ts.month, 0).getDate()
+    const rangeStart = `${ts.year}-${mm}-01`
+    const rangeEnd = `${ts.year}-${mm}-${String(daysInTs).padStart(2, '0')}`
+
+    const vacations = await query(
+      `SELECT vr.user_id, vr.start_date, vr.end_date, vt.code as type_code
+       FROM vacation_requests vr
+       JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       WHERE rs.code = 'approved'
+         AND vr.start_date <= $1
+         AND vr.end_date >= $2
+         AND vr.user_id = ANY($3)`,
+      [rangeEnd, rangeStart, empResult.rows.map(e => e.id)]
+    )
+
+    if (vacations.rows.length > 0) {
+      const empMap = Object.fromEntries(empResult.rows.map(e => [e.id, e]))
+      const entrySet = new Set(entriesResult.rows.map(e => `${e.employee_id}:${e.date}`))
+      const vacationEntries = []
+
+      for (const v of vacations.rows) {
+        const tsCode = VACATION_TYPE_TO_CODE[v.type_code]
+        if (!tsCode || !empMap[v.user_id]) continue
+
+        const start = new Date(Math.max(new Date(v.start_date).getTime(), new Date(rangeStart).getTime()))
+        const end = new Date(Math.min(new Date(v.end_date).getTime(), new Date(rangeEnd).getTime()))
+
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const dow = d.getDay()
+          if (dow === 0 || dow === 6) continue
+          const dateStr = toLocalDateStr(d)
+          const key = `${v.user_id}:${dateStr}`
+          if (!entrySet.has(key)) {
+            vacationEntries.push([id, v.user_id, dateStr, tsCode, true])
+            entrySet.add(key)
+          }
+        }
+      }
+
+      if (vacationEntries.length > 0) {
+        const client = await getClient()
+        try {
+          await client.query('BEGIN')
+          const placeholders = vacationEntries.map((_, i) => {
+            const b = i * 5
+            return `($${b+1}, $${b+2}, $${b+3}, $${b+4}, $${b+5})`
+          }).join(', ')
+          await client.query(
+            `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted)
+             VALUES ${placeholders}
+             ON CONFLICT (timesheet_id, employee_id, date) DO NOTHING`,
+            vacationEntries.flat()
+          )
+          await client.query('COMMIT')
+
+          const refreshed = await query(
+            `SELECT te.*, u.first_name, u.last_name
+             FROM timesheet_entries te
+             JOIN users u ON te.employee_id = u.id
+             WHERE te.timesheet_id = $1
+             ORDER BY u.last_name, u.first_name, te.date`,
+            [id]
+          )
+          entriesResult.rows = refreshed.rows
+        } catch (err) {
+          await client.query('ROLLBACK')
+          console.error('Error inserting vacation entries:', err)
+        } finally {
+          client.release()
+        }
+      }
+    }
 
     res.json({ ...tsResult.rows[0], entries: entriesResult.rows, employees: empResult.rows })
   } catch (error) {
