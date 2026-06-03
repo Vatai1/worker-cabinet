@@ -155,9 +155,13 @@ services:
     restart: unless-stopped
     volumes:
       - ${HOME:-~}/.hermes:/opt/data
+    env_file:
+      - path: ${HOME:-~}/.hermes/.env
+        required: false
     environment:
       - HERMES_UID=${HERMES_UID:-1000}
       - HERMES_GID=${HERMES_GID:-1000}
+      - HERMES_HOME=/opt/data
       - API_SERVER_ENABLED=true
       - API_SERVER_KEY=${HERMES_API_KEY:-wc-assistant-secret}
       - API_SERVER_HOST=0.0.0.0
