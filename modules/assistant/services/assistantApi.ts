@@ -2,11 +2,15 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 
 export const assistantApi = {
-  async sendMessage(message: string, history: Array<{ role: string; content: string }>): Promise<string> {
+  async sendMessage(
+    message: string,
+    sessionId: string,
+    history: Array<{ role: string; content: string }>
+  ): Promise<string> {
     const response = await fetch(`${API_BASE_URL}/assistant/chat`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
-      body: JSON.stringify({ message, history }),
+      body: JSON.stringify({ message, sessionId, history }),
     })
 
     if (!response.ok) {
@@ -18,7 +22,7 @@ export const assistantApi = {
     return data.response
   },
 
-  async getSessions(): Promise<Array<{ id: string; title: string; createdAt: string }>> {
+  async getSessions(): Promise<Array<{ id: string; title: string; createdAt: string; message_count: string }>> {
     const response = await fetch(`${API_BASE_URL}/assistant/sessions`, {
       headers: getAuthHeaders(),
     })
@@ -26,7 +30,9 @@ export const assistantApi = {
     return response.json()
   },
 
-  async getSession(id: string) {
+  async getSession(
+    id: string
+  ): Promise<{ id: string; title: string; createdAt: string; messages: Array<{ id: number; role: string; content: string; timestamp: string }> }> {
     const response = await fetch(`${API_BASE_URL}/assistant/sessions/${id}`, {
       headers: getAuthHeaders(),
     })
@@ -34,7 +40,7 @@ export const assistantApi = {
     return response.json()
   },
 
-  async deleteSession(id: string) {
+  async deleteSession(id: string): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/assistant/sessions/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),

@@ -295,6 +295,19 @@ async function runMigrations() {
       )
     `).catch(e => console.log('  - assistant_messages:', e.message))
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS assistant_sessions (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title TEXT NOT NULL DEFAULT 'Новый чат',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - assistant_sessions:', e.message))
+
+    await db.query(`
+      ALTER TABLE assistant_messages ADD COLUMN IF NOT EXISTS session_id TEXT REFERENCES assistant_sessions(id) ON DELETE CASCADE
+    `).catch(() => {})
+
     console.log('✅ Tables created')
 
     // Step 2.5: Add new columns to existing tables

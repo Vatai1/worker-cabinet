@@ -1,13 +1,13 @@
 export interface ChatMessage {
-  id: string
+  id: string | number
   role: 'user' | 'assistant'
   content: string
-  timestamp: Date
+  timestamp: Date | string
 }
 
 export interface ChatSession {
   id: string
   title: string
   messages: ChatMessage[]
-  createdAt: Date
+  createdAt: Date | string
 }

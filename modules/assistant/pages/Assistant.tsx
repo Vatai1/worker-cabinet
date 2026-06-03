@@ -17,8 +17,10 @@ export function Assistant() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadingSessions, setLoadingSessions] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const loadedSessionsRef = useRef<Set<string>>(new Set())
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
 
@@ -30,22 +32,68 @@ export function Assistant() {
     scrollToBottom()
   }, [activeSession?.messages, scrollToBottom])
 
+  useEffect(() => {
+    loadSessions()
+  }, [])
+
+  async function loadSessions() {
+    try {
+      setLoadingSessions(true)
+      const data = await assistantApi.getSessions()
+      setSessions(
+        data.map((s) => ({
+          id: s.id,
+          title: s.title,
+          messages: [],
+          createdAt: s.createdAt,
+        }))
+      )
+    } catch {
+    } finally {
+      setLoadingSessions(false)
+    }
+  }
+
+  async function loadSessionMessages(sessionId: string): Promise<ChatMessage[]> {
+    if (loadedSessionsRef.current.has(sessionId)) {
+      return sessions.find((s) => s.id === sessionId)?.messages || []
+    }
+    try {
+      const data = await assistantApi.getSession(sessionId)
+      const messages: ChatMessage[] = data.messages.map((m) => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        timestamp: m.timestamp,
+      }))
+      loadedSessionsRef.current.add(sessionId)
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, messages } : s))
+      )
+      return messages
+    } catch {
+      return []
+    }
+  }
+
   const createNewSession = () => {
+    const id = generateId()
     const session: ChatSession = {
-      id: generateId(),
+      id,
       title: 'Новый чат',
       messages: [],
       createdAt: new Date(),
     }
     setSessions((prev) => [session, ...prev])
-    setActiveSessionId(session.id)
+    setActiveSessionId(id)
     setInput('')
     setError(null)
-    inputRef.current?.focus()
+    setTimeout(() => inputRef.current?.focus(), 50)
   }
 
-  const deleteSession = (id: string) => {
+  const deleteSession = async (id: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== id))
+    loadedSessionsRef.current.delete(id)
     if (activeSessionId === id) {
       const remaining = sessions.filter((s) => s.id !== id)
       setActiveSessionId(remaining.length > 0 ? remaining[0].id : null)
@@ -53,23 +101,29 @@ export function Assistant() {
     assistantApi.deleteSession(id).catch(() => {})
   }
 
+  const selectSession = async (id: string) => {
+    setActiveSessionId(id)
+    setError(null)
+    await loadSessionMessages(id)
+  }
+
   const handleSend = async () => {
     const text = input.trim()
     if (!text || loading) return
 
     let sessionId = activeSessionId
-    let currentSessions = sessions
+    let isNewSession = false
 
     if (!sessionId) {
+      sessionId = generateId()
+      isNewSession = true
       const session: ChatSession = {
-        id: generateId(),
+        id: sessionId,
         title: text.slice(0, 40) + (text.length > 40 ? '...' : ''),
         messages: [],
         createdAt: new Date(),
       }
-      sessionId = session.id
-      currentSessions = [session, ...sessions]
-      setSessions(currentSessions)
+      setSessions((prev) => [session, ...prev])
       setActiveSessionId(sessionId)
     }
 
@@ -92,10 +146,10 @@ export function Assistant() {
     setLoading(true)
 
     try {
-      const session = currentSessions.find((s) => s.id === sessionId)
+      const session = sessions.find((s) => s.id === sessionId)
       const history = (session?.messages || []).map((m) => ({ role: m.role, content: m.content }))
 
-      const response = await assistantApi.sendMessage(text, history)
+      const response = await assistantApi.sendMessage(text, sessionId, history)
 
       const assistantMessage: ChatMessage = {
         id: generateId(),
@@ -106,11 +160,21 @@ export function Assistant() {
 
       setSessions((prev) =>
         prev.map((s) =>
-          s.id === sessionId ? { ...s, messages: [...s.messages, assistantMessage] } : s
+          s.id === sessionId
+            ? { ...s, messages: [...s.messages, assistantMessage] }
+            : s
         )
       )
+
+      if (isNewSession) {
+        loadedSessionsRef.current.add(sessionId)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Произошла ошибка')
+      if (isNewSession) {
+        setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+        setActiveSessionId(null)
+      }
     } finally {
       setLoading(false)
       inputRef.current?.focus()
@@ -134,7 +198,12 @@ export function Assistant() {
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {sessions.length === 0 && (
+          {loadingSessions && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          {!loadingSessions && sessions.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-4">
               Нет чатов
             </p>
@@ -148,7 +217,7 @@ export function Assistant() {
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-muted/50'
               )}
-              onClick={() => setActiveSessionId(session.id)}
+              onClick={() => selectSession(session.id)}
             >
               <MessageSquare className="w-4 h-4 shrink-0" />
               <span className="truncate flex-1">{session.title}</span>

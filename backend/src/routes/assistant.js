@@ -19,6 +19,105 @@ async function getAssistantConfig() {
 
 /**
  * @swagger
+ * /assistant/sessions:
+ *   get:
+ *     tags: [Assistant]
+ *     summary: Получить список сессий
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список сессий
+ */
+router.get('/sessions', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT s.id, s.title, s.created_at AS "createdAt",
+        (SELECT COUNT(*) FROM assistant_messages WHERE session_id = s.id) AS message_count
+       FROM assistant_sessions s
+       WHERE s.user_id = $1
+       ORDER BY s.created_at DESC`,
+      [req.user.id]
+    )
+    res.json(result.rows)
+  } catch (error) {
+    res.status(500).json({ error: 'Ошибка загрузки сессий' })
+  }
+})
+
+/**
+ * @swagger
+ * /assistant/sessions/{id}:
+ *   get:
+ *     tags: [Assistant]
+ *     summary: Получить сессию с сообщениями
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Сессия с сообщениями
+ */
+router.get('/sessions/:id', authenticateToken, async (req, res) => {
+  try {
+    const session = await query(
+      `SELECT id, title, created_at AS "createdAt" FROM assistant_sessions WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.user.id]
+    )
+    if (session.rows.length === 0) {
+      return res.status(404).json({ error: 'Сессия не найдена' })
+    }
+    const messages = await query(
+      `SELECT id, role, content, created_at AS "timestamp" FROM assistant_messages
+       WHERE session_id = $1 ORDER BY created_at ASC`,
+      [req.params.id]
+    )
+    res.json({ ...session.rows[0], messages: messages.rows })
+  } catch (error) {
+    res.status(500).json({ error: 'Ошибка загрузки чата' })
+  }
+})
+
+/**
+ * @swagger
+ * /assistant/sessions/{id}:
+ *   delete:
+ *     tags: [Assistant]
+ *     summary: Удалить сессию
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Сессия удалена
+ */
+router.delete('/sessions/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(
+      `DELETE FROM assistant_sessions WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.user.id]
+    )
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Сессия не найдена' })
+    }
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Ошибка удаления сессии' })
+  }
+})
+
+/**
+ * @swagger
  * /assistant/chat:
  *   post:
  *     tags: [Assistant]
@@ -31,9 +130,10 @@ async function getAssistantConfig() {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [message]
+ *             required: [message, sessionId]
  *             properties:
  *               message: { type: string }
+ *               sessionId: { type: string }
  *               history: { type: array, items: { type: object, properties: { role: { type: string }, content: { type: string } } } }
  *     responses:
  *       200:
@@ -41,11 +141,15 @@ async function getAssistantConfig() {
  */
 router.post('/chat', authenticateToken, async (req, res) => {
   try {
-    const { message, history = [] } = req.body
+    const { message, sessionId, history = [] } = req.body
     const userId = req.user.id
 
     if (!message?.trim()) {
       return res.status(400).json({ error: 'Сообщение не может быть пустым' })
+    }
+
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Не указана сессия' })
     }
 
     const config = await getAssistantConfig()
@@ -54,8 +158,38 @@ router.post('/chat', authenticateToken, async (req, res) => {
       return res.status(503).json({ error: 'Ассистент не настроен. Обратитесь к администратору.' })
     }
 
+    const sessionCheck = await query(
+      `SELECT id FROM assistant_sessions WHERE id = $1 AND user_id = $2`,
+      [sessionId, userId]
+    )
+
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+
+      if (sessionCheck.rows.length === 0) {
+        const title = message.slice(0, 40) + (message.length > 40 ? '...' : '')
+        await client.query(
+          `INSERT INTO assistant_sessions (id, user_id, title) VALUES ($1, $2, $3)`,
+          [sessionId, userId, title]
+        )
+      }
+
+      await client.query(
+        `INSERT INTO assistant_messages (session_id, user_id, role, content) VALUES ($1, $2, 'user', $3)`,
+        [sessionId, userId, message]
+      )
+
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+
     const userResult = await query(
-      'SELECT first_name, last_name, position, department_id FROM users WHERE id = $1',
+      'SELECT first_name, last_name, position FROM users WHERE id = $1',
       [userId]
     )
     const u = userResult.rows[0]
@@ -94,27 +228,27 @@ router.post('/chat', authenticateToken, async (req, res) => {
     const aiData = await aiResponse.json()
     const responseText = aiData.choices?.[0]?.message?.content || 'Не удалось получить ответ'
 
-    const client = await getClient()
-    try {
-      await client.query('BEGIN')
-      await client.query(
-        `INSERT INTO assistant_messages (user_id, role, content) VALUES ($1, 'user', $2)`,
-        [userId, message]
+    await query(
+      `INSERT INTO assistant_messages (session_id, user_id, role, content) VALUES ($1, $2, 'assistant', $3)`,
+      [sessionId, userId, responseText]
+    )
+
+    const updatedSession = await query(
+      `SELECT title FROM assistant_sessions WHERE id = $1`,
+      [sessionId]
+    )
+    const currentTitle = updatedSession.rows[0]?.title
+
+    if (currentTitle === 'Новый чат') {
+      await query(
+        `UPDATE assistant_sessions SET title = $1 WHERE id = $2 AND title = 'Новый чат'`,
+        [message.slice(0, 40) + (message.length > 40 ? '...' : ''), sessionId]
       )
-      await client.query(
-        `INSERT INTO assistant_messages (user_id, role, content) VALUES ($1, 'assistant', $2)`,
-        [userId, responseText]
-      )
-      await client.query('COMMIT')
-    } catch {
-      await client.query('ROLLBACK')
-    } finally {
-      client.release()
     }
 
     res.json({ response: responseText })
   } catch (error) {
-    console.error('Assistant chat error:', error)
+    console.error('Assistant error:', error.message)
     res.status(500).json({ error: 'Внутренняя ошибка сервера' })
   }
 })
@@ -124,7 +258,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
  * /assistant/history:
  *   get:
  *     tags: [Assistant]
- *     summary: Получить историю сообщений
+ *     summary: Получить всю историю сообщений
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -135,7 +269,7 @@ router.get('/history', authenticateToken, async (req, res) => {
   try {
     const result = await query(
       `SELECT role, content, created_at FROM assistant_messages
-       WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
+       WHERE user_id = $1 AND session_id IS NULL ORDER BY created_at DESC LIMIT 100`,
       [req.user.id]
     )
     res.json(result.rows.reverse())
@@ -149,7 +283,7 @@ router.get('/history', authenticateToken, async (req, res) => {
  * /assistant/history:
  *   delete:
  *     tags: [Assistant]
- *     summary: Очистить историю сообщений
+ *     summary: Очистить историю сообщений без сессий
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -158,7 +292,7 @@ router.get('/history', authenticateToken, async (req, res) => {
  */
 router.delete('/history', authenticateToken, async (req, res) => {
   try {
-    await query('DELETE FROM assistant_messages WHERE user_id = $1', [req.user.id])
+    await query('DELETE FROM assistant_messages WHERE user_id = $1 AND session_id IS NULL', [req.user.id])
     res.json({ success: true })
   } catch (error) {
     res.status(500).json({ error: 'Ошибка очистки истории' })
