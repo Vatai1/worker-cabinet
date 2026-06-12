@@ -51,6 +51,7 @@ docker/hermes/data/*
 !docker/hermes/data/skills/
 docker/hermes/data/skills/*/**/cache/
 docker/hermes/data/skills/*/**/__pycache__/
+docker/llama/models/*.gguf
 err.txt
 lerna-debug.log*
 logs
@@ -67,3 +68,4 @@ Thumbs.db
 vite.config.d.ts
 yarn-debug.log*
 yarn-error.log*
+docker/llama/models/**/*.gguf
