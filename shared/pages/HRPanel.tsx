@@ -1,7 +1,5 @@
-import { useState, useMemo, lazy, Suspense, useEffect } from 'react'
+import { useState, useMemo, lazy, Suspense } from 'react'
 import { cn } from '@/shared/lib/utils'
-import { getAuthHeaders } from '@/shared/lib/authHeaders'
-import { API_BASE_URL } from '@/shared/lib/api'
 import {
   Users, ClipboardList, UserPlus, Plane, Network, BookOpen,
   Calendar, Loader2, BarChart3, Sparkles,
@@ -49,7 +47,6 @@ const TAB_GROUPS: TabGroup[] = [
 
 export function HRPanel() {
   const [activeTab, setActiveTab] = useState<TabId>('surveys')
-  const [stats, setStats] = useState<{ totalUsers: number; totalDepartments: number; activeSurveys: number; pendingVacations: number } | null>(null)
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
 
   const filteredGroups = useMemo(() =>
@@ -60,21 +57,11 @@ export function HRPanel() {
   )
 
   const allTabs = filteredGroups.flatMap((g) => g.tabs)
-  const activeTabInfo = allTabs.find((t) => t.id === activeTab)
   const firstTab = filteredGroups[0]?.tabs[0]?.id
   const safeActiveTab = allTabs.some((t) => t.id === activeTab)
     ? activeTab
     : (firstTab as TabId | undefined)
   const currentTabInfo = allTabs.find((t) => t.id === safeActiveTab)
-
-  useEffect(() => { fetchStats() }, [])
-
-  const fetchStats = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/stats`, { headers: getAuthHeaders() })
-      if (res.ok) setStats(await res.json())
-    } catch {}
-  }
 
   return (
     <div className="space-y-6">

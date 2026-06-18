@@ -5,7 +5,7 @@ import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
 import { Sparkles, Users, Send, CheckCircle2 } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 

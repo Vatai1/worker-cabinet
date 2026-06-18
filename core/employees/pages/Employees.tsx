@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -71,12 +71,6 @@ export function Employees() {
     )
   })
 
-  const stats = useMemo(() => ({
-    total: employees.length,
-    active: employees.filter((e) => e.status === 'active').length,
-    onLeave: employees.filter((e) => e.status === 'on_leave').length,
-    departments: [...new Set(employees.map((e) => e.department_name).filter(Boolean))].length,
-  }), [employees])
 
   if (loading) {
     return (

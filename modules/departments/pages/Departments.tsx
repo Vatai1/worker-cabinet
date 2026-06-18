@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Input } from '@/shared/components/ui/Input'
@@ -56,10 +56,6 @@ export function Departments() {
 
   const totalEmployees = departments.reduce((sum, d) => sum + parseInt(d.employee_count || '0'), 0)
 
-  const topDepts = useMemo(() =>
-    [...departments].sort((a, b) => parseInt(b.employee_count || '0') - parseInt(a.employee_count || '0')).slice(0, 3),
-    [departments]
-  )
 
   if (loading) {
     return (

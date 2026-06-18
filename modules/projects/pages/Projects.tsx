@@ -114,15 +114,7 @@ export function Projects() {
     setProjects((prev) => [project, ...prev])
   }
 
-  const activeCount = useMemo(() => projects.filter((p) => p.status === 'active').length, [projects])
-  const pausedCount = useMemo(() => projects.filter((p) => p.status === 'paused').length, [projects])
-  const completedCount = useMemo(() => projects.filter((p) => p.status === 'completed').length, [projects])
   const totalMembers = useMemo(() => projects.reduce((s, p) => s + p.member_count, 0), [projects])
-
-  const topProjects = useMemo(() =>
-    [...projects].sort((a, b) => b.member_count - a.member_count).slice(0, 3),
-    [projects]
-  )
 
   if (error) {
     return (

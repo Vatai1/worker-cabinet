@@ -24,7 +24,7 @@ import {
   Calendar, Zap, Briefcase, Wrench, Plane,
   Pencil, Save, Bot,
 } from 'lucide-react'
-import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry, AdminStats } from '@/core/admin/types/admin'
+import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
 type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'analytics' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries' | 'modules' | 'assistant'
 
@@ -234,7 +234,6 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<TabId>('users')
-  const [stats, setStats] = useState<AdminStats | null>(null)
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
 
   const filteredGroups = TAB_GROUPS
@@ -243,17 +242,6 @@ export function AdminPanel() {
       tabs: group.tabs.filter((tab) => !tab.module || isModuleEnabled(tab.module)),
     }))
     .filter((group) => group.tabs.length > 0)
-
-  useEffect(() => {
-    fetchStats()
-  }, [])
-
-  const fetchStats = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/admin/stats`, { headers: getAuthHeaders() })
-      if (res.ok) setStats(await res.json())
-    } catch {}
-  }
 
   const allTabs = filteredGroups.flatMap((g) => g.tabs)
   const activeTabInfo = allTabs.find((t) => t.id === activeTab)
@@ -415,7 +403,7 @@ function UsersTab() {
       title: status === 'active' ? 'Активировать' : 'Деактивировать',
       message: `${status === 'active' ? 'Активировать' : 'Деактивировать'} ${user?.first_name} ${user?.last_name}?`,
       confirmText: status === 'active' ? 'Активировать' : 'Деактивировать',
-      danger: status === 'inactive',
+      variant: status === 'inactive' ? 'danger' : 'default',
     })
     if (!confirmed) return
     try {
@@ -432,7 +420,7 @@ function UsersTab() {
 
   const resetPassword = async (userId: number, newPassword: string) => {
     if (!newPassword || newPassword.length < 6) { setError('Пароль минимум 6 символов'); return }
-    const confirmed = await confirmDialog({ title: 'Сбросить пароль', message: 'Установить новый пароль для этого пользователя?', confirmText: 'Сбросить', danger: true })
+    const confirmed = await confirmDialog({ title: 'Сбросить пароль', message: 'Установить новый пароль для этого пользователя?', confirmText: 'Сбросить', variant: 'danger' })
     if (!confirmed) return
     try {
       const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/reset-password`, {
@@ -1229,7 +1217,7 @@ function DepartmentsTab() {
   }
 
   const deleteDept = async (id: number, name: string) => {
-    const confirmed = await confirmDialog({ title: 'Удалить отдел', message: `Удалить отдел «${name}»? Сотрудники будут отвязаны от отдела.`, confirmText: 'Удалить', danger: true })
+    const confirmed = await confirmDialog({ title: 'Удалить отдел', message: `Удалить отдел «${name}»? Сотрудники будут отвязаны от отдела.`, confirmText: 'Удалить', variant: 'danger' })
     if (!confirmed) return
     try {
       await fetch(`${API_BASE_URL}/dictionaries/departments/${id}`, {
