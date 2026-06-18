@@ -29,7 +29,15 @@
     "deploy:prod:start": "node ./deploy/deploy.js prod start",
     "deploy:prod:stop": "node ./deploy/deploy.js prod stop",
     "deploy:prod:logs": "node ./deploy/deploy.js prod logs",
-    "deploy:prod:status": "node ./deploy/deploy.js prod status"
+    "deploy:prod:status": "node ./deploy/deploy.js prod status",
+    "docker:build:frontend": "docker build -f Dockerfile.frontend --build-arg VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api} -t worker-cabinet-frontend:latest .",
+    "docker:build:backend": "docker build -f Dockerfile.backend -t worker-cabinet-backend:latest .",
+    "docker:build:notification": "docker build -t worker-cabinet-notification:latest ./notification-service",
+    "docker:build": "npm run docker:build:frontend && npm run docker:build:backend && npm run docker:build:notification",
+    "docker:push:frontend": "docker tag worker-cabinet-frontend:latest $REGISTRY/$FRONTEND_IMAGE:latest && docker push $REGISTRY/$FRONTEND_IMAGE:latest",
+    "docker:push:backend": "docker tag worker-cabinet-backend:latest $REGISTRY/$BACKEND_IMAGE:latest && docker push $REGISTRY/$BACKEND_IMAGE:latest",
+    "docker:push:notification": "docker tag worker-cabinet-notification:latest $REGISTRY/$NOTIFICATION_IMAGE:latest && docker push $REGISTRY/$NOTIFICATION_IMAGE:latest",
+    "docker:push": "npm run docker:push:frontend && npm run docker:push:backend && npm run docker:push:notification"
   },
   "dependencies": {
     "@dicebear/collection": "^9.4.2",
