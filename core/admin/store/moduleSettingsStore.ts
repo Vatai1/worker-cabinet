@@ -31,6 +31,8 @@ const DEFAULT_CALENDAR: CalendarSettings = {
 }
 
 const DEFAULT_NOTIFICATIONS: NotificationsSettings = {
+  // NOTE: smtpPassword, smsApiKey, etc. are type definitions for what settings CAN contain.
+  // The real credential protection should be handled on the backend (mask values in GET responses).
   emailEnabled: true, smtpServer: '', smtpPort: 587, smtpLogin: '', smtpPassword: '', smtpTls: true,
   pushEnabled: true, teamsEnabled: false, teamsWebhookUrl: '', slackEnabled: false, slackWebhookUrl: '',
   smsEnabled: false, smsProvider: 'twilio', smsApiKey: '', smsSenderId: '',

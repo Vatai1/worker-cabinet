@@ -1,6 +1,6 @@
-﻿import { create } from 'zustand'
+import { create } from 'zustand'
 import type { User, AuthState } from '@/shared/types'
-import { setCookie, getCookie, deleteCookie } from '@/shared/lib/cookies'
+import { getCookie, deleteCookie } from '@/shared/lib/cookies'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useModulesStore } from '@/shared/store/modulesStore'
 
@@ -15,12 +15,11 @@ interface AuthStore extends AuthState {
 export const useAuthStore = create<AuthStore>()((set) => ({
   user: null,
   isAuthenticated: false,
-  token: getCookie('auth_token'),
   loading: true,
   checkAuth: async () => {
     const token = getCookie('auth_token')
     if (!token) {
-      set({ isAuthenticated: false, user: null, token: null, loading: false })
+      set({ isAuthenticated: false, user: null, loading: false })
       return
     }
 
@@ -33,7 +32,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
       if (!response.ok) {
         deleteCookie('auth_token')
-        set({ isAuthenticated: false, user: null, token: null, loading: false })
+        set({ isAuthenticated: false, user: null, loading: false })
         return
       }
 
@@ -59,13 +58,12 @@ export const useAuthStore = create<AuthStore>()((set) => ({
           avatar: data.avatar,
         },
         isAuthenticated: true,
-        token,
         loading: false,
       })
       useModulesStore.getState().fetchModules()
     } catch (error) {
       deleteCookie('auth_token')
-      set({ isAuthenticated: false, user: null, token: null, loading: false })
+      set({ isAuthenticated: false, user: null, loading: false })
     }
   },
   login: async (email: string, password: string) => {
@@ -85,7 +83,8 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
       const data = await response.json()
 
-      setCookie('auth_token', data.token)
+      // auth_token is now set as HttpOnly cookie by the backend.
+      // We no longer store the token in client state for security.
 
       set({
         user: {
@@ -108,7 +107,6 @@ export const useAuthStore = create<AuthStore>()((set) => ({
           avatar: data.user.avatar,
         },
         isAuthenticated: true,
-        token: data.token,
       })
       useModulesStore.getState().fetchModules()
     } catch (error) {
@@ -120,7 +118,6 @@ export const useAuthStore = create<AuthStore>()((set) => ({
     set({
       user: null,
       isAuthenticated: false,
-      token: null,
     })
   },
   updateUser: (updates: Partial<User>) => {

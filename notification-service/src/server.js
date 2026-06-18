@@ -4,7 +4,7 @@ import dotenv from 'dotenv'
 import { migrate } from './db/migrate.js'
 import { verifyConnection } from './config/email.js'
 import { connect, close as closeRabbitMQ } from './config/rabbitmq.js'
-import { startConsumer, retryFailedNotifications } from './services/notificationService.js'
+import { startConsumer } from './services/notificationService.js'
 import notificationsRoutes from './routes/notifications.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
@@ -29,15 +29,6 @@ app.use((req, res, next) => {
 })
 
 app.use('/notifications', notificationsRoutes)
-
-app.post('/retry-failed', async (req, res, next) => {
-  try {
-    const retried = await retryFailedNotifications()
-    res.json({ retried })
-  } catch (err) {
-    next(err)
-  }
-})
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'notification-service', timestamp: new Date().toISOString() })

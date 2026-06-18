@@ -36,7 +36,6 @@ import { Assistant } from '@/modules/assistant/pages/Assistant'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  const token = useAuthStore((state) => state.token)
   const loading = useAuthStore((state) => state.loading)
 
   if (loading) {
@@ -47,7 +46,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!isAuthenticated || !token) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
 

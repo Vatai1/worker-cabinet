@@ -1,5 +1,6 @@
 import express from 'express'
 import multer from 'multer'
+import path from 'node:path'
 import { query } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { uploadToS3, getFromS3, deleteFromS3 } from '../config/s3.js'
@@ -102,14 +103,15 @@ router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Файл не загружен' })
     }
 
-    const s3Key = `user-documents/${userId}/${Date.now()}-${file.originalname}`
+    const safeName = path.basename(file.originalname).replace(/[^a-zA-Zа-яА-Я0-9._\-() ]/g, '_')
+    const s3Key = `user-documents/${userId}/${Date.now()}-${safeName}`
     await uploadToS3(file, s3Key)
 
     const result = await query(
       `INSERT INTO user_documents (user_id, name, file_path, file_size, mime_type, category, description, uploaded_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [userId, file.originalname, s3Key, file.size, file.mimetype, category || 'other', description, userId]
+      [userId, safeName, s3Key, file.size, file.mimetype, category || 'other', description, userId]
     )
 
     const doc = result.rows[0]

@@ -275,8 +275,10 @@ router.get('/users', asyncHandler(async (req, res) => {
     paramIdx++
   }
   if (department) {
+    const deptId = parseInt(department)
+    if (isNaN(deptId)) throw new ValidationError('Неверный ID отдела')
     conditions.push(`u.department_id = $${paramIdx}`)
-    values.push(parseInt(department))
+    values.push(deptId)
     paramIdx++
   }
   if (status) {
@@ -1332,7 +1334,14 @@ router.get('/reports/vacations', asyncHandler(async (req, res) => {
   const year = parseInt(req.query.year) || new Date().getFullYear()
   const { departmentId, format } = req.query
 
-  const deptFilter = departmentId ? ` AND u.department_id = ${parseInt(departmentId)}` : ''
+  const values = [year]
+  let deptFilter = ''
+  if (departmentId) {
+    const deptId = parseInt(departmentId)
+    if (isNaN(deptId)) return res.status(400).json({ error: 'Некорректный ID отдела' })
+    deptFilter = ` AND u.department_id = $2`
+    values.push(deptId)
+  }
 
   const result = await query(`
     SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, d.name as department,
@@ -1346,7 +1355,7 @@ router.get('/reports/vacations', asyncHandler(async (req, res) => {
     LEFT JOIN vacation_balances vb ON vb.user_id = u.id AND vb.year = $1
     WHERE u.status = 'active'${deptFilter}
     ORDER BY d.name, u.last_name, u.first_name
-  `, [year])
+  `, values)
 
   if (format === 'csv') {
     const sep = ';'

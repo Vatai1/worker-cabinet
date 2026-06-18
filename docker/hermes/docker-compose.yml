@@ -9,7 +9,7 @@ services:
       - HERMES_UID=${HERMES_UID:-1000}
       - HERMES_GID=${HERMES_GID:-1000}
       - API_SERVER_ENABLED=true
-      - API_SERVER_KEY=wc-assistant-secret-2026
+      - API_SERVER_KEY=${HERMES_API_KEY:-changeme}
       - API_SERVER_HOST=0.0.0.0
       - API_SERVER_PORT=8642
       - API_SERVER_CORS_ORIGINS=http://localhost:3000,http://localhost:5000

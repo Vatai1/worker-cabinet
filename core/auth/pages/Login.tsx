@@ -36,6 +36,8 @@ export function Login() {
     }
   }
 
+  const isDev = import.meta.env.DEV
+
   const handleDemoLogin = async (demoEmail: string) => {
     setError('')
     setIsLoading(true)
@@ -49,7 +51,7 @@ export function Login() {
     }
   }
 
-  const showDemo = loaded ? settings.login_demo_buttons !== 'false' : true
+  const showDemo = isDev && (loaded ? settings.login_demo_buttons !== 'false' : true)
   const title = settings.login_title || 'Личный кабинет сотрудника'
   const subtitle = settings.login_subtitle || 'Единая платформа для управления персоналом, отпусками и документами'
 

@@ -95,19 +95,27 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   )
 
-  res.status(201).json({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      middleName: user.middle_name,
-      position: user.position,
-      departmentId: user.department_id,
-      role: user.role,
-    },
-  })
+  res.status(201)
+    .cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    })
+    .json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        middleName: user.middle_name,
+        position: user.position,
+        departmentId: user.department_id,
+        role: user.role,
+      },
+    })
 }))
 
 /**
@@ -206,27 +214,35 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
     subordinates = subordinatesResult.rows.map(row => row.id)
   }
 
-  res.json({
-    token,
-    user: {
-      id: user.id,
-      email: user.email,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      middleName: user.middle_name,
-      position: user.position,
-      department: user.department_name,
-      departmentId: user.department_id,
-      phone: user.phone,
-      birthDate: user.birth_date,
-      hireDate: user.hire_date,
-      status: user.status,
-      role: user.role,
-      managerId: user.manager_id,
-      subordinates,
-      avatar: user.avatar,
-    },
-  })
+  res
+    .cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    })
+    .json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        middleName: user.middle_name,
+        position: user.position,
+        department: user.department_name,
+        departmentId: user.department_id,
+        phone: user.phone,
+        birthDate: user.birth_date,
+        hireDate: user.hire_date,
+        status: user.status,
+        role: user.role,
+        managerId: user.manager_id,
+        subordinates,
+        avatar: user.avatar,
+      },
+    })
 }))
 
 /**

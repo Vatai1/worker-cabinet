@@ -6,6 +6,16 @@ import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../
 import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
 import multer from 'multer'
 
+function validateOnlyOfficeUrl(url) {
+  try {
+    const parsed = new URL(url)
+    const allowedHost = process.env.ONLYOFFICE_URL ? new URL(process.env.ONLYOFFICE_URL).hostname : null
+    if (allowedHost && parsed.hostname !== allowedHost) return false
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    return true
+  } catch { return false }
+}
+
 const uploadDocTemplate = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
@@ -801,6 +811,8 @@ router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRole
 
   const tmpl = tmplResult.rows[0]
 
+  if (!validateOnlyOfficeUrl(url)) return res.status(400).json({ error: 'URL not allowed' })
+
   const response = await fetch(url)
   if (!response.ok) return res.status(502).json({ error: 'Не удалось скачать файл из OnlyOffice' })
 
@@ -846,7 +858,7 @@ router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRole
  *       200:
  *         description: Callback обработан
  */
-router.post('/doc-templates/:id/callback', asyncHandler(async (req, res) => {
+router.post('/doc-templates/:id/callback', authenticateToken, asyncHandler(async (req, res) => {
   const { id } = req.params
   const { status, url } = req.body
 
@@ -862,6 +874,8 @@ router.post('/doc-templates/:id/callback', asyncHandler(async (req, res) => {
   if (result.rows.length === 0) return res.status(404).json({ error: 1 })
 
   const tmpl = result.rows[0]
+
+  if (!validateOnlyOfficeUrl(url)) return res.status(502).json({ error: 1 })
 
   const response = await fetch(url)
   if (!response.ok) return res.status(502).json({ error: 1 })

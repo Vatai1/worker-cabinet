@@ -84,11 +84,14 @@ services:
     container_name: worker-cabinet-onlyoffice
     restart: unless-stopped
     environment:
-      - JWT_ENABLED=false
+      - JWT_ENABLED=${ONLYOFFICE_JWT_ENABLED:-true}
+      - JWT_HEADER=Authorization
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-changeme}
+      - JWT_BODY=false
       - WOPI_ENABLED=true
       - ALLOW_PRIVATE_IP_ADDRESS=true
       - ALLOW_META_IP_ADDRESS=true
-      - USE_UNAUTHORIZED_STORAGE=true
+      - USE_UNAUTHORIZED_STORAGE=${ONLYOFFICE_UNAUTH_STORAGE:-false}
       - DB_TYPE=postgres
       - DB_HOST=postgres
       - DB_PORT=5432

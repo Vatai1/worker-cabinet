@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, RefreshCw, Link2, Unlink, X, MapPin, Clock, User, Tag, Users, Globe, Lock, Eye, ExternalLink, Calendar, AlertCircle, Sparkles } from 'lucide-react'
+import DOMPurify from 'dompurify'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
@@ -596,9 +597,11 @@ export function CalendarPage() {
               const cleanHtml = (() => {
                 if (!hasHtmlBody) return ''
                 const raw = ev.body!.content || ''
-                const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
-                const inner = bodyMatch ? bodyMatch[1] : raw.replace(/<head[\s\S]*?<\/head>/gi, '').replace(/<\/?html[^>]*>/gi, '')
-                return inner.replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<o:p>/g, '').replace(/<\/o:p>/g, '').replace(/<!\-\-[\s\S]*?\-\->/g, '').replace(/xmlns[^=]*="[^"]*"/gi, '').trim()
+                return DOMPurify.sanitize(raw, {
+                  ALLOWED_TAGS: ['p', 'br', 'b', 'i', 'u', 'strong', 'em', 'span', 'div', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'hr', 'img'],
+                  ALLOWED_ATTR: ['href', 'src', 'style', 'class', 'colspan', 'rowspan', 'alt', 'target', 'width', 'height'],
+                  ALLOW_DATA_ATTR: false,
+                })
               })()
               const plainBody = (() => {
                 if (!ev.body?.content) return ''

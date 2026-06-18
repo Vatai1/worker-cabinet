@@ -1,10 +1,14 @@
 import express from 'express'
+import crypto from 'node:crypto'
 import { query } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError } from '../middleware/errors.js'
 import { encrypt, decrypt, fetchEwsEvents, fetchEwsEventBody, testEwsConnection } from '../services/ewsService.js'
 
 const router = express.Router()
+const oauthStates = new Map()
+
+setInterval(() => { for (const [k, v] of oauthStates) { if (v.expiresAt < Date.now()) oauthStates.delete(k) } }, 60000).unref()
 
 router.use(authenticateToken)
 
@@ -33,7 +37,11 @@ router.get('/auth/url', asyncHandler(async (req, res) => {
     response_type: 'code',
     redirect_uri: redirectUri,
     scope: 'Calendars.Read offline_access',
-    state: String(req.user.id),
+    state: (() => {
+      const state = crypto.randomBytes(16).toString('hex')
+      oauthStates.set(state, { userId: req.user.id, expiresAt: Date.now() + 300000 })
+      return state
+    })(),
   }).toString()
 
   res.json({ url, connected: false })
@@ -62,7 +70,11 @@ router.get('/auth/url', asyncHandler(async (req, res) => {
  */
 router.get('/auth/callback', asyncHandler(async (req, res) => {
   const { code, state } = req.query
-  const userId = parseInt(String(state))
+
+  const stateData = oauthStates.get(String(state))
+  if (!stateData || stateData.expiresAt < Date.now()) return res.redirect('/calendar?error=invalid_state')
+  oauthStates.delete(String(state))
+  const userId = stateData.userId
 
   if (!code) return res.redirect('/calendar?error=no_code')
 

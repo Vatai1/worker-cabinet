@@ -1,3 +1,13 @@
+function esc(s) {
+  if (!s) return ''
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;')
+}
+
+function safeLink(link) {
+  if (!link || link.startsWith('https://') || link.startsWith('http://')) return esc(link)
+  return ''
+}
+
 const BASE_STYLES = `
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #1a1a1a;
@@ -49,7 +59,7 @@ function wrapHtml(title, bodyContent) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${title}</title>
+  <title>${esc(title)}</title>
 </head>
 <body style="${BASE_STYLES} background: #f3f4f6; margin: 0; padding: 0;">
   <div style="${CONTAINER_STYLES}">
@@ -70,13 +80,13 @@ function wrapHtml(title, bodyContent) {
 export function vacationCreated(data) {
   const { employeeName, startDate, endDate, days, approverName, link } = data
   const body = `
-    <p>Здравствуйте${approverName ? ', ' + approverName : ''}!</p>
-    <p>Сотрудник <strong>${employeeName}</strong> подал заявку на отпуск:</p>
+    <p>Здравствуйте${approverName ? ', ' + esc(approverName) : ''}!</p>
+    <p>Сотрудник <strong>${esc(employeeName)}</strong> подал заявку на отпуск:</p>
     <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Период</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${startDate} — ${endDate}</td></tr>
-      <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Количество дней</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${days}</td></tr>
+      <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Период</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${esc(startDate)} — ${esc(endDate)}</td></tr>
+      <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Количество дней</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${esc(days)}</td></tr>
     </table>
-    ${link ? `<a href="${link}" style="${BUTTON_STYLES}">Рассмотреть заявку</a>` : ''}
+    ${safeLink(link) ? `<a href="${safeLink(link)}" style="${BUTTON_STYLES}">Рассмотреть заявку</a>` : ''}
   `
   return {
     subject: 'Новая заявка на отпуск',
@@ -90,13 +100,13 @@ export function vacationStatusChanged(data) {
   const statusText = status === 'approved' ? 'одобрен' : 'отклонён'
   const statusColor = status === 'approved' ? '#16a34a' : '#dc2626'
   const body = `
-    <p>Здравствуйте, ${employeeName}!</p>
+    <p>Здравствуйте, ${esc(employeeName)}!</p>
     <p>Ваша заявка на отпуск <span style="color: ${statusColor}; font-weight: 600;">${statusText}</span>.</p>
     <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Период</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${startDate} — ${endDate}</td></tr>
-      ${comment ? `<tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Комментарий</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${comment}</td></tr>` : ''}
+      <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Период</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${esc(startDate)} — ${esc(endDate)}</td></tr>
+      ${comment ? `<tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Комментарий</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${esc(comment)}</td></tr>` : ''}
     </table>
-    ${link ? `<a href="${link}" style="${BUTTON_STYLES}">Перейти в систему</a>` : ''}
+    ${safeLink(link) ? `<a href="${safeLink(link)}" style="${BUTTON_STYLES}">Перейти в систему</a>` : ''}
   `
   return {
     subject: `Заявка на отпуск ${statusText}`,
@@ -108,12 +118,12 @@ export function vacationStatusChanged(data) {
 export function documentAssigned(data) {
   const { employeeName, documentTitle, assignerName, link } = data
   const body = `
-    <p>Здравствуйте, ${employeeName}!</p>
-    <p><strong>${assignerName}</strong> назначил(а) вам документ для ознакомления:</p>
+    <p>Здравствуйте, ${esc(employeeName)}!</p>
+    <p><strong>${esc(assignerName)}</strong> назначил(а) вам документ для ознакомления:</p>
     <p style="padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #3b82f6; margin: 16px 0;">
-      ${documentTitle}
+      ${esc(documentTitle)}
     </p>
-    ${link ? `<a href="${link}" style="${BUTTON_STYLES}">Перейти к документу</a>` : ''}
+    ${safeLink(link) ? `<a href="${safeLink(link)}" style="${BUTTON_STYLES}">Перейти к документу</a>` : ''}
   `
   return {
     subject: 'Новый документ для ознакомления',
@@ -125,13 +135,13 @@ export function documentAssigned(data) {
 export function surveyAssigned(data) {
   const { employeeName, surveyTitle, dueDate, link } = data
   const body = `
-    <p>Здравствуйте, ${employeeName}!</p>
+    <p>Здравствуйте, ${esc(employeeName)}!</p>
     <p>Вам назначен новый опрос:</p>
     <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-      <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Опрос</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${surveyTitle}</td></tr>
-      ${dueDate ? `<tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Срок</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${dueDate}</td></tr>` : ''}
+      <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Опрос</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${esc(surveyTitle)}</td></tr>
+      ${dueDate ? `<tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Срок</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${esc(dueDate)}</td></tr>` : ''}
     </table>
-    ${link ? `<a href="${link}" style="${BUTTON_STYLES}">Пройти опрос</a>` : ''}
+    ${safeLink(link) ? `<a href="${safeLink(link)}" style="${BUTTON_STYLES}">Пройти опрос</a>` : ''}
   `
   return {
     subject: 'Новый опрос',
@@ -143,13 +153,13 @@ export function surveyAssigned(data) {
 export function onboardingTask(data) {
   const { employeeName, taskTitle, dueDate, link } = data
   const body = `
-    <p>Здравствуйте, ${employeeName}!</p>
+    <p>Здравствуйте, ${esc(employeeName)}!</p>
     <p>Вам назначена новая задача онбординга:</p>
     <p style="padding: 16px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #8b5cf6; margin: 16px 0;">
-      ${taskTitle}
+      ${esc(taskTitle)}
     </p>
-    ${dueDate ? `<p style="color: #6b7280;">Срок выполнения: <strong>${dueDate}</strong></p>` : ''}
-    ${link ? `<a href="${link}" style="${BUTTON_STYLES}">Перейти к задаче</a>` : ''}
+    ${dueDate ? `<p style="color: #6b7280;">Срок выполнения: <strong>${esc(dueDate)}</strong></p>` : ''}
+    ${safeLink(link) ? `<a href="${safeLink(link)}" style="${BUTTON_STYLES}">Перейти к задаче</a>` : ''}
   `
   return {
     subject: 'Новая задача онбординга',
@@ -161,13 +171,13 @@ export function onboardingTask(data) {
 export function generic(data) {
   const { recipientName, subject, message, link, linkText } = data
   const body = `
-    <p>Здравствуйте${recipientName ? ', ' + recipientName : ''}!</p>
-    <p>${message}</p>
-    ${link ? `<a href="${link}" style="${BUTTON_STYLES}">${linkText || 'Перейти в систему'}</a>` : ''}
+    <p>Здравствуйте${recipientName ? ', ' + esc(recipientName) : ''}!</p>
+    <p>${esc(message)}</p>
+    ${safeLink(link) ? `<a href="${safeLink(link)}" style="${BUTTON_STYLES}">${esc(linkText || 'Перейти в систему')}</a>` : ''}
   `
   return {
-    subject: subject || 'Уведомление от Worker Cabinet',
-    html: wrapHtml(subject || 'Уведомление', body),
+    subject: esc(subject) || 'Уведомление от Worker Cabinet',
+    html: wrapHtml(esc(subject) || 'Уведомление', body),
     text: message,
   }
 }

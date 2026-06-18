@@ -11,8 +11,8 @@ export const s3Client = new S3Client({
   region: 'us-east-1',
   endpoint: S3_ENDPOINT,
   credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY || process.env.S3_ACCESS_KEY_ID || 'minioadmin',
-    secretAccessKey: process.env.S3_SECRET_KEY || 'minioadmin123',
+    accessKeyId: process.env.S3_ACCESS_KEY || process.env.S3_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.S3_SECRET_KEY || '',
   },
   forcePathStyle: true,
 })

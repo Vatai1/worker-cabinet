@@ -6,7 +6,7 @@ services:
     container_name: worker-cabinet-db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: worker_cabinet
     ports:
       - "5432:5432"
@@ -28,7 +28,7 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-changeme}
       MINIO_BROWSER: "on"
       MINIO_SERVER_URL: "http://localhost:9000"
       MINIO_REGION_NAME: "us-east-1"
@@ -53,19 +53,20 @@ services:
       - "8080:80"
       - "4433:443"
     environment:
-      - JWT_ENABLED=false
+      - JWT_ENABLED=${ONLYOFFICE_JWT_ENABLED:-true}
       - JWT_HEADER=Authorization
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-changeme}
       - JWT_BODY=false
       - WOPI_ENABLED=true
       - ALLOW_PRIVATE_IP_ADDRESS=true
       - ALLOW_META_IP_ADDRESS=true
-      - USE_UNAUTHORIZED_STORAGE=true
+      - USE_UNAUTHORIZED_STORAGE=${ONLYOFFICE_UNAUTH_STORAGE:-false}
       - DB_TYPE=postgres
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=onlyoffice
       - DB_USER=postgres
-      - DB_PWD=postgres
+      - DB_PWD=${DB_PASSWORD:-postgres}
     volumes:
       - onlyoffice_data:/var/www/onlyoffice/Data
       - onlyoffice_logs:/var/log/onlyoffice
@@ -101,7 +102,7 @@ services:
     container_name: worker-cabinet-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: worker_cabinet
-      RABBITMQ_DEFAULT_PASS: rabbitmq_secret
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -129,7 +130,7 @@ services:
       DB_PORT: 5432
       DB_NAME: worker_cabinet
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
       RABBITMQ_URL: amqp://worker_cabinet:rabbitmq_secret@rabbitmq:5672
       MAIL_HOST: ${MAIL_HOST:-smtp.example.com}
       MAIL_PORT: ${MAIL_PORT:-587}
@@ -137,7 +138,7 @@ services:
       MAIL_USER: ${MAIL_USER:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
-      NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-change-this-secret}
+      NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
     ports:
       - "5001:5001"
     depends_on:
@@ -163,7 +164,7 @@ services:
       - HERMES_GID=${HERMES_GID:-1000}
       - HERMES_HOME=/opt/data
       - API_SERVER_ENABLED=true
-      - API_SERVER_KEY=${HERMES_API_KEY:-wc-assistant-secret}
+      - API_SERVER_KEY=${HERMES_API_KEY:-changeme}
       - API_SERVER_HOST=0.0.0.0
       - API_SERVER_PORT=8642
       - API_SERVER_CORS_ORIGINS=http://localhost:3000,http://localhost:5000

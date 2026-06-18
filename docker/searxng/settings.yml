@@ -13,7 +13,7 @@ search:
     - json
 
 server:
-  secret_key: "worker-cabinet-searxng-secret-change-me"
+  secret_key: "${SEARXNG_SECRET_KEY:-changeme}"
   bind_address: "0.0.0.0"
   port: 8080
   limiter: false

@@ -518,6 +518,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 
     if (request.status === 'on_approval') {
       const origYear = extractYear(request.start_date)
+      await client.query('SELECT 1 FROM vacation_balances WHERE user_id = $1 AND year = $2 FOR UPDATE', [request.user_id, origYear])
       await client.query(
         `UPDATE vacation_balances
          SET reserved_days = reserved_days - $1 + $2
@@ -526,6 +527,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
       )
     } else if (request.status === 'approved') {
       const origYear = extractYear(request.start_date)
+      await client.query('SELECT 1 FROM vacation_balances WHERE user_id = $1 AND year = $2 FOR UPDATE', [request.user_id, origYear])
       await client.query(
         `UPDATE vacation_balances
          SET used_days = used_days - $1 + $2
@@ -574,6 +576,15 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
+    if (req.user.role === 'manager') {
+      const mgrDept = await client.query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
+      const empDept = await client.query('SELECT u.department_id FROM users u JOIN vacation_requests vr ON vr.user_id = u.id WHERE vr.id = $1', [id])
+      if (mgrDept.rows[0]?.department_id !== empDept.rows[0]?.department_id) {
+        await client.query('ROLLBACK')
+        return res.status(403).json({ error: 'Нет прав на этот отдел' })
+      }
+    }
+
     const origYear = new Date(request.rows[0].start_date).getFullYear()
     await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1), used_days = used_days + $1 WHERE user_id = $2 AND year = $3',
       [request.rows[0].duration, request.rows[0].user_id, origYear])
@@ -609,6 +620,15 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     )
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
+
+    if (req.user.role === 'manager') {
+      const mgrDept = await client.query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
+      const empDept = await client.query('SELECT u.department_id FROM users u JOIN vacation_requests vr ON vr.user_id = u.id WHERE vr.id = $1', [id])
+      if (mgrDept.rows[0]?.department_id !== empDept.rows[0]?.department_id) {
+        await client.query('ROLLBACK')
+        return res.status(403).json({ error: 'Нет прав на этот отдел' })
+      }
+    }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
     await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',

@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import cookieParser from 'cookie-parser'
 import { swaggerSpec } from './config/swagger.js'
 import authRoutes from './routes/auth.js'
 import vacationRoutes from './routes/vacation.js'
@@ -24,6 +25,7 @@ import assistantRoutes from './routes/assistant.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { errorHandler } from './middleware/errors.js'
 import * as rabbitmq from './config/rabbitmq.js'
+import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
 
 dotenv.config()
 
@@ -54,16 +56,21 @@ app.use(cors({
     if (!origin || allowed.includes(origin) || /^http:\/\/172\.\d+\.\d+\.\d+:3000$/.test(origin)) {
       callback(null, true)
     } else {
-      callback(null, true)
+      callback(new Error('Not allowed by CORS'))
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }))
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+app.use(cookieParser())
+app.use(generateCsrfToken)
+
+// CSRF protection for mutating API requests (safe methods exempt)
+app.use('/api', csrfMiddleware)
 
 if (process.env.NODE_ENV !== 'production') {
   app.get('/api-docs.json', (req, res) => res.json(swaggerSpec))
