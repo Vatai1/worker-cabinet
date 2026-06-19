@@ -7,6 +7,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"                                            # порт nginx
+    environment:
+      BACKEND_HOST: 192.168.1.100                          # IP сервера бэкенда
+      BACKEND_PORT: 5000                                   # порт бэкенда
+      NGINX_SERVER_NAME: _                                 # доменное имя ( _ = любой )
     networks:
       - worker-cabinet-network
 
