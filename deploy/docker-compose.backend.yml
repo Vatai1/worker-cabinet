@@ -2,24 +2,24 @@ version: '3.8'
 
 services:
   backend:
-    image: ${REGISTRY:-vatai12}/${BACKEND_IMAGE:-worker-cabinet-backend:latest}
+    image: vatai12/worker-cabinet-backend:latest
     container_name: worker-cabinet-backend
     restart: unless-stopped
     ports:
-      - "${BACKEND_PORT:-5000}:5000"
+      - "5000:5000"
     environment:
-      - PORT=${BACKEND_INTERNAL_PORT:-5000}
-      - NODE_ENV=${NODE_ENV:-production}
-      - DB_HOST=${DB_HOST:-postgres}
-      - DB_PORT=${DB_PORT:-5432}
-      - DB_NAME=${DB_NAME:-worker_cabinet}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - JWT_SECRET=${JWT_SECRET}
-      - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - S3_SECRET_KEY=${S3_SECRET_KEY}
-      - S3_BUCKET=${S3_BUCKET:-worker-cabinet}
+      - PORT=5000
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=worker_cabinet
+      - DB_USER=postgres
+      - DB_PASSWORD=changeme
+      - JWT_SECRET=changeme
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=worker-cabinet
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,16 +33,16 @@ services:
     container_name: worker-cabinet-db
     restart: unless-stopped
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "5432:5432"
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME:-worker_cabinet}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: worker_cabinet
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../docker/init-db:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,12 +55,12 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "9000:9000"
+      - "9001:9001"
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
-      MINIO_BROWSER: ${MINIO_BROWSER:-off}
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BROWSER: off
     volumes:
       - minio_data:/data
     healthcheck:
@@ -76,20 +76,20 @@ services:
     container_name: worker-cabinet-onlyoffice
     restart: unless-stopped
     environment:
-      - JWT_ENABLED=${ONLYOFFICE_JWT_ENABLED:-true}
-      - JWT_HEADER=${ONLYOFFICE_JWT_HEADER:-Authorization}
-      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
-      - JWT_BODY=${ONLYOFFICE_JWT_BODY:-false}
-      - WOPI_ENABLED=${ONLYOFFICE_WOPI_ENABLED:-true}
-      - ALLOW_PRIVATE_IP_ADDRESS=${ONLYOFFICE_ALLOW_PRIVATE:-true}
-      - ALLOW_META_IP_ADDRESS=${ONLYOFFICE_ALLOW_META:-true}
-      - USE_UNAUTHORIZED_STORAGE=${ONLYOFFICE_UNAUTH_STORAGE:-false}
-      - DB_TYPE=${ONLYOFFICE_DB_TYPE:-postgres}
-      - DB_HOST=${ONLYOFFICE_DB_HOST:-postgres}
-      - DB_PORT=${ONLYOFFICE_DB_PORT:-5432}
-      - DB_NAME=${ONLYOFFICE_DB_NAME:-onlyoffice}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PWD=${DB_PASSWORD}
+      - JWT_ENABLED=true
+      - JWT_HEADER=Authorization
+      - JWT_SECRET=changeme
+      - JWT_BODY=false
+      - WOPI_ENABLED=true
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+      - ALLOW_META_IP_ADDRESS=true
+      - USE_UNAUTHORIZED_STORAGE=false
+      - DB_TYPE=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=onlyoffice
+      - DB_USER=postgres
+      - DB_PWD=changeme
     volumes:
       - onlyoffice_data:/var/www/onlyoffice/Data
       - onlyoffice_logs:/var/log/onlyoffice
@@ -125,11 +125,11 @@ services:
     container_name: worker-cabinet-rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-worker_cabinet}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_USER: worker_cabinet
+      RABBITMQ_DEFAULT_PASS: changeme
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+      - "5672:5672"
+      - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -142,27 +142,27 @@ services:
       - worker-cabinet-network
 
   notification-service:
-    image: ${REGISTRY:-vatai12}/${NOTIFICATION_IMAGE:-worker-cabinet-notification:latest}
+    image: vatai12/worker-cabinet-notification:latest
     container_name: worker-cabinet-notifications
     restart: unless-stopped
     environment:
-      PORT: ${NOTIFICATION_INTERNAL_PORT:-5001}
-      NODE_ENV: ${NODE_ENV:-production}
-      DB_HOST: ${NOTIFICATION_DB_HOST:-postgres}
-      DB_PORT: ${NOTIFICATION_DB_PORT:-5432}
-      DB_NAME: ${NOTIFICATION_DB_NAME:-worker_cabinet}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD}
-      RABBITMQ_URL: ${NOTIFICATION_RABBITMQ_URL:-amqp://worker_cabinet:${RABBITMQ_PASSWORD}@rabbitmq:5672}
-      MAIL_HOST: ${MAIL_HOST:-smtp.example.com}
-      MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_SECURE: ${MAIL_SECURE:-false}
-      MAIL_USER: ${MAIL_USER:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
-      NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
+      PORT: 5001
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: worker_cabinet
+      DB_USER: postgres
+      DB_PASSWORD: changeme
+      RABBITMQ_URL: amqp://worker_cabinet:changeme@rabbitmq:5672
+      MAIL_HOST: smtp.example.com
+      MAIL_PORT: 587
+      MAIL_SECURE: false
+      MAIL_USER: ""
+      MAIL_PASSWORD: ""
+      MAIL_FROM: '"Worker Cabinet" <noreply@example.com>'
+      NOTIFICATION_SECRET: changeme
     ports:
-      - "${NOTIFICATION_PORT:-5001}:5001"
+      - "5001:5001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -178,16 +178,16 @@ services:
     volumes:
       - hermes_data:/opt/data
     environment:
-      - HERMES_UID=${HERMES_UID:-1000}
-      - HERMES_GID=${HERMES_GID:-1000}
+      - HERMES_UID=1000
+      - HERMES_GID=1000
       - HERMES_HOME=/opt/data
       - API_SERVER_ENABLED=true
-      - API_SERVER_KEY=${HERMES_API_KEY:-changeme}
+      - API_SERVER_KEY=changeme
       - API_SERVER_HOST=0.0.0.0
       - API_SERVER_PORT=8642
       - SEARXNG_URL=http://searxng:8080
     ports:
-      - "127.0.0.1:${HERMES_PORT:-8642}:8642"
+      - "127.0.0.1:8642:8642"
     command: ["gateway", "run"]
     networks:
       - worker-cabinet-network
@@ -202,7 +202,7 @@ services:
     volumes:
       - ../docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
     ports:
-      - "127.0.0.1:${SEARXNG_PORT:-8888}:8080"
+      - "127.0.0.1:8888:8080"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
       interval: 15s
