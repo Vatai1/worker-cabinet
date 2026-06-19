@@ -2,10 +2,11 @@ version: '3.8'
 
 services:
   backend:
-    image: ${REGISTRY}/${BACKEND_IMAGE:-worker-cabinet-backend:latest}
+    image: ${REGISTRY:-vatai12}/${BACKEND_IMAGE:-worker-cabinet-backend:latest}
     container_name: worker-cabinet-backend
     restart: unless-stopped
-    env_file: .env
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
     environment:
       - PORT=${BACKEND_INTERNAL_PORT:-5000}
       - NODE_ENV=${NODE_ENV:-production}
@@ -19,8 +20,6 @@ services:
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
       - S3_SECRET_KEY=${S3_SECRET_KEY}
       - S3_BUCKET=${S3_BUCKET:-worker-cabinet}
-    ports:
-      - "${BACKEND_PORT:-5000}:5000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,13 +32,12 @@ services:
     image: postgres:16-alpine
     container_name: worker-cabinet-db
     restart: unless-stopped
-    env_file: .env
+    ports:
+      - "${DB_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME:-worker_cabinet}
-    ports:
-      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../docker/init-db:/docker-entrypoint-initdb.d
@@ -56,14 +54,13 @@ services:
     container_name: worker-cabinet-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
-    env_file: .env
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
       MINIO_BROWSER: ${MINIO_BROWSER:-off}
-    ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -78,7 +75,6 @@ services:
     image: onlyoffice/documentserver:latest
     container_name: worker-cabinet-onlyoffice
     restart: unless-stopped
-    env_file: .env
     environment:
       - JWT_ENABLED=${ONLYOFFICE_JWT_ENABLED:-true}
       - JWT_HEADER=${ONLYOFFICE_JWT_HEADER:-Authorization}
@@ -116,7 +112,6 @@ services:
     image: redis:7-alpine
     container_name: worker-cabinet-onlyoffice-redis
     restart: unless-stopped
-    env_file: .env
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -129,7 +124,6 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: worker-cabinet-rabbitmq
     restart: unless-stopped
-    env_file: .env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-worker_cabinet}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -148,10 +142,9 @@ services:
       - worker-cabinet-network
 
   notification-service:
-    image: ${REGISTRY}/${NOTIFICATION_IMAGE:-worker-cabinet-notification:latest}
+    image: ${REGISTRY:-vatai12}/${NOTIFICATION_IMAGE:-worker-cabinet-notification:latest}
     container_name: worker-cabinet-notifications
     restart: unless-stopped
-    env_file: .env
     environment:
       PORT: ${NOTIFICATION_INTERNAL_PORT:-5001}
       NODE_ENV: ${NODE_ENV:-production}
@@ -182,7 +175,6 @@ services:
     image: nousresearch/hermes-agent:latest
     container_name: worker-cabinet-hermes
     restart: unless-stopped
-    env_file: .env
     volumes:
       - hermes_data:/opt/data
     environment:

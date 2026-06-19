@@ -5,7 +5,6 @@ services:
     image: ${REGISTRY:-registry.example.com}/${FRONTEND_IMAGE:-worker-cabinet-frontend:latest}
     container_name: worker-cabinet-frontend
     restart: unless-stopped
-    env_file: .env
     ports:
       - "${APP_PORT:-80}:80"
     networks:
