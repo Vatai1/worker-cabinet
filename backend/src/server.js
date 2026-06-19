@@ -23,6 +23,7 @@ import notificationsRoutes from './routes/notifications.js'
 import adminRoutes from './routes/admin.js'
 import assistantRoutes from './routes/assistant.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
+import { runMigrations } from './db/migrate.js'
 import { errorHandler } from './middleware/errors.js'
 import * as rabbitmq from './config/rabbitmq.js'
 import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
@@ -138,6 +139,14 @@ app.use(errorHandler)
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' })
 })
+
+// Run database migrations on startup
+try {
+  await runMigrations()
+} catch (err) {
+  console.error('Migration failed:', err.message)
+  process.exit(1)
+}
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`)

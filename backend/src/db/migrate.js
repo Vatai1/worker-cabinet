@@ -1533,4 +1533,16 @@ async function runMigrations() {
   }
 }
 
-runMigrations()
+// Auto-run when executed directly (node src/db/migrate.js)
+const __filename = typeof import.meta !== 'undefined' ? new URL(import.meta.url).pathname : '';
+const isMainModule = typeof process !== 'undefined' && process.argv[1] && (
+  process.argv[1] === __filename ||
+  process.argv[1].endsWith('/migrate.js') ||
+  process.argv[1].endsWith('\\migrate.js')
+)
+
+if (isMainModule) {
+  runMigrations()
+}
+
+export { runMigrations }
