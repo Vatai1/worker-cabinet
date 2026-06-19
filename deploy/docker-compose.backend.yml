@@ -2,24 +2,24 @@ version: '3.8'
 
 services:
   backend:
-    image: vatai12/worker-cabinet-backend:latest
+    image: vatai12/worker-cabinet-backend:latest          # образ бэкенда
     container_name: worker-cabinet-backend
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "5000:5000"                                        # порт API
     environment:
-      - PORT=5000
-      - NODE_ENV=production
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=worker_cabinet
-      - DB_USER=postgres
-      - DB_PASSWORD=changeme
-      - JWT_SECRET=changeme
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=minioadmin
-      - S3_BUCKET=worker-cabinet
+      - PORT=5000                                          # внутренний порт приложения
+      - NODE_ENV=production                                # режим работы
+      - DB_HOST=postgres                                   # хост БД (имя сервиса)
+      - DB_PORT=5432                                       # порт БД
+      - DB_NAME=worker_cabinet                             # имя БД
+      - DB_USER=postgres                                   # пользователь БД
+      - DB_PASSWORD=changeme                               # пароль БД
+      - JWT_SECRET=changeme                                # секрет подписи JWT
+      - S3_ENDPOINT=http://minio:9000                      # адрес S3
+      - S3_ACCESS_KEY=minioadmin                           # ключ S3
+      - S3_SECRET_KEY=minioadmin                           # секретный ключ S3
+      - S3_BUCKET=worker-cabinet                           # бакет S3
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,9 +35,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: changeme
-      POSTGRES_DB: worker_cabinet
+      POSTGRES_USER: postgres                              # пользователь БД
+      POSTGRES_PASSWORD: changeme                          # пароль БД
+      POSTGRES_DB: worker_cabinet                          # имя БД
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../docker/init-db:/docker-entrypoint-initdb.d
@@ -55,12 +55,12 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:9000"                                        # S3 API
+      - "9001:9001"                                        # веб-консоль
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_BROWSER: off
+      MINIO_ROOT_USER: minioadmin                          # пользователь MinIO
+      MINIO_ROOT_PASSWORD: minioadmin                      # пароль MinIO
+      MINIO_BROWSER: off                                   # отключить встроенный браузер
     volumes:
       - minio_data:/data
     healthcheck:
@@ -76,20 +76,20 @@ services:
     container_name: worker-cabinet-onlyoffice
     restart: unless-stopped
     environment:
-      - JWT_ENABLED=true
-      - JWT_HEADER=Authorization
-      - JWT_SECRET=changeme
-      - JWT_BODY=false
-      - WOPI_ENABLED=true
-      - ALLOW_PRIVATE_IP_ADDRESS=true
-      - ALLOW_META_IP_ADDRESS=true
-      - USE_UNAUTHORIZED_STORAGE=false
-      - DB_TYPE=postgres
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=onlyoffice
-      - DB_USER=postgres
-      - DB_PWD=changeme
+      - JWT_ENABLED=true                                   # включить JWT
+      - JWT_HEADER=Authorization                           # заголовок JWT
+      - JWT_SECRET=changeme                                # секрет JWT
+      - JWT_BODY=false                                     # JWT не в теле запроса
+      - WOPI_ENABLED=true                                  # поддержка WOPI
+      - ALLOW_PRIVATE_IP_ADDRESS=true                      # разрешить запросы к внутренним IP
+      - ALLOW_META_IP_ADDRESS=true                         # разрешить meta-запросы
+      - USE_UNAUTHORIZED_STORAGE=false                     # неавторизованное хранилище
+      - DB_TYPE=postgres                                   # тип БД
+      - DB_HOST=postgres                                   # хост БД
+      - DB_PORT=5432                                       # порт БД
+      - DB_NAME=onlyoffice                                 # имя БД
+      - DB_USER=postgres                                   # пользователь БД
+      - DB_PWD=changeme                                    # пароль БД
     volumes:
       - onlyoffice_data:/var/www/onlyoffice/Data
       - onlyoffice_logs:/var/log/onlyoffice
@@ -125,11 +125,11 @@ services:
     container_name: worker-cabinet-rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: worker_cabinet
-      RABBITMQ_DEFAULT_PASS: changeme
+      RABBITMQ_DEFAULT_USER: worker_cabinet                # пользователь RMQ
+      RABBITMQ_DEFAULT_PASS: changeme                      # пароль RMQ
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5672:5672"                                        # AMQP
+      - "15672:15672"                                      # веб-интерфейс
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -146,21 +146,21 @@ services:
     container_name: worker-cabinet-notifications
     restart: unless-stopped
     environment:
-      PORT: 5001
-      NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: worker_cabinet
-      DB_USER: postgres
-      DB_PASSWORD: changeme
-      RABBITMQ_URL: amqp://worker_cabinet:changeme@rabbitmq:5672
-      MAIL_HOST: smtp.example.com
-      MAIL_PORT: 587
-      MAIL_SECURE: false
-      MAIL_USER: ""
-      MAIL_PASSWORD: ""
-      MAIL_FROM: '"Worker Cabinet" <noreply@example.com>'
-      NOTIFICATION_SECRET: changeme
+      PORT: 5001                                           # порт сервиса
+      NODE_ENV: production                                 # режим работы
+      DB_HOST: postgres                                    # хост БД
+      DB_PORT: 5432                                        # порт БД
+      DB_NAME: worker_cabinet                              # имя БД
+      DB_USER: postgres                                    # пользователь БД
+      DB_PASSWORD: changeme                                # пароль БД
+      RABBITMQ_URL: amqp://worker_cabinet:changeme@rabbitmq:5672  # подключение к RMQ
+      MAIL_HOST: smtp.example.com                          # SMTP-сервер
+      MAIL_PORT: 587                                       # порт SMTP
+      MAIL_SECURE: false                                   # STARTTLS
+      MAIL_USER: ""                                        # пользователь SMTP
+      MAIL_PASSWORD: ""                                    # пароль SMTP
+      MAIL_FROM: '"Worker Cabinet" <noreply@example.com>'  # отправитель
+      NOTIFICATION_SECRET: changeme                        # секрет для подписи уведомлений
     ports:
       - "5001:5001"
     depends_on:
@@ -178,14 +178,14 @@ services:
     volumes:
       - hermes_data:/opt/data
     environment:
-      - HERMES_UID=1000
-      - HERMES_GID=1000
-      - HERMES_HOME=/opt/data
-      - API_SERVER_ENABLED=true
-      - API_SERVER_KEY=changeme
-      - API_SERVER_HOST=0.0.0.0
-      - API_SERVER_PORT=8642
-      - SEARXNG_URL=http://searxng:8080
+      - HERMES_UID=1000                                    # UID внутри контейнера
+      - HERMES_GID=1000                                    # GID внутри контейнера
+      - HERMES_HOME=/opt/data                              # домашняя директория
+      - API_SERVER_ENABLED=true                            # включить API-сервер
+      - API_SERVER_KEY=changeme                            # ключ аутентификации API
+      - API_SERVER_HOST=0.0.0.0                            # хост API
+      - API_SERVER_PORT=8642                               # порт API
+      - SEARXNG_URL=http://searxng:8080                    # поисковик
     ports:
       - "127.0.0.1:8642:8642"
     command: ["gateway", "run"]
