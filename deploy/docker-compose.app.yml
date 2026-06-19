@@ -2,11 +2,11 @@ version: '3.8'
 
 services:
   frontend:
-    image: vatai12/worker-cabinet-frontend:latest          # образ фронтенда
+    image: ${REGISTRY:-vatai12}/${FRONTEND_IMAGE:-worker-cabinet-frontend:latest}  # образ фронтенда
     container_name: worker-cabinet-frontend
     restart: unless-stopped
     ports:
-      - "80:80"                                            # порт nginx
+      - "${APP_PORT:-80}:80"                                                      # порт nginx
     networks:
       - worker-cabinet-network
 
