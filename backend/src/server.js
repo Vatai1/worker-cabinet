@@ -27,6 +27,8 @@ import { runMigrations } from './db/migrate.js'
 import { errorHandler } from './middleware/errors.js'
 import * as rabbitmq from './config/rabbitmq.js'
 import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
+import bcrypt from 'bcryptjs'
+import { query } from './config/database.js'
 
 dotenv.config()
 
@@ -48,6 +50,8 @@ app.use(cors({
       'http://localhost:5173',
       'http://localhost:57173',
       'http://localhost:8080',
+      'http://localhost',
+      'http://localhost:80',
       'http://127.0.0.1:3000',
       'http://127.0.0.1:3001',
       'http://127.0.0.1:8080',
@@ -147,6 +151,29 @@ try {
   console.error('Migration failed:', err.message)
   process.exit(1)
 }
+
+async function ensureAdmin() {
+  try {
+    const email = process.env.ADMIN_EMAIL || 'admin@example.com'
+    const password = process.env.ADMIN_PASSWORD || 'admin123'
+    const existing = await query('SELECT id FROM users WHERE email = $1', [email])
+    if (existing.rows.length === 0) {
+      const passwordHash = await bcrypt.hash(password, 10)
+      const deptResult = await query('SELECT id FROM departments ORDER BY id LIMIT 1')
+      const deptId = deptResult.rows[0]?.id || null
+      await query(
+        `INSERT INTO users (email, password_hash, first_name, last_name, middle_name, position, department_id, hire_date, role)
+         VALUES ($1, $2, 'Администратор', 'Системы', '', 'System Administrator', $3, NOW(), 'admin')`,
+        [email, passwordHash, deptId]
+      )
+      console.log(`✅ Admin account created: ${email} / ${password}`)
+    }
+  } catch (err) {
+    console.warn(`[ADMIN] Could not ensure admin account: ${err.message}`)
+  }
+}
+
+await ensureAdmin()
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`)

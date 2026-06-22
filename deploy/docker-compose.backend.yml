@@ -16,6 +16,8 @@ services:
       - DB_USER=postgres                                   # пользователь БД
       - DB_PASSWORD=changeme                               # пароль БД
       - JWT_SECRET=changeme                                # секрет подписи JWT
+      - ADMIN_EMAIL=admin@example.com                        # email администратора
+      - ADMIN_PASSWORD=admin123                             # пароль администратора
       - S3_ENDPOINT=http://minio:9000                      # адрес S3
       - S3_ACCESS_KEY=minioadmin                           # ключ S3
       - S3_SECRET_KEY=minioadmin                           # секретный ключ S3
