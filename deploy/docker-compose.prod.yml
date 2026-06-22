@@ -5,10 +5,17 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile.frontend
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api}
     container_name: worker-cabinet-frontend
     restart: unless-stopped
     ports:
       - "80:80"
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: 5000
+      NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-_}
+      NGINX_ENVSUBST_PARAMS: $${BACKEND_HOST} $${BACKEND_PORT} $${NGINX_SERVER_NAME}
     depends_on:
       - backend
     networks:
