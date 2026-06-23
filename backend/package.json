@@ -48,6 +48,7 @@
     "express-validator": "^7.3.1",
     "httpntlm": "^1.8.13",
     "joi": "^17.11.0",
+    "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^4.2.1",

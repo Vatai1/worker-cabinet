@@ -1,5 +1,76 @@
 import jwt from 'jsonwebtoken'
+import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { query } from '../config/database.js'
+import keycloakConfig, { getIssuer, getJwksUrl } from '../config/keycloak.js'
+
+let jwksCache = null
+
+async function getJwks() {
+  if (!jwksCache) {
+    jwksCache = createRemoteJWKSet(new URL(getJwksUrl()), {
+      timeoutSeconds: 15,
+      cacheMaxAge: 300,
+    })
+  }
+  return jwksCache
+}
+
+const VALID_ROLES = ['admin', 'hr', 'manager', 'employee', 'onboarding']
+
+function extractRole(token) {
+  const realmRoles = token.realm_access?.roles || []
+  const resourceRoles = token.resource_access?.[keycloakConfig.clientId]?.roles || []
+  const allRoles = [...realmRoles, ...resourceRoles]
+  const role = allRoles.find(r => VALID_ROLES.includes(r))
+  return role || 'employee'
+}
+
+async function verifyKeycloakToken(token) {
+  const jwks = await getJwks()
+  const { payload } = await jwtVerify(token, jwks)
+
+  const expectedPath = `/realms/${keycloakConfig.realm}`
+  if (!payload.iss || !payload.iss.endsWith(expectedPath)) {
+    throw new Error('Invalid token issuer')
+  }
+
+  return payload
+}
+
+async function findOrCreateUser(kcPayload) {
+  const email = kcPayload.email
+  if (!email) throw new Error('Email not found in Keycloak token')
+
+  let result = await query(
+    'SELECT id, email, role, first_name, last_name FROM users WHERE email = $1',
+    [email]
+  )
+
+  if (result.rows.length > 0) {
+    const user = result.rows[0]
+    const role = extractRole(kcPayload)
+    if (role !== user.role) {
+      await query('UPDATE users SET role = $1 WHERE id = $2', [role, user.id])
+    }
+    return { ...user, role }
+  }
+
+  const role = extractRole(kcPayload)
+  const firstName = kcPayload.given_name || ''
+  const lastName = kcPayload.family_name || ''
+
+  result = await query(
+    `INSERT INTO users (email, first_name, last_name, role, status)
+     VALUES ($1, $2, $3, $4, 'active')
+     RETURNING id, email, role, first_name, last_name`,
+    [email, firstName, lastName, role]
+  )
+
+  const user = result.rows[0]
+  await query('INSERT INTO vacation_balances (user_id, total_days) VALUES ($1, 28)', [user.id]).catch(() => {})
+
+  return user
+}
 
 export const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization']
@@ -10,18 +81,24 @@ export const authenticateToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    
-    const result = await query(
-      'SELECT id, email, role, first_name, last_name FROM users WHERE id = $1',
-      [decoded.id]
-    )
-    
-    if (result.rows.length === 0) {
-      return res.status(403).json({ error: 'User not found' })
+    let user
+
+    if (keycloakConfig.enabled) {
+      const kcPayload = await verifyKeycloakToken(token)
+      user = await findOrCreateUser(kcPayload)
+    } else {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET)
+      const result = await query(
+        'SELECT id, email, role, first_name, last_name FROM users WHERE id = $1',
+        [decoded.id]
+      )
+      if (result.rows.length === 0) {
+        return res.status(403).json({ error: 'User not found' })
+      }
+      user = result.rows[0]
     }
-    
-    req.user = result.rows[0]
+
+    req.user = user
     next()
   } catch (err) {
     return res.status(403).json({ error: 'Invalid or expired token' })

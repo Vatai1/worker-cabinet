@@ -16,6 +16,11 @@ services:
       - DB_USER=postgres                                   # пользователь БД
       - DB_PASSWORD=changeme                               # пароль БД
       - JWT_SECRET=changeme                                # секрет подписи JWT
+      - KEYCLOAK_URL=http://host.docker.internal:8081               # URL Keycloak (тестируемый)
+      - KEYCLOAK_PUBLIC_URL=http://localhost:8081                    # URL Keycloak для браузера
+      - KEYCLOAK_REALM=worker-cabinet                       # realm
+      - KEYCLOAK_CLIENT_ID=worker-cabinet                   # client ID
+      - KEYCLOAK_CLIENT_SECRET=worker-cabinet-secret           # client secret
       - ADMIN_EMAIL=admin@example.com                        # email администратора
       - ADMIN_PASSWORD=admin123                             # пароль администратора
       - S3_ENDPOINT=http://minio:9000                      # адрес S3
