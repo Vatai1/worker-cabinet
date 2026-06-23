@@ -1,4 +1,4 @@
-import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useUIStore } from '@/shared/store/uiStore'
@@ -116,7 +116,6 @@ export function Sidebar() {
   const { user, logout } = useAuthStore()
   const { sidebarOpen, toggleSidebar, darkMode, toggleTheme, openModals } = useUIStore()
   const { isModuleEnabled, modulesLoaded } = useModulesStore()
-  const navigate = useNavigate()
   const location = useLocation()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
 
@@ -165,8 +164,7 @@ export function Sidebar() {
   }
 
   const handleLogout = () => {
-    logout()
-    navigate('/login')
+    void logout()
   }
 
   const getUserInitials = () => {

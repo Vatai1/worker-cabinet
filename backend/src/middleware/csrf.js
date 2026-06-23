@@ -10,7 +10,7 @@ export function csrfMiddleware(req, res, next) {
     return next()
   }
 
-  if (req.path === '/auth/login' || req.path === '/auth/register') {
+  if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/callback') {
     return next()
   }
 
