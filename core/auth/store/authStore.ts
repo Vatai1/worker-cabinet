@@ -1,13 +1,13 @@
 import { create } from 'zustand'
 import type { User, AuthState } from '@/shared/types'
-import { getCookie, deleteCookie } from '@/shared/lib/cookies'
+import { deleteCookie } from '@/shared/lib/cookies'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useModulesStore } from '@/shared/store/modulesStore'
 
 interface AuthStore extends AuthState {
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   updateUser: (user: Partial<User>) => void
   checkAuth: () => Promise<void>
 }
@@ -17,17 +17,9 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   isAuthenticated: false,
   loading: true,
   checkAuth: async () => {
-    const token = getCookie('auth_token')
-    if (!token) {
-      set({ isAuthenticated: false, user: null, loading: false })
-      return
-    }
-
     try {
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        credentials: 'include',
       })
 
       if (!response.ok) {
@@ -83,9 +75,6 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
       const data = await response.json()
 
-      // auth_token is now set as HttpOnly cookie by the backend.
-      // We no longer store the token in client state for security.
-
       set({
         user: {
           id: data.user.id.toString(),
@@ -113,12 +102,27 @@ export const useAuthStore = create<AuthStore>()((set) => ({
       throw error
     }
   },
-  logout: () => {
-    deleteCookie('auth_token')
+  logout: async () => {
     set({
       user: null,
       isAuthenticated: false,
     })
+    deleteCookie('auth_token')
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.logoutUrl) {
+          window.location.href = data.logoutUrl
+          return
+        }
+      }
+    } catch {
+      // ignore
+    }
   },
   updateUser: (updates: Partial<User>) => {
     set((state) => ({
