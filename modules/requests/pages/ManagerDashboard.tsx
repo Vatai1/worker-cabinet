@@ -7,7 +7,7 @@ import { Label } from '@/shared/components/ui/Label'
 import { Check, X, Search, Users, Clock, CheckCircle } from 'lucide-react'
 import { useRequestsStore } from '@/modules/requests/store/requestsStore'
 import { useAuthStore } from '@/core/auth/store/authStore'
-import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/mockData'
+import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/requestUtils'
 import { formatDate, formatDateTime } from '@/shared/lib/utils'
 
 export function ManagerDashboard() {

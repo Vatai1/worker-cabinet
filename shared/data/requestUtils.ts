@@ -1,4 +1,4 @@
-﻿import type { Request } from '@/shared/types'
+import type { Request } from '@/shared/types'
 
 export const getRequestTypeLabel = (type: Request['type']): string => {
   const labels: Record<Request['type'], string> = {
@@ -19,12 +19,4 @@ export const getRequestStatusBadge = (status: Request['status']): { label: strin
     cancelled: { label: 'Отменено', className: 'bg-gray-100 text-gray-800' },
   }
   return badges[status]
-}
-
-export const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 Б'
-  const k = 1024
-  const sizes = ['Б', 'КБ', 'МБ', 'ГБ']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }

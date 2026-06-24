@@ -50,9 +50,6 @@ coverage
 dist-ssr/
 dist/
 docker/hermes/data/*
-!docker/hermes/data/skills/
-docker/hermes/data/skills/*/**/cache/
-docker/hermes/data/skills/*/**/__pycache__/
 docker/llama/models/*.gguf
 err.txt
 lerna-debug.log*

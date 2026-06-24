@@ -27,6 +27,7 @@ import { runMigrations } from './db/migrate.js'
 import { errorHandler } from './middleware/errors.js'
 import * as rabbitmq from './config/rabbitmq.js'
 import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
+import { apiLimiter } from './middleware/rateLimiter.js'
 import bcrypt from 'bcryptjs'
 import { query } from './config/database.js'
 
@@ -78,6 +79,7 @@ app.use(generateCsrfToken)
 
 // CSRF protection for mutating API requests (safe methods exempt)
 app.use('/api', csrfMiddleware)
+app.use('/api', apiLimiter)
 
 if (process.env.NODE_ENV !== 'production') {
   app.get('/api-docs.json', (req, res) => res.json(swaggerSpec))

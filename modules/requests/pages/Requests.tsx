@@ -9,7 +9,7 @@ import { VacationRequestForm } from '@/modules/requests/components/forms/Vacatio
 import { Plus, Search, Download, X, FileText, Clock, CheckCircle } from 'lucide-react'
 import { useRequestsStore } from '@/modules/requests/store/requestsStore'
 import { useAuthStore } from '@/core/auth/store/authStore'
-import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/mockData'
+import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/requestUtils'
 import { formatDate, formatDateTime } from '@/shared/lib/utils'
 
 type RequestStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'cancelled'
