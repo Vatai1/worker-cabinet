@@ -31,11 +31,11 @@ export function csrfMiddleware(req, res, next) {
 export function generateCsrfToken(req, res, next) {
   if (!req.cookies?.csrf_token) {
     const token = crypto.randomBytes(32).toString('hex')
-    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https'
+    const isHttps = req.protocol === 'https'
     res.cookie('csrf_token', token, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === 'production' && isHttps,
-      sameSite: process.env.NODE_ENV === 'production' && isHttps ? 'strict' : 'lax',
+      secure: isHttps,
+      sameSite: isHttps ? 'strict' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
     })

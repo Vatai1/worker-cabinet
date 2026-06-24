@@ -59,45 +59,42 @@ router.post('/callback', asyncHandler(async (req, res) => {
   const idToken = tokenData.id_token
 
   res.cookie('auth_token', accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production' && req.protocol === 'https',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    ...cookieOptions(req),
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
   })
 
   if (idToken) {
     res.cookie('kc_id_token', idToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && req.protocol === 'https',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      ...cookieOptions(req),
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
     })
   }
 
   res.json({ success: true, accessToken })
 }))
 
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-  path: '/',
+function cookieOptions(req) {
+  return {
+    httpOnly: true,
+    secure: req.protocol === 'https',
+    sameSite: req.protocol === 'https' ? 'strict' : 'lax',
+    path: '/',
+  }
 }
 
 router.post('/logout', asyncHandler(async (req, res) => {
+  const opts = cookieOptions(req)
   if (keycloakConfig.enabled) {
     const idToken = req.cookies?.kc_id_token
     let logoutUrl = getPublicLogoutUrl(process.env.FRONTEND_URL || '/')
     if (idToken) {
       logoutUrl += `&id_token_hint=${encodeURIComponent(idToken)}`
     }
-    res.clearCookie('auth_token', COOKIE_OPTIONS)
-    res.clearCookie('kc_id_token', COOKIE_OPTIONS)
+    res.clearCookie('auth_token', opts)
+    res.clearCookie('kc_id_token', opts)
     res.json({ logoutUrl })
   } else {
-    res.clearCookie('auth_token', COOKIE_OPTIONS)
+    res.clearCookie('auth_token', opts)
     res.json({ success: true })
   }
 }))
@@ -131,11 +128,8 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
 
   res.status(201)
     .cookie('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && req.protocol === 'https',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      ...cookieOptions(req),
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
     })
     .json({
       token,
@@ -208,11 +202,8 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
 
   res
     .cookie('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && req.protocol === 'https',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      ...cookieOptions(req),
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
     })
     .json({
       token,
