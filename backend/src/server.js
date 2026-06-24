@@ -60,7 +60,7 @@ app.use(cors({
       'http://host.docker.internal:5000',
       process.env.FRONTEND_URL,
     ].filter(Boolean)
-    if (!origin || allowed.includes(origin) || /^http:\/\/172\.\d+\.\d+\.\d+:3000$/.test(origin)) {
+    if (!origin || allowed.includes(origin) || /^https?:\/\/[\d.]+(:\d+)?$/.test(origin) || /^https?:\/\/[a-zA-Z0-9.-]+(:\d+)?$/.test(origin)) {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'))
