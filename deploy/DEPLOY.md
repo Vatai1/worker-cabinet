@@ -1,283 +1,337 @@
 # Деплой Worker Cabinet
 
-========================================
-ДЕПЛОЙ — ОДИН СЕРВЕР
-========================================
+## Один сервер
 
-Используется: deploy/docker-compose.prod.yml
+Используется: `deploy/docker-compose.prod.yml`
 
-Файлы на сервере: docker-compose.prod.yml, deploy/.env.backend.example → .env,
-Dockerfile.frontend, Dockerfile.backend, deploy/nginx.conf
+Файлы на сервере: `docker-compose.prod.yml`, `deploy/.env.backend.example` → `.env`, `Dockerfile.frontend`, `Dockerfile.backend`, `deploy/nginx.conf`
 
-1. Подготовка сервера
+### 1. Подготовка сервера
 
-  apt install docker.io docker-compose-plugin
-  mkdir -p /opt/worker-cabinet
+```bash
+apt install docker.io docker-compose-plugin
+mkdir -p /opt/worker-cabinet
+```
 
-2. Копирование файлов
+### 2. Копирование файлов
 
-  scp deploy/docker-compose.prod.yml \
-      deploy/.env.backend.example \
-      deploy/nginx.conf \
-      Dockerfile.frontend \
-      Dockerfile.backend \
-      docker/init-db/ \
-      user@server:/opt/worker-cabinet/
+```bash
+scp deploy/docker-compose.prod.yml \
+    deploy/.env.backend.example \
+    deploy/nginx.conf \
+    Dockerfile.frontend \
+    Dockerfile.backend \
+    docker/init-db/ \
+    user@server:/opt/worker-cabinet/
+```
 
-3. Конфигурация .env
+### 3. Конфигурация .env
 
-  ssh user@server
-  cd /opt/worker-cabinet
-  cp .env.backend.example .env
-  nano .env
+```bash
+ssh user@server
+cd /opt/worker-cabinet
+cp .env.backend.example .env
+nano .env
+```
 
-  Обязательно заполнить:
-    DB_PASSWORD, JWT_SECRET, S3_SECRET_KEY
-    ONLYOFFICE_JWT_SECRET, RABBITMQ_PASSWORD
-    NOTIFICATION_SECRET, HERMES_API_KEY
+Обязательно заполнить: `DB_PASSWORD`, `JWT_SECRET`, `S3_SECRET_KEY`, `ONLYOFFICE_JWT_SECRET`, `RABBITMQ_PASSWORD`, `NOTIFICATION_SECRET`, `HERMES_API_KEY`
 
-4. Сборка образов на сервере (или пуш с машины разработчика)
+### 4. Сборка образов
 
-  cd /opt/worker-cabinet
-  docker compose -f docker-compose.prod.yml build
+Сборка на сервере:
 
-  Или пуш с машины разработчика:
-    npm run docker:build
-    docker tag worker-cabinet-frontend:latest registry/worker-cabinet-frontend:latest
-    docker tag worker-cabinet-backend:latest registry/worker-cabinet-backend:latest
-    docker tag worker-cabinet-notification:latest registry/worker-cabinet-notification:latest
-    docker push registry/worker-cabinet-frontend:latest
-    docker push registry/worker-cabinet-backend:latest
-    docker push registry/worker-cabinet-notification:latest
+```bash
+cd /opt/worker-cabinet
+docker compose -f docker-compose.prod.yml build
+```
 
-  Тогда в .env на сервере:
-    BACKEND_IMAGE=registry/worker-cabinet-backend:latest
-    NOTIFICATION_IMAGE=registry/worker-cabinet-notification:latest
+Или пуш с машины разработчика:
 
-5. Запуск
+```bash
+npm run docker:build
+docker tag worker-cabinet-frontend:latest registry/worker-cabinet-frontend:latest
+docker tag worker-cabinet-backend:latest registry/worker-cabinet-backend:latest
+docker tag worker-cabinet-notification:latest registry/worker-cabinet-notification:latest
+docker push registry/worker-cabinet-frontend:latest
+docker push registry/worker-cabinet-backend:latest
+docker push registry/worker-cabinet-notification:latest
+```
 
-  cd /opt/worker-cabinet
-  docker compose -f docker-compose.prod.yml up -d
+Тогда в `.env` на сервере: `BACKEND_IMAGE=registry/worker-cabinet-backend:latest`, `NOTIFICATION_IMAGE=registry/worker-cabinet-notification:latest`
 
-6. Миграции БД
+### 5. Запуск
 
-  docker compose -f docker-compose.prod.yml exec backend npm run migrate
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
 
-7. Проверка
+### 6. Миграции БД
 
-  docker compose -f docker-compose.prod.yml ps
-  docker compose -f docker-compose.prod.yml logs -f backend
+```bash
+docker compose -f docker-compose.prod.yml exec backend npm run migrate
+```
 
-  Приложение: http://SERVER_IP/
-  API:       http://SERVER_IP:5000/
+### 7. Проверка
 
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f backend
+```
 
-========================================
-ДЕПЛОЙ — ДВА СЕРВЕРА
-========================================
+- Приложение: `http://SERVER_IP/`
+- API: `http://SERVER_IP:5000/`
 
-Сервер 1 (APP):      nginx + frontend, порт 80
-Сервер 2 (BACKEND):  backend API + PostgreSQL + MinIO + OnlyOffice +
-                      RabbitMQ + notification-service + Hermes
+---
+
+## Два сервера
+
+- **Сервер 1 (APP)** — nginx + frontend, порт 80
+- **Сервер 2 (BACKEND)** — backend API + PostgreSQL + MinIO + OnlyOffice + RabbitMQ + notification-service + Hermes
 
 Используется:
-  APP:      deploy/docker-compose.app.yml + deploy/nginx-app.conf + deploy/deploy-app.sh
-  BACKEND:  deploy/docker-compose.backend.yml + deploy/deploy-backend.sh
 
-Архитектура:
+- APP: `deploy/docker-compose.app.yml` + `deploy/nginx-app.conf` + `deploy/deploy-app.sh`
+- BACKEND: `deploy/docker-compose.backend.yml` + `deploy/deploy-backend.sh`
 
-  ┌───────────────────────────┐       ┌────────────────────────────────┐
-  │  APP Сервер (:80)         │       │  BACKEND Сервер                 │
-  │                           │       │                                │
-  │  nginx → /api ────────────┼──────►│  backend (:5000)                │
-  │  nginx → /      (static)  │       │  PostgreSQL (:5432)             │
-  │                           │       │  MinIO (:9000/:9001)            │
-  │  docker-compose.app.yml   │       │  OnlyOffice + Redis            │
-  │  deploy-app.sh            │       │  RabbitMQ (:5672)               │
-  │                           │       │  notification-service (:5001)   │
-  └───────────────────────────┘       │  Hermes Agent (:8642 local)      │
-        Локальная сеть               │  SearXNG (:8888 local)           │
-                                     │  docker-compose.backend.yml     │
-                                     │  deploy-backend.sh              │
-                                     └────────────────────────────────┘
+### Архитектура
 
+```
+┌───────────────────────────┐       ┌────────────────────────────────┐
+│  APP Сервер (:80)         │       │  BACKEND Сервер                 │
+│                           │       │                                │
+│  nginx → /api ────────────┼──────►│  backend (:5000)                │
+│  nginx → /      (static)  │       │  PostgreSQL (:5432)             │
+│                           │       │  MinIO (:9000/:9001)            │
+│  docker-compose.app.yml   │       │  OnlyOffice + Redis            │
+│  deploy-app.sh            │       │  RabbitMQ (:5672)               │
+│                           │       │  notification-service (:5001)   │
+└───────────────────────────┘       │  Hermes Agent (:8642 local)      │
+      Локальная сеть                │  SearXNG (:8888 local)           │
+                                    │  docker-compose.backend.yml     │
+                                    │  deploy-backend.sh              │
+                                    └────────────────────────────────┘
+```
 
------- СБОРКА И ПУШ ОБРАЗОВ (машина разработчика) ------
+### Сборка и пуш образов (машина разработчика)
 
-  cd worker-cabinet
+```bash
+cd worker-cabinet
+```
 
-  Сборка (multi-arch для amd64 сервера):
-    docker buildx build -f Dockerfile.frontend \
-      --build-arg VITE_API_BASE_URL=/api \
-      --platform linux/amd64,linux/arm64 \
-      -t vatai12/worker-cabinet-frontend:latest \
-      --push .
+Сборка (multi-arch для amd64 сервера):
 
-    docker buildx build -f Dockerfile.backend \
-      --platform linux/amd64,linux/arm64 \
-      -t vatai12/worker-cabinet-backend:latest \
-      --push .
+```bash
+docker buildx build -f Dockerfile.frontend \
+  --build-arg VITE_API_BASE_URL=/api \
+  --platform linux/amd64,linux/arm64 \
+  -t vatai12/worker-cabinet-frontend:latest \
+  --push .
 
-    docker buildx build -t worker-cabinet-notification \
-      --platform linux/amd64,linux/arm64 \
-      -t vatai12/worker-cabinet-notification:latest \
-      --push .
+docker buildx build -f Dockerfile.backend \
+  --platform linux/amd64,linux/arm64 \
+  -t vatai12/worker-cabinet-backend:latest \
+  --push .
 
-  Или коротко (если buildx builder настроен):
-    npm run docker:build
-    # затем docker tag + push вручную
+docker buildx build -t worker-cabinet-notification \
+  --platform linux/amd64,linux/arm64 \
+  -t vatai12/worker-cabinet-notification:latest \
+  --push .
+```
 
+---
 
------- СЕРВЕР БЭКЕНДА ------
+### Сервер бэкенда
 
-1. Копирование файлов
+#### 1. Копирование файлов
 
-  ssh user@backend-server
-  mkdir -p /opt/worker-cabinet
+```bash
+ssh user@backend-server
+mkdir -p /opt/worker-cabinet
+```
 
-  С машины разработчика:
-    scp deploy/docker-compose.backend.yml \
-        deploy/deploy-backend.sh \
-        deploy/.env.backend.example \
-        docker/init-db/ \
-        user@backend-server:/opt/worker-cabinet/
+С машины разработчика:
 
-2. Конфигурация .env
+```bash
+scp deploy/docker-compose.backend.yml \
+    deploy/deploy-backend.sh \
+    deploy/.env.backend.example \
+    docker/init-db/ \
+    user@backend-server:/opt/worker-cabinet/
+```
 
-  cd /opt/worker-cabinet
-  cp .env.backend.example .env
-  nano .env
+#### 2. Конфигурация .env
 
-  Обязательные переменные:
-    BACKEND_IMAGE=vatai12/worker-cabinet-backend:latest
-    NOTIFICATION_IMAGE=vatai12/worker-cabinet-notification:latest
-    DB_PASSWORD=***
-    JWT_SECRET=***
-    S3_SECRET_KEY=***
-    ONLYOFFICE_JWT_SECRET=***
-    RABBITMQ_PASSWORD=***
-    NOTIFICATION_SECRET=***
-    HERMES_API_KEY=***
+```bash
+cd /opt/worker-cabinet
+cp .env.backend.example .env
+nano .env
+```
 
-  Keycloak (если используется):
-    KEYCLOAK_URL=http://host.docker.internal:8081
-    KEYCLOAK_PUBLIC_URL=http://<BACKEND_SERVER_IP>:8081
-    KEYCLOAK_REALM=worker-cabinet
-    KEYCLOAK_CLIENT_ID=worker-cabinet
-    KEYCLOAK_CLIENT_SECRET=***
+Обязательные переменные:
 
-3. Деплой
+| Переменная              | Значение                                      |
+|-------------------------|-----------------------------------------------|
+| `BACKEND_IMAGE`         | `vatai12/worker-cabinet-backend:latest`        |
+| `NOTIFICATION_IMAGE`   | `vatai12/worker-cabinet-notification:latest`  |
+| `DB_PASSWORD`           | пароль PostgreSQL                             |
+| `JWT_SECRET`            | секрет подписи JWT                            |
+| `S3_SECRET_KEY`         | секретный ключ MinIO                         |
+| `ONLYOFFICE_JWT_SECRET`| секрет OnlyOffice JWT                         |
+| `RABBITMQ_PASSWORD`    | пароль RabbitMQ                               |
+| `NOTIFICATION_SECRET`   | секрет уведомлений                            |
+| `HERMES_API_KEY`        | API ключ Hermes Agent                        |
 
-  chmod +x deploy-backend.sh
-  ./deploy-backend.sh deploy
+Keycloak (если используется):
 
-  Это автоматически:
-    - pull образов
-    - пересоздание контейнеров
-    - запуск миграций
+| Переменная               | Значение                                              |
+|--------------------------|-------------------------------------------------------|
+| `KEYCLOAK_URL`           | `http://host.docker.internal:8081`                     |
+| `KEYCLOAK_PUBLIC_URL`    | `http://<BACKEND_SERVER_IP>:8081`                     |
+| `KEYCLOAK_REALM`         | `worker-cabinet`                                      |
+| `KEYCLOAK_CLIENT_ID`     | `worker-cabinet`                                      |
+| `KEYCLOAK_CLIENT_SECRET` | клиентский секрет                                     |
 
-  Команды скрипта:
-    ./deploy-backend.sh deploy    Полный деплой
-    ./deploy-backend.sh pull     Загрузка образов
-    ./deploy-backend.sh start    Запуск
-    ./deploy-backend.sh stop     Остановка
-    ./deploy-backend.sh restart  Перезапуск
-    ./deploy-backend.sh logs     Логи
-    ./deploy-backend.sh status   Статус
-    ./deploy-backend.sh migrate  Миграции
+#### 3. Деплой
 
-4. Keycloak (если нужен SSO)
+```bash
+chmod +x deploy-backend.sh
+./deploy-backend.sh deploy
+```
 
-  Скопировать docker/keycloak-test/ и realm-export.json
-  на сервер бэкенда или отдельный сервер.
+Автоматически: pull образов → пересоздание контейнеров → миграции.
 
+Команды скрипта:
 
------- СЕРВЕР ПРИЛОЖЕНИЙ (APP) ------
+| Команда     | Описание         |
+|-------------|------------------|
+| `deploy`    | Полный деплой    |
+| `pull`      | Загрузка образов |
+| `start`     | Запуск           |
+| `stop`      | Остановка        |
+| `restart`   | Перезапуск       |
+| `logs`      | Логи             |
+| `status`    | Статус           |
+| `migrate`   | Миграции         |
 
-1. Копирование файлов
+#### 4. Keycloak (если нужен SSO)
 
-  scp deploy/docker-compose.app.yml \
-      deploy/deploy-app.sh \
-      deploy/.env.app.example \
-      deploy/nginx-app.conf \
-      user@app-server:/opt/worker-cabinet/
+Скопировать `docker/keycloak-test/` и `realm-export.json` на сервер бэкенда или отдельный сервер.
 
-2. Конфигурация .env
+---
 
-  cd /opt/worker-cabinet
-  cp .env.app.example .env
-  nano .env
+### Сервер приложений (APP)
 
-  Обязательные переменные:
-    FRONTEND_IMAGE=vatai12/worker-cabinet-frontend:latest
-    BACKEND_HOST=<IP сервера бэкенда>
-    BACKEND_PORT=5000
-    APP_PORT=80
-    NGINX_SERVER_NAME=<домен или _>
+#### 1. Копирование файлов
 
-  Важно: BACKEND_HOST — IP или hostname сервера бэкенда
-  в локальной сети, т.к. nginx фронтенда проксирует /api туда.
+```bash
+scp deploy/docker-compose.app.yml \
+    deploy/deploy-app.sh \
+    deploy/.env.app.example \
+    deploy/nginx-app.conf \
+    user@app-server:/opt/worker-cabinet/
+```
 
-3. Деплой
+#### 2. Конфигурация .env
 
-  chmod +x deploy-app.sh
-  ./deploy-app.sh deploy
+```bash
+cd /opt/worker-cabinet
+cp .env.app.example .env
+nano .env
+```
 
-  Команды скрипта:
-    ./deploy-app.sh deploy    Полный деплой
-    ./deploy-app.sh pull     Загрузка образов
-    ./deploy-app.sh start    Запуск
-    ./deploy-app.sh stop     Остановка
-    ./deploy-app.sh restart  Перезапуск
-    ./deploy-app.sh logs     Логи
-    ./deploy-app.sh status  Статус
+Обязательные переменные:
 
+| Переменная         | Значение                               |
+|--------------------|----------------------------------------|
+| `FRONTEND_IMAGE`   | `vatai12/worker-cabinet-frontend:latest` |
+| `BACKEND_HOST`     | IP сервера бэкенда в локальной сети    |
+| `BACKEND_PORT`     | `5000`                                 |
+| `APP_PORT`         | `80`                                   |
+| `NGINX_SERVER_NAME`| домен или `_`                           |
 
------- ПОРТЫ ------
+> `BACKEND_HOST` — IP или hostname сервера бэкенда в локальной сети, т.к. nginx фронтенда проксирует `/api` туда.
 
-APP Сервер (открыть извне):
-  80 — HTTP (nginx)
+#### 3. Деплой
 
-BACKEND Сервер (только внутри сети):
-  5000 — Backend API
-  5432 — PostgreSQL (закрыть извне)
-  9000 — MinIO S3 API (закрыть извне)
-  9001 — MinIO Console (закрыть извне)
-  5672 — RabbitMQ (закрыть извне)
-  15672 — RabbitMQ Management (закрыть извне)
-  5001 — Notification service (закрыть извне)
-  8642 — Hermes Agent (localhost only)
-  8888 — SearXNG (localhost only)
+```bash
+chmod +x deploy-app.sh
+./deploy-app.sh deploy
+```
 
-  Рекомендация: в docker-compose.backend.yml убрать все ports,
-  кроме 5000 (API), и слушать его только на internal IP:
-    ports:
-      - "10.0.0.x:5000:5000"
+Команды скрипта:
 
+| Команда   | Описание         |
+|-----------|------------------|
+| `deploy`  | Полный деплой    |
+| `pull`    | Загрузка образов |
+| `start`   | Запуск           |
+| `stop`    | Остановка        |
+| `restart` | Перезапуск       |
+| `logs`    | Логи             |
+| `status`  | Статус           |
 
------- ОБНОВЛЕНИЕ ------
+---
 
-Машина разработчика:
-  npm run docker:build
-  # tag + push (или --push в buildx)
+### Порты
 
-APP сервер:
-  ./deploy-app.sh deploy
+**APP Сервер** (открыть извне):
 
-BACKEND сервер:
-  ./deploy-backend.sh deploy
+| Порт | Сервис   |
+|------|----------|
+| 80   | HTTP (nginx) |
 
-Порядок: сначала BACKEND, потом APP (reverse proxy
-терпит короткий даунтайм бэкенда).
+**BACKEND Сервер** (закрыть извне, кроме API):
 
+| Порт  | Сервис               | Доступ   |
+|-------|----------------------|----------|
+| 5000  | Backend API          | сеть    |
+| 5432  | PostgreSQL           | закрыть  |
+| 9000  | MinIO S3 API         | закрыть  |
+| 9001  | MinIO Console        | закрыть  |
+| 5672  | RabbitMQ             | закрыть  |
+| 15672 | RabbitMQ Management  | закрыть  |
+| 5001  | Notification service | закрыть  |
+| 8642  | Hermes Agent         | localhost |
+| 8888  | SearXNG              | localhost |
 
------- ПОЛИТИКА БЕЗОПАСНОСТИ ------
+Рекомендация: слушать API только на internal IP:
+
+```yaml
+ports:
+  - "10.0.0.x:5000:5000"
+```
+
+---
+
+### Обновление
+
+1. Машина разработчика:
+
+```bash
+npm run docker:build
+# tag + push (или --push в buildx)
+```
+
+2. BACKEND сервер:
+
+```bash
+./deploy-backend.sh deploy
+```
+
+3. APP сервер:
+
+```bash
+./deploy-app.sh deploy
+```
+
+Порядок: сначала BACKEND, потом APP (reverse proxy терпит короткий даунтайм бэкенда).
+
+---
+
+### Политика безопасности
 
 - PostgreSQL, MinIO, RabbitMQ — закрыть порты извне
-- Все секреты (DB_PASSWORD, JWT_SECRET и т.д.) — сильные,
-  уникальные, не в git
-- Hermes Agent и SearXNG — биндятся на 127.0.0.1
+- Все секреты (`DB_PASSWORD`, `JWT_SECRET` и т.д.) — сильные, уникальные, не в git
+- Hermes Agent и SearXNG — биндятся на `127.0.0.1`
 - OnlyOffice — за reverse proxy, JWT включён
-- Для production: добавить HTTPS (certbot/letsencrypt) на APP
-  сервере перед nginx (либо добавить certbot контейнер
-  в docker-compose.app.yml)
+- Для production: добавить HTTPS (certbot/letsencrypt) на APP сервере перед nginx (либо добавить certbot контейнер в `docker-compose.app.yml`)
