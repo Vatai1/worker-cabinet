@@ -29,7 +29,9 @@
 /playwright-report/
 /playwright/.auth/
 /playwright/.cache/
+/playwright-mcp/
 /test-results/
+/tests/
 # Build outputs
 # Debug/test files
 # Dependencies
