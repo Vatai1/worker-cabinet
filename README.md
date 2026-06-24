@@ -120,6 +120,7 @@ Copy-Item .env.example .env
 - docxtemplater (генерация DOCX)
 - ExcelJS + PDFKit (экспорт табелей)
 - EWS/Outlook OAuth2 (интеграция с календарём)
+- RabbitMQ (очередь уведомлений, опционально)
 
 ## Тестовые пользователи
 
@@ -154,35 +155,48 @@ Copy-Item .env.example .env
 worker-cabinet/
 ├── backend/                  # Backend API (Node.js + Express)
 │   └── src/
-│       ├── routes/           # auth, vacation, users, departments, projects,
+│       ├── routes/           # 15 групп: auth, vacation, users, departments, projects,
 │       │                     # surveys, onboarding, documents, notifications,
-│       │                     # hierarchy, dictionaries, timesheet, calendar
-│       ├── middleware/       # JWT auth, multer upload, rate limiter
-│       ├── services/         # Бизнес-логика
-│       ├── config/           # database.js, s3.js (MinIO), swagger.js
-│       ├── db/               # migrate.js, seed.js
-│       ├── public/           # Кастомный Swagger UI (api-docs.html)
-│       └── cron/             # Cron-задачи (автозаполнение табеля)
+│       │                     # hierarchy, dictionaries, timesheet, calendar, admin, assistant
+│       ├── middleware/       # JWT auth, multer upload, rate limiter, CSRF, validation
+│       ├── services/         # Бизнес-логика (ewsService, surveyService)
+│       ├── config/           # database.js, s3.js (MinIO), rabbitmq.js, swagger.js
+│       ├── db/               # migrate.js, seed.js, default-vacation-templates.js
+│       ├── tests/            # HTTP-интеграционные тесты (node --test)
+│       ├── cron/             # timesheetCron.js
+│       └── public/           # Кастомный Swagger UI (api-docs.html)
 ├── core/                     # Основные модули приложения
-│   ├── admin/                # Административная панель
-│   ├── auth/                 # Авторизация, страница входа
-│   └── settings/             # Настройки пользователя
-├── modules/                  # Бизнес-модули
-│   ├── vacation/             # Отпуска
-│   ├── surveys/              # Опросы
-│   ├── onboarding/           # Онбординг
-│   ├── timesheet/            # Табель рабочего времени
-│   ├── hierarchy/            # Иерархия организации
-│   ├── projects/             # Проекты
-│   ├── documents/            # Документы
-│   ├── notifications/        # Уведомления
-│   └── requests/             # Заявки
+│   ├── admin/                # AdminPanel, HRDictionaries, AdminAnalytics, модули
+│   ├── auth/                 # Login, Profile, authStore
+│   ├── employees/            # Employees, EmployeeProfile
+│   └── settings/             # Settings
+├── modules/                  # Бизнес-модули (каждый: pages/components/services/store/types)
+│   ├── assistant/            # AI-ассистент (streaming chat)
+│   ├── calendar/             # Календарь (Exchange EWS)
+│   ├── departments/          # Отделы, DepartmentDetail
+│   ├── documents/            # Документы (MinIO, OnlyOffice)
+│   ├── hierarchy/            # HR-иерархия (React Flow)
+│   ├── notifications/         # Уведомления
+│   ├── onboarding/           # Онбординг (HR + сотрудник)
+│   ├── projects/             # Проекты, Roadmap, документы
+│   ├── requests/             # Заявки, ManagerDashboard
+│   ├── skills/               # Навыки сотрудников
+│   ├── surveys/              # Опросы, аналитика
+│   ├── timesheet/            # Табель (manager + HR)
+│   └── vacation/             # Отпуска, баланс, ограничения, заявки, переносы
 ├── shared/                   # Общие компоненты и утилиты
-│   ├── components/           # UI-примитивы, layout, timesheet grid
-│   ├── lib/                  # api.ts, authHeaders, utils
-│   ├── store/                # Zustand stores (auth, modules, siteSettings)
-│   └── pages/                # Общие страницы (HRPanel и др.)
-└── types/                    # TypeScript интерфейсы
+│   ├── components/           # Layout (Header, Sidebar), UI-примитивы, ConfirmDialog,
+│   │                         # ErrorBoundary, TimesheetGrid
+│   ├── data/                 # requestUtils.ts
+│   ├── hooks/                # useModalOpen
+│   ├── lib/                  # api, apiClient, authHeaders, cookies, utils, avatar,
+│   │                         # documentUtils, timesheetCodes
+│   ├── pages/                # Dashboard, HRPanel
+│   ├── store/                # Zustand stores (modules, ui, siteSettings)
+│   └── types/                # TypeScript интерфейсы
+├── notification-service/     # Микросервис (RabbitMQ consumer + mailer)
+├── deploy/                   # Docker Compose, dev/prod скрипты
+└── docker/                   # Docker конфиги (Hermes agent)
 ```
 
 ## Тестирование

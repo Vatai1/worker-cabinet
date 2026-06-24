@@ -48,19 +48,18 @@ Russian for all user-facing text and error messages.
 
 ### TypeScript/React (Frontend)
 
-**Imports Order**: React → External libs → `@/` components → Icons → Stores → Lib utilities → API → Types
+**Imports Order**: React → External libs → `@/shared/*`, `@/core/*`, `@/modules/*` components → Icons → Stores → Lib utilities → API → Types
 
 ```typescript
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
+import { Card } from '@/shared/components/ui/Card'
+import { Button } from '@/shared/components/ui/Button'
 import { FolderKanban } from 'lucide-react'
-import { useAuthStore } from '@/store/authStore'
-import { getAuthHeaders, getAuthHeadersWithContentType } from '@/lib/authHeaders'
-import { formatDate, formatDateTime, getErrorMessage, cn } from '@/lib/utils'
-import { API_BASE_URL } from '@/lib/api'
-import type { User, Project } from '@/types'
+import { useAuthStore } from '@/core/auth/store/authStore'
+import { apiGet, apiPost } from '@/shared/lib/apiClient'
+import { formatDate, formatDateTime, getErrorMessage, cn } from '@/shared/lib/utils'
+import type { User, Project } from '@/shared/types'
 ```
 
 **Naming**: PascalCase files + named exports (`export function MyComponent`). Interfaces: `Props`, `ProjectDetail`. Constants: SCREAMING_SNAKE_CASE (file-level). CSS: Tailwind with `cn()`.
@@ -77,11 +76,7 @@ export function MyComponent({ projectId, onSave }: Props) {
     e.preventDefault()
     setLoading(true); setError(null)
     try {
-      const res = await fetch(`${API_BASE_URL}/endpoint`, {
-        method: 'POST', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ projectId }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка')
+      await apiPost('/endpoint', { projectId })
       onSave()
     } catch (err: unknown) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
@@ -90,9 +85,10 @@ export function MyComponent({ projectId, onSave }: Props) {
 }
 ```
 
-**Frontend Auth**: `getAuthHeaders()` for GET, `getAuthHeadersWithContentType()` for POST/PUT/DELETE. Both read token from `auth_token` cookie. **Path alias**: `@/` → repo root.
+**Frontend Auth**: Prefer `apiClient` helpers (`apiGet`, `apiPost`, `apiPut`, `apiPatch`, `apiDelete`) from `@/shared/lib/apiClient` — they handle auth headers and error parsing automatically. For raw fetch (streaming, FormData), use `getAuthHeaders()` / `getAuthHeadersWithContentType()` from `@/shared/lib/authHeaders`. Both read token from `auth_token` cookie. **Path alias**: `@/` → repo root.
 
-**Utilities** (`lib/utils.ts`): `cn()` Tailwind merge, `formatDate()`/`formatDateTime()` Russian locale, `formatCurrency()` RUB, `getErrorMessage()` extract from `unknown`.
+**Utilities** (`shared/lib/utils.ts`): `cn()` Tailwind merge, `formatDate()`/`formatDateTime()` Russian locale, `formatCurrency()` RUB, `getErrorMessage()` extract from `unknown`.
+**API Client** (`shared/lib/apiClient.ts`): `apiGet<T>()`, `apiPost<T>()`, `apiPut<T>()`, `apiPatch<T>()`, `apiDelete()` — auto auth headers, error parsing, typed responses. Throws `ApiError` with `.status`, `.code`, `.message`.
 
 ### Backend (Node.js/Express)
 
@@ -155,10 +151,11 @@ Roles: `employee`, `manager`, `hr`, `admin`, `onboarding`
 
 1. **Always run** `npm run lint && npm run typecheck` after frontend changes
 2. **Always update Swagger** when modifying API routes — add or update JSDoc `@swagger` annotations for new/changed endpoints, keep them consistent with actual request/response shapes and status codes
-2. **Schema changes**: Add SQL to `backend/src/db/migrate.js` (monolithic migration, idempotent)
-3. **Date handling**: `formatDate()` from `@/lib/utils` — parses `YYYY-MM-DD` as local date (pg pool configured to return DATE as raw strings)
-4. **Environment**: `cp backend/.env.example backend/.env` — configure `DB_*`, `JWT_SECRET` (required, no fallback), `S3_*`
-5. **API base URL**: `import { API_BASE_URL } from '@/lib/api'` — reads `VITE_API_BASE_URL`, defaults to `http://localhost:5000/api`
-6. **Sidebar**: NEVER remove existing nav items from `components/layout/Sidebar.tsx`
-7. **Route file order matters**: In `onboarding.js`, literal paths (`/templates`, `/me`) must precede parameterized paths (`/:id`) to avoid Express matching them as params
-8. **Vite port auto-kill**: `vite.config.ts` includes a plugin that kills processes on port 3000 before starting dev server (Windows-only `taskkill`)
+3. **Schema changes**: Add SQL to `backend/src/db/migrate.js` (monolithic migration, idempotent)
+4. **Date handling**: `formatDate()` from `@/shared/lib/utils` — parses `YYYY-MM-DD` as local date (pg pool configured to return DATE as raw strings)
+5. **Environment**: `cp backend/.env.example backend/.env` — configure `DB_*`, `JWT_SECRET` (required, no fallback), `S3_*`
+6. **API base URL**: `import { API_BASE_URL } from '@/shared/lib/api'` — reads `VITE_API_BASE_URL`, defaults to `http://localhost:5000/api`
+7. **API client**: Prefer `apiGet/apiPost/apiPut/apiPatch/apiDelete` from `@/shared/lib/apiClient` over raw fetch. Use raw fetch only for streaming, FormData uploads, or custom headers.
+8. **Sidebar**: NEVER remove existing nav items from `shared/components/layout/Sidebar.tsx`
+9. **Route file order matters**: In `onboarding.js`, literal paths (`/templates`, `/me`) must precede parameterized paths (`/:id`) to avoid Express matching them as params
+10. **Vite port auto-kill**: `vite.config.ts` includes a plugin that kills processes on port 3000 before starting dev server (Windows-only `taskkill`)
