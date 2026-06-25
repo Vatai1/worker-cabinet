@@ -1521,6 +1521,20 @@ async function runMigrations() {
     console.log('  ✓ notification_queue')
     console.log('✅ Notification tables created')
 
+
+    try {
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS keycloak_guid VARCHAR(255) UNIQUE`)
+      console.log('  ✓ keycloak_guid column')
+    } catch (e) {
+      if (!e.message.includes('already exists')) {
+        console.log('  - keycloak_guid:', e.message)
+      }
+    }
+
+    await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_keycloak_guid ON users(keycloak_guid) WHERE keycloak_guid IS NOT NULL`)
+      .catch(e => console.log('  - idx_users_keycloak_guid:', e.message))
+    console.log('  ✓ idx_users_keycloak_guid')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     

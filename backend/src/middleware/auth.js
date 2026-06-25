@@ -38,12 +38,14 @@ async function verifyKeycloakToken(token) {
 }
 
 async function findOrCreateUser(kcPayload) {
+  const sub = kcPayload.sub
+  if (!sub) throw new Error('sub (GUID) not found in Keycloak token')
   const email = kcPayload.email
   if (!email) throw new Error('Email not found in Keycloak token')
 
   let result = await query(
-    'SELECT id, email, role, first_name, last_name FROM users WHERE email = $1',
-    [email]
+    'SELECT id, email, role, first_name, last_name FROM users WHERE keycloak_guid = $1',
+    [sub]
   )
 
   if (result.rows.length > 0) {
@@ -60,10 +62,10 @@ async function findOrCreateUser(kcPayload) {
   const lastName = kcPayload.family_name || ''
 
   result = await query(
-    `INSERT INTO users (email, first_name, last_name, role, status)
-     VALUES ($1, $2, $3, $4, 'active')
+    `INSERT INTO users (email, first_name, last_name, role, status, keycloak_guid, password_hash)
+     VALUES ($1, $2, $3, $4, 'active', $5, '')
      RETURNING id, email, role, first_name, last_name`,
-    [email, firstName, lastName, role]
+    [email, firstName, lastName, role, sub]
   )
 
   const user = result.rows[0]

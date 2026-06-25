@@ -186,8 +186,8 @@ async function setupEnv() {
 }
 
 async function startServices() {
-  log.info('Запуск сервисов (PostgreSQL, MinIO, OnlyOffice, Hermes Agent, SearXNG)...')
-  await runCommand('docker-compose', ['up', '-d', 'postgres', 'minio', 'onlyoffice', 'rabbitmq', 'hermes-agent', 'searxng'])
+  log.info('Запуск сервисов (PostgreSQL, MinIO, OnlyOffice, RabbitMQ, Hermes Agent, SearXNG, Keycloak)...')
+  await runCommand('docker-compose', ['up', '-d', 'postgres', 'minio', 'onlyoffice', 'rabbitmq', 'hermes-agent', 'searxng', 'keycloak-db', 'keycloak'])
   log.success('Сервисы запущены')
 
   log.info('Ожидание готовности PostgreSQL...')
@@ -206,6 +206,33 @@ async function startServices() {
   }
 
   log.success('PostgreSQL готов к работе')
+
+  log.info('Ожидание готовности Keycloak...')
+  let kcRetries = 0
+  const kcMaxRetries = 30
+  while (kcRetries < kcMaxRetries) {
+    try {
+      const kcResult = await runCommandAsync('docker', ['exec', 'wc-keycloak', 'curl', '-sf', 'http://localhost:8080/health/ready'])
+      if (kcResult.code === 0) break
+    } catch {}
+    await sleep(2000)
+    kcRetries++
+  }
+  if (kcRetries === kcMaxRetries) {
+    log.warning('Keycloak не запустился вовремя')
+  } else {
+    log.success('Keycloak готов')
+    log.info('Отключение SSL requirement для master realm...')
+    try {
+      await runCommand('docker', ['exec', 'wc-keycloak', 'bash', '-c',
+        '/opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password admin123 && ' +
+        '/opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=none && ' +
+        '/opt/keycloak/bin/kcadm.sh update realms/worker-cabinet -s sslRequired=none'])
+      log.success('SSL requirement отключён для всех realms')
+    } catch (err) {
+      log.warning('Не удалось отключить SSL: ' + err.message)
+    }
+  }
 }
 
 async function installDependencies() {
@@ -326,6 +353,93 @@ async function deployFull() {
   log.success('✅ Деплой завершен! Приложение доступно на http://localhost')
 }
 
+
+// ==================== SINGLE SERVER COMMANDS ====================
+
+async function checkSingleEnvFile() {
+  const envPath = join(DEPLOY_DIR, '.env')
+  if (!existsSync(envPath)) {
+    log.error('deploy/.env not found. Copy deploy/.env.backend.example -> deploy/.env')
+    process.exit(1)
+  }
+}
+
+async function buildSingleImages() {
+  log.info('Building Docker images...')
+  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'build'], { cwd: DEPLOY_DIR })
+  log.success('Images built')
+}
+
+async function startSingleServices() {
+  log.info('Starting all services...')
+  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'up', '-d'], { cwd: DEPLOY_DIR })
+  log.success('Services started')
+  log.info('App: http://localhost')
+}
+
+async function stopSingleServices() {
+  log.info('Stopping services...')
+  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'down'], { cwd: DEPLOY_DIR })
+  log.success('Services stopped')
+}
+
+async function restartSingleServices() {
+  await stopSingleServices()
+  await startSingleServices()
+}
+
+async function showSingleLogs() {
+  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'logs', '-f'], { cwd: DEPLOY_DIR })
+}
+
+async function showSingleStatus() {
+  log.info('Services status:')
+  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'ps'], { cwd: DEPLOY_DIR })
+}
+
+async function runSingleMigrations() {
+  log.info('Running migrations...')
+  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'exec', 'backend', 'npm', 'run', 'migrate'], { cwd: DEPLOY_DIR })
+  log.success('Migrations done')
+}
+
+async function deploySingleFull() {
+  log.info('Full single-server deploy...')
+  await checkRequirements()
+  await checkSingleEnvFile()
+  await buildSingleImages()
+  await startSingleServices()
+  await sleep(15000)
+  await runSingleMigrations()
+  log.success('Deploy done! http://localhost')
+}
+
+function showSingleHelp() {
+  const b = COLORS.blue
+  const r = COLORS.reset
+  console.log(`
+${b}Single-server deployment (frontend + backend + all services in containers)${r}
+
+Usage: node deploy/deploy.js single [COMMAND]
+
+Commands:
+  deploy      Full deploy (check, build, start, migrate)
+  build       Build Docker images
+  start       Start all services
+  stop        Stop all services
+  restart     Restart services
+  logs        View logs
+  status      Service status
+  migrate     Run migrations
+  help        Show this help
+
+Examples:
+  node deploy/deploy.js single deploy      Full deploy on one server
+  node deploy/deploy.js single logs         View logs
+  node deploy/deploy.js single restart      Restart
+`)
+}
+
 // ==================== HELP ====================
 
 function showDevHelp() {
@@ -385,11 +499,13 @@ ${COLORS.blue}Worker Cabinet Deployment${COLORS.reset}
 Использование: node deploy/deploy.js <env> [command]
 
 Окружения:
-  dev         Dev окружение (локальная разработка)
+  dev         Dev окружение (сервисы в Docker, backend/frontend локально)
+  single      One-server deploy (всё в контейнерах)
   prod        Production окружение
 
 Примеры:
   node deploy/deploy.js dev start            Запуск dev окружения
+  node deploy/deploy.js single deploy        One-server деплой
   node deploy/deploy.js prod deploy          Продакшн деплой
   node deploy/deploy.js dev help             Справка по dev командам
   node deploy/deploy.js prod help            Справка по prod командам
@@ -454,6 +570,43 @@ async function main() {
         showDevHelp()
         process.exit(1)
     }
+  } else if (env === 'single') {
+    switch (command) {
+      case 'deploy':
+        await deploySingleFull()
+        break
+      case 'build':
+        await buildSingleImages()
+        break
+      case 'start':
+        await startSingleServices()
+        break
+      case 'stop':
+        await stopSingleServices()
+        break
+      case 'restart':
+        await restartSingleServices()
+        break
+      case 'logs':
+        await showSingleLogs()
+        break
+      case 'status':
+        await showSingleStatus()
+        break
+      case 'migrate':
+        await runSingleMigrations()
+        break
+      case 'help':
+      case '--help':
+      case '-h':
+        showSingleHelp()
+        break
+      default:
+        log.error(`Unknown command: ${command}`)
+        showSingleHelp()
+        process.exit(1)
+    }
+  
   } else if (env === 'prod') {
     switch (command) {
       case 'deploy':

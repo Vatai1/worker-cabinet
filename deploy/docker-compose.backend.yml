@@ -1,36 +1,85 @@
 version: '3.8'
 
 services:
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: wc-keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
+      POSTGRES_DB: keycloak
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - worker-cabinet-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: wc-keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm --http-relative-path=/
+    environment:
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD:-keycloak123}
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN_USER:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+      - KC_HEALTH_ENABLED=true
+    ports:
+      - "${KEYCLOAK_PORT:-8081}:8080"
+    volumes:
+      - ../docker/keycloak-test/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      - worker-cabinet-network
+
   backend:
-    image: vatai12/worker-cabinet-backend:latest          # образ бэкенда
+    image: vatai12/worker-cabinet-backend:latest
     container_name: worker-cabinet-backend
     restart: unless-stopped
     ports:
-      - "5000:5000"                                        # порт API
+      - "5000:5000"
     environment:
-      - PORT=5000                                          # внутренний порт приложения
-      - NODE_ENV=production                                # режим работы
-      - DB_HOST=postgres                                   # хост БД (имя сервиса)
-      - DB_PORT=5432                                       # порт БД
-      - DB_NAME=worker_cabinet                             # имя БД
-      - DB_USER=postgres                                   # пользователь БД
-      - DB_PASSWORD=changeme                               # пароль БД
-      - JWT_SECRET=changeme                                # секрет подписи JWT
-      - KEYCLOAK_URL=http://host.docker.internal:8081               # URL Keycloak (тестируемый)
-      - KEYCLOAK_PUBLIC_URL=http://localhost:8081                    # URL Keycloak для браузера
-      - KEYCLOAK_REALM=worker-cabinet                       # realm
-      - KEYCLOAK_CLIENT_ID=worker-cabinet                   # client ID
-      - KEYCLOAK_CLIENT_SECRET=worker-cabinet-secret           # client secret
-      - ADMIN_EMAIL=admin@example.com                        # email администратора
-      - ADMIN_PASSWORD=admin123                             # пароль администратора
-      - S3_ENDPOINT=http://minio:9000                      # адрес S3
-      - S3_ACCESS_KEY=minioadmin                           # ключ S3
-      - S3_SECRET_KEY=minioadmin                           # секретный ключ S3
-      - S3_BUCKET=worker-cabinet                           # бакет S3
+      - PORT=5000
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=worker_cabinet
+      - DB_USER=postgres
+      - DB_PASSWORD=***
+      - JWT_SECRET=***
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_PUBLIC_URL=http://${KEYCLOAK_PUBLIC_URL:-localhost}:${KEYCLOAK_PORT:-8081}
+      - KEYCLOAK_REALM=worker-cabinet
+      - KEYCLOAK_CLIENT_ID=worker-cabinet
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-changeme}
+      - ADMIN_EMAIL=admin@example.com
+      - ADMIN_PASSWORD=***
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=***
+      - S3_BUCKET=worker-cabinet
     depends_on:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     networks:
       - worker-cabinet-network
@@ -42,9 +91,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: postgres                              # пользователь БД
-      POSTGRES_PASSWORD: changeme                          # пароль БД
-      POSTGRES_DB: worker_cabinet                          # имя БД
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: worker_cabinet
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../docker/init-db:/docker-entrypoint-initdb.d
@@ -62,12 +111,12 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"                                        # S3 API
-      - "9001:9001"                                        # веб-консоль
+      - "9000:9000"
+      - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin                          # пользователь MinIO
-      MINIO_ROOT_PASSWORD: minioadmin                      # пароль MinIO
-      MINIO_BROWSER: off                                   # отключить встроенный браузер
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BROWSER: off
     volumes:
       - minio_data:/data
     healthcheck:
@@ -83,20 +132,20 @@ services:
     container_name: worker-cabinet-onlyoffice
     restart: unless-stopped
     environment:
-      - JWT_ENABLED=true                                   # включить JWT
-      - JWT_HEADER=Authorization                           # заголовок JWT
-      - JWT_SECRET=changeme                                # секрет JWT
-      - JWT_BODY=false                                     # JWT не в теле запроса
-      - WOPI_ENABLED=true                                  # поддержка WOPI
-      - ALLOW_PRIVATE_IP_ADDRESS=true                      # разрешить запросы к внутренним IP
-      - ALLOW_META_IP_ADDRESS=true                         # разрешить meta-запросы
-      - USE_UNAUTHORIZED_STORAGE=false                     # неавторизованное хранилище
-      - DB_TYPE=postgres                                   # тип БД
-      - DB_HOST=postgres                                   # хост БД
-      - DB_PORT=5432                                       # порт БД
-      - DB_NAME=onlyoffice                                 # имя БД
-      - DB_USER=postgres                                   # пользователь БД
-      - DB_PWD=changeme                                    # пароль БД
+      - JWT_ENABLED=true
+      - JWT_HEADER=Authorization
+      - JWT_SECRET=***
+      - JWT_BODY=false
+      - WOPI_ENABLED=true
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+      - ALLOW_META_IP_ADDRESS=true
+      - USE_UNAUTHORIZED_STORAGE=***
+      - DB_TYPE=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=onlyoffice
+      - DB_USER=postgres
+      - DB_PWD=changeme
     volumes:
       - onlyoffice_data:/var/www/onlyoffice/Data
       - onlyoffice_logs:/var/log/onlyoffice
@@ -132,11 +181,11 @@ services:
     container_name: worker-cabinet-rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: worker_cabinet                # пользователь RMQ
-      RABBITMQ_DEFAULT_PASS: changeme                      # пароль RMQ
+      RABBITMQ_DEFAULT_USER: worker_cabinet
+      RABBITMQ_DEFAULT_PASS: changeme
     ports:
-      - "5672:5672"                                        # AMQP
-      - "15672:15672"                                      # веб-интерфейс
+      - "5672:5672"
+      - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -153,21 +202,21 @@ services:
     container_name: worker-cabinet-notifications
     restart: unless-stopped
     environment:
-      PORT: 5001                                           # порт сервиса
-      NODE_ENV: production                                 # режим работы
-      DB_HOST: postgres                                    # хост БД
-      DB_PORT: 5432                                        # порт БД
-      DB_NAME: worker_cabinet                              # имя БД
-      DB_USER: postgres                                    # пользователь БД
-      DB_PASSWORD: changeme                                # пароль БД
-      RABBITMQ_URL: amqp://worker_cabinet:changeme@rabbitmq:5672  # подключение к RMQ
-      MAIL_HOST: smtp.example.com                          # SMTP-сервер
-      MAIL_PORT: 587                                       # порт SMTP
-      MAIL_SECURE: false                                   # STARTTLS
-      MAIL_USER: ""                                        # пользователь SMTP
-      MAIL_PASSWORD: ""                                    # пароль SMTP
-      MAIL_FROM: '"Worker Cabinet" <noreply@example.com>'  # отправитель
-      NOTIFICATION_SECRET: changeme                        # секрет для подписи уведомлений
+      PORT: 5001
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: worker_cabinet
+      DB_USER: postgres
+      DB_PASSWORD: changeme
+      RABBITMQ_URL: amqp://worker_cabinet:***@rabbitmq:5672
+      MAIL_HOST: smtp.example.com
+      MAIL_PORT: 587
+      MAIL_SECURE: false
+      MAIL_USER: ""
+      MAIL_PASSWORD: ""
+      MAIL_FROM: '"Worker Cabinet" <noreply@example.com>'
+      NOTIFICATION_SECRET: changeme
     ports:
       - "5001:5001"
     depends_on:
@@ -185,14 +234,14 @@ services:
     volumes:
       - hermes_data:/opt/data
     environment:
-      - HERMES_UID=1000                                    # UID внутри контейнера
-      - HERMES_GID=1000                                    # GID внутри контейнера
-      - HERMES_HOME=/opt/data                              # домашняя директория
-      - API_SERVER_ENABLED=true                            # включить API-сервер
-      - API_SERVER_KEY=changeme                            # ключ аутентификации API
-      - API_SERVER_HOST=0.0.0.0                            # хост API
-      - API_SERVER_PORT=8642                               # порт API
-      - SEARXNG_URL=http://searxng:8080                    # поисковик
+      - HERMES_UID=1000
+      - HERMES_GID=1000
+      - HERMES_HOME=/opt/data
+      - API_SERVER_ENABLED=true
+      - API_SERVER_KEY=changeme
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_PORT=8642
+      - SEARXNG_URL=http://searxng:8080
     ports:
       - "127.0.0.1:8642:8642"
     command: ["gateway", "run"]
@@ -219,6 +268,7 @@ services:
       - worker-cabinet-network
 
 volumes:
+  keycloak_db_data:
   postgres_data:
   minio_data:
   onlyoffice_data:

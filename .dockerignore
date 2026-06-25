@@ -14,3 +14,11 @@ Thumbs.db
 .idea
 coverage
 .nyc_output
+docker/hermes/data
+docker/keycloak-test
+hermes-webui
+notification-service
+*.pyc
+__pycache__
+venv
+.venv

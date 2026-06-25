@@ -155,9 +155,35 @@
     "use_count": 0,
     "view_count": 0
   },
+  "claude-code": {
+    "archived_at": null,
+    "created_at": "2026-06-25T01:50:41.665507+00:00",
+    "created_by": null,
+    "last_patched_at": null,
+    "last_used_at": null,
+    "last_viewed_at": null,
+    "patch_count": 0,
+    "pinned": false,
+    "state": "active",
+    "use_count": 0,
+    "view_count": 0
+  },
   "claude-design": {
     "archived_at": null,
     "created_at": "2026-06-08T22:33:26.008408+00:00",
+    "created_by": null,
+    "last_patched_at": null,
+    "last_used_at": null,
+    "last_viewed_at": null,
+    "patch_count": 0,
+    "pinned": false,
+    "state": "active",
+    "use_count": 0,
+    "view_count": 0
+  },
+  "codebase-inspection": {
+    "archived_at": null,
+    "created_at": "2026-06-25T01:50:41.671186+00:00",
     "created_by": null,
     "last_patched_at": null,
     "last_used_at": null,
