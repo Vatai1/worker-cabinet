@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { query } from '../config/database.js'
-import keycloakConfig, { getIssuer, getJwksUrl } from '../config/keycloak.js'
+import keycloakConfig, { getJwksUrl } from '../config/keycloak.js'
 
 let jwksCache = null
 
@@ -13,16 +13,6 @@ async function getJwks() {
     })
   }
   return jwksCache
-}
-
-const VALID_ROLES = ['admin', 'hr', 'manager', 'employee', 'onboarding']
-
-function extractRole(token) {
-  const realmRoles = token.realm_access?.roles || []
-  const resourceRoles = token.resource_access?.[keycloakConfig.clientId]?.roles || []
-  const allRoles = [...realmRoles, ...resourceRoles]
-  const role = allRoles.find(r => VALID_ROLES.includes(r))
-  return role || 'employee'
 }
 
 async function verifyKeycloakToken(token) {
@@ -49,12 +39,7 @@ async function findOrCreateUser(kcPayload) {
   )
 
   if (result.rows.length > 0) {
-    const user = result.rows[0]
-    const role = extractRole(kcPayload)
-    if (role !== user.role) {
-      await query('UPDATE users SET role = $1 WHERE id = $2', [role, user.id])
-    }
-    return { ...user, role }
+    return result.rows[0]
   }
 
   result = await query(
@@ -63,20 +48,18 @@ async function findOrCreateUser(kcPayload) {
   )
   if (result.rows.length > 0) {
     const user = result.rows[0]
-    const role = extractRole(kcPayload)
-    await query('UPDATE users SET keycloak_guid = $1, role = $2 WHERE id = $3', [sub, role, user.id])
-    return { ...user, role }
+    await query('UPDATE users SET keycloak_guid = $1 WHERE id = $2', [sub, user.id])
+    return user
   }
 
-  const role = extractRole(kcPayload)
   const firstName = kcPayload.given_name || ''
   const lastName = kcPayload.family_name || ''
 
   result = await query(
     `INSERT INTO users (email, first_name, last_name, role, status, keycloak_guid, password_hash, position, hire_date)
-     VALUES ($1, $2, $3, $4, 'active', $5, '', 'Не указана', CURRENT_DATE)
+     VALUES ($1, $2, $3, 'employee', 'active', $4, '', 'Не указана', CURRENT_DATE)
      RETURNING id, email, role, first_name, last_name`,
-    [email, firstName, lastName, role, sub]
+    [email, firstName, lastName, sub]
   )
 
   const user = result.rows[0]

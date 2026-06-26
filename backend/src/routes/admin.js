@@ -1,4 +1,4 @@
-import { updateKcUserRole } from '../config/keycloak.js'
+import { updateKcUserRole, deleteKcRole } from '../config/keycloak.js'
 import express from 'express'
 import bcrypt from 'bcryptjs'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
@@ -215,6 +215,7 @@ router.delete('/roles/:id', asyncHandler(async (req, res) => {
   }
 
   await query('DELETE FROM roles WHERE id = $1', [id])
+  await deleteKcRole(existing.rows[0].name).catch(() => {})
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_delete', 'role', id, { name: existing.rows[0].name }, req.ip)
   res.json({ success: true })
 }))
