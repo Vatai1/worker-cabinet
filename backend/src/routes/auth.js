@@ -55,6 +55,7 @@ router.post('/callback', asyncHandler(async (req, res) => {
   }
 
   const tokenData = await tokenRes.json()
+  console.log("[auth/callback] token exchange OK, has access_token:", !!tokenData.access_token, "has id_token:", !!tokenData.id_token)
   const accessToken = tokenData.access_token
   const idToken = tokenData.id_token
 
@@ -100,6 +101,7 @@ router.post('/logout', asyncHandler(async (req, res) => {
 }))
 
 router.post('/register', authLimiter, validateRegister, asyncHandler(async (req, res) => {
+  if (keycloakConfig.enabled) throw new UnauthorizedError('Используйте авторизацию через Keycloak')
   const { email, password, firstName, lastName, middleName, position, departmentId, phone, birthDate, hireDate, role } = req.body
 
   const existingUser = await query('SELECT id FROM users WHERE email = $1', [email])
@@ -141,6 +143,7 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
 }))
 
 router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) => {
+  if (keycloakConfig.enabled) throw new UnauthorizedError('Используйте авторизацию через Keycloak')
   const { email, password } = req.body
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
 

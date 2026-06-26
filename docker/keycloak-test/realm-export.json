@@ -17,11 +17,26 @@
   "failureFactor": 5,
   "roles": {
     "realm": [
-      { "name": "admin", "description": "Администратор системы" },
-      { "name": "hr", "description": "HR-менеджер" },
-      { "name": "manager", "description": "Руководитель" },
-      { "name": "employee", "description": "Сотрудник" },
-      { "name": "onboarding", "description": "Онбординг-менеджер" }
+      {
+        "name": "admin",
+        "description": "Администратор системы"
+      },
+      {
+        "name": "hr",
+        "description": "HR-менеджер"
+      },
+      {
+        "name": "manager",
+        "description": "Руководитель"
+      },
+      {
+        "name": "employee",
+        "description": "Сотрудник"
+      },
+      {
+        "name": "onboarding",
+        "description": "Онбординг-менеджер"
+      }
     ],
     "client": {
       "realm-management": [],
@@ -44,7 +59,13 @@
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
       "authorizationServicesEnabled": false,
-      "redirectUris": ["http://localhost:*", "http://localhost:3000/*", "http://localhost:3000/login", "http://localhost:80/*", "http://localhost:5000/*"],
+      "redirectUris": [
+        "http://localhost:*",
+        "http://localhost:3000/*",
+        "http://localhost:3000/login",
+        "http://localhost:80/*",
+        "http://localhost:5000/*"
+      ],
       "adminUrl": "http://localhost:3000",
       "rootUrl": "http://localhost:3000",
       "baseUrl": "/",
@@ -124,9 +145,14 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["admin", "employee"],
+      "realmRoles": [
+        "admin",
+        "employee"
+      ],
       "attributes": {
-        "position": ["System Administrator"]
+        "position": [
+          "System Administrator"
+        ]
       }
     },
     {
@@ -143,9 +169,13 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["employee"],
+      "realmRoles": [
+        "employee"
+      ],
       "attributes": {
-        "position": ["Разработчик"]
+        "position": [
+          "Разработчик"
+        ]
       }
     },
     {
@@ -162,9 +192,14 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["manager", "employee"],
+      "realmRoles": [
+        "manager",
+        "employee"
+      ],
       "attributes": {
-        "position": ["Руководитель отдела"]
+        "position": [
+          "Руководитель отдела"
+        ]
       }
     },
     {
@@ -181,9 +216,934 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["hr", "employee"],
+      "realmRoles": [
+        "hr",
+        "employee"
+      ],
       "attributes": {
-        "position": ["HR-менеджер"]
+        "position": [
+          "HR-менеджер"
+        ]
+      }
+    },
+    {
+      "username": "smirnov@example.com",
+      "email": "smirnov@example.com",
+      "firstName": "Алексей",
+      "lastName": "Смирнов",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Senior Backend Developer"
+        ]
+      }
+    },
+    {
+      "username": "kuznetsova@example.com",
+      "email": "kuznetsova@example.com",
+      "firstName": "Мария",
+      "lastName": "Кузнецова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "UI/UX Designer"
+        ]
+      }
+    },
+    {
+      "username": "volkov@example.com",
+      "email": "volkov@example.com",
+      "firstName": "Дмитрий",
+      "lastName": "Волков",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "QA Engineer"
+        ]
+      }
+    },
+    {
+      "username": "popova@example.com",
+      "email": "popova@example.com",
+      "firstName": "Ольга",
+      "lastName": "Попова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "hr"
+      ],
+      "attributes": {
+        "position": [
+          "HR Manager"
+        ]
+      }
+    },
+    {
+      "username": "sidorov@example.com",
+      "email": "sidorov@example.com",
+      "firstName": "Сергей",
+      "lastName": "Сидоров",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "DevOps Engineer"
+        ]
+      }
+    },
+    {
+      "username": "morozova@example.com",
+      "email": "morozova@example.com",
+      "firstName": "Екатерина",
+      "lastName": "Морозова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Financial Analyst"
+        ]
+      }
+    },
+    {
+      "username": "fedorov@example.com",
+      "email": "fedorov@example.com",
+      "firstName": "Николай",
+      "lastName": "Фёдоров",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager"
+      ],
+      "attributes": {
+        "position": [
+          "Sales Manager"
+        ]
+      }
+    },
+    {
+      "username": "vasilyeva@example.com",
+      "email": "vasilyeva@example.com",
+      "firstName": "Анна",
+      "lastName": "Васильева",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager"
+      ],
+      "attributes": {
+        "position": [
+          "Marketing Manager"
+        ]
+      }
+    },
+    {
+      "username": "pavlov@example.com",
+      "email": "pavlov@example.com",
+      "firstName": "Андрей",
+      "lastName": "Павлов",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Data Analyst"
+        ]
+      }
+    },
+    {
+      "username": "golubeva@example.com",
+      "email": "golubeva@example.com",
+      "firstName": "Татьяна",
+      "lastName": "Голубева",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager"
+      ],
+      "attributes": {
+        "position": [
+          "Product Manager"
+        ]
+      }
+    },
+    {
+      "username": "артeм.лебедев@example.com",
+      "email": "артeм.лебедев@example.com",
+      "firstName": "Артём",
+      "lastName": "Лебедев",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Frontend Developer"
+        ]
+      }
+    },
+    {
+      "username": "ирина.соколова@example.com",
+      "email": "ирина.соколова@example.com",
+      "firstName": "Ирина",
+      "lastName": "Соколова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Backend Developer"
+        ]
+      }
+    },
+    {
+      "username": "максим.козлов@example.com",
+      "email": "максим.козлов@example.com",
+      "firstName": "Максим",
+      "lastName": "Козлов",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "System Administrator"
+        ]
+      }
+    },
+    {
+      "username": "наталья.новикова@example.com",
+      "email": "наталья.новикова@example.com",
+      "firstName": "Наталья",
+      "lastName": "Новикова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Бухгалтер"
+        ]
+      }
+    },
+    {
+      "username": "виктор.орлов@example.com",
+      "email": "виктор.орлов@example.com",
+      "firstName": "Виктор",
+      "lastName": "Орлов",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager"
+      ],
+      "attributes": {
+        "position": [
+          "Project Manager"
+        ]
+      }
+    },
+    {
+      "username": "елена.киселeва@example.com",
+      "email": "елена.киселeва@example.com",
+      "firstName": "Елена",
+      "lastName": "Киселёва",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Юрист"
+        ]
+      }
+    },
+    {
+      "username": "александр.макаров@example.com",
+      "email": "александр.макаров@example.com",
+      "firstName": "Александр",
+      "lastName": "Макаров",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "DevOps Engineer"
+        ]
+      }
+    },
+    {
+      "username": "дарья.зайцева@example.com",
+      "email": "дарья.зайцева@example.com",
+      "firstName": "Дарья",
+      "lastName": "Зайцева",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "HR Specialist"
+        ]
+      }
+    },
+    {
+      "username": "денис.соловьeв@example.com",
+      "email": "денис.соловьeв@example.com",
+      "firstName": "Денис",
+      "lastName": "Соловьёв",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Data Engineer"
+        ]
+      }
+    },
+    {
+      "username": "вероника.борисова@example.com",
+      "email": "вероника.борисова@example.com",
+      "firstName": "Вероника",
+      "lastName": "Борисова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Графический дизайнер"
+        ]
+      }
+    },
+    {
+      "username": "игорь.яковлев@example.com",
+      "email": "игорь.яковлев@example.com",
+      "firstName": "Игорь",
+      "lastName": "Яковлев",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Security Engineer"
+        ]
+      }
+    },
+    {
+      "username": "тамара.григорьева@example.com",
+      "email": "тамара.григорьева@example.com",
+      "firstName": "Тамара",
+      "lastName": "Григорьева",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Секретарь"
+        ]
+      }
+    },
+    {
+      "username": "олег.романов@example.com",
+      "email": "олег.романов@example.com",
+      "firstName": "Олег",
+      "lastName": "Романов",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Fullstack Developer"
+        ]
+      }
+    },
+    {
+      "username": "марина.воробьeва@example.com",
+      "email": "марина.воробьeва@example.com",
+      "firstName": "Марина",
+      "lastName": "Воробьёва",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "PR Manager"
+        ]
+      }
+    },
+    {
+      "username": "антон.сергеев@example.com",
+      "email": "антон.сергеев@example.com",
+      "firstName": "Антон",
+      "lastName": "Сергеев",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Mobile Developer"
+        ]
+      }
+    },
+    {
+      "username": "людмила.кузьмина@example.com",
+      "email": "людмила.кузьмина@example.com",
+      "firstName": "Людмила",
+      "lastName": "Кузьмина",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "hr"
+      ],
+      "attributes": {
+        "position": [
+          "Менеджер по персоналу"
+        ]
+      }
+    },
+    {
+      "username": "владимир.фролов@example.com",
+      "email": "владимир.фролов@example.com",
+      "firstName": "Владимир",
+      "lastName": "Фролов",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Аналитик"
+        ]
+      }
+    },
+    {
+      "username": "алина.александрова@example.com",
+      "email": "алина.александрова@example.com",
+      "firstName": "Алина",
+      "lastName": "Александрова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "SMM-специалист"
+        ]
+      }
+    },
+    {
+      "username": "геннадий.дмитриев@example.com",
+      "email": "геннадий.дмитриев@example.com",
+      "firstName": "Геннадий",
+      "lastName": "Дмитриев",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Технический писатель"
+        ]
+      }
+    },
+    {
+      "username": "полина.королeва@example.com",
+      "email": "полина.королeва@example.com",
+      "firstName": "Полина",
+      "lastName": "Королёва",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager"
+      ],
+      "attributes": {
+        "position": [
+          "QA Lead"
+        ]
+      }
+    },
+    {
+      "username": "роман.гусев@example.com",
+      "email": "роман.гусев@example.com",
+      "firstName": "Роман",
+      "lastName": "Гусев",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "ML Engineer"
+        ]
+      }
+    },
+    {
+      "username": "ксения.кириллова@example.com",
+      "email": "ксения.кириллова@example.com",
+      "firstName": "Ксения",
+      "lastName": "Кириллова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager"
+      ],
+      "attributes": {
+        "position": [
+          "Product Owner"
+        ]
+      }
+    },
+    {
+      "username": "тимур.рашидов@example.com",
+      "email": "тимур.рашидов@example.com",
+      "firstName": "Тимур",
+      "lastName": "Рашидов",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Backend Developer"
+        ]
+      }
+    },
+    {
+      "username": "софья.максимова@example.com",
+      "email": "софья.максимова@example.com",
+      "firstName": "Софья",
+      "lastName": "Максимова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "UX Researcher"
+        ]
+      }
+    },
+    {
+      "username": "вадим.захаров@example.com",
+      "email": "вадим.захаров@example.com",
+      "firstName": "Вадим",
+      "lastName": "Захаров",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Network Engineer"
+        ]
+      }
+    },
+    {
+      "username": "елизавета.степанова@example.com",
+      "email": "елизавета.степанова@example.com",
+      "firstName": "Елизавета",
+      "lastName": "Степанова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Office Manager"
+        ]
+      }
+    },
+    {
+      "username": "фeдор.николаев@example.com",
+      "email": "фeдор.николаев@example.com",
+      "firstName": "Фёдор",
+      "lastName": "Николаев",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager"
+      ],
+      "attributes": {
+        "position": [
+          "Архитектор ПО"
+        ]
+      }
+    },
+    {
+      "username": "виктория.ефимова@example.com",
+      "email": "виктория.ефимова@example.com",
+      "firstName": "Виктория",
+      "lastName": "Ефимова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Business Analyst"
+        ]
+      }
+    },
+    {
+      "username": "борис.павлов@example.com",
+      "email": "борис.павлов@example.com",
+      "firstName": "Борис",
+      "lastName": "Павлов",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Database Administrator"
+        ]
+      }
+    },
+    {
+      "username": "диана.семeнова@example.com",
+      "email": "диана.семeнова@example.com",
+      "firstName": "Диана",
+      "lastName": "Семёнова",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "employee"
+      ],
+      "attributes": {
+        "position": [
+          "Recruiter"
+        ]
       }
     }
   ]

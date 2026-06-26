@@ -1,3 +1,4 @@
+import { updateKcUserRole } from '../config/keycloak.js'
 import express from 'express'
 import bcrypt from 'bcryptjs'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
@@ -344,6 +345,11 @@ router.put('/users/:id/role', asyncHandler(async (req, res) => {
 
   const oldRole = userCheck.rows[0].role
   await query('UPDATE users SET role = $1 WHERE id = $2', [role.trim(), id])
+
+  const guidCheck = await query('SELECT keycloak_guid FROM users WHERE id = $1', [id])
+  if (guidCheck.rows[0]?.keycloak_guid) {
+    await updateKcUserRole(guidCheck.rows[0].keycloak_guid, role.trim()).catch(() => {})
+  }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_role_change', 'user', id,
     { oldRole, newRole: role.trim(), userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip)
@@ -728,6 +734,13 @@ router.put('/users/bulk-role', asyncHandler(async (req, res) => {
     `UPDATE users SET role = $1 WHERE id = ANY($2)`,
     [role.trim(), userIds]
   )
+
+  if (result.rowCount > 0) {
+    const guids = await query('SELECT keycloak_guid FROM users WHERE id = ANY($1) AND keycloak_guid IS NOT NULL', [userIds])
+    for (const row of guids.rows) {
+      await updateKcUserRole(row.keycloak_guid, role.trim()).catch(() => {})
+    }
+  }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'bulk_role_change', 'user', null,
     { count: result.rowCount, role: role.trim() }, req.ip)

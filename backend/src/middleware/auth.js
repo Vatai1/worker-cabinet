@@ -27,7 +27,7 @@ function extractRole(token) {
 
 async function verifyKeycloakToken(token) {
   const jwks = await getJwks()
-  const { payload } = await jwtVerify(token, jwks)
+  const { payload } = await jwtVerify(token, jwks, { clockTolerance: 30 })
 
   const expectedPath = `/realms/${keycloakConfig.realm}`
   if (!payload.iss || !payload.iss.endsWith(expectedPath)) {
@@ -57,13 +57,24 @@ async function findOrCreateUser(kcPayload) {
     return { ...user, role }
   }
 
+  result = await query(
+    'SELECT id, email, role, first_name, last_name FROM users WHERE email = $1',
+    [email]
+  )
+  if (result.rows.length > 0) {
+    const user = result.rows[0]
+    const role = extractRole(kcPayload)
+    await query('UPDATE users SET keycloak_guid = $1, role = $2 WHERE id = $3', [sub, role, user.id])
+    return { ...user, role }
+  }
+
   const role = extractRole(kcPayload)
   const firstName = kcPayload.given_name || ''
   const lastName = kcPayload.family_name || ''
 
   result = await query(
-    `INSERT INTO users (email, first_name, last_name, role, status, keycloak_guid, password_hash)
-     VALUES ($1, $2, $3, $4, 'active', $5, '')
+    `INSERT INTO users (email, first_name, last_name, role, status, keycloak_guid, password_hash, position, hire_date)
+     VALUES ($1, $2, $3, $4, 'active', $5, '', 'Не указана', CURRENT_DATE)
      RETURNING id, email, role, first_name, last_name`,
     [email, firstName, lastName, role, sub]
   )
@@ -79,6 +90,7 @@ export const authenticateToken = async (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1] || req.cookies?.auth_token
 
   if (!token) {
+    console.log('[auth] No token in request')
     return res.status(401).json({ error: 'Access token required' })
   }
 
@@ -103,6 +115,7 @@ export const authenticateToken = async (req, res, next) => {
     req.user = user
     next()
   } catch (err) {
+    console.log('[auth] Token verification failed:', err.message)
     return res.status(403).json({ error: 'Invalid or expired token' })
   }
 }

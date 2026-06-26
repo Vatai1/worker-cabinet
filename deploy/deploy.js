@@ -212,7 +212,7 @@ async function startServices() {
   const kcMaxRetries = 30
   while (kcRetries < kcMaxRetries) {
     try {
-      const kcResult = await runCommandAsync('docker', ['exec', 'wc-keycloak', 'curl', '-sf', 'http://localhost:8080/health/ready'])
+      const kcResult = await runCommandAsync('docker', ['exec', 'wc-keycloak', 'bash', '-c', 'timeout 2 bash -c \x27</dev/tcp/localhost/8080\x27'])
       if (kcResult.code === 0) break
     } catch {}
     await sleep(2000)
