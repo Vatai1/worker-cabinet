@@ -82,6 +82,19 @@ router.post('/callback', asyncHandler(async (req, res) => {
   res.json({ success: true, accessToken })
 }))
 
+/**
+ * @swagger
+ * /auth/refresh:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Обновить access token через refresh token (Keycloak)
+ *     description: 'Использует kc_refresh_token из httpOnly cookie. Возвращает новый access_token, id_token и refresh_token.'
+ *     responses:
+ *       200:
+ *         description: Токен обновлён
+ *       401:
+ *         description: 'Refresh token истёк или отсутствует'
+ */
 router.post('/refresh', asyncHandler(async (req, res) => {
   if (!keycloakConfig.enabled) {
     return res.status(400).json({ error: 'Refresh available only in Keycloak mode' })

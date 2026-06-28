@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { User, AuthState } from '@/shared/types'
 import { deleteCookie } from '@/shared/lib/cookies'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { useModulesStore } from '@/shared/store/modulesStore'
 
 interface AuthStore extends AuthState {
@@ -18,7 +19,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   loading: true,
   checkAuth: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/auth/me`, {
         credentials: 'include',
       })
 

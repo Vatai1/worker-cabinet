@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -355,7 +356,7 @@ function UsersTab() {
 
   const fetchRoles = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/roles`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/roles`, { headers: getAuthHeaders() })
       if (res.ok) setRoles(await res.json())
     } catch {}
   }
@@ -366,7 +367,7 @@ function UsersTab() {
       const params = new URLSearchParams({ page: String(page), limit: '25' })
       if (search) params.set('search', search)
       if (filterRole) params.set('role', filterRole)
-      const res = await fetch(`${API_BASE_URL}/admin/users?${params}`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users?${params}`, { headers: getAuthHeaders() })
       if (res.ok) {
         const data = await res.json()
         setUsers(data.users); setTotal(data.total)
@@ -384,7 +385,7 @@ function UsersTab() {
     })
     if (!confirmed) return
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/${userId}/role`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ role }),
       })
@@ -407,7 +408,7 @@ function UsersTab() {
     })
     if (!confirmed) return
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/status`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/${userId}/status`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ status }),
       })
@@ -423,7 +424,7 @@ function UsersTab() {
     const confirmed = await confirmDialog({ title: 'Сбросить пароль', message: 'Установить новый пароль для этого пользователя?', confirmText: 'Сбросить', variant: 'danger' })
     if (!confirmed) return
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/reset-password`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/${userId}/reset-password`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ newPassword }),
       })
@@ -454,21 +455,21 @@ function UsersTab() {
     if (!confirmed) return
     try {
       if (bulkAction === 'activate') {
-        const res = await fetch(`${API_BASE_URL}/admin/users/bulk-status`, {
+        const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/bulk-status`, {
           method: 'PUT', headers: getAuthHeadersWithContentType(),
           body: JSON.stringify({ userIds: ids, status: 'active' }),
         })
         if (res.ok) { setSelectedIds(new Set()); fetchUsers() }
         else { const d = await res.json(); setError(d.error) }
       } else if (bulkAction === 'deactivate') {
-        const res = await fetch(`${API_BASE_URL}/admin/users/bulk-status`, {
+        const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/bulk-status`, {
           method: 'PUT', headers: getAuthHeadersWithContentType(),
           body: JSON.stringify({ userIds: ids, status: 'inactive' }),
         })
         if (res.ok) { setSelectedIds(new Set()); fetchUsers() }
         else { const d = await res.json(); setError(d.error) }
       } else if (bulkAction === 'setRole' && bulkRole) {
-        const res = await fetch(`${API_BASE_URL}/admin/users/bulk-role`, {
+        const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/bulk-role`, {
           method: 'PUT', headers: getAuthHeadersWithContentType(),
           body: JSON.stringify({ userIds: ids, role: bulkRole }),
         })
@@ -657,11 +658,11 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
   const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
+    fetchWithRetry(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(data => setDepartments(data.departments || data))
       .catch(() => {})
-    fetch(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() })
+    fetchWithRetry(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(data => setPositions((Array.isArray(data) ? data : data.positions || []).map((p: { name: string }) => p.name)))
       .catch(() => {})
@@ -680,7 +681,7 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
       }
       if (editForm.department_id !== '') body.department_id = Number(editForm.department_id)
       else body.department_id = null
-      const res = await fetch(`${API_BASE_URL}/admin/users/${user.id}`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/${user.id}`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify(body),
       })
@@ -968,8 +969,8 @@ function RolesTab() {
     setLoading(true)
     try {
       const [rolesRes, permsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/admin/roles`, { headers: getAuthHeaders() }),
-        fetch(`${API_BASE_URL}/admin/permissions`, { headers: getAuthHeaders() }),
+        fetchWithRetry(`${API_BASE_URL}/admin/roles`, { headers: getAuthHeaders() }),
+        fetchWithRetry(`${API_BASE_URL}/admin/permissions`, { headers: getAuthHeaders() }),
       ])
       if (rolesRes.ok) setRoles(await rolesRes.json())
       if (permsRes.ok) setPermissions(await permsRes.json())
@@ -982,7 +983,7 @@ function RolesTab() {
   const createRole = async () => {
     if (!newName.trim()) { setError('Название обязательно'); return }
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/roles`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/roles`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ name: newName.trim(), description: newDesc.trim() }),
       })
@@ -997,7 +998,7 @@ function RolesTab() {
   const deleteRole = async (id: number) => {
     if (!await confirmDialog({ title: 'Удаление роли', message: 'Удалить эту роль?', confirmText: 'Удалить', variant: 'danger' })) return
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/roles/${id}`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/roles/${id}`, {
         method: 'DELETE', headers: getAuthHeaders(),
       })
       if (res.ok) fetchData()
@@ -1008,7 +1009,7 @@ function RolesTab() {
   const savePermissions = async () => {
     if (!editingRole) return
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/roles/${editingRole.id}`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/roles/${editingRole.id}`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ permissionIds: editPerms }),
       })
@@ -1169,7 +1170,7 @@ function DepartmentsTab() {
   const fetchDepartments = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
       if (res.ok) setDepartments(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -1191,7 +1192,7 @@ function DepartmentsTab() {
     const confirmed = await confirmDialog({ title: 'Создать отдел', message: `Создать отдел «${newName.trim()}»?`, confirmText: 'Создать' })
     if (!confirmed) return
     try {
-      const res = await fetch(`${API_BASE_URL}/dictionaries/departments`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ name: newName.trim(), description: newDesc.trim(), manager_id: newManagerId }),
       })
@@ -1207,7 +1208,7 @@ function DepartmentsTab() {
       const body: Record<string, unknown> = { name: editName.trim(), description: editDesc.trim() }
       if (editManagerId) body.manager_id = editManagerId
       else body.manager_id = null
-      const res = await fetch(`${API_BASE_URL}/dictionaries/departments/${id}`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${id}`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify(body),
       })
@@ -1220,7 +1221,7 @@ function DepartmentsTab() {
     const confirmed = await confirmDialog({ title: 'Удалить отдел', message: `Удалить отдел «${name}»? Сотрудники будут отвязаны от отдела.`, confirmText: 'Удалить', variant: 'danger' })
     if (!confirmed) return
     try {
-      await fetch(`${API_BASE_URL}/dictionaries/departments/${id}`, {
+      await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${id}`, {
         method: 'DELETE', headers: getAuthHeaders(),
       })
       fetchDepartments()
@@ -1535,7 +1536,7 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
     const fetchUsers = async () => {
       setLoading(true)
       try {
-        const res = await fetch(`${API_BASE_URL}/admin/users?limit=1000`, { headers: getAuthHeaders() })
+        const res = await fetchWithRetry(`${API_BASE_URL}/admin/users?limit=1000`, { headers: getAuthHeaders() })
         if (res.ok) {
           const data = await res.json()
           setUsers(data.users || [])
@@ -1627,7 +1628,7 @@ function SettingsTab() {
   const fetchSettings = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
       if (res.ok) setSettings(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -1635,7 +1636,7 @@ function SettingsTab() {
   const saveSettings = async () => {
     setSaving(true); setError(null); setSuccess(false)
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/settings`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ settings: settings.map((s) => ({ key: s.key, value: s.value })) }),
       })
@@ -1655,7 +1656,7 @@ function SettingsTab() {
     setError(null)
     try {
       const now = new Date()
-      const res = await fetch(`${API_BASE_URL}/timesheet/auto-create`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/timesheet/auto-create`, {
         method: 'POST',
         headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ year: now.getFullYear(), month: now.getMonth() + 1 }),
@@ -1823,7 +1824,7 @@ function AssistantSettingsTab() {
   const fetchSettings = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
       if (res.ok) {
         const all = await res.json()
         setSettings(all.filter((s: SystemSetting) => s.key.startsWith('assistant_')))
@@ -1834,7 +1835,7 @@ function AssistantSettingsTab() {
   const saveSettings = async () => {
     setSaving(true); setError(null); setSuccess(false)
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/settings`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ settings: settings.map((s) => ({ key: s.key, value: s.value })) }),
       })
@@ -1884,7 +1885,7 @@ function AssistantSettingsTab() {
     setApplyingHermes(true); setHermesResult(null)
     try {
       await saveSettings()
-      const res = await fetch(`${API_BASE_URL}/admin/assistant/hermes-config`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/assistant/hermes-config`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
       })
       const data = await res.json()
@@ -2226,7 +2227,7 @@ function AuditTab() {
       if (filterAction) params.set('action', filterAction)
       if (dateFrom) params.set('dateFrom', dateFrom)
       if (dateTo) params.set('dateTo', dateTo)
-      const res = await fetch(`${API_BASE_URL}/admin/audit-log?${params}`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/audit-log?${params}`, { headers: getAuthHeaders() })
       if (res.ok) {
         const data = await res.json()
         setLogs(data.logs)
@@ -2493,7 +2494,7 @@ function HealthTab() {
   const fetchHealth = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/health`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/health`, { headers: getAuthHeaders() })
       if (res.ok) setHealth(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -2605,7 +2606,7 @@ function ErrorsTab() {
   const fetchErrors = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/error-log?page=${page}&limit=25`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/error-log?page=${page}&limit=25`, { headers: getAuthHeaders() })
       if (res.ok) {
         const data = await res.json()
         setErrors(data.errors)
@@ -2697,8 +2698,8 @@ function SecurityTab() {
     setLoading(true)
     try {
       const [flRes, lockedRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/admin/security/failed-logins?days=${days}`, { headers: getAuthHeaders() }),
-        fetch(`${API_BASE_URL}/admin/security/locked-accounts`, { headers: getAuthHeaders() }),
+        fetchWithRetry(`${API_BASE_URL}/admin/security/failed-logins?days=${days}`, { headers: getAuthHeaders() }),
+        fetchWithRetry(`${API_BASE_URL}/admin/security/locked-accounts`, { headers: getAuthHeaders() }),
       ])
       if (flRes.ok) setFailedLogins(await flRes.json())
       if (lockedRes.ok) setLockedAccounts(await lockedRes.json())
@@ -2707,7 +2708,7 @@ function SecurityTab() {
 
   const unlockAccount = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${id}/unlock`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/${id}/unlock`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
       })
       if (res.ok) setLockedAccounts((prev) => prev.filter((a) => a.id !== id))
@@ -2832,7 +2833,7 @@ function ReportsTab() {
   const loadVacationReport = async () => {
     setLoading(true); setActiveReport('vacation')
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/reports/vacations?year=${vacationYear}`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/reports/vacations?year=${vacationYear}`, { headers: getAuthHeaders() })
       if (res.ok) setVacationData(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -2840,7 +2841,7 @@ function ReportsTab() {
   const loadHiresReport = async () => {
     setLoading(true); setActiveReport('hires')
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/reports/hires`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/reports/hires`, { headers: getAuthHeaders() })
       if (res.ok) setHiresData(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -2848,7 +2849,7 @@ function ReportsTab() {
   const loadTurnoverReport = async () => {
     setLoading(true); setActiveReport('turnover')
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/reports/turnover?year=${turnoverYear}`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/reports/turnover?year=${turnoverYear}`, { headers: getAuthHeaders() })
       if (res.ok) setTurnoverData(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -2856,7 +2857,7 @@ function ReportsTab() {
   const loadTenureReport = async () => {
     setLoading(true); setActiveReport('tenure')
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/reports/tenure-age`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/reports/tenure-age`, { headers: getAuthHeaders() })
       if (res.ok) setTenureData(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -2864,7 +2865,7 @@ function ReportsTab() {
   const loadUnusedVacationsReport = async () => {
     setLoading(true); setActiveReport('unused_vacations')
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/reports/unused-vacations?year=${unusedYear}`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/reports/unused-vacations?year=${unusedYear}`, { headers: getAuthHeaders() })
       if (res.ok) setUnusedVacationsData(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -2872,7 +2873,7 @@ function ReportsTab() {
   const loadProjectLoadReport = async () => {
     setLoading(true); setActiveReport('project_load')
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/reports/project-load`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/reports/project-load`, { headers: getAuthHeaders() })
       if (res.ok) setProjectLoadData(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -3254,7 +3255,7 @@ function DictionariesTab() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/dictionaries`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/dictionaries`, { headers: getAuthHeaders() })
       if (res.ok) setData(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -3262,7 +3263,7 @@ function DictionariesTab() {
   const addSkill = async () => {
     if (!newSkill.trim()) return
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/dictionaries/skills`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/dictionaries/skills`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ name: newSkill.trim() }),
       })
@@ -3274,7 +3275,7 @@ function DictionariesTab() {
   const updateSkill = async (id: number) => {
     if (!editSkillName.trim()) return
     try {
-      const res = await fetch(`${API_BASE_URL}/dictionaries/skills/${id}`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/skills/${id}`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ name: editSkillName.trim() }),
       })
@@ -3285,7 +3286,7 @@ function DictionariesTab() {
 
   const deleteSkill = async (id: number) => {
     try {
-      await fetch(`${API_BASE_URL}/admin/dictionaries/skills/${id}`, {
+      await fetchWithRetry(`${API_BASE_URL}/admin/dictionaries/skills/${id}`, {
         method: 'DELETE', headers: getAuthHeaders(),
       })
       fetchData()
@@ -3295,7 +3296,7 @@ function DictionariesTab() {
   const addVacationType = async () => {
     if (!newVacationName.trim() || !newVacationCode.trim()) return
     try {
-      const res = await fetch(`${API_BASE_URL}/dictionaries/vacation-types`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/vacation-types`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ name: newVacationName.trim(), code: newVacationCode.trim() }),
       })
@@ -3307,7 +3308,7 @@ function DictionariesTab() {
   const updateVacationType = async (id: number) => {
     if (!editVacationName.trim()) return
     try {
-      const res = await fetch(`${API_BASE_URL}/dictionaries/vacation-types/${id}`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/vacation-types/${id}`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ name: editVacationName.trim(), code: editVacationCode.trim() }),
       })
@@ -3318,7 +3319,7 @@ function DictionariesTab() {
 
   const deleteVacationType = async (id: number) => {
     try {
-      await fetch(`${API_BASE_URL}/dictionaries/vacation-types/${id}`, {
+      await fetchWithRetry(`${API_BASE_URL}/dictionaries/vacation-types/${id}`, {
         method: 'DELETE', headers: getAuthHeaders(),
       })
       fetchData()
@@ -3328,7 +3329,7 @@ function DictionariesTab() {
   const renamePosition = async (oldName: string) => {
     if (!editPositionNewName.trim() || editPositionNewName.trim() === oldName) { setEditPositionName(null); return }
     try {
-      const res = await fetch(`${API_BASE_URL}/dictionaries/positions/rename`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/positions/rename`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ oldName, newName: editPositionNewName.trim() }),
       })
@@ -3339,7 +3340,7 @@ function DictionariesTab() {
 
   const deletePosition = async (name: string) => {
     try {
-      await fetch(`${API_BASE_URL}/dictionaries/positions/${encodeURIComponent(name)}`, {
+      await fetchWithRetry(`${API_BASE_URL}/dictionaries/positions/${encodeURIComponent(name)}`, {
         method: 'DELETE', headers: getAuthHeaders(),
       })
       fetchData()
@@ -3604,7 +3605,7 @@ function ModulesTab() {
   const fetchModules = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/modules`, { headers: getAuthHeaders() })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/modules`, { headers: getAuthHeaders() })
       if (res.ok) setModules(await res.json())
     } catch {} finally { setLoading(false) }
   }
@@ -3613,7 +3614,7 @@ function ModulesTab() {
     setTogglingId(mod.id)
     setError(null)
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/modules/${mod.id}/toggle`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/modules/${mod.id}/toggle`, {
         method: 'PUT', headers: getAuthHeadersWithContentType(),
       })
       if (res.ok) {

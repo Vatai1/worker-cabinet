@@ -1,4 +1,4 @@
-import { updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword } from '../config/keycloak.js'
+import { updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword, unlockKcUser } from '../config/keycloak.js'
 import express from 'express'
 import bcrypt from 'bcryptjs'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
@@ -1087,6 +1087,12 @@ router.get('/security/locked-accounts', asyncHandler(async (req, res) => {
 router.post('/users/:id/unlock', asyncHandler(async (req, res) => {
   const { id } = req.params
   await query('UPDATE users SET locked_until = NULL, failed_login_count = 0 WHERE id = $1', [id])
+
+  const guidCheck = await query('SELECT keycloak_guid FROM users WHERE id = $1', [id])
+  if (guidCheck.rows[0]?.keycloak_guid) {
+    await unlockKcUser(guidCheck.rows[0].keycloak_guid).catch(() => {})
+  }
+
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'account_unlock', 'user', id, {}, req.ip)
   res.json({ success: true })
 }))

@@ -33,7 +33,7 @@ async function tryRefresh(): Promise<boolean> {
   return refreshing
 }
 
-async function fetchWithRetry(
+export async function fetchWithRetry(
   url: string,
   options: RequestInit
 ): Promise<Response> {

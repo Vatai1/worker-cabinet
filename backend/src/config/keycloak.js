@@ -204,6 +204,28 @@ async function resetKcUserPassword(kcGuid, newPassword) {
   }
 }
 
+async function unlockKcUser(kcGuid) {
+  if (!config.enabled) return
+  try {
+    const token = await getKcAdminToken()
+    await fetch(
+      `${config.url}/admin/realms/${config.realm}/attack-detection/brute-force/users/${kcGuid}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+    )
+    await fetch(
+      `${config.url}/admin/realms/${config.realm}/users/${kcGuid}`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true }),
+      }
+    )
+    console.log('[kc] unlocked user', kcGuid)
+  } catch (err) {
+    console.error('[kc] unlockKcUser error:', err.message)
+  }
+}
+
 async function deleteKcRole(roleName) {
   if (!config.enabled) return
   try {
@@ -222,4 +244,4 @@ async function deleteKcRole(roleName) {
   }
 }
 
-export { getKcAdminToken, getKcUserId, getKcUserIdByEmail, updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword }
+export { getKcAdminToken, getKcUserId, getKcUserIdByEmail, updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword, unlockKcUser }
