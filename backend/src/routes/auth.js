@@ -71,7 +71,59 @@ router.post('/callback', asyncHandler(async (req, res) => {
     })
   }
 
+  const refreshToken = tokenData.refresh_token
+  if (refreshToken) {
+    res.cookie('kc_refresh_token', refreshToken, {
+      ...cookieOptions(req),
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    })
+  }
+
   res.json({ success: true, accessToken })
+}))
+
+router.post('/refresh', asyncHandler(async (req, res) => {
+  if (!keycloakConfig.enabled) {
+    return res.status(400).json({ error: 'Refresh available only in Keycloak mode' })
+  }
+
+  const refreshToken = req.cookies?.kc_refresh_token
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'No refresh token' })
+  }
+
+  const tokenRes = await fetch(getTokenEndpoint(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: keycloakConfig.clientId,
+      client_secret: keycloakConfig.clientSecret,
+    }),
+  })
+
+  if (!tokenRes.ok) {
+    res.clearCookie('auth_token', cookieOptions(req))
+    res.clearCookie('kc_id_token', cookieOptions(req))
+    res.clearCookie('kc_refresh_token', cookieOptions(req))
+    return res.status(401).json({ error: 'Refresh token expired' })
+  }
+
+  const tokenData = await tokenRes.json()
+  const opts = cookieOptions(req)
+  const maxAge = 7 * 24 * 60 * 60 * 1000
+
+  res.cookie('auth_token', tokenData.access_token, { ...opts, maxAge })
+
+  if (tokenData.id_token) {
+    res.cookie('kc_id_token', tokenData.id_token, { ...opts, maxAge })
+  }
+  if (tokenData.refresh_token) {
+    res.cookie('kc_refresh_token', tokenData.refresh_token, { ...opts, maxAge })
+  }
+
+  res.json({ success: true })
 }))
 
 function cookieOptions(req) {
@@ -93,6 +145,7 @@ router.post('/logout', asyncHandler(async (req, res) => {
     }
     res.clearCookie('auth_token', opts)
     res.clearCookie('kc_id_token', opts)
+    res.clearCookie('kc_refresh_token', opts)
     res.json({ logoutUrl })
   } else {
     res.clearCookie('auth_token', opts)

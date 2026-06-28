@@ -147,6 +147,63 @@ async function updateKcUserRole(kcUserId, newRole) {
   }
 }
 
+async function updateKcUserProfile(kcGuid, { firstName, lastName, email }) {
+  if (!config.enabled) return
+  try {
+    const token = await getKcAdminToken()
+    const res = await fetch(
+      `${config.url}/admin/realms/${config.realm}/users/${kcGuid}`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firstName, lastName, email }),
+      }
+    )
+    if (!res.ok) { console.error('[kc] failed to update profile:', kcGuid, res.status); return }
+    console.log('[kc] updated profile for', kcGuid)
+  } catch (err) {
+    console.error('[kc] updateKcUserProfile error:', err.message)
+  }
+}
+
+async function setKcUserEnabled(kcGuid, enabled) {
+  if (!config.enabled) return
+  try {
+    const token = await getKcAdminToken()
+    const res = await fetch(
+      `${config.url}/admin/realms/${config.realm}/users/${kcGuid}`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      }
+    )
+    if (!res.ok) { console.error('[kc] failed to set enabled:', kcGuid, res.status); return }
+    console.log('[kc] set enabled =', enabled, 'for', kcGuid)
+  } catch (err) {
+    console.error('[kc] setKcUserEnabled error:', err.message)
+  }
+}
+
+async function resetKcUserPassword(kcGuid, newPassword) {
+  if (!config.enabled) return
+  try {
+    const token = await getKcAdminToken()
+    const res = await fetch(
+      `${config.url}/admin/realms/${config.realm}/users/${kcGuid}/reset-password`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'password', value: newPassword, temporary: false }),
+      }
+    )
+    if (!res.ok) { console.error('[kc] failed to reset password:', kcGuid, res.status); return }
+    console.log('[kc] reset password for', kcGuid)
+  } catch (err) {
+    console.error('[kc] resetKcUserPassword error:', err.message)
+  }
+}
+
 async function deleteKcRole(roleName) {
   if (!config.enabled) return
   try {
@@ -165,4 +222,4 @@ async function deleteKcRole(roleName) {
   }
 }
 
-export { getKcAdminToken, getKcUserId, getKcUserIdByEmail, updateKcUserRole, deleteKcRole }
+export { getKcAdminToken, getKcUserId, getKcUserIdByEmail, updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword }

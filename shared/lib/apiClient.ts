@@ -13,6 +13,42 @@ export class ApiError extends Error {
   }
 }
 
+let refreshing: Promise<boolean> | null = null
+
+async function tryRefresh(): Promise<boolean> {
+  if (refreshing) return refreshing
+  refreshing = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      return res.ok
+    } catch {
+      return false
+    } finally {
+      refreshing = null
+    }
+  })()
+  return refreshing
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit
+): Promise<Response> {
+  let response = await fetch(url, { ...options, credentials: 'include' })
+
+  if (response.status === 401) {
+    const refreshed = await tryRefresh()
+    if (refreshed) {
+      response = await fetch(url, { ...options, credentials: 'include' })
+    }
+  }
+
+  return response
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const data = await response.json().catch(() => ({ error: 'Ошибка', code: 'API_ERROR' }))
@@ -22,14 +58,14 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithRetry(`${API_BASE_URL}${path}`, {
     headers: getAuthHeaders(),
   })
   return handleResponse<T>(response)
 }
 
 export async function apiPost<T = void>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithRetry(`${API_BASE_URL}${path}`, {
     method: 'POST',
     headers: getAuthHeadersWithContentType(),
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -38,7 +74,7 @@ export async function apiPost<T = void>(path: string, body?: unknown): Promise<T
 }
 
 export async function apiPut<T = void>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithRetry(`${API_BASE_URL}${path}`, {
     method: 'PUT',
     headers: getAuthHeadersWithContentType(),
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -47,7 +83,7 @@ export async function apiPut<T = void>(path: string, body?: unknown): Promise<T>
 }
 
 export async function apiPatch<T = void>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithRetry(`${API_BASE_URL}${path}`, {
     method: 'PATCH',
     headers: getAuthHeadersWithContentType(),
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -56,7 +92,7 @@ export async function apiPatch<T = void>(path: string, body?: unknown): Promise<
 }
 
 export async function apiDelete(path: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithRetry(`${API_BASE_URL}${path}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   })

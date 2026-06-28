@@ -1,4 +1,4 @@
-import { updateKcUserRole, deleteKcRole } from '../config/keycloak.js'
+import { updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword } from '../config/keycloak.js'
 import express from 'express'
 import bcrypt from 'bcryptjs'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
@@ -392,6 +392,11 @@ router.put('/users/:id/status', asyncHandler(async (req, res) => {
   const oldStatus = userCheck.rows[0].status
   await query('UPDATE users SET status = $1 WHERE id = $2', [status, id])
 
+  const guidCheck = await query('SELECT keycloak_guid FROM users WHERE id = $1', [id])
+  if (guidCheck.rows[0]?.keycloak_guid) {
+    await setKcUserEnabled(guidCheck.rows[0].keycloak_guid, status === 'active').catch(() => {})
+  }
+
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_status_change', 'user', id,
     { oldStatus, newStatus: status, userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip)
   res.json({ success: true })
@@ -429,6 +434,11 @@ router.post('/users/:id/reset-password', asyncHandler(async (req, res) => {
 
   const hash = await bcrypt.hash(newPassword, 10)
   await query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, id])
+
+  const guidCheck = await query('SELECT keycloak_guid FROM users WHERE id = $1', [id])
+  if (guidCheck.rows[0]?.keycloak_guid) {
+    await resetKcUserPassword(guidCheck.rows[0].keycloak_guid, newPassword).catch(() => {})
+  }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_password_reset', 'user', id,
     { userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip)
@@ -491,6 +501,17 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
 
   values.push(id)
   await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values)
+
+  if (body.first_name || body.last_name || body.email) {
+    const guidCheck = await query('SELECT keycloak_guid, first_name, last_name, email FROM users WHERE id = $1', [id])
+    if (guidCheck.rows[0]?.keycloak_guid) {
+      await updateKcUserProfile(guidCheck.rows[0].keycloak_guid, {
+        firstName: guidCheck.rows[0].first_name,
+        lastName: guidCheck.rows[0].last_name,
+        email: guidCheck.rows[0].email,
+      }).catch(() => {})
+    }
+  }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_update', 'user', id, { updatedFields: updates.map(u => u.split(' = ')[0]) }, req.ip)
   res.json({ success: true })
@@ -696,6 +717,13 @@ router.put('/users/bulk-status', asyncHandler(async (req, res) => {
     `UPDATE users SET status = $1 WHERE id = ANY($2)`,
     [status, userIds]
   )
+
+  if (result.rowCount > 0) {
+    const guids = await query('SELECT keycloak_guid FROM users WHERE id = ANY($1) AND keycloak_guid IS NOT NULL', [userIds])
+    for (const row of guids.rows) {
+      await setKcUserEnabled(row.keycloak_guid, status === 'active').catch(() => {})
+    }
+  }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'bulk_status_change', 'user', null,
     { count: result.rowCount, status }, req.ip)
