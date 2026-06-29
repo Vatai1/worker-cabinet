@@ -1,107 +1,22 @@
-version: '3.8'
-
 services:
-  keycloak-db:
-    image: postgres:16-alpine
-    container_name: wc-keycloak-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
-      POSTGRES_DB: keycloak
-    volumes:
-      - keycloak_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - worker-cabinet-network
-
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.0
-    container_name: wc-keycloak
-    restart: unless-stopped
-    command: start-dev --import-realm --http-relative-path=/
-    environment:
-      - KC_DB=postgres
-      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
-      - KC_DB_USERNAME=keycloak
-      - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD:-keycloak123}
-      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN_USER:-admin}
-      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin123}
-      - KC_HEALTH_ENABLED=true
-    ports:
-      - "${KEYCLOAK_PORT:-8081}:8080"
-    volumes:
-      - ../docker/keycloak-test/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
-    depends_on:
-      keycloak-db:
-        condition: service_healthy
-    networks:
-      - worker-cabinet-network
-
-  backend:
-    image: vatai12/worker-cabinet-backend:latest
-    container_name: worker-cabinet-backend
-    restart: unless-stopped
-    ports:
-      - "5000:5000"
-    environment:
-      - PORT=5000
-      - NODE_ENV=production
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=worker_cabinet
-      - DB_USER=postgres
-      - DB_PASSWORD=***
-      - JWT_SECRET=***
-      - KEYCLOAK_URL=http://keycloak:8080
-      - KEYCLOAK_PUBLIC_URL=http://${KEYCLOAK_PUBLIC_URL:-localhost}:${KEYCLOAK_PORT:-8081}
-      - KEYCLOAK_REALM=worker-cabinet
-      - KEYCLOAK_CLIENT_ID=worker-cabinet
-      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-changeme}
-      - ADMIN_EMAIL=admin@example.com
-      - ADMIN_PASSWORD=***
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=***
-      - S3_BUCKET=worker-cabinet
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      keycloak:
-        condition: service_healthy
-    networks:
-      - worker-cabinet-network
-
   postgres:
     image: postgres:16-alpine
     container_name: worker-cabinet-db
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: changeme
-      POSTGRES_DB: worker_cabinet
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-worker_cabinet}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../docker/init-db:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    ports:
+      - "${DB_PORT:-5432}:5432"
     networks:
       - worker-cabinet-network
 
@@ -110,15 +25,14 @@ services:
     container_name: worker-cabinet-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_BROWSER: off
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin123}
     volumes:
       - minio_data:/data
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -126,43 +40,6 @@ services:
       retries: 3
     networks:
       - worker-cabinet-network
-
-  onlyoffice:
-    image: onlyoffice/documentserver:latest
-    container_name: worker-cabinet-onlyoffice
-    restart: unless-stopped
-    environment:
-      - JWT_ENABLED=true
-      - JWT_HEADER=Authorization
-      - JWT_SECRET=***
-      - JWT_BODY=false
-      - WOPI_ENABLED=true
-      - ALLOW_PRIVATE_IP_ADDRESS=true
-      - ALLOW_META_IP_ADDRESS=true
-      - USE_UNAUTHORIZED_STORAGE=***
-      - DB_TYPE=postgres
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=onlyoffice
-      - DB_USER=postgres
-      - DB_PWD=changeme
-    volumes:
-      - onlyoffice_data:/var/www/onlyoffice/Data
-      - onlyoffice_logs:/var/log/onlyoffice
-      - onlyoffice_lib:/var/lib/onlyoffice
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/healthcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
-    networks:
-      - worker-cabinet-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      onlyoffice-redis:
-        condition: service_healthy
 
   onlyoffice-redis:
     image: redis:7-alpine
@@ -176,21 +53,54 @@ services:
     networks:
       - worker-cabinet-network
 
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    container_name: worker-cabinet-onlyoffice
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${ONLYOFFICE_DB_NAME:-onlyoffice}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PWD: ${DB_PASSWORD}
+      REDIS_SERVER_HOST: onlyoffice-redis
+      REDIS_SERVER_PORT: "6379"
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+      - onlyoffice_logs:/var/log/onlyoffice
+      - onlyoffice_lib:/var/lib/onlyoffice
+    depends_on:
+      postgres:
+        condition: service_healthy
+      onlyoffice-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - worker-cabinet-network
+
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: worker-cabinet-rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: worker_cabinet
-      RABBITMQ_DEFAULT_PASS: changeme
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-worker_cabinet}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-worker_cabinet}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
-      interval: 10s
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
       timeout: 10s
       retries: 5
       start_period: 30s
@@ -198,27 +108,25 @@ services:
       - worker-cabinet-network
 
   notification-service:
-    image: vatai12/worker-cabinet-notification:latest
+    image: ${NOTIFICATION_IMAGE:-vatai12/worker-cabinet-notification:latest}
     container_name: worker-cabinet-notifications
     restart: unless-stopped
     environment:
-      PORT: 5001
+      PORT: "5001"
       NODE_ENV: production
       DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: worker_cabinet
-      DB_USER: postgres
-      DB_PASSWORD: changeme
-      RABBITMQ_URL: amqp://worker_cabinet:***@rabbitmq:5672
-      MAIL_HOST: smtp.example.com
-      MAIL_PORT: 587
-      MAIL_SECURE: false
-      MAIL_USER: ""
-      MAIL_PASSWORD: ""
-      MAIL_FROM: '"Worker Cabinet" <noreply@example.com>'
-      NOTIFICATION_SECRET: changeme
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-worker_cabinet}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-worker_cabinet}:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+      MAIL_HOST: ${MAIL_HOST:-localhost}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM:-noreply@example.com}
     ports:
-      - "5001:5001"
+      - "${NOTIFICATION_PORT:-5001}:5001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -226,30 +134,6 @@ services:
         condition: service_healthy
     networks:
       - worker-cabinet-network
-
-  hermes-agent:
-    image: nousresearch/hermes-agent:latest
-    container_name: worker-cabinet-hermes
-    restart: unless-stopped
-    volumes:
-      - hermes_data:/opt/data
-    environment:
-      - HERMES_UID=1000
-      - HERMES_GID=1000
-      - HERMES_HOME=/opt/data
-      - API_SERVER_ENABLED=true
-      - API_SERVER_KEY=changeme
-      - API_SERVER_HOST=0.0.0.0
-      - API_SERVER_PORT=8642
-      - SEARXNG_URL=http://searxng:8080
-    ports:
-      - "127.0.0.1:8642:8642"
-    command: ["gateway", "run"]
-    networks:
-      - worker-cabinet-network
-    depends_on:
-      searxng:
-        condition: service_healthy
 
   searxng:
     image: searxng/searxng:latest
@@ -260,15 +144,75 @@ services:
     ports:
       - "127.0.0.1:8888:8080"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 10s
+    networks:
+      - worker-cabinet-network
+
+  hermes-agent:
+    image: nousresearch/hermes-agent:latest
+    container_name: worker-cabinet-hermes
+    restart: unless-stopped
+    volumes:
+      - hermes_data:/opt/data
+    environment:
+      HERMES_DATA_DIR: /opt/data
+    ports:
+      - "127.0.0.1:8642:8642"
+    command: ["gateway", "run"]
+    depends_on:
+      searxng:
+        condition: service_healthy
+    networks:
+      - worker-cabinet-network
+
+  backend:
+    image: ${BACKEND_IMAGE:-vatai12/worker-cabinet-backend:latest}
+    container_name: worker-cabinet-backend
+    restart: unless-stopped
+    environment:
+      PORT: "5000"
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-worker_cabinet}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      JWT_SECRET: ${JWT_SECRET:-changeme}
+      KEYCLOAK_URL: ${KEYCLOAK_URL}
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-worker-cabinet}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-worker-cabinet}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+      FRONTEND_URL: ${FRONTEND_URL}
+      PUBLIC_URL: ${PUBLIC_URL}
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
+      S3_BUCKET: ${S3_BUCKET:-worker-cabinet}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-worker_cabinet}:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+      MAIL_HOST: ${MAIL_HOST:-smtp.example.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_SECURE: ${MAIL_SECURE:-false}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
+      NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     networks:
       - worker-cabinet-network
 
 volumes:
-  keycloak_db_data:
   postgres_data:
   minio_data:
   onlyoffice_data:

@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: worker-cabinet-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
@@ -21,7 +22,8 @@ services:
 
   keycloak-db:
     image: postgres:16-alpine
-    container_name: worker-cabinet-keycloak-db
+    container_name: wc-keycloak-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
@@ -30,32 +32,39 @@ services:
       - keycloak_db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak"]
-      interval: 10s
-      timeout: 5s
+      interval: 5s
+      timeout: 3s
       retries: 5
     networks:
       - worker-cabinet-network
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
-    container_name: worker-cabinet-keycloak
+    container_name: wc-keycloak
+    restart: unless-stopped
+    entrypoint: ["/opt/keycloak/entrypoint.sh"]
     command: start-dev --import-realm --http-relative-path=/
     environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_BUCKET: ${S3_BUCKET:-worker-cabinet}
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD:-keycloak123}
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+      - KC_HEALTH_ENABLED=true
     ports:
-      - "${KEYCLOAK_PORT:-5000}:5000"
+      - "${KEYCLOAK_PORT:-8081}:8080"
+    volumes:
+      - ../docker/keycloak-test/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ../docker/keycloak-test/entrypoint.sh:/opt/keycloak/entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
     depends_on:
       keycloak-db:
-        condition: service_healthy
-      minio:
         condition: service_healthy
     networks:
       - worker-cabinet-network
@@ -63,6 +72,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: worker-cabinet-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
@@ -83,6 +93,7 @@ services:
   onlyoffice-redis:
     image: redis:7-alpine
     container_name: worker-cabinet-onlyoffice-redis
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -94,14 +105,14 @@ services:
   onlyoffice:
     image: onlyoffice/documentserver:latest
     container_name: worker-cabinet-onlyoffice
+    restart: unless-stopped
     environment:
-      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
-      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-changeme}
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_NAME: ${ONLYOFFICE_DB_NAME:-onlyoffice}
       DB_USER: ${DB_USER:-postgres}
-      DB_PWD: ${DB_PASSWORD}
+      DB_PWD: ${DB_PASSWORD:-changeme}
       REDIS_SERVER_HOST: onlyoffice-redis
       REDIS_SERVER_PORT: "6379"
     volumes:
@@ -125,10 +136,10 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: worker-cabinet-rabbitmq
+    restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-worker_cabinet}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
-      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-worker_cabinet}
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
       - "${RABBITMQ_MGMT_PORT:-15672}:15672"
@@ -146,6 +157,7 @@ services:
   notification-service:
     image: ${NOTIFICATION_IMAGE:-vatai12/worker-cabinet-notification:latest}
     container_name: worker-cabinet-notifications
+    restart: unless-stopped
     environment:
       PORT: "5001"
       NODE_ENV: production
@@ -153,12 +165,12 @@ services:
       DB_PORT: "5432"
       DB_NAME: ${DB_NAME:-worker_cabinet}
       DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD}
-      RABBITMQ_URL: amqp://worker_cabinet:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-worker_cabinet}:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
       MAIL_HOST: ${MAIL_HOST:-localhost}
       MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_USER: ${MAIL_USER}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-noreply@example.com}
     ports:
       - "${NOTIFICATION_PORT:-5001}:5001"
@@ -173,6 +185,7 @@ services:
   searxng:
     image: searxng/searxng:latest
     container_name: worker-cabinet-searxng
+    restart: unless-stopped
     volumes:
       - ../docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
     ports:
@@ -189,6 +202,7 @@ services:
   hermes-agent:
     image: nousresearch/hermes-agent:latest
     container_name: worker-cabinet-hermes
+    restart: unless-stopped
     volumes:
       - hermes_data:/opt/data
     environment:
@@ -203,27 +217,32 @@ services:
       - worker-cabinet-network
 
   backend:
-    build:
-      context: ..
-      dockerfile: Dockerfile.backend
+    image: ${BACKEND_IMAGE:-vatai12/worker-cabinet-backend:latest}
     container_name: worker-cabinet-backend
+    restart: unless-stopped
     environment:
       PORT: "5000"
-      NODE_ENV: production
+      NODE_ENV: development
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_NAME: ${DB_NAME:-worker_cabinet}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-changeme}
       JWT_SECRET: ${JWT_SECRET:-changeme}
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_PUBLIC_URL: http://localhost:${KEYCLOAK_PORT:-8081}
+      KEYCLOAK_REALM: worker-cabinet
+      KEYCLOAK_CLIENT_ID: worker-cabinet
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-changeme}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+      FRONTEND_URL: http://localhost:${APP_PORT:-3000}
+      PUBLIC_URL: http://localhost:${APP_PORT:-3000}
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
       S3_BUCKET: ${S3_BUCKET:-worker-cabinet}
-      FRONTEND_URL: http://${FRONTEND_URL:-localhost}
-      PUBLIC_URL: http://${PUBLIC_URL:-localhost}
-      RABBITMQ_URL: amqp://worker_cabinet:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
-      MAIL_HOST: ${MAIL_HOST:-smtp.example.com}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-worker_cabinet}:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
+      MAIL_HOST: ${MAIL_HOST:-localhost}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_SECURE: ${MAIL_SECURE:-false}
       MAIL_USER: ${MAIL_USER:-}
@@ -237,23 +256,22 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
     networks:
       - worker-cabinet-network
 
   frontend:
-    build:
-      context: ..
-      dockerfile: Dockerfile.frontend
-      args:
-        VITE_API_BASE_URL: /api
+    image: ${FRONTEND_IMAGE:-vatai12/worker-cabinet-frontend:latest}
     container_name: worker-cabinet-frontend
+    restart: unless-stopped
     environment:
       BACKEND_HOST: backend
       BACKEND_PORT: "5000"
       NGINX_SERVER_NAME: ${NGINX_SERVER_NAME:-_}
       NGINX_ENVSUBST_PARAMS: $${BACKEND_HOST} $${BACKEND_PORT} $${NGINX_SERVER_NAME}
     ports:
-      - "${APP_PORT:-80}:80"
+      - "${APP_PORT:-3000}:80"
     depends_on:
       - backend
     networks:

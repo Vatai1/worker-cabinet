@@ -30,7 +30,7 @@ function runCommand(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
     const isWindows = process.platform === 'win32'
     const shell = isWindows ? true : false
-    
+
     const child = spawn(command, args, {
       stdio: 'inherit',
       shell,
@@ -56,7 +56,7 @@ function runCommandAsync(command, args = [], options = {}) {
   return new Promise((resolve, reject) => {
     const isWindows = process.platform === 'win32'
     const shell = isWindows ? true : false
-    
+
     const child = spawn(command, args, {
       stdio: 'pipe',
       shell,
@@ -116,13 +116,13 @@ function askQuestion(query) {
 
 async function killPortProcess(port) {
   const isWindows = process.platform === 'win32'
-  
+
   try {
     if (isWindows) {
       const result = await runCommandAsync('netstat', ['-ano'])
       const lines = result.stdout.split('\n')
       const portLine = lines.find(line => line.includes(`:${port}`) && line.includes('LISTENING'))
-      
+
       if (portLine) {
         const parts = portLine.trim().split(/\s+/)
         const pid = parts[parts.length - 1]
@@ -135,7 +135,7 @@ async function killPortProcess(port) {
     } else {
       const result = await runCommandAsync('lsof', ['-ti', `:${port}`])
       const pids = result.stdout.trim().split('\n').filter(p => p)
-      
+
       if (pids.length > 0) {
         log.info(`Завершение процесса на порту ${port} (PID: ${pids.join(', ')})...`)
         await runCommandAsync('kill', ['-9', ...pids])
@@ -151,6 +151,10 @@ async function killDevPorts() {
   await killPortProcess(3000)
   await killPortProcess(5000)
 }
+
+const COMPOSE_DEV = ['-f', 'docker-compose.dev.yml']
+const COMPOSE_BACKEND = ['-f', 'docker-compose.backend.yml']
+const COMPOSE_FRONTEND = ['-f', 'docker-compose.frontend.yml']
 
 // ==================== DEV COMMANDS ====================
 
@@ -185,9 +189,9 @@ async function setupEnv() {
   }
 }
 
-async function startServices() {
-  log.info('Запуск сервисов (PostgreSQL, MinIO, OnlyOffice, RabbitMQ, Hermes Agent, SearXNG, Keycloak)...')
-  await runCommand('docker-compose', ['up', '-d', 'postgres', 'minio', 'onlyoffice', 'rabbitmq', 'hermes-agent', 'searxng', 'keycloak-db', 'keycloak'])
+async function startDevServices() {
+  log.info('Запуск сервисов (PostgreSQL, MinIO, OnlyOffice, RabbitMQ, Keycloak, Hermes, SearXNG)...')
+  await runCommand('docker-compose', [...COMPOSE_DEV, 'up', '-d'], { cwd: DEPLOY_DIR })
   log.success('Сервисы запущены')
 
   log.info('Ожидание готовности PostgreSQL...')
@@ -222,16 +226,6 @@ async function startServices() {
     log.warning('Keycloak не запустился вовремя')
   } else {
     log.success('Keycloak готов')
-    log.info('Отключение SSL requirement для master realm...')
-    try {
-      await runCommand('docker', ['exec', 'wc-keycloak', 'bash', '-c',
-        '/opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password admin123 && ' +
-        '/opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=none && ' +
-        '/opt/keycloak/bin/kcadm.sh update realms/worker-cabinet -s sslRequired=none'])
-      log.success('SSL requirement отключён для всех realms')
-    } catch (err) {
-      log.warning('Не удалось отключить SSL: ' + err.message)
-    }
   }
 }
 
@@ -264,22 +258,22 @@ async function startDev() {
   await runCommand('npm', ['run', 'dev'])
 }
 
-async function stopServices() {
+async function stopDevServices() {
   log.info('Остановка сервисов...')
-  await runCommand('docker-compose', ['down'])
+  await runCommand('docker-compose', [...COMPOSE_DEV, 'down'], { cwd: DEPLOY_DIR })
   log.success('Сервисы остановлены')
 }
 
-async function showStatus() {
+async function showDevStatus() {
   log.info('Статус сервисов:')
-  await runCommand('docker-compose', ['ps'])
+  await runCommand('docker-compose', [...COMPOSE_DEV, 'ps'], { cwd: DEPLOY_DIR })
 }
 
-async function showLogs() {
-  await runCommand('docker-compose', ['logs', '-f'])
+async function showDevLogs() {
+  await runCommand('docker-compose', [...COMPOSE_DEV, 'logs', '-f'], { cwd: DEPLOY_DIR })
 }
 
-// ==================== PROD COMMANDS ====================
+// ==================== BACKEND (PROD) COMMANDS ====================
 
 async function checkEnvFile() {
   const envPath = join(DEPLOY_DIR, '.env')
@@ -290,167 +284,95 @@ async function checkEnvFile() {
   }
 }
 
-async function buildImages() {
-  log.info('Сборка Docker образов...')
-  await runCommand('docker-compose', ['-f', 'docker-compose.prod.yml', 'build'], { cwd: DEPLOY_DIR })
-  log.success('Образы собраны')
-}
-
-async function startProdServices() {
-  log.info('Запуск сервисов...')
-  await runCommand('docker-compose', ['-f', 'docker-compose.prod.yml', 'up', '-d'], { cwd: DEPLOY_DIR })
+async function startBackendServices() {
+  log.info('Запуск backend-сервисов...')
+  await runCommand('docker-compose', [...COMPOSE_BACKEND, 'up', '-d'], { cwd: DEPLOY_DIR })
   log.success('Сервисы запущены')
-  log.info('Приложение доступно на http://localhost')
 }
 
-async function stopProdServices() {
-  log.info('Остановка сервисов...')
-  await runCommand('docker-compose', ['-f', 'docker-compose.prod.yml', 'down'], { cwd: DEPLOY_DIR })
+async function stopBackendServices() {
+  log.info('Остановка backend-сервисов...')
+  await runCommand('docker-compose', [...COMPOSE_BACKEND, 'down'], { cwd: DEPLOY_DIR })
   log.success('Сервисы остановлены')
 }
 
-async function restartProdServices() {
-  await stopProdServices()
-  await startProdServices()
+async function restartBackendServices() {
+  await stopBackendServices()
+  await startBackendServices()
 }
 
-async function showProdLogs() {
-  await runCommand('docker-compose', ['-f', 'docker-compose.prod.yml', 'logs', '-f'], { cwd: DEPLOY_DIR })
+async function showBackendLogs() {
+  await runCommand('docker-compose', [...COMPOSE_BACKEND, 'logs', '-f'], { cwd: DEPLOY_DIR })
 }
 
-async function showProdStatus() {
+async function showBackendStatus() {
   log.info('Статус сервисов:')
-  await runCommand('docker-compose', ['-f', 'docker-compose.prod.yml', 'ps'], { cwd: DEPLOY_DIR })
+  await runCommand('docker-compose', [...COMPOSE_BACKEND, 'ps'], { cwd: DEPLOY_DIR })
 }
 
-async function runProdMigrations() {
+async function runBackendMigrations() {
   log.info('Запуск миграций...')
-  await runCommand('docker-compose', ['-f', 'docker-compose.prod.yml', 'exec', 'backend', 'npm', 'run', 'migrate'], { cwd: DEPLOY_DIR })
+  await runCommand('docker-compose', [...COMPOSE_BACKEND, 'exec', 'backend', 'npm', 'run', 'migrate'], { cwd: DEPLOY_DIR })
   log.success('Миграции выполнены')
 }
 
-async function cleanup() {
-  log.warning('Это удалит все данные (БД, файлы, логи)!')
-  const answer = await askQuestion('Продолжить? (yes/no): ')
-  if (answer.toLowerCase() === 'yes') {
-    log.info('Очистка...')
-    await runCommand('docker-compose', ['-f', 'docker-compose.prod.yml', 'down', '-v', '--remove-orphans'], { cwd: DEPLOY_DIR })
-    await runCommand('docker', ['system', 'prune', '-f'])
-    log.success('Очистка завершена')
-  } else {
-    log.info('Отменено')
-  }
-}
-
-async function deployFull() {
-  log.info('🚀 Полный деплой...')
+async function deployBackend() {
+  log.info('🚀 Деплой backend-сервера...')
   await checkRequirements()
   await checkEnvFile()
-  await buildImages()
-  await startProdServices()
+  await startBackendServices()
   await sleep(10000)
-  await runProdMigrations()
-  log.success('✅ Деплой завершен! Приложение доступно на http://localhost')
+  await runBackendMigrations()
+  log.success('✅ Деплой завершён!')
 }
 
+// ==================== FRONTEND (PROD) COMMANDS ====================
 
-// ==================== SINGLE SERVER COMMANDS ====================
-
-async function checkSingleEnvFile() {
-  const envPath = join(DEPLOY_DIR, '.env')
-  if (!existsSync(envPath)) {
-    log.error('deploy/.env not found. Copy deploy/.env.backend.example -> deploy/.env')
-    process.exit(1)
-  }
+async function startFrontendServices() {
+  log.info('Запуск frontend...')
+  await runCommand('docker-compose', [...COMPOSE_FRONTEND, 'up', '-d'], { cwd: DEPLOY_DIR })
+  log.success('Frontend запущен')
 }
 
-async function buildSingleImages() {
-  log.info('Building Docker images...')
-  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'build'], { cwd: DEPLOY_DIR })
-  log.success('Images built')
+async function stopFrontendServices() {
+  log.info('Остановка frontend...')
+  await runCommand('docker-compose', [...COMPOSE_FRONTEND, 'down'], { cwd: DEPLOY_DIR })
+  log.success('Frontend остановлен')
 }
 
-async function startSingleServices() {
-  log.info('Starting all services...')
-  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'up', '-d'], { cwd: DEPLOY_DIR })
-  log.success('Services started')
-  log.info('App: http://localhost')
+async function restartFrontendServices() {
+  await stopFrontendServices()
+  await startFrontendServices()
 }
 
-async function stopSingleServices() {
-  log.info('Stopping services...')
-  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'down'], { cwd: DEPLOY_DIR })
-  log.success('Services stopped')
+async function showFrontendLogs() {
+  await runCommand('docker-compose', [...COMPOSE_FRONTEND, 'logs', '-f'], { cwd: DEPLOY_DIR })
 }
 
-async function restartSingleServices() {
-  await stopSingleServices()
-  await startSingleServices()
+async function showFrontendStatus() {
+  log.info('Статус:')
+  await runCommand('docker-compose', [...COMPOSE_FRONTEND, 'ps'], { cwd: DEPLOY_DIR })
 }
 
-async function showSingleLogs() {
-  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'logs', '-f'], { cwd: DEPLOY_DIR })
-}
-
-async function showSingleStatus() {
-  log.info('Services status:')
-  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'ps'], { cwd: DEPLOY_DIR })
-}
-
-async function runSingleMigrations() {
-  log.info('Running migrations...')
-  await runCommand('docker-compose', ['-f', 'docker-compose.single.yml', 'exec', 'backend', 'npm', 'run', 'migrate'], { cwd: DEPLOY_DIR })
-  log.success('Migrations done')
-}
-
-async function deploySingleFull() {
-  log.info('Full single-server deploy...')
+async function deployFrontend() {
+  log.info('🚀 Деплой frontend-сервера...')
   await checkRequirements()
-  await checkSingleEnvFile()
-  await buildSingleImages()
-  await startSingleServices()
-  await sleep(15000)
-  await runSingleMigrations()
-  log.success('Deploy done! http://localhost')
-}
-
-function showSingleHelp() {
-  const b = COLORS.blue
-  const r = COLORS.reset
-  console.log(`
-${b}Single-server deployment (frontend + backend + all services in containers)${r}
-
-Usage: node deploy/deploy.js single [COMMAND]
-
-Commands:
-  deploy      Full deploy (check, build, start, migrate)
-  build       Build Docker images
-  start       Start all services
-  stop        Stop all services
-  restart     Restart services
-  logs        View logs
-  status      Service status
-  migrate     Run migrations
-  help        Show this help
-
-Examples:
-  node deploy/deploy.js single deploy      Full deploy on one server
-  node deploy/deploy.js single logs         View logs
-  node deploy/deploy.js single restart      Restart
-`)
+  await checkEnvFile()
+  await startFrontendServices()
+  log.success('✅ Деплой завершён!')
 }
 
 // ==================== HELP ====================
 
 function showDevHelp() {
   console.log(`
-${COLORS.blue}Скрипт запуска dev окружения${COLORS.reset}
+${COLORS.blue}Dev окружение (сервисы + Keycloak в Docker, backend/frontend локально)${COLORS.reset}
 
 Использование: node deploy/deploy.js dev [COMMAND]
 
 Команды:
-  start       Запуск полного цикла (проверка, сервисы, миграции, dev сервер)
-  services    Запуск только Docker сервисов
+  start       Запуск полного цикла (сервисы, миграции, dev сервер)
+  services    Запуск Docker сервисов (БД, MinIO, KC, OnlyOffice и т.д.)
   deps        Установка зависимостей
   migrate     Запуск миграций
   dev         Запуск dev сервера (без сервисов)
@@ -458,37 +380,41 @@ ${COLORS.blue}Скрипт запуска dev окружения${COLORS.reset}
   status      Статус сервисов
   logs        Логи сервисов
   help        Показать эту справку
-
-Примеры:
-  node deploy/deploy.js dev start           Полный запуск
-  node deploy/deploy.js dev services        Запуск БД, MinIO, OnlyOffice
-  node deploy/deploy.js dev dev             Запуск dev сервера
 `)
 }
 
-function showProdHelp() {
+function showBackendHelp() {
   console.log(`
-${COLORS.blue}Скрипт продакшн деплоя${COLORS.reset}
+${COLORS.blue}Backend-сервер (production, без Keycloak)${COLORS.reset}
 
-Использование: node deploy/deploy.js prod [COMMAND]
+Использование: node deploy/deploy.js backend [COMMAND]
 
 Команды:
-  deploy      Полный деплой (проверка, сборка, запуск, миграции)
-  build       Сборка Docker образов
+  deploy      Полный деплой (проверка, запуск, миграции)
   start       Запуск сервисов
   stop        Остановка сервисов
   restart     Перезапуск сервисов
   logs        Просмотр логов
   status      Статус сервисов
   migrate     Запуск миграций
-  cleanup     Полная очистка (удаление volumes)
   help        Показать эту справку
+`)
+}
 
-Примеры:
-  node deploy/deploy.js prod deploy          Полный деплой
-  node deploy/deploy.js prod build           Только сборка образов
-  node deploy/deploy.js prod logs            Просмотр логов
-  node deploy/deploy.js prod restart         Перезапуск
+function showFrontendHelp() {
+  console.log(`
+${COLORS.blue}Frontend-сервер (production)${COLORS.reset}
+
+Использование: node deploy/deploy.js frontend [COMMAND]
+
+Команды:
+  deploy      Полный деплой
+  start       Запуск frontend
+  stop        Остановка frontend
+  restart     Перезапуск frontend
+  logs        Просмотр логов
+  status      Статус
+  help        Показать эту справку
 `)
 }
 
@@ -499,16 +425,14 @@ ${COLORS.blue}Worker Cabinet Deployment${COLORS.reset}
 Использование: node deploy/deploy.js <env> [command]
 
 Окружения:
-  dev         Dev окружение (сервисы в Docker, backend/frontend локально)
-  single      One-server deploy (всё в контейнерах)
-  prod        Production окружение
+  dev         Dev окружение (сервисы + Keycloak в Docker, backend/frontend локально)
+  backend     Backend-сервер (production, без Keycloak — внешний KC)
+  frontend    Frontend-сервер (production)
 
 Примеры:
   node deploy/deploy.js dev start            Запуск dev окружения
-  node deploy/deploy.js single deploy        One-server деплой
-  node deploy/deploy.js prod deploy          Продакшн деплой
-  node deploy/deploy.js dev help             Справка по dev командам
-  node deploy/deploy.js prod help            Справка по prod командам
+  node deploy/deploy.js backend deploy       Деплой backend-сервера
+  node deploy/deploy.js frontend deploy      Деплой frontend-сервера
 `)
 }
 
@@ -529,7 +453,7 @@ async function main() {
       case 'start':
         await checkRequirements()
         await setupEnv()
-        await startServices()
+        await startDevServices()
         await installDependencies()
         await runMigrations()
         await seedDatabase()
@@ -537,7 +461,7 @@ async function main() {
         break
       case 'services':
         await checkRequirements()
-        await startServices()
+        await startDevServices()
         break
       case 'deps':
         await installDependencies()
@@ -552,13 +476,13 @@ async function main() {
         await startDev()
         break
       case 'stop':
-        await stopServices()
+        await stopDevServices()
         break
       case 'status':
-        await showStatus()
+        await showDevStatus()
         break
       case 'logs':
-        await showLogs()
+        await showDevLogs()
         break
       case 'help':
       case '--help':
@@ -570,84 +494,71 @@ async function main() {
         showDevHelp()
         process.exit(1)
     }
-  } else if (env === 'single') {
+  } else if (env === 'backend') {
     switch (command) {
       case 'deploy':
-        await deploySingleFull()
-        break
-      case 'build':
-        await buildSingleImages()
+        await deployBackend()
         break
       case 'start':
-        await startSingleServices()
+        await checkEnvFile()
+        await startBackendServices()
         break
       case 'stop':
-        await stopSingleServices()
+        await stopBackendServices()
         break
       case 'restart':
-        await restartSingleServices()
+        await checkEnvFile()
+        await restartBackendServices()
         break
       case 'logs':
-        await showSingleLogs()
+        await showBackendLogs()
         break
       case 'status':
-        await showSingleStatus()
+        await showBackendStatus()
         break
       case 'migrate':
-        await runSingleMigrations()
+        await runBackendMigrations()
         break
       case 'help':
       case '--help':
       case '-h':
-        showSingleHelp()
-        break
-      default:
-        log.error(`Unknown command: ${command}`)
-        showSingleHelp()
-        process.exit(1)
-    }
-  
-  } else if (env === 'prod') {
-    switch (command) {
-      case 'deploy':
-        await deployFull()
-        break
-      case 'build':
-        await checkRequirements()
-        await checkEnvFile()
-        await buildImages()
-        break
-      case 'start':
-        await checkEnvFile()
-        await startProdServices()
-        break
-      case 'stop':
-        await stopProdServices()
-        break
-      case 'restart':
-        await checkEnvFile()
-        await restartProdServices()
-        break
-      case 'logs':
-        await showProdLogs()
-        break
-      case 'status':
-        await showProdStatus()
-        break
-      case 'migrate':
-        await runProdMigrations()
-        break
-      case 'cleanup':
-        await cleanup()
-        break
-      case 'help':
-      case '--help':
-      case '-h':
-        showProdHelp()
+        showBackendHelp()
         break
       default:
         log.error(`Неизвестная команда: ${command}`)
-        showProdHelp()
+        showBackendHelp()
+        process.exit(1)
+    }
+  } else if (env === 'frontend') {
+    switch (command) {
+      case 'deploy':
+        await deployFrontend()
+        break
+      case 'start':
+        await checkEnvFile()
+        await startFrontendServices()
+        break
+      case 'stop':
+        await stopFrontendServices()
+        break
+      case 'restart':
+        await checkEnvFile()
+        await restartFrontendServices()
+        break
+      case 'logs':
+        await showFrontendLogs()
+        break
+      case 'status':
+        await showFrontendStatus()
+        break
+      case 'help':
+      case '--help':
+      case '-h':
+        showFrontendHelp()
+        break
+      default:
+        log.error(`Неизвестная команда: ${command}`)
+        showFrontendHelp()
         process.exit(1)
     }
   } else {
