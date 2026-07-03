@@ -1466,7 +1466,7 @@ async function runMigrations() {
       vacation: 'hr', surveys: 'work', projects: 'work', documents: 'docs',
       timesheet: 'work', onboarding: 'hr', hierarchy: 'hr',
       dictionaries: 'admin', skills: 'hr', calendar: 'admin',
-      analytics: 'admin', notifications: 'docs',
+      analytics: 'admin', notifications: 'docs', assistant: 'general',
     }
     for (const [code, category] of Object.entries(categoryMap)) {
       await db.query(`UPDATE modules SET category = $1 WHERE code = $2 AND (category IS NULL OR category = 'general')`, [category, code])
@@ -1486,6 +1486,7 @@ async function runMigrations() {
       { code: 'notifications', name: 'Уведомления', description: 'Email-уведомления о событиях в системе', icon: 'Bell', route: '/notifications', sort: 100, category: 'docs' },
       { code: 'analytics', name: 'Аналитика', description: 'Графики, статистика и аналитика системы', icon: 'BarChart3', route: '/admin/analytics', sort: 120, category: 'admin' },
       { code: 'auth', name: 'Авторизация', description: 'Настройки аутентификации, авторизации и безопасности', icon: 'Lock', route: null, sort: 5, category: 'core' },
+      { code: 'assistant', name: 'AI Ассистент', description: 'Кадровый AI-ассистент для ответов на вопросы сотрудников', icon: 'Bot', route: '/assistant', sort: 15, category: 'general' },
     ]
     for (const m of defaultModules) {
       await db.query(

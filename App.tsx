@@ -170,7 +170,7 @@ function App() {
               <Route path="hr/onboarding/:id" element={<ModuleGuard module="onboarding"><HRRoute><HROnboarding /></HRRoute></ModuleGuard>} />
               <Route path="leader/timesheet" element={<ModuleGuard module="timesheet"><ManagerRoute><ManagerTimesheet /></ManagerRoute></ModuleGuard>} />
               <Route path="admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
-              <Route path="assistant" element={<BlockOnboardingRoute><Assistant /></BlockOnboardingRoute>} />
+              <Route path="assistant" element={<ModuleGuard module="assistant"><BlockOnboardingRoute><Assistant /></BlockOnboardingRoute></ModuleGuard>} />
             </Route>
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>

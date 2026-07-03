@@ -25,14 +25,14 @@ interface NavItem {
 
 const getOnboardingNavigation = (): NavItem[] => [
   { name: 'Онбординг', href: '/onboarding', icon: ClipboardList, section: 'Основное' },
-  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Сотрудники', href: '/employees', icon: Users, section: 'Основное' },
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Основное' },
 ]
 
 const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
-  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Отдел', icon: Building2, section: 'Работа', children: [
     { name: 'Отпуск', href: '/vacation', module: 'vacation' },
@@ -51,7 +51,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
 
 const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/leader', icon: Users, section: 'Основное' },
-  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Отдел', icon: Building2, section: 'Управление', children: [
     { name: 'Табель', href: '/leader/timesheet', module: 'timesheet' },
@@ -71,7 +71,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
 
 const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
-  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'HR-панель', href: '/hr', icon: Users, section: 'Основное' },
   { name: 'Сотрудники', href: '/employees', icon: Users, section: 'Управление' },
@@ -88,7 +88,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
 
 const getAdminNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
-  { name: 'Ассистент', href: '/assistant', icon: Bot, section: 'Основное' },
+  { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Администрирование', href: '/admin', icon: Shield, section: 'Основное' },
   { name: 'HR-панель', href: '/hr', icon: Users, section: 'Основное' },
