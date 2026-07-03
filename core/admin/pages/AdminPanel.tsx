@@ -5,6 +5,7 @@ import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useModulesStore } from '@/shared/store/modulesStore'
+import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { AnalyticsTab } from '@/core/admin/pages/AdminAnalytics'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
@@ -342,6 +343,7 @@ function UsersTab() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filterRole, setFilterRole] = useState('')
   const [roles, setRoles] = useState<AdminRole[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -352,7 +354,12 @@ function UsersTab() {
 
   useEffect(() => { fetchRoles() }, [])
 
-  useEffect(() => { fetchUsers() }, [page, search, filterRole])
+  useEffect(() => { fetchUsers() }, [page, debouncedSearch, filterRole])
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
 
   const fetchRoles = async () => {
     try {
@@ -365,7 +372,7 @@ function UsersTab() {
     setLoading(true); setError(null)
     try {
       const params = new URLSearchParams({ page: String(page), limit: '25' })
-      if (search) params.set('search', search)
+      if (debouncedSearch) params.set('search', debouncedSearch)
       if (filterRole) params.set('role', filterRole)
       const res = await fetchWithRetry(`${API_BASE_URL}/admin/users?${params}`, { headers: getAuthHeaders() })
       if (res.ok) {
@@ -643,7 +650,8 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
   const [activeSection, setActiveSection] = useState<'info' | 'edit' | 'role' | 'password'>('info')
   const [newPassword, setNewPassword] = useState('')
   const [selectedRole, setSelectedRole] = useState(user.role)
-  const [departments, setDepartments] = useState<{ id: number; name: string }[]>([])
+  const departments = useDepartmentsStore(s => s.departments) as { id: number; name: string }[]
+  const fetchDepartments = useDepartmentsStore(s => s.fetchDepartments)
   const [editForm, setEditForm] = useState({
     position: user.position || '',
     department_id: user.department_id ?? '',
@@ -658,10 +666,7 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
   const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
 
   useEffect(() => {
-    fetchWithRetry(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
-      .then(r => r.json())
-      .then(data => setDepartments(data.departments || data))
-      .catch(() => {})
+    fetchDepartments().catch(() => {})
     fetchWithRetry(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(data => setPositions((Array.isArray(data) ? data : data.positions || []).map((p: { name: string }) => p.name)))

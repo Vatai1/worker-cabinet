@@ -1698,6 +1698,33 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
       [departmentId]
     )
 
+    const allOtherUserIds = new Set()
+    for (const restriction of restrictions.rows) {
+      const others = (restriction.employee_ids || []).filter(id => id !== parseInt(userId))
+      others.forEach(id => allOtherUserIds.add(id))
+    }
+
+    let overlapSet = new Set()
+    let nameMap = new Map()
+    if (allOtherUserIds.size > 0) {
+      const allIds = [...allOtherUserIds]
+      const [overlapResult, namesResult] = await Promise.all([
+        query(
+          `SELECT DISTINCT vr.user_id FROM vacation_requests vr
+           JOIN request_statuses rs ON vr.status_id = rs.id
+           WHERE vr.user_id = ANY($1)
+           AND rs.code IN ('on_approval', 'approved')
+           AND vr.start_date <= $3 AND vr.end_date >= $2`,
+          [allIds, startDate, endDate]
+        ),
+        query('SELECT id, first_name, last_name FROM users WHERE id = ANY($1)', [allIds])
+      ])
+      overlapSet = new Set(overlapResult.rows.map(r => r.user_id))
+      for (const row of namesResult.rows) {
+        nameMap.set(row.id, row.last_name || '')
+      }
+    }
+
     const violations = []
 
     for (const restriction of restrictions.rows) {
@@ -1705,35 +1732,17 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
         const otherUserId = restriction.employee_ids.find(id => id !== parseInt(userId))
         if (!otherUserId) continue
 
-        const overlap = await query(
-          `SELECT 1 FROM vacation_requests vr
-           JOIN request_statuses rs ON vr.status_id = rs.id
-           WHERE vr.user_id = $1
-           AND rs.code IN ('on_approval', 'approved')
-           AND vr.start_date <= $3 AND vr.end_date >= $2`,
-          [otherUserId, startDate, endDate]
-        )
-        if (overlap.rows.length > 0) {
-          const otherUser = await query('SELECT first_name, last_name FROM users WHERE id = $1', [otherUserId])
+        if (overlapSet.has(otherUserId)) {
           violations.push({
             field: 'restriction',
-            message: `Невозможно: ${(otherUser.rows[0]?.last_name || '')} уже в отпуске в эти даты (парное ограничение)`,
+            message: `Невозможно: ${nameMap.get(otherUserId) || ''} уже в отпуске в эти даты (парное ограничение)`,
           })
         }
       } else if (restriction.restriction_type === 'group') {
         const otherUsers = restriction.employee_ids.filter(id => id !== parseInt(userId))
         let concurrentCount = 0
-
         for (const otherId of otherUsers) {
-          const overlap = await query(
-            `SELECT 1 FROM vacation_requests vr
-             JOIN request_statuses rs ON vr.status_id = rs.id
-             WHERE vr.user_id = $1
-             AND rs.code IN ('on_approval', 'approved')
-             AND vr.start_date <= $3 AND vr.end_date >= $2`,
-            [otherId, startDate, endDate]
-          )
-          if (overlap.rows.length > 0) concurrentCount++
+          if (overlapSet.has(otherId)) concurrentCount++
         }
 
         if (concurrentCount >= (restriction.max_concurrent || 1)) {

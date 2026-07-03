@@ -148,7 +148,6 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>, date: Date) => {
     e.preventDefault()
     e.stopPropagation()
-    console.log('Context menu triggered', date)
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -381,7 +380,6 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                         onClick={(e) => {
                           e.stopPropagation()
                           e.preventDefault()
-                          console.log('View details button clicked', request.id)
                           handleViewDetails(request)
                         }}
                         onMouseDown={(e) => {

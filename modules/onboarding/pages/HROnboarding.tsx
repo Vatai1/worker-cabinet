@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, formatDate } from '@/shared/lib/utils'
+import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
@@ -79,7 +80,8 @@ export function HROnboarding() {
   const [editTemplate, setEditTemplate] = useState<OnboardingTemplate | null>(null)
   const [deleteTemplateTarget, setDeleteTemplateTarget] = useState<OnboardingTemplate | null>(null)
 
-  const [departments, setDepartments] = useState<Department[]>([])
+  const departments = useDepartmentsStore((s) => s.departments) as Department[]
+  const fetchDepartments = useDepartmentsStore((s) => s.fetchDepartments)
   const [positions, setPositions] = useState<string[]>([])
   const [templateFilterDept, setTemplateFilterDept] = useState('')
   const [templateFilterPos, setTemplateFilterPos] = useState('')
@@ -151,17 +153,6 @@ export function HROnboarding() {
       setTemplates([])
     } finally {
       setTemplatesLoading(false)
-    }
-  }
-
-  const fetchDepartments = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error((await res.json()).error || 'Ошибка загрузки')
-      const data = await res.json()
-      setDepartments(data)
-    } catch {
-      setDepartments([])
     }
   }
 

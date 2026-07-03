@@ -92,12 +92,11 @@ router.post('/roles', asyncHandler(async (req, res) => {
     const role = result.rows[0]
 
     if (permissionIds?.length) {
-      for (const pid of permissionIds) {
-        await client.query(
-          `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [role.id, pid]
-        )
-      }
+      const values = permissionIds.map((_, i) => `($1, $${i + 2})`).join(', ')
+      await client.query(
+        `INSERT INTO role_permissions (role_id, permission_id) VALUES ${values} ON CONFLICT DO NOTHING`,
+        [role.id, ...permissionIds]
+      )
     }
 
     await client.query('COMMIT')
@@ -170,10 +169,11 @@ router.put('/roles/:id', asyncHandler(async (req, res) => {
 
     if (permissionIds !== undefined) {
       await client.query('DELETE FROM role_permissions WHERE role_id = $1', [id])
-      for (const pid of permissionIds) {
+      if (permissionIds.length > 0) {
+        const permValues = permissionIds.map((_, i) => `($1, $${i + 2})`).join(', ')
         await client.query(
-          `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [id, pid]
+          `INSERT INTO role_permissions (role_id, permission_id) VALUES ${permValues} ON CONFLICT DO NOTHING`,
+          [id, ...permissionIds]
         )
       }
     }
@@ -564,14 +564,21 @@ router.put('/settings', asyncHandler(async (req, res) => {
   const { settings } = req.body
   if (!Array.isArray(settings)) throw new ValidationError('Ожидается массив настроек')
 
-  for (const s of settings) {
-    if (!s.key || s.value === undefined) continue
-    await query(
-      `INSERT INTO system_settings (key, value, updated_at) VALUES ($1, $2, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
-      [s.key, String(s.value)]
-    )
-  }
+    const valid = settings.filter(s => s.key && s.value !== undefined)
+    if (valid.length > 0) {
+      const values = []
+      const params = []
+      valid.forEach((s, i) => {
+        const base = i * 2
+        values.push(`($${base + 1}, $${base + 2}, NOW())`)
+        params.push(s.key, String(s.value))
+      })
+      await query(
+        `INSERT INTO system_settings (key, value, updated_at) VALUES ${values.join(', ')}
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        params
+      )
+    }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'settings_update', 'system', null, { count: settings.length }, req.ip)
   res.json({ success: true })

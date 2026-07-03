@@ -71,3 +71,5 @@ vite.config.d.ts
 yarn-debug.log*
 yarn-error.log*
 docker/llama/models/**/*.gguf
+deploy/ssl/
+backend/test_kc*.mjs

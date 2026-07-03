@@ -5,37 +5,19 @@
   VacationFormData,
   VacationValidationError,
 } from '@/shared/types'
-import { getCookie } from '@/shared/lib/cookies'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { fetchWithRetry, ApiError } from '@/shared/lib/apiClient'
+import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 
-class VacationApiError extends Error {
-  code: string
-  details?: any
-
-  constructor(code: string, message: string, details?: any) {
-    super(message)
-    this.name = 'VacationApiError'
-    this.code = code
-    this.details = details
-  }
-}
-
-const getAuthHeadersWithContentType = (): Record<string, string> => {
-  const token = getCookie('auth_token')
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  return headers
-}
+export { ApiError as VacationApiError }
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Unknown error' }))
-    throw new VacationApiError(
+    throw new ApiError(
+      response.status,
       error.code || 'API_ERROR',
-      error.message || 'An error occurred',
-      error.details
+      error.message || 'An error occurred'
     )
   }
   return response.json()
@@ -44,12 +26,10 @@ const handleResponse = async (response: Response) => {
 const formatLocalDate = (date: any): string => {
   if (!date) return ''
 
-  // Если это строка без времени
   if (typeof date === 'string' && !date.includes('T')) {
     return date
   }
 
-  // Если это строка с временем или Date объект, конвертируем в локальную дату
   const d = new Date(date)
   const year = d.getFullYear()
   const month = String(d.getMonth() + 1).padStart(2, '0')
@@ -91,7 +71,7 @@ export const vacationApi = {
     if (filters?.departmentId) params.set('departmentId', filters.departmentId)
     if (filters?.year) params.set('year', filters.year.toString())
     const query = params.toString() ? `?${params.toString()}` : ''
-    const response = await fetch(`${API_BASE_URL}/vacation/requests${query}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests${query}`, {
       headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
@@ -99,7 +79,7 @@ export const vacationApi = {
   },
 
   async getUserRequests(userId: string): Promise<VacationRequest[]> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests?userId=${userId}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests?userId=${userId}`, {
       headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
@@ -107,7 +87,7 @@ export const vacationApi = {
   },
 
   async getDepartmentRequests(departmentId: string): Promise<VacationRequest[]> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests?departmentId=${departmentId}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests?departmentId=${departmentId}`, {
       headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
@@ -115,7 +95,7 @@ export const vacationApi = {
   },
 
   async getBalance(userId: string, year: number): Promise<VacationBalance> {
-    const response = await fetch(`${API_BASE_URL}/vacation/balance/${userId}?year=${year}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/balance/${userId}?year=${year}`, {
       headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
@@ -134,7 +114,7 @@ export const vacationApi = {
   },
 
   async getRestrictions(departmentId: string): Promise<VacationRestriction[]> {
-    const response = await fetch(`${API_BASE_URL}/vacation/restrictions?departmentId=${departmentId}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions?departmentId=${departmentId}`, {
       headers: getAuthHeadersWithContentType(),
     })
     return handleResponse(response)
@@ -144,19 +124,17 @@ export const vacationApi = {
     userId: string,
     data: { startDate: string; endDate: string }
   ): Promise<VacationValidationError[]> {
-    console.log('[vacationApi] checkRestrictions called', { userId, startDate: data.startDate, endDate: data.endDate })
-    const response = await fetch(`${API_BASE_URL}/vacation/check-restrictions`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/check-restrictions`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ userId, startDate: data.startDate, endDate: data.endDate }),
     })
     const result = await handleResponse(response)
-    console.log('[vacationApi] checkRestrictions result:', result)
     return result
   },
 
   async createRequest(_userId: string, data: VacationFormData): Promise<VacationRequest> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({
@@ -173,7 +151,7 @@ export const vacationApi = {
   },
 
   async updateRequest(requestId: string, data: Partial<VacationFormData>): Promise<VacationRequest> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}`, {
       method: 'PUT',
       headers: getAuthHeadersWithContentType(),
       body: JSON.stringify(data),
@@ -183,7 +161,7 @@ export const vacationApi = {
   },
 
   async cancelRequest(requestId: string): Promise<VacationRequest> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/cancel`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/cancel`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
     })
@@ -192,7 +170,7 @@ export const vacationApi = {
   },
 
   async approveRequest(requestId: string, _managerId: string): Promise<VacationRequest> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/approve`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/approve`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
     })
@@ -205,7 +183,7 @@ export const vacationApi = {
     _managerId: string,
     reason: string
   ): Promise<VacationRequest> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/reject`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/reject`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ reason }),
@@ -218,7 +196,7 @@ export const vacationApi = {
     departmentId: string,
     data: Omit<VacationRestriction, 'id' | 'departmentId' | 'createdAt' | 'createdBy' | 'createdByName'>
   ): Promise<VacationRestriction> {
-    const response = await fetch(`${API_BASE_URL}/vacation/restrictions`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ departmentId, ...data }),
@@ -227,7 +205,7 @@ export const vacationApi = {
   },
 
   async deleteRestriction(restrictionId: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/vacation/restrictions/${restrictionId}`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions/${restrictionId}`, {
       method: 'DELETE',
       headers: getAuthHeadersWithContentType(),
     })
@@ -235,7 +213,7 @@ export const vacationApi = {
   },
 
   async addComment(requestId: string, comment: string): Promise<VacationRequest> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/comment`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/comment`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ comment }),
@@ -247,7 +225,7 @@ export const vacationApi = {
     requestId: string,
     data: { newStartDate: string; newEndDate: string; reason: string }
   ): Promise<VacationRequest> {
-    const response = await fetch(`${API_BASE_URL}/vacation/requests/${requestId}/transfer`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/transfer`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
       body: JSON.stringify(data),

@@ -35,6 +35,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { DepartmentHierarchyOverlay } from '@/modules/hierarchy/components/DepartmentHierarchyOverlay'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { useUIStore } from '@/shared/store/uiStore'
 
@@ -631,9 +632,8 @@ export function HRHierarchy() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
-        if (!res.ok) throw new Error('Не удалось загрузить отделы')
-        const data: Department[] = await res.json()
+        await useDepartmentsStore.getState().fetchDepartments()
+        const data = useDepartmentsStore.getState().departments as Department[]
         setDepartments(data)
       } catch (err) {
         setError(getErrorMessage(err))

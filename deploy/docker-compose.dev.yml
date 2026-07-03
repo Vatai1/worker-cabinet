@@ -43,7 +43,6 @@ services:
     container_name: wc-keycloak
     restart: unless-stopped
     entrypoint: ["/opt/keycloak/entrypoint.sh"]
-    command: start-dev --import-realm --http-relative-path=/
     environment:
       - KC_DB=postgres
       - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
@@ -61,8 +60,8 @@ services:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8080'"]
       interval: 10s
       timeout: 5s
-      retries: 15
-      start_period: 30s
+      retries: 60
+      start_period: 60s
     depends_on:
       keycloak-db:
         condition: service_healthy

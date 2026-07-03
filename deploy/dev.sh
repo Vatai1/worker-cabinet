@@ -4,6 +4,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+COMPOSE_FILE="$SCRIPT_DIR/docker-compose.dev.yml"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -56,17 +57,22 @@ setup_env() {
 }
 
 start_services() {
-    log_info "Запуск сервисов (PostgreSQL, MinIO, OnlyOffice)..."
+    log_info "Запуск сервисов (PostgreSQL, MinIO, OnlyOffice, RabbitMQ, Keycloak)..."
     cd "$PROJECT_DIR"
-    docker-compose up -d postgres minio onlyoffice
+    docker compose -f "$COMPOSE_FILE" up -d postgres minio onlyoffice rabbitmq keycloak-db keycloak
     log_success "Сервисы запущены"
     
     log_info "Ожидание готовности PostgreSQL..."
-    sleep 5
-    until docker exec worker-cabinet-db pg_isready -U postgres; do
+    until docker exec worker-cabinet-db pg_isready -U ${DB_USER:-postgres}; do
         sleep 1
     done
     log_success "PostgreSQL готов к работе"
+
+    log_info "Ожидание готовности Keycloak..."
+    until docker inspect --format='{{.State.Health.Status}}' wc-keycloak 2>/dev/null | grep -q healthy; do
+        sleep 2
+    done
+    log_success "Keycloak готов к работе"
 }
 
 install_dependencies() {
@@ -128,19 +134,19 @@ EOF
 stop_services() {
     log_info "Остановка сервисов..."
     cd "$PROJECT_DIR"
-    docker-compose down
+    docker compose -f "$COMPOSE_FILE" down
     log_success "Сервисы остановлены"
 }
 
 status_services() {
     log_info "Статус сервисов:"
     cd "$PROJECT_DIR"
-    docker-compose ps
+    docker compose -f "$COMPOSE_FILE" ps
 }
 
 logs_services() {
     cd "$PROJECT_DIR"
-    docker-compose logs -f
+    docker compose -f "$COMPOSE_FILE" logs -f "$@"
 }
 
 main() {

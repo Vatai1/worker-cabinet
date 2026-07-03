@@ -1,6 +1,6 @@
 const config = {
-  url: process.env.KEYCLOAK_URL || 'http://localhost:8081',
-  publicUrl: process.env.KEYCLOAK_PUBLIC_URL || process.env.KEYCLOAK_URL || 'http://localhost:8081',
+  url: (process.env.KEYCLOAK_URL || 'http://localhost:8081').replace(/\/+$/, ''),
+  publicUrl: (process.env.KEYCLOAK_PUBLIC_URL || process.env.KEYCLOAK_URL || 'http://localhost:8081').replace(/\/+$/, ''),
   realm: process.env.KEYCLOAK_REALM || 'worker-cabinet',
   clientId: process.env.KEYCLOAK_CLIENT_ID || 'worker-cabinet',
   clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || '',
@@ -141,7 +141,6 @@ async function updateKcUserRole(kcUserId, newRole) {
       body: JSON.stringify([{ id: roleDef.id, name: roleDef.name }]),
     })
     if (!assignRes.ok) console.error('[kc] failed to assign role:', assignRes.status)
-    console.log('[kc] updated role to', newRole, 'for user', kcUserId)
   } catch (err) {
     console.error('[kc] updateKcUserRole error:', err.message)
   }
@@ -160,7 +159,6 @@ async function updateKcUserProfile(kcGuid, { firstName, lastName, email }) {
       }
     )
     if (!res.ok) { console.error('[kc] failed to update profile:', kcGuid, res.status); return }
-    console.log('[kc] updated profile for', kcGuid)
   } catch (err) {
     console.error('[kc] updateKcUserProfile error:', err.message)
   }
@@ -179,7 +177,6 @@ async function setKcUserEnabled(kcGuid, enabled) {
       }
     )
     if (!res.ok) { console.error('[kc] failed to set enabled:', kcGuid, res.status); return }
-    console.log('[kc] set enabled =', enabled, 'for', kcGuid)
   } catch (err) {
     console.error('[kc] setKcUserEnabled error:', err.message)
   }
@@ -198,7 +195,6 @@ async function resetKcUserPassword(kcGuid, newPassword) {
       }
     )
     if (!res.ok) { console.error('[kc] failed to reset password:', kcGuid, res.status); return }
-    console.log('[kc] reset password for', kcGuid)
   } catch (err) {
     console.error('[kc] resetKcUserPassword error:', err.message)
   }
@@ -220,7 +216,6 @@ async function unlockKcUser(kcGuid) {
         body: JSON.stringify({ enabled: true }),
       }
     )
-    console.log('[kc] unlocked user', kcGuid)
   } catch (err) {
     console.error('[kc] unlockKcUser error:', err.message)
   }
@@ -238,7 +233,6 @@ async function deleteKcRole(roleName) {
       console.error('[kc] failed to delete role:', roleName, res.status)
       return
     }
-    console.log('[kc] deleted role', roleName)
   } catch (err) {
     console.error('[kc] deleteKcRole error:', err.message)
   }

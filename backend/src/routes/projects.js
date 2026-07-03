@@ -238,13 +238,13 @@ router.post('/', authenticateToken, async (req, res) => {
       [project.id, userId, 'lead']
     )
 
-    for (const memberId of membersSet) {
-      if (!leadsSet.has(memberId)) {
-        await client.query(
-          'INSERT INTO company_project_members (project_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-          [project.id, memberId, 'member']
-        )
-      }
+    const regularMembers = [...membersSet].filter(m => !leadsSet.has(m))
+    if (regularMembers.length > 0) {
+      const values = regularMembers.map((_, i) => `($1, $${i + 2}, 'member')`).join(', ')
+      await client.query(
+        `INSERT INTO company_project_members (project_id, user_id, role) VALUES ${values} ON CONFLICT DO NOTHING`,
+        [project.id, ...regularMembers]
+      )
     }
 
     await client.query('COMMIT')
@@ -560,7 +560,10 @@ router.get('/:id/documents', authenticateToken, async (req, res) => {
       sql += ` AND d.folder_path = $${params.length}`
     }
 
-    sql += ' ORDER BY d.created_at DESC'
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 200))
+    sql += ` ORDER BY d.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
+    params.push(limit, (page - 1) * limit)
 
     const result = await query(sql, params)
     const documents = await Promise.all(
@@ -790,16 +793,24 @@ router.delete('/:id/folders', authenticateToken, async (req, res) => {
     )
     if (accessCheck.rows.length === 0) return res.status(403).json({ error: 'Forbidden' })
 
-    // Delete all documents inside (and nested)
-    await query(
-      `DELETE FROM project_documents WHERE project_id = $1 AND folder_path LIKE $2`,
-      [id, `${path}%`]
-    )
-    // Delete all subfolders
-    await query(
-      `DELETE FROM project_folders WHERE project_id = $1 AND path LIKE $2`,
-      [id, `${path}%`]
-    )
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        `DELETE FROM project_documents WHERE project_id = $1 AND folder_path LIKE $2`,
+        [id, `${path}%`]
+      )
+      await client.query(
+        `DELETE FROM project_folders WHERE project_id = $1 AND path LIKE $2`,
+        [id, `${path}%`]
+      )
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
     res.json({ success: true })
   } catch (error) {
     console.error('Error deleting folder:', error)

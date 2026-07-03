@@ -115,15 +115,6 @@
   .gradient-primary {
     background: linear-gradient(135deg, hsl(var(--primary-dark)) 0%, hsl(var(--primary)) 50%, hsl(var(--primary-light)) 100%);
   }
-  .gradient-primary-subtle {
-    background: linear-gradient(135deg, hsl(var(--primary) / 0.08) 0%, hsl(var(--primary-light) / 0.04) 100%);
-  }
-  .gradient-success {
-    background: linear-gradient(135deg, hsl(var(--success)) 0%, hsl(152 69% 42%) 100%);
-  }
-  .gradient-card {
-    background: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--background)) 100%);
-  }
   .gradient-bg {
     background:
       radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--primary) / 0.04), transparent),
@@ -131,19 +122,11 @@
       hsl(var(--background));
   }
 
-  .glow { box-shadow: 0 0 20px hsl(var(--glow-color) / 0.15); }
-  .glow-lg { box-shadow: 0 0 40px hsl(var(--glow-color) / 0.2); }
-  .glow-sm { box-shadow: 0 0 10px hsl(var(--glow-color) / 0.1); }
-
   .animate-in { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
   .animate-fade-in { animation: fadeIn 0.5s ease-out both; }
   .animate-scale-in { animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
   .animate-slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
-  .animate-slide-right { animation: slideRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
   .animate-float { animation: float 6s ease-in-out infinite; }
-  .animate-shimmer { animation: shimmer 2s linear infinite; }
-  .animate-pulse-soft { animation: pulseSoft 3s ease-in-out infinite; }
-  .animate-glow-pulse { animation: glowPulse 3s ease-in-out infinite; }
 
   .stagger-1 { animation-delay: 0.05s; }
   .stagger-2 { animation-delay: 0.1s; }
@@ -151,7 +134,6 @@
   .stagger-4 { animation-delay: 0.2s; }
   .stagger-5 { animation-delay: 0.25s; }
   .stagger-6 { animation-delay: 0.3s; }
-  .stagger-7 { animation-delay: 0.35s; }
   .stagger-8 { animation-delay: 0.4s; }
 
   @keyframes slideUp {
@@ -166,25 +148,9 @@
     from { opacity: 0; transform: scale(0.95); }
     to { opacity: 1; transform: scale(1); }
   }
-  @keyframes slideRight {
-    from { opacity: 0; transform: translateX(-12px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
   @keyframes float {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-8px); }
-  }
-  @keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
-  }
-  @keyframes pulseSoft {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-  }
-  @keyframes glowPulse {
-    0%, 100% { box-shadow: 0 0 15px hsl(var(--glow-color) / 0.1); }
-    50% { box-shadow: 0 0 30px hsl(var(--glow-color) / 0.25); }
   }
   @keyframes spin {
     from { transform: rotate(0deg); }
@@ -208,13 +174,6 @@
   .hover-lift:active {
     transform: translateY(-1px);
     transition-duration: 0.1s;
-  }
-
-  .hover-glow {
-    transition: box-shadow 0.3s ease;
-  }
-  .hover-glow:hover {
-    box-shadow: 0 0 20px hsl(var(--glow-color) / 0.15);
   }
 
   .interactive {
@@ -277,70 +236,4 @@
   .pdf-document { display: flex; justify-content: center; align-items: flex-start; width: 100%; }
   .pdf-document canvas { max-width: 100%; height: auto !important; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); }
   .dark .pdf-document canvas { filter: invert(1) hue-rotate(180deg); }
-
-  .docx-content { width: 100%; height: 100%; }
-  .docx-preview-wrapper { width: 100%; height: 100%; }
-  .docx-preview { width: 100%; height: 100%; font-family: 'Times New Roman', Times, 'Calibri', 'Arial', sans-serif !important; }
-
-  .docx-content del {
-    color: hsl(var(--destructive)); text-decoration: line-through;
-    text-decoration-color: hsl(var(--destructive)); text-decoration-thickness: 2px;
-    background-color: hsl(0 100% 50% / 0.25); padding: 0.1em 0.2em; border-radius: 2px;
-    transition: all 0.2s ease;
-  }
-  .docx-content del:hover { background-color: hsl(0 100% 50% / 0.35); cursor: pointer; }
-  .docx-content ins {
-    color: hsl(var(--success)); text-decoration: underline;
-    text-decoration-color: hsl(var(--success)); text-decoration-thickness: 2px;
-    background-color: hsl(142 76% 36% / 0.25); padding: 0.1em 0.2em; border-radius: 2px;
-    text-underline-offset: 2px; transition: all 0.2s ease;
-  }
-  .docx-content ins:hover { background-color: hsl(142 76% 36% / 0.35); cursor: pointer; }
-  .docx-content .docx-comment { position: relative; margin: 0.5em 0; padding-left: 0; border-left: none; box-shadow: none; }
-  .docx-content .docx-comment::before {
-    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
-    width: 4px; background: hsl(38 92% 50%); border-radius: 2px 0 0 2px;
-  }
-  .docx-content .docx-comment-marker {
-    position: absolute; left: -24px; top: 0; background: hsl(38 92% 50%);
-    color: white; font-weight: bold; cursor: help; padding: 0.15em 0.4em;
-    border-radius: 4px 2px 2px 4px; font-size: 0.75em; vertical-align: top;
-    line-height: 1; min-width: 16px; text-align: center;
-  }
-  .docx-content .docx-comment-text {
-    background-color: hsl(38 92% 50% / 0.1); border: 1px solid hsl(38 92% 50% / 0.3);
-    border-radius: 4px; padding: 0.75em 1em; margin-left: 0; display: block; margin-top: 0.25em;
-  }
-  .docx-content .docx-comment-text strong { display: block; font-size: 0.85em; color: hsl(38 92% 50%); margin-bottom: 0.25em; }
-  .docx-content .docx-comment-text p { margin: 0; font-size: 0.9em; line-height: 1.4; }
-  .docx-content .docx-comment-meta {
-    font-size: 0.75em; color: hsl(var(--muted-foreground)); margin-top: 0.5em;
-    padding-top: 0.5em; border-top: 1px solid hsl(38 92% 50% / 0.2);
-  }
-  .docx-content .docx-comment:hover .docx-comment-text {
-    background-color: hsl(38 92% 50% / 0.2); border-color: hsl(38 92% 50% / 0.4);
-  }
-  .dark .docx-content .docx-comment-text { background-color: hsl(38 92% 50% / 0.15); border-color: hsl(38 92% 50% / 0.3); }
-  .dark .docx-content .docx-comment:hover .docx-comment-text { background-color: hsl(38 92% 50% / 0.25); border-color: hsl(38 92% 50% / 0.4); }
-  .docx-content .docx-comment:hover { background-color: hsl(38 92% 50% / 0.4); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); transform: translateY(-1px); }
-  .docx-content .docx-comment-marker {
-    background-color: hsl(38 92% 50%); color: white; font-weight: bold; cursor: help;
-    padding: 0.1em 0.4em; border-radius: 50%; font-size: 0.8em; margin-left: 0.25em;
-    vertical-align: super; display: inline-block;
-  }
-  .dark .docx-content del { background-color: hsl(0 100% 50% / 0.35); }
-  .dark .docx-content ins { background-color: hsl(142 76% 36% / 0.35); }
-  .dark .docx-content .docx-comment { background-color: hsl(38 92% 50% / 0.35); }
-  .dark .docx-content .docx-comment:hover { background-color: hsl(38 92% 50% / 0.45); }
-  .docx-content del[data-author="1"] { background-color: hsl(0 100% 50% / 0.25); }
-  .docx-content del[data-author="2"] { background-color: hsl(210 100% 50% / 0.25); }
-  .docx-content del[data-author="3"] { background-color: hsl(30 100% 50% / 0.25); }
-  .docx-content del[data-author="4"] { background-color: hsl(280 100% 50% / 0.25); }
-  .docx-content ins[data-author="1"] { background-color: hsl(142 76% 36% / 0.25); }
-  .docx-content ins[data-author="2"] { background-color: hsl(200 100% 50% / 0.25); }
-  .docx-content ins[data-author="3"] { background-color: hsl(45 100% 50% / 0.25); }
-  .docx-content ins[data-author="4"] { background-color: hsl(270 100% 50% / 0.25); }
-  .docx-content del.hidden-change, .docx-content ins.hidden-change { opacity: 0.1; text-decoration: none; background-color: transparent; }
-  .docx-content .docx-comment.hidden-comment { opacity: 0.1; border-left-color: transparent; }
-  .dark .docx-content .docx-comment { background-color: hsl(var(--primary) / 0.15); }
 }

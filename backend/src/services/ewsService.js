@@ -264,10 +264,8 @@ async function ntlmRequest(ewsUrl, username, password, domain, envelope, retries
           agent.destroy()
           const elapsed = Date.now() - ts
           if (err) {
-            console.log(`[EWS] attempt ${attempt}/${retries} FAIL ${elapsed}ms`)
             return reject(err)
           }
-          console.log(`[EWS] attempt ${attempt}/${retries} OK ${elapsed}ms status=${res.statusCode}`)
           if (res.statusCode === 401) return reject(new Error('Неверный логин или пароль. Проверьте домен, логин и пароль.'))
           if (res.statusCode >= 400) return reject(new Error('EWS HTTP ' + res.statusCode + ': ' + (res.body || '').substring(0, 200)))
           resolve(res.body)
@@ -278,7 +276,6 @@ async function ntlmRequest(ewsUrl, username, password, domain, envelope, retries
     } catch (err) {
       agent.destroy()
       if (attempt === retries) {
-        console.log(`[EWS] all ${retries} attempts failed`)
         throw err
       }
     }
@@ -320,7 +317,6 @@ export async function fetchEwsEvents(ewsUrl, username, password, domain, startIs
 
   const envelope = buildSoapEnvelope(soapBody)
 
-  console.log('[EWS] NTLM auth to:', ewsUrl, 'user:', username, 'domain:', domain || '(none)')
 
   const responseXml = await ntlmRequest(ewsUrl, username, password, domain, envelope)
 

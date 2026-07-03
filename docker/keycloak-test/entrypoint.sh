@@ -10,8 +10,8 @@ RETRIES=0
 until timeout 2 bash -c "</dev/tcp/localhost/8080" 2>/dev/null; do
   sleep 2
   RETRIES=$((RETRIES + 1))
-  if [ $RETRIES -ge 60 ]; then
-    echo "[entrypoint] Keycloak failed to start after 120s"
+  if [ $RETRIES -ge 180 ]; then
+    echo "[entrypoint] Keycloak failed to start after 360s"
     exit 1
   fi
 done

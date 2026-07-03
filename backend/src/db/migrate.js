@@ -1535,6 +1535,22 @@ async function runMigrations() {
       .catch(e => console.log('  - idx_users_keycloak_guid:', e.message))
     console.log('  ✓ idx_users_keycloak_guid')
 
+    const extraIndexes = [
+      'CREATE INDEX IF NOT EXISTS idx_surveys_status_created ON surveys(status, created_at DESC)',
+      'CREATE INDEX IF NOT EXISTS idx_survey_questions_survey_order ON survey_questions(survey_id, order_index)',
+      'CREATE INDEX IF NOT EXISTS idx_survey_responses_survey_user ON survey_responses(survey_id, user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_survey_answers_response ON survey_answers(response_id)',
+      'CREATE INDEX IF NOT EXISTS idx_onboarding_templates_dept_pos ON onboarding_templates(department_id, position)',
+      'CREATE INDEX IF NOT EXISTS idx_eod_onboarding ON employee_onboarding_documents(onboarding_id)',
+      'CREATE INDEX IF NOT EXISTS idx_eo_user_active ON employee_onboarding(user_id) WHERE completed_at IS NULL',
+      'CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)',
+      'CREATE INDEX IF NOT EXISTS idx_timesheet_entries_timesheet ON timesheet_entries(timesheet_id)',
+    ]
+    for (const sql of extraIndexes) {
+      await db.query(sql).catch(e => console.log('  - extra index skipped:', e.message))
+    }
+    console.log('  ✓ extra performance indexes')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
     

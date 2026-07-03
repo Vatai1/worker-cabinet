@@ -47,7 +47,10 @@ router.get('/templates', authenticateToken, authorizeRoles('hr', 'admin'), async
       sql += ` AND t.position ILIKE $${params.length + 1}`
       params.push(`%${position}%`)
     }
-    sql += ' ORDER BY t.created_at DESC'
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 200))
+    sql += ` ORDER BY t.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
+    params.push(limit, (page - 1) * limit)
     const result = await query(sql, params)
     res.json(result.rows)
   } catch (error) {
@@ -654,10 +657,11 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
       )
       const onboardingId = onboardingResult.rows[0].id
 
-      for (const templateId of template_ids) {
+      if (template_ids?.length) {
+        const values = template_ids.map((_, i) => `($1, $${i + 2})`).join(', ')
         await client.query(
-          `INSERT INTO employee_onboarding_documents (onboarding_id, template_id) VALUES ($1, $2)`,
-          [onboardingId, templateId]
+          `INSERT INTO employee_onboarding_documents (onboarding_id, template_id) VALUES ${values}`,
+          [onboardingId, ...template_ids]
         )
       }
 

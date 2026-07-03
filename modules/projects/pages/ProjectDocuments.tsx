@@ -1539,24 +1539,14 @@ export function ProjectDocuments() {
             name: previewDoc.name,
             mimeType: previewDoc.mime_type,
             url: async () => {
-              console.log('🔍 Loading document preview:', {
-                id: previewDoc.id,
-                name: previewDoc.name,
-                mimeType: previewDoc.mime_type,
-              })
-
               // For DOCX files, get preview token and use public URL for OnlyOffice
               if (previewDoc.mime_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
                   previewDoc.mime_type === 'application/msword' ||
                   previewDoc.name.toLowerCase().endsWith('.docx')) {
-                console.log('📄 Detected DOCX file, getting preview token...')
                 const tokenRes = await fetch(
                   `${API_BASE_URL}/projects/${id}/documents/${previewDoc.id}/preview-token`,
                   { headers: getAuthHeaders() }
                 )
-
-                console.log('Token response status:', tokenRes.status)
-
                 if (!tokenRes.ok) {
                   const errorData = await tokenRes.text()
                   console.error('❌ Failed to get token:', errorData)
@@ -1565,8 +1555,6 @@ export function ProjectDocuments() {
 
                 const data = await tokenRes.json()
                 const publicUrl = data.publicUrl || `${API_BASE_URL}/projects/${id}/documents/${previewDoc.id}/public/${data.token}`
-                console.log('✅ Got public URL:', publicUrl.substring(0, 80) + '...')
-
                 return publicUrl
               }
 

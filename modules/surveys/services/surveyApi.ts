@@ -17,9 +17,10 @@ interface SurveyFormPayload {
 
 export const surveyApi = {
   async list(): Promise<Survey[]> {
-    const res = await fetch(`${API_BASE_URL}/surveys`, { headers: getAuthHeaders() })
+    const res = await fetch(`${API_BASE_URL}/surveys?limit=200`, { headers: getAuthHeaders() })
     if (!res.ok) throw new Error('Ошибка загрузки опросов')
-    return res.json()
+    const body = await res.json()
+    return Array.isArray(body) ? body : (body.data ?? [])
   },
 
   async listMy(): Promise<(Survey & { responded: boolean })[]> {

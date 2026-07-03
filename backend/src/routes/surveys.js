@@ -29,6 +29,13 @@ const router = express.Router()
 // GET /api/surveys — list all (HR/admin)
 router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 100))
+    const offset = (page - 1) * limit
+
+    const countRes = await query('SELECT COUNT(*) FROM surveys')
+    const total = parseInt(countRes.rows[0].count)
+
     const result = await query(
       `SELECT s.*,
         (SELECT COUNT(*) FROM survey_questions WHERE survey_id = s.id) as question_count,
@@ -43,9 +50,10 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
           )
           ELSE 0
         END as total_targeted
-       FROM surveys s ORDER BY s.created_at DESC`
+       FROM surveys s ORDER BY s.created_at DESC LIMIT $1 OFFSET $2`,
+      [limit, offset]
     )
-    res.json(result.rows)
+    res.json({ data: result.rows, total, page, limit })
   } catch (error) {
     console.error('GET /surveys error:', error)
     res.status(500).json({ error: 'Ошибка загрузки опросов' })
@@ -75,14 +83,20 @@ router.get('/my', authenticateToken, async (req, res) => {
       "SELECT * FROM surveys WHERE status = 'active' ORDER BY created_at DESC"
     )
 
+    const surveyIds = surveysRes.rows.map(s => s.id)
+    let respondedSet = new Set()
+    if (surveyIds.length > 0) {
+      const respondedRes = await query(
+        'SELECT survey_id FROM survey_responses WHERE survey_id = ANY($1) AND user_id = $2',
+        [surveyIds, userId]
+      )
+      respondedSet = new Set(respondedRes.rows.map(r => r.survey_id))
+    }
+
     const accessible = []
     for (const s of surveysRes.rows) {
       if (await isUserInTarget(s, userId, departmentId)) {
-        const responded = await query(
-          'SELECT 1 FROM survey_responses WHERE survey_id = $1 AND user_id = $2',
-          [s.id, userId]
-        )
-        accessible.push({ ...s, responded: responded.rows.length > 0 })
+        accessible.push({ ...s, responded: respondedSet.has(s.id) })
       }
     }
     res.json(accessible)
@@ -180,15 +194,19 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
     const survey = surveyRes.rows[0]
 
     if (questions?.length) {
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i]
-        await client.query(
-          `INSERT INTO survey_questions (survey_id, order_index, type, text, options, scale_min, scale_max, required)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [survey.id, i, q.type, q.text, JSON.stringify(q.options || []),
-           q.scaleMin || 1, q.scaleMax || 5, q.required || false]
-        )
-      }
+      const values = []
+      const params = []
+      questions.forEach((q, i) => {
+        const base = i * 8
+        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`)
+        params.push(survey.id, i, q.type, q.text, JSON.stringify(q.options || []),
+                    q.scaleMin || 1, q.scaleMax || 5, q.required || false)
+      })
+      await client.query(
+        `INSERT INTO survey_questions (survey_id, order_index, type, text, options, scale_min, scale_max, required)
+         VALUES ${values.join(', ')}`,
+        params
+      )
     }
 
     await client.query('COMMIT')
@@ -256,15 +274,19 @@ router.put('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
 
     await client.query('DELETE FROM survey_questions WHERE survey_id = $1', [req.params.id])
     if (questions?.length) {
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i]
-        await client.query(
-          `INSERT INTO survey_questions (survey_id, order_index, type, text, options, scale_min, scale_max, required)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [req.params.id, i, q.type, q.text, JSON.stringify(q.options || []),
-           q.scaleMin || 1, q.scaleMax || 5, q.required || false]
-        )
-      }
+      const values = []
+      const params = []
+      questions.forEach((q, i) => {
+        const base = i * 8
+        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`)
+        params.push(req.params.id, i, q.type, q.text, JSON.stringify(q.options || []),
+                    q.scaleMin || 1, q.scaleMax || 5, q.required || false)
+      })
+      await client.query(
+        `INSERT INTO survey_questions (survey_id, order_index, type, text, options, scale_min, scale_max, required)
+         VALUES ${values.join(', ')}`,
+        params
+      )
     }
 
     await client.query('COMMIT')
@@ -487,11 +509,17 @@ router.post('/:id/respond', authenticateToken, async (req, res) => {
     )
     const responseId = responseRes.rows[0].id
 
-    for (const answer of (answers || [])) {
-      const { questionId, value, values } = answer
+    if (answers?.length) {
+      const values = []
+      const params = []
+      answers.forEach((a, i) => {
+        const base = i * 4
+        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`)
+        params.push(responseId, a.questionId, a.value ?? null, a.values ? JSON.stringify(a.values) : null)
+      })
       await client.query(
-        'INSERT INTO survey_answers (response_id, question_id, value, values) VALUES ($1, $2, $3, $4)',
-        [responseId, questionId, value ?? null, values ? JSON.stringify(values) : null]
+        `INSERT INTO survey_answers (response_id, question_id, value, values) VALUES ${values.join(', ')}`,
+        params
       )
     }
     await client.query('COMMIT')

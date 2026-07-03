@@ -9,7 +9,6 @@ const EXCHANGE_TYPE = 'topic'
 export async function connect() {
   const url = process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672'
 
-  console.log(`[RABBITMQ] Publisher connecting to ${url.replace(/\/\/.*@/, '//***@')}...`)
 
   connection = await amqp.connect(url)
 
@@ -26,7 +25,6 @@ export async function connect() {
   channel = await connection.createChannel()
   await channel.assertExchange(EXCHANGE, EXCHANGE_TYPE, { durable: true })
 
-  console.log(`[RABBITMQ] Publisher ready. Exchange="${EXCHANGE}"`)
 
   return { connection, channel }
 }
@@ -67,5 +65,4 @@ export async function close() {
   if (connection) await connection.close().catch(() => {})
   channel = null
   connection = null
-  console.log('[RABBITMQ] Publisher disconnected')
 }

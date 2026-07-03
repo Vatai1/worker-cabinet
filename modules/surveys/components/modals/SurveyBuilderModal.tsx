@@ -6,6 +6,7 @@ import { surveyApi } from '@/modules/surveys/services/surveyApi'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
+import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import type { SurveyWithQuestions } from '@/shared/types'
 
 type QuestionType = 'radio' | 'checkbox' | 'text' | 'scale'
@@ -54,7 +55,9 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
   const [deadline, setDeadline] = useState('')
   const [anonymous, setAnonymous] = useState(false)
   const [questions, setQuestions] = useState<LocalQuestion[]>([])
-  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([])
+  const rawDepartments = useDepartmentsStore((s) => s.departments)
+  const fetchDepartments = useDepartmentsStore((s) => s.fetchDepartments)
+  const departments = rawDepartments.map((d: any) => ({ id: String(d.id), name: d.name }))
   const [employees, setEmployees] = useState<{ id: string; firstName: string; lastName: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,10 +93,7 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
 
   useEffect(() => {
     const headers = getAuthHeaders()
-    fetch(`${API_BASE_URL}/departments`, { headers })
-      .then((r) => r.json())
-      .then((data) => setDepartments(Array.isArray(data) ? data.map((d: { id: number; name: string }) => ({ id: String(d.id), name: d.name })) : []))
-      .catch((err) => console.error('Failed to load departments:', err))
+    fetchDepartments()
     fetch(`${API_BASE_URL}/users`, { headers })
       .then((r) => r.json())
       .then((data) => setEmployees(Array.isArray(data) ? data.map((e: { id: number; firstName: string; lastName: string }) => ({ id: String(e.id), firstName: e.firstName, lastName: e.lastName })) : []))

@@ -6,6 +6,7 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { TimesheetGrid, TimesheetEntry } from '@/shared/components/timesheet/TimesheetGrid'
 import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
 import { useAuthStore } from '@/core/auth/store/authStore'
+import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 
 interface Department { id: number; name: string }
 interface Timesheet {
@@ -22,7 +23,8 @@ const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','
 export function HRTimesheet() {
   const user = useAuthStore(s => s.user)
   const now = new Date()
-  const [departments, setDepartments] = useState<Department[]>([])
+  const departments = useDepartmentsStore(s => s.departments) as Department[]
+  const fetchDepartments = useDepartmentsStore(s => s.fetchDepartments)
   const [selectedDept, setSelectedDept] = useState<number | null>(null)
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -32,16 +34,10 @@ export function HRTimesheet() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
-      .then(r => {
-        if (!r.ok) throw new Error('Ошибка загрузки отделов')
-        return r.json()
-      })
-      .then((data: Department[]) => {
-        setDepartments(data)
-        if (data.length > 0) setSelectedDept(data[0].id)
-      })
-      .catch(err => setError(getErrorMessage(err)))
+    fetchDepartments().then(() => {
+      const deps = useDepartmentsStore.getState().departments as Department[]
+      if (deps.length > 0) setSelectedDept(deps[0].id)
+    }).catch(err => setError(getErrorMessage(err)))
   }, [])
 
   async function loadTimesheet() {

@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Input } from '@/shared/components/ui/Input'
 import { Building2, Loader2, Search, Users, ArrowRight, Crown, Sparkles } from 'lucide-react'
+import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { getErrorMessage } from '@/shared/lib/utils'
-import { getAuthHeaders } from '@/shared/lib/authHeaders'
-import { API_BASE_URL } from '@/shared/lib/api'
 
 interface Department {
   id: number
@@ -37,9 +36,8 @@ export function Departments() {
     const fetchDepartments = async () => {
       try {
         setLoading(true)
-        const response = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
-        if (!response.ok) throw new Error('Не удалось загрузить список отделов')
-        setDepartments(await response.json())
+        await useDepartmentsStore.getState().fetchDepartments()
+        setDepartments(useDepartmentsStore.getState().departments as Department[])
       } catch (err: unknown) {
         setError(getErrorMessage(err))
       } finally {

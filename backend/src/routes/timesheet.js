@@ -39,12 +39,22 @@ router.post('/auto-create', authorizeRoles('admin', 'hr'), async (req, res) => {
     }
 
     let created = 0
-    for (const dept of toCreate) {
-      await query(
-        'INSERT INTO timesheets (department_id, year, month, created_by) VALUES ($1, $2, $3, $4)',
-        [dept.id, y, m, req.user.id]
-      )
-      created++
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+      for (const dept of toCreate) {
+        await client.query(
+          'INSERT INTO timesheets (department_id, year, month, created_by) VALUES ($1, $2, $3, $4)',
+          [dept.id, y, m, req.user.id]
+        )
+        created++
+      }
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
     }
 
     res.status(201).json({
@@ -107,6 +117,10 @@ async function canAccessTimesheet(user, timesheetId) {
  */
 router.get('/', async (req, res) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 500))
+    const offset = (page - 1) * limit
+
     let rows
     if (['hr', 'admin'].includes(req.user.role)) {
       const result = await query(`
@@ -114,7 +128,8 @@ router.get('/', async (req, res) => {
         FROM timesheets t
         JOIN departments d ON t.department_id = d.id
         ORDER BY t.year DESC, t.month DESC, d.name
-      `)
+        LIMIT $1 OFFSET $2
+      `, [limit, offset])
       rows = result.rows
     } else {
       const deptId = await getManagerDepartmentId(req.user.id)
@@ -127,7 +142,8 @@ router.get('/', async (req, res) => {
           JOIN departments d ON t.department_id = d.id
           WHERE t.department_id = $1
           ORDER BY t.year DESC, t.month DESC
-        `, [deptId])
+          LIMIT $2 OFFSET $3
+        `, [deptId, limit, offset])
         rows = result.rows
       }
     }
@@ -408,6 +424,18 @@ router.put('/:id/entries', async (req, res) => {
     const today = toLocalDateStr(new Date())
     const vacationCodes = ['ОТ', 'ОС', 'ДО']
 
+    const employeeIds = [...new Set(entries.map(e => e.employee_id))]
+    const dates = [...new Set(entries.map(e => e.date))]
+    const existingResult = await query(
+      `SELECT employee_id, date, code FROM timesheet_entries
+       WHERE timesheet_id = $1 AND employee_id = ANY($2) AND date = ANY($3)`,
+      [id, employeeIds, dates]
+    )
+    const existingMap = new Map()
+    for (const row of existingResult.rows) {
+      existingMap.set(`${row.employee_id}_${row.date}`, row.code)
+    }
+
     for (const e of entries) {
       if (e.date < rangeStart || e.date > rangeEnd) {
         return res.status(400).json({ error: `Дата ${e.date} не входит в диапазон табеля` })
@@ -416,15 +444,9 @@ router.put('/:id/entries', async (req, res) => {
         return res.status(400).json({ error: `Нельзя редактировать будущие даты (${e.date})` })
       }
 
-      const existingEntryResult = await query(
-        `SELECT code FROM timesheet_entries WHERE timesheet_id = $1 AND employee_id = $2 AND date = $3`,
-        [id, e.employee_id, e.date]
-      )
-      if (existingEntryResult.rows.length > 0) {
-        const existingCode = existingEntryResult.rows[0].code
-        if (existingCode && vacationCodes.includes(existingCode)) {
-          return res.status(403).json({ error: `Нельзя редактировать записи отпуска (${e.date})` })
-        }
+      const existingCode = existingMap.get(`${e.employee_id}_${e.date}`)
+      if (existingCode && vacationCodes.includes(existingCode)) {
+        return res.status(403).json({ error: `Нельзя редактировать записи отпуска (${e.date})` })
       }
     }
 
@@ -521,17 +543,27 @@ router.put('/:id/status', async (req, res) => {
       return res.status(403).json({ error: `Переход ${current}→${status} недопустим для вашей роли` })
     }
 
-    const result = await query(
-      `UPDATE timesheets SET status = $1, updated_by = $2, updated_at = NOW()
-       WHERE id = $3 RETURNING *`,
-      [status, req.user.id, id]
-    )
-
-    if (status === 'submitted' && current === 'draft') {
-      await query(
-        `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1`,
-        [id]
+    const client = await getClient()
+    let result
+    try {
+      await client.query('BEGIN')
+      result = await client.query(
+        `UPDATE timesheets SET status = $1, updated_by = $2, updated_at = NOW()
+         WHERE id = $3 RETURNING *`,
+        [status, req.user.id, id]
       )
+      if (status === 'submitted' && current === 'draft') {
+        await client.query(
+          `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1`,
+          [id]
+        )
+      }
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
     }
 
     res.json(result.rows[0])

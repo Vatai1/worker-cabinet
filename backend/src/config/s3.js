@@ -45,7 +45,6 @@ export const deleteFromS3 = async (key) => {
 }
 
 export const getFromS3 = async (key) => {
-  console.log('[S3] Getting file from S3:', { bucket: S3_BUCKET, key })
   const params = {
     Bucket: S3_BUCKET,
     Key: key,
@@ -53,7 +52,6 @@ export const getFromS3 = async (key) => {
 
   try {
     const response = await s3Client.send(new GetObjectCommand(params))
-    console.log('[S3] File retrieved successfully, size:', response.ContentLength)
     return response
   } catch (error) {
     console.error('[S3] Error getting file:', error.message, 'Code:', error.Code)

@@ -87,7 +87,6 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
   const destroyEditor = useCallback(() => {
     if (editorRef.current) {
       try {
-        console.log('🧹 Destroying editor...')
         editorRef.current.destroyEditor()
       } catch (e) {
         console.error('Error destroying editor:', e)
@@ -128,15 +127,12 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
       setError(null)
 
       try {
-        console.log('📦 Loading OnlyOffice API...')
-        
         if (!(window as any).DocsAPI) {
           await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script')
             script.src = ONLYOFFICE_API_URL
             script.async = true
             script.onload = () => {
-              console.log('✅ OnlyOffice API loaded')
               resolve()
             }
             script.onerror = () => reject(new Error('Не удалось загрузить OnlyOffice API'))
@@ -145,18 +141,12 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
         }
 
         let fileUrl: string
-        console.log('🔗 Getting document URL...')
         if (typeof doc.url === 'function') {
           fileUrl = await doc.url()
         } else {
           fileUrl = doc.url
         }
-        console.log('📄 Document URL:', fileUrl)
-        console.log('📄 URL length:', fileUrl.length)
-        console.log('📄 URL starts with:', fileUrl.substring(0, 100))
-
         if (fileUrl.startsWith('blob:')) {
-          console.log('🔄 Converting blob URL to data URL...')
           const response = await fetch(fileUrl)
           const blob = await response.blob()
           fileUrl = await new Promise<string>((resolve, reject) => {
@@ -165,7 +155,6 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
             reader.onerror = reject
             reader.readAsDataURL(blob)
           })
-          console.log('✅ Converted to data URL')
         }
 
         const DocsAPI = (window as any).DocsAPI
@@ -173,10 +162,6 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
         const key = `${doc.id}-${Date.now()}`
         keyRef.current = key
         fileTypeRef.current = fileType
-
-        console.log('⚙️ Creating editor configuration...')
-        console.log('📋 File type:', fileType, 'Key:', key)
-
         const config = {
           document: {
             fileType: fileType,
@@ -210,9 +195,6 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
             },
           },
         }
-
-        console.log('🎨 Initializing editor in:', editorId)
-        
         await new Promise(resolve => setTimeout(resolve, 50))
         
         const container = document.getElementById(editorId)
@@ -222,8 +204,6 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
 
         editorRef.current = new DocsAPI.DocEditor(editorId, config)
         isInitializedRef.current = true
-        console.log('✅ Editor initialized!')
-
         setLoading(false)
       } catch (e: any) {
         console.error('❌ Error:', e)

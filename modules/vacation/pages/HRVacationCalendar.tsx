@@ -4,10 +4,11 @@ import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { YearCalendar } from '@/shared/components/calendar/YearCalendar'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
-import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { Plane, Filter, ChevronLeft, ChevronRight, Loader2, Users, Lock, Unlock } from 'lucide-react'
 import type { VacationRequest } from '@/shared/types'
+import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { VacationRequestStatus } from '@/shared/types'
 
 interface Department {
@@ -29,14 +30,9 @@ export function HRVacationCalendar() {
   const [togglingAll, setTogglingAll] = useState(false)
 
   const fetchDepartments = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Не удалось загрузить отделы')
-      const data = await res.json()
-      setDepartments(data)
-    } catch (err) {
-      console.error('Error fetching departments:', err)
-    }
+    await useDepartmentsStore.getState().invalidateDepartments()
+    await useDepartmentsStore.getState().fetchDepartments()
+    setDepartments(useDepartmentsStore.getState().departments as Department[])
   }
 
   useEffect(() => {
