@@ -34,7 +34,6 @@ router.post('/callback', asyncHandler(async (req, res) => {
     throw new ValidationError('Отсутствует код или PKCE verifier')
   }
 
-  console.log('[auth/callback] code_verifier length:', code_verifier?.length, 'redirect_uri:', redirect_uri)
 
   const tokenRes = await fetch(getTokenEndpoint(), {
     method: 'POST',
@@ -55,7 +54,12 @@ router.post('/callback', asyncHandler(async (req, res) => {
   }
 
   const tokenData = await tokenRes.json()
-  console.log("[auth/callback] token exchange OK, has access_token:", !!tokenData.access_token, "has id_token:", !!tokenData.id_token)
+  console.log('[KC] /callback token response keys:', Object.keys(tokenData).join(', '))
+  if (tokenData.id_token) {
+    const idParts = tokenData.id_token.split('.')
+    const idPayload = JSON.parse(Buffer.from(idParts[1], 'base64url').toString())
+    console.log('[KC] /callback id_token payload:', JSON.stringify(idPayload, null, 2))
+  }
   const accessToken = tokenData.access_token
   const idToken = tokenData.id_token
 
@@ -214,7 +218,10 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
 
   const result = await query(
-    `SELECT u.*, d.name as department_name, d.manager_id as department_manager_id
+    `SELECT u.id, u.email, u.password_hash, u.first_name, u.last_name, u.middle_name,
+       u.position, u.department_id, u.phone, u.birth_date, u.hire_date,
+       u.status, u.role, u.manager_id, u.avatar, u.failed_login_count, u.locked_until,
+       d.name as department_name, d.manager_id as department_manager_id
      FROM users u
      LEFT JOIN departments d ON u.department_id = d.id
      WHERE u.email = $1`,
@@ -288,7 +295,10 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
 
 router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
   const result = await query(
-    `SELECT u.*, d.name as department_name
+    `SELECT u.id, u.email, u.first_name, u.last_name, u.middle_name,
+       u.position, u.department_id, u.phone, u.birth_date, u.hire_date,
+       u.status, u.role, u.manager_id, u.avatar,
+       d.name as department_name
      FROM users u
      LEFT JOIN departments d ON u.department_id = d.id
      WHERE u.id = $1`,
