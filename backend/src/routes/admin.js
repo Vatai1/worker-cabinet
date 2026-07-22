@@ -1792,4 +1792,69 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
   res.json(result.rows[0].settings)
 }))
 
+// ===================== MINI-AGENT =====================
+
+router.get('/assistant/agent-status', asyncHandler(async (req, res) => {
+  const { rows } = await query(
+    `SELECT key, value FROM system_settings WHERE key IN ('assistant_agent_port')`
+  )
+  const port = rows.find(r => r.key === 'assistant_agent_port')?.value || '8642'
+  try {
+    const healthRes = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(3000) })
+    res.json({ status: healthRes.ok ? 'running' : 'stopped' })
+  } catch {
+    res.json({ status: 'stopped' })
+  }
+}))
+
+router.post('/assistant/agent-toggle', asyncHandler(async (req, res) => {
+  const { enabled } = req.body
+  const { rows: settings } = await query(
+    `SELECT value FROM system_settings WHERE key = 'assistant_agent_port'`
+  )
+  const port = settings[0]?.value || '8642'
+
+  const { execSync } = await import('child_process')
+  const composeDir = process.cwd()
+
+  try {
+    if (enabled) {
+      execSync(`MINI_AGENT_PORT=${port} docker compose -f docker/mini-agent/docker-compose.yml up -d`, { cwd: composeDir, timeout: 30000 })
+    } else {
+      execSync(`docker compose -f docker/mini-agent/docker-compose.yml down`, { cwd: composeDir, timeout: 15000 })
+    }
+  } catch (e) {
+    return res.json({ success: false, message: `Контейнер: ${e.message}` })
+  }
+
+  res.json({ success: true })
+}))
+
+router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
+  const { rows } = await query(
+    `SELECT key, value FROM system_settings WHERE key IN ('assistant_agent_model', 'assistant_agent_base_url')`
+  )
+  const map = Object.fromEntries(rows.map(r => [r.key, r.value]))
+
+  const model = map.assistant_agent_model || 'qwen2.5:3b'
+  const baseUrl = map.assistant_agent_base_url || 'http://host.docker.internal:11434/v1'
+
+  const { execSync } = await import('child_process')
+  const composeDir = process.cwd()
+
+  try {
+    execSync(
+      `MINI_AGENT_MODEL=${model} MINI_AGENT_BASE_URL=${baseUrl} docker compose -f docker/mini-agent/docker-compose.yml up -d`,
+      { cwd: composeDir, timeout: 30000 }
+    )
+  } catch (e) {
+    return res.json({ success: false, message: e.message })
+  }
+
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    'agent_config_update', 'system', null, { model, baseUrl }, req.ip)
+
+  res.json({ success: true })
+}))
+
 export default router

@@ -1359,6 +1359,7 @@ async function runMigrations() {
       { key: 'assistant_agent_enabled', value: 'false', desc: 'Включить встроенный Mini-Agent (Docker)' },
       { key: 'assistant_agent_model', value: 'qwen2.5:3b', desc: 'Модель Ollama для Mini-Agent' },
       { key: 'assistant_agent_base_url', value: 'http://host.docker.internal:11434/v1', desc: 'Ollama Base URL для Mini-Agent' },
+      { key: 'assistant_agent_port', value: '8642', desc: 'Порт Mini-Agent' },
       { key: 'assistant_temperature', value: '0.7', desc: 'Температура (креативность ответов, 0.0-2.0)' },
       { key: 'assistant_max_tokens', value: '2048', desc: 'Максимум токенов в ответе' },
       { key: 'assistant_history_limit', value: '20', desc: 'Количество сообщений истории, отправляемых в контекст' },

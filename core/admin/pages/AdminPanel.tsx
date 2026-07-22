@@ -1840,9 +1840,9 @@ function AssistantSettingsTab() {
 
   const checkAgent = async () => {
     try {
-      const port = getValue('assistant_agent_port') || '8642'
-      const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(3000) })
-      setAgentStatus(res.ok ? 'running' : 'stopped')
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/assistant/agent-status`, { headers: getAuthHeaders() })
+      const data = await res.json()
+      setAgentStatus(data.status || 'stopped')
     } catch { setAgentStatus('stopped') }
   }
 
@@ -1850,11 +1850,25 @@ function AssistantSettingsTab() {
   const configured = !!getValue('assistant_api_url') && !!getValue('assistant_api_key')
   const temperature = parseFloat(getValue('assistant_temperature')) || 0.7
 
-  const toggleAgent = () => {
+  const toggleAgent = async () => {
     const newVal = agentEnabled ? 'false' : 'true'
     updateValue('assistant_agent_enabled', newVal)
     if (newVal === 'true') {
       updateValue('assistant_api_url', 'http://127.0.0.1:8642/v1/chat')
+    }
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/assistant/agent-toggle`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newVal === 'true' }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        setAgentResult({ ok: false, msg: data.message || 'Ошибка запуска контейнера' })
+      }
+      await checkAgent()
+    } catch (err) {
+      setAgentResult({ ok: false, msg: getErrorMessage(err) })
     }
   }
 
@@ -1862,7 +1876,16 @@ function AssistantSettingsTab() {
     setApplyingAgent(true); setAgentResult(null)
     try {
       await saveSettings()
-      setAgentResult({ ok: true, msg: 'Настройки сохранены' })
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/assistant/agent-config`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAgentResult({ ok: true, msg: 'Контейнер перезапущен с новыми настройками' })
+      } else {
+        setAgentResult({ ok: false, msg: data.message || 'Ошибка перезапуска' })
+      }
     } catch (err) { setAgentResult({ ok: false, msg: getErrorMessage(err) }) }
     finally { setApplyingAgent(false) }
   }
