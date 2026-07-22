@@ -1824,7 +1824,7 @@ router.post('/assistant/agent-toggle', asyncHandler(async (req, res) => {
 
   try {
     if (enabled) {
-      execSync(`MINI_AGENT_PORT=${port} docker compose -f docker/mini-agent/docker-compose.yml up -d`, { cwd: COMPOSE_ROOT, timeout: 30000 })
+      execSync(`docker rm -f worker-cabinet-mini-agent 2>/dev/null; MINI_AGENT_PORT=${port} docker compose -f docker/mini-agent/docker-compose.yml up -d`, { cwd: COMPOSE_ROOT, timeout: 30000 })
     } else {
       execSync(`docker compose -f docker/mini-agent/docker-compose.yml down`, { cwd: COMPOSE_ROOT, timeout: 15000 })
     }
@@ -1848,7 +1848,7 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
 
   try {
     execSync(
-      `MINI_AGENT_MODEL=${model} MINI_AGENT_BASE_URL=${baseUrl} docker compose -f docker/mini-agent/docker-compose.yml up -d`,
+      `docker rm -f worker-cabinet-mini-agent 2>/dev/null; MINI_AGENT_MODEL=${model} MINI_AGENT_BASE_URL=${baseUrl} docker compose -f docker/mini-agent/docker-compose.yml up -d`,
       { cwd: COMPOSE_ROOT, timeout: 30000 }
     )
   } catch (e) {
