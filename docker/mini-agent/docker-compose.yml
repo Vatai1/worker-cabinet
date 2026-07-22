@@ -1,6 +1,6 @@
 services:
   mini-agent:
-    build: .
+    image: vatai12/worker-cabinet-mini-agent:latest
     container_name: worker-cabinet-mini-agent
     restart: unless-stopped
     environment:
