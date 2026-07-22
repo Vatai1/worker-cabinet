@@ -181,37 +181,15 @@ services:
     networks:
       - worker-cabinet-network
 
-  searxng:
-    image: searxng/searxng:latest
-    container_name: worker-cabinet-searxng
+  mini-agent:
+    build: ../docker/mini-agent
+    container_name: worker-cabinet-mini-agent
     restart: unless-stopped
-    volumes:
-      - ../docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
-    ports:
-      - "127.0.0.1:8888:8080"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - worker-cabinet-network
-
-  hermes-agent:
-    image: nousresearch/hermes-agent:latest
-    container_name: worker-cabinet-hermes
-    restart: unless-stopped
-    volumes:
-      - hermes_data:/opt/data
     environment:
-      HERMES_DATA_DIR: /opt/data
+      MODEL: ${MINI_AGENT_MODEL:-qwen2.5:3b}
+      BASE_URL: ${MINI_AGENT_BASE_URL:-http://host.docker.internal:11434/v1}
     ports:
       - "127.0.0.1:8642:8642"
-    command: ["gateway", "run"]
-    depends_on:
-      searxng:
-        condition: service_healthy
     networks:
       - worker-cabinet-network
 
@@ -284,7 +262,6 @@ volumes:
   onlyoffice_logs:
   onlyoffice_lib:
   rabbitmq_data:
-  hermes_data:
 
 networks:
   worker-cabinet-network:

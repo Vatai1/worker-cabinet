@@ -1791,9 +1791,11 @@ function AssistantSettingsTab() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [hermesStatus, setHermesStatus] = useState<'unknown' | 'running' | 'stopped'>('unknown')
-  const [applyingHermes, setApplyingHermes] = useState(false)
-  const [hermesResult, setHermesResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [agentStatus, setAgentStatus] = useState<'unknown' | 'running' | 'stopped'>('unknown')
+  const [applyingAgent, setApplyingAgent] = useState(false)
+  const [agentResult, setAgentResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  useEffect(() => { fetchSettings(); checkAgent() }, [])
 
   const PROVIDERS = [
     { value: 'zai', label: 'Z.AI / GLM', envKey: 'GLM_API_KEY' },
@@ -1803,25 +1805,6 @@ function AssistantSettingsTab() {
     { value: 'deepseek', label: 'DeepSeek', envKey: 'DEEPSEEK_API_KEY' },
     { value: 'xai', label: 'xAI / Grok', envKey: 'XAI_API_KEY' },
     { value: 'google', label: 'Google Gemini', envKey: 'GOOGLE_API_KEY' },
-  ]
-
-  const TOOLSET_OPTIONS = [
-    { value: 'web', label: 'Web (поиск, извлечение)' },
-    { value: 'terminal', label: 'Terminal (shell)' },
-    { value: 'file', label: 'File (чтение/запись)' },
-    { value: 'browser', label: 'Browser (автоматизация)' },
-    { value: 'vision', label: 'Vision (анализ изображений)' },
-    { value: 'code_execution', label: 'Code (Python sandbox)' },
-    { value: 'memory', label: 'Memory (память)' },
-    { value: 'skills', label: 'Skills (навыки)' },
-    { value: 'delegation', label: 'Delegation (подзадачи)' },
-    { value: 'cronjob', label: 'Cron (планировщик)' },
-  ]
-
-  const APPROVAL_OPTIONS = [
-    { value: 'manual', label: 'Ручной — подтверждать каждую' },
-    { value: 'smart', label: 'Умный — авто-одобрение безопасных' },
-    { value: 'off', label: 'Выключен — выполнять всё' },
   ]
 
   useEffect(() => { fetchSettings() }, [])
@@ -1855,52 +1838,33 @@ function AssistantSettingsTab() {
   }
   const getValue = (key: string) => settings.find(s => s.key === key)?.value || ''
 
-  const checkHermes = async () => {
+  const checkAgent = async () => {
     try {
-      const port = getValue('assistant_hermes_port') || '8642'
+      const port = getValue('assistant_agent_port') || '8642'
       const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(3000) })
-      setHermesStatus(res.ok ? 'running' : 'stopped')
-    } catch { setHermesStatus('stopped') }
+      setAgentStatus(res.ok ? 'running' : 'stopped')
+    } catch { setAgentStatus('stopped') }
   }
 
-  const toggleHermes = () => {
-    const newVal = getValue('assistant_hermes_enabled') === 'true' ? 'false' : 'true'
-    updateValue('assistant_hermes_enabled', newVal)
-    if (newVal === 'true') {
-      const port = getValue('assistant_hermes_port') || '8642'
-      const apiKey = getValue('assistant_hermes_api_key') || 'wc-assistant-secret'
-      updateValue('assistant_api_url', `http://127.0.0.1:${port}/v1/chat/completions`)
-      updateValue('assistant_api_key', apiKey)
-    }
-  }
-
-  const hermesEnabled = getValue('assistant_hermes_enabled') === 'true'
+  const agentEnabled = getValue('assistant_agent_enabled') === 'true'
   const configured = !!getValue('assistant_api_url') && !!getValue('assistant_api_key')
   const temperature = parseFloat(getValue('assistant_temperature')) || 0.7
 
-  const selectedToolsets = (getValue('assistant_hermes_toolsets') || 'web,terminal,file,browser').split(',').map(t => t.trim()).filter(Boolean)
-  const toggleToolset = (ts: string) => {
-    const next = selectedToolsets.includes(ts)
-      ? selectedToolsets.filter(t => t !== ts)
-      : [...selectedToolsets, ts]
-    updateValue('assistant_hermes_toolsets', next.join(','))
+  const toggleAgent = () => {
+    const newVal = agentEnabled ? 'false' : 'true'
+    updateValue('assistant_agent_enabled', newVal)
+    if (newVal === 'true') {
+      updateValue('assistant_api_url', 'http://127.0.0.1:8642/v1/chat')
+    }
   }
 
-  const applyHermesConfig = async () => {
-    setApplyingHermes(true); setHermesResult(null)
+  const applyAgentConfig = async () => {
+    setApplyingAgent(true); setAgentResult(null)
     try {
       await saveSettings()
-      const res = await fetchWithRetry(`${API_BASE_URL}/admin/assistant/hermes-config`, {
-        method: 'POST', headers: getAuthHeadersWithContentType(),
-      })
-      const data = await res.json()
-      if (res.ok && data.success) {
-        setHermesResult({ ok: true, msg: data.restarted ? 'Конфигурация записана, контейнер перезапущен' : (data.warning || 'Конфигурация записана') })
-      } else {
-        setHermesResult({ ok: false, msg: data.error || 'Ошибка применения конфигурации' })
-      }
-    } catch (err) { setHermesResult({ ok: false, msg: getErrorMessage(err) }) }
-    finally { setApplyingHermes(false) }
+      setAgentResult({ ok: true, msg: 'Настройки сохранены' })
+    } catch (err) { setAgentResult({ ok: false, msg: getErrorMessage(err) }) }
+    finally { setApplyingAgent(false) }
   }
 
   if (loading) {
@@ -1916,182 +1880,82 @@ function AssistantSettingsTab() {
       )}
       {success && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-sm">
-          <Check className="h-4 w-4 shrink-0" /> Настройки сохранены
+          <Check className="h-4 w-4" /> Настройки сохранены
         </div>
       )}
 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Boxes className="h-5 w-5" /> Hermes Agent
+            <Boxes className="h-5 w-5" /> Mini-Agent
           </CardTitle>
-          <CardDescription>Встроенный AI-движок в Docker-контейнере</CardDescription>
+          <CardDescription>Локальный AI-агент (Ollama + инструменты)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium text-sm">Включить Hermes Agent</p>
-              <p className="text-xs text-muted-foreground">nousresearch/hermes-agent с поддержкой инструментов</p>
+              <p className="font-medium text-sm">Включить Mini-Agent</p>
+              <p className="text-xs text-muted-foreground">Погода, крипта, инструменты через Ollama</p>
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={checkHermes}
+                onClick={checkAgent}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
               >
                 <RefreshCw className="h-3 w-3" />
-                {hermesStatus === 'running' && <span className="text-emerald-600">Запущен</span>}
-                {hermesStatus === 'stopped' && <span className="text-red-500">Остановлен</span>}
-                {hermesStatus === 'unknown' && 'Проверить'}
+                {agentStatus === 'running' && <span className="text-emerald-600">Запущен</span>}
+                {agentStatus === 'stopped' && <span className="text-red-500">Остановлен</span>}
+                {agentStatus === 'unknown' && 'Проверить'}
               </button>
               <div
-                onClick={toggleHermes}
+                onClick={toggleAgent}
                 className={cn(
                   'relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer transition-colors',
-                  hermesEnabled ? 'bg-primary' : 'bg-muted'
+                  agentEnabled ? 'bg-primary' : 'bg-muted'
                 )}
               >
                 <span className={cn(
                   'inline-block h-4 w-4 rounded-full bg-white transition-transform',
-                  hermesEnabled ? 'translate-x-6' : 'translate-x-1'
+                  agentEnabled ? 'translate-x-6' : 'translate-x-1'
                 )} />
               </div>
             </div>
           </div>
 
-          {hermesEnabled && (
+          {agentEnabled && (
             <div className="grid gap-4 p-4 rounded-xl bg-muted/20 border border-border/50">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Провайдер LLM</p>
-                  <select
-                    value={getValue('assistant_hermes_provider')}
-                    onChange={(e) => updateValue('assistant_hermes_provider', e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
-                  >
-                    {PROVIDERS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                  </select>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Модель Ollama</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Модель</p>
-                  <Input value={getValue('assistant_hermes_model')} onChange={(e) => updateValue('assistant_hermes_model', e.target.value)} placeholder="glm-5.1" />
-                </div>
+                <Input value={getValue('assistant_agent_model')} onChange={(e) => updateValue('assistant_agent_model', e.target.value)} className="sm:w-64" placeholder="qwen2.5:3b" />
               </div>
 
-              <div className="space-y-1">
-                <p className="text-sm font-medium">API ключ провайдера</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {PROVIDERS.find(p => p.value === getValue('assistant_hermes_provider'))?.envKey || 'API_KEY'}
-                </p>
-                <Input type="password" value={getValue('assistant_hermes_provider_api_key')} onChange={(e) => updateValue('assistant_hermes_provider_api_key', e.target.value)} placeholder="sk-..." />
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Ollama Base URL</p>
+                </div>
+                <Input value={getValue('assistant_agent_base_url')} onChange={(e) => updateValue('assistant_agent_base_url', e.target.value)} className="sm:w-96" placeholder="http://host.docker.internal:11434/v1" />
               </div>
 
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Base URL <span className="text-muted-foreground font-normal text-xs">(необязательно)</span></p>
-                <Input value={getValue('assistant_hermes_provider_base_url')} onChange={(e) => updateValue('assistant_hermes_provider_base_url', e.target.value)} placeholder="https://api.openai.com/v1" />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Порт API Server</p>
-                  <Input value={getValue('assistant_hermes_port')} onChange={(e) => updateValue('assistant_hermes_port', e.target.value)} className="w-32" placeholder="8642" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">API ключ сервера</p>
-                  <Input type="password" value={getValue('assistant_hermes_api_key')} onChange={(e) => updateValue('assistant_hermes_api_key', e.target.value)} placeholder="wc-assistant-secret" />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Инструменты (Toolsets)</p>
-                <div className="flex flex-wrap gap-2">
-                  {TOOLSET_OPTIONS.map(ts => (
-                    <button
-                      key={ts.value}
-                      onClick={() => toggleToolset(ts.value)}
-                      className={cn(
-                        'px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors',
-                        selectedToolsets.includes(ts.value)
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-background text-muted-foreground border-border hover:border-primary/50'
-                      )}
-                    >
-                      {ts.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2 p-3 rounded-lg bg-muted/30 border border-border/40">
-                <p className="text-sm font-medium">Поиск</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Поисковый движок</p>
-                    <select
-                      value={getValue('assistant_search_backend')}
-                      onChange={(e) => updateValue('assistant_search_backend', e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
-                    >
-                      <option value="searxng">SearXNG (Яндекс + Google + DDG)</option>
-                      <option value="ddgs">DuckDuckGo (бесплатно)</option>
-                      <option value="tavily">Tavily (API ключ)</option>
-                      <option value="brave-free">Brave Search (API ключ)</option>
-                    </select>
-                  </div>
-                  {getValue('assistant_search_backend') !== 'ddgs' && (
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">
-                        {getValue('assistant_search_backend') === 'searxng' ? 'URL SearXNG' : 'API ключ'}
-                      </p>
-                      {getValue('assistant_search_backend') === 'searxng' ? (
-                        <Input value={getValue('assistant_searxng_url')} onChange={(e) => updateValue('assistant_searxng_url', e.target.value)} placeholder="http://localhost:8080" />
-                      ) : (
-                        <Input type="password" placeholder="tvly-..." />
-                      )}
-                    </div>
-                  )}
-                </div>
-                {getValue('assistant_search_backend') === 'searxng' && (
-                  <p className="text-[11px] text-muted-foreground">
-                    SearXNG запускается как контейнер <code className="bg-background px-1 py-0.5 rounded">docker compose up -d searxng</code>. Яндекс включён как основной движок.
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Одобрение команд</p>
-                  <select
-                    value={getValue('assistant_hermes_approvals')}
-                    onChange={(e) => updateValue('assistant_hermes_approvals', e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
-                  >
-                    {APPROVAL_OPTIONS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Макс. итераций агента</p>
-                  <Input type="number" min="10" max="500" value={getValue('assistant_hermes_max_turns')} onChange={(e) => updateValue('assistant_hermes_max_turns', e.target.value)} />
-                </div>
-              </div>
-
-              {hermesResult && (
+              {agentResult && (
                 <div className={cn(
                   'flex items-center gap-2 p-2 rounded-lg text-sm',
-                  hermesResult.ok ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400' : 'bg-destructive/10 text-destructive'
+                  agentResult.ok ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400' : 'bg-destructive/10 text-destructive'
                 )}>
-                  {hermesResult.ok ? <Check className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
-                  {hermesResult.msg}
+                  {agentResult.ok ? <Check className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+                  {agentResult.msg}
                 </div>
               )}
 
               <div className="flex items-center justify-between pt-1">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Zap className="h-3.5 w-3.5" />
-                  config.yaml + .env → docker restart
+                  docker compose up -d mini-agent
                 </div>
-                <Button onClick={applyHermesConfig} disabled={applyingHermes} size="sm">
-                  {applyingHermes ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-                  Применить и перезапустить
+                <Button onClick={applyAgentConfig} disabled={applyingAgent} size="sm">
+                  {applyingAgent ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                  Сохранить
                 </Button>
               </div>
             </div>
@@ -2158,7 +2022,7 @@ function AssistantSettingsTab() {
             <Key className="h-5 w-5" /> API подключение
           </CardTitle>
           <CardDescription>
-            {hermesEnabled ? 'Заполняется автоматически при включении Hermes' : 'OpenAI-совместимый API endpoint'}
+            OpenAI-совместимый API endpoint
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

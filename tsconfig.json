@@ -27,6 +27,6 @@
     }
   },
   "include": ["core/**/*.ts", "core/**/*.tsx", "modules/**/*.ts", "modules/**/*.tsx", "shared/**/*.ts", "shared/**/*.tsx", "*.ts", "*.tsx"],
-  "exclude": ["vite.config.ts", "docker", "hermes-webui", "node_modules", "notification-service"],
+  "exclude": ["vite.config.ts", "docker", "node_modules", "notification-service"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

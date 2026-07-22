@@ -34,7 +34,7 @@ cp .env.backend.example .env
 nano .env
 ```
 
-Обязательно заполнить: `DB_PASSWORD`, `JWT_SECRET`, `S3_SECRET_KEY`, `ONLYOFFICE_JWT_SECRET`, `RABBITMQ_PASSWORD`, `NOTIFICATION_SECRET`, `HERMES_API_KEY`
+Обязательно заполнить: `DB_PASSWORD`, `JWT_SECRET`, `S3_SECRET_KEY`, `ONLYOFFICE_JWT_SECRET`, `RABBITMQ_PASSWORD`, `NOTIFICATION_SECRET`
 
 ### 4. Сборка образов
 
@@ -179,7 +179,6 @@ nano .env
 | `ONLYOFFICE_JWT_SECRET` | секрет OnlyOffice JWT                           |
 | `RABBITMQ_PASSWORD`      | пароль RabbitMQ                                |
 | `NOTIFICATION_SECRET`   | секрет уведомлений                             |
-| `HERMES_API_KEY`         | API ключ Hermes Agent                         |
 
 Keycloak (если используется):
 

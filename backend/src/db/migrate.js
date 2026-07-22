@@ -1356,18 +1356,9 @@ async function runMigrations() {
       { key: 'assistant_api_key', value: '', desc: 'API ключ ассистента' },
       { key: 'assistant_model', value: 'gpt-4o-mini', desc: 'Модель AI ассистента' },
       { key: 'assistant_system_prompt', value: 'Ты — кадровый ассистент. Помогай сотрудникам с вопросами о кадрах, отпусках, документах. Отвечай на русском языке.', desc: 'Системный промпт ассистента' },
-      { key: 'assistant_hermes_enabled', value: 'false', desc: 'Использовать встроенный Hermes Agent (Docker)' },
-      { key: 'assistant_hermes_port', value: '8642', desc: 'Порт Hermes Agent' },
-      { key: 'assistant_hermes_api_key', value: '', desc: 'API ключ для Hermes Agent API Server' },
-      { key: 'assistant_hermes_provider', value: 'zai', desc: 'Провайдер LLM для Hermes (zai, openrouter, anthropic, openai, deepseek, xai, google)' },
-      { key: 'assistant_hermes_model', value: 'glm-5.1', desc: 'Модель LLM для Hermes' },
-      { key: 'assistant_hermes_provider_api_key', value: '', desc: 'API ключ провайдера LLM' },
-      { key: 'assistant_hermes_provider_base_url', value: '', desc: 'Base URL провайдера (пустой = по умолчанию)' },
-      { key: 'assistant_hermes_toolsets', value: 'web,terminal,file,browser', desc: 'Инструменты Hermes (через запятую)' },
-      { key: 'assistant_hermes_approvals', value: 'manual', desc: 'Режим одобрения команд (manual, smart, off)' },
-      { key: 'assistant_hermes_max_turns', value: '150', desc: 'Максимум итераций агента' },
-      { key: 'assistant_search_backend', value: 'searxng', desc: 'Поисковый движок (searxng, ddgs, tavily, brave-free)' },
-      { key: 'assistant_searxng_url', value: 'http://localhost:8080', desc: 'URL SearXNG инстанса' },
+      { key: 'assistant_agent_enabled', value: 'false', desc: 'Включить встроенный Mini-Agent (Docker)' },
+      { key: 'assistant_agent_model', value: 'qwen2.5:3b', desc: 'Модель Ollama для Mini-Agent' },
+      { key: 'assistant_agent_base_url', value: 'http://host.docker.internal:11434/v1', desc: 'Ollama Base URL для Mini-Agent' },
       { key: 'assistant_temperature', value: '0.7', desc: 'Температура (креативность ответов, 0.0-2.0)' },
       { key: 'assistant_max_tokens', value: '2048', desc: 'Максимум токенов в ответе' },
       { key: 'assistant_history_limit', value: '20', desc: 'Количество сообщений истории, отправляемых в контекст' },
@@ -1429,6 +1420,7 @@ async function runMigrations() {
     } catch (e) {}
     try {
       await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cabinet VARCHAR(50)`)
+      await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(20)`)
       console.log('  ✓ cabinet column')
     } catch (e) {}
 
