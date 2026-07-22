@@ -4,6 +4,9 @@ import bcrypt from 'bcryptjs'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '../middleware/errors.js'
 import { query, getClient } from '../config/database.js'
+import path from 'path'
+
+const COMPOSE_ROOT = path.resolve(__dirname, '../../..')
 
 const router = express.Router()
 
@@ -1815,13 +1818,12 @@ router.post('/assistant/agent-toggle', asyncHandler(async (req, res) => {
   const port = settings[0]?.value || '8642'
 
   const { execSync } = await import('child_process')
-  const composeDir = process.cwd()
 
   try {
     if (enabled) {
-      execSync(`MINI_AGENT_PORT=${port} docker compose -f docker/mini-agent/docker-compose.yml up -d`, { cwd: composeDir, timeout: 30000 })
+      execSync(`MINI_AGENT_PORT=${port} docker compose -f docker/mini-agent/docker-compose.yml up -d`, { cwd: COMPOSE_ROOT, timeout: 30000 })
     } else {
-      execSync(`docker compose -f docker/mini-agent/docker-compose.yml down`, { cwd: composeDir, timeout: 15000 })
+      execSync(`docker compose -f docker/mini-agent/docker-compose.yml down`, { cwd: COMPOSE_ROOT, timeout: 15000 })
     }
   } catch (e) {
     return res.json({ success: false, message: `Контейнер: ${e.message}` })
@@ -1840,12 +1842,11 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
   const baseUrl = map.assistant_agent_base_url || 'http://host.docker.internal:11434/v1'
 
   const { execSync } = await import('child_process')
-  const composeDir = process.cwd()
 
   try {
     execSync(
       `MINI_AGENT_MODEL=${model} MINI_AGENT_BASE_URL=${baseUrl} docker compose -f docker/mini-agent/docker-compose.yml up -d`,
-      { cwd: composeDir, timeout: 30000 }
+      { cwd: COMPOSE_ROOT, timeout: 30000 }
     )
   } catch (e) {
     return res.json({ success: false, message: e.message })
