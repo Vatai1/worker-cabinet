@@ -24,6 +24,9 @@ async function getAssistantConfig() {
     apiUrl: map.assistant_api_url || '',
     apiKey: map.assistant_api_key || '',
     model: map.assistant_model || 'gpt-4o-mini',
+    agentEnabled: map.assistant_agent_enabled === 'true',
+    agentModel: map.assistant_agent_model || 'qwen2.5:3b',
+    agentPort: map.assistant_agent_port || '8642',
     systemPrompt: map.assistant_system_prompt || 'Ты — кадровый ассистент. Помогай сотрудникам с вопросами о кадрах, отпусках, документах. Отвечай на русском языке.',
     temperature: parseFloat(map.assistant_temperature) || 0.7,
     maxTokens: parseInt(map.assistant_max_tokens) || 2048,
@@ -168,8 +171,15 @@ router.post('/chat', authenticateToken, async (req, res) => {
 
     const config = await getAssistantConfig()
 
-    if (!config.apiUrl || !config.apiKey) {
-      return res.status(503).json({ error: 'Ассистент не настроен. Обратитесь к администратору.' })
+    if (config.agentEnabled) {
+      // Встроенный mini-agent — не требует apiKey
+      if (!config.agentPort) {
+        return res.status(503).json({ error: 'Ассистент не настроен. Обратитесь к администратору.' })
+      }
+    } else {
+      if (!config.apiUrl || !config.apiKey) {
+        return res.status(503).json({ error: 'Ассистент не настроен. Обратитесь к администратору.' })
+      }
     }
 
     const sessionCheck = await query(
@@ -221,79 +231,97 @@ router.post('/chat', authenticateToken, async (req, res) => {
       { role: 'user', content: message },
     ]
 
-    const aiResponse = await fetch(config.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        stream: true,
-      }),
-    })
+    let responseText = ''
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text().catch(() => '')
-      console.error('AI API error:', aiResponse.status, errText)
-      return res.status(502).json({ error: 'Ошибка связи с AI-сервисом' })
+    if (config.agentEnabled) {
+      // Запрос к встроенному mini-agent
+      const agentUrl = `http://127.0.0.1:${config.agentPort}/v1/chat`
+      const agentRes = await fetch(agentUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, message }),
+      })
+      if (!agentRes.ok) {
+        const errText = await agentRes.text().catch(() => '')
+        console.error('Mini-agent error:', agentRes.status, errText)
+        return res.status(502).json({ error: 'Ошибка связи с Mini-Agent' })
+      }
+      const agentData = await agentRes.json()
+      responseText = agentData.response || 'Не удалось получить ответ'
+    } else {
+      const aiResponse = await fetch(config.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages,
+          max_tokens: config.maxTokens,
+          temperature: config.temperature,
+          stream: true,
+        }),
+      })
+
+      if (!aiResponse.ok) {
+        const errText = await aiResponse.text().catch(() => '')
+        console.error('AI API error:', aiResponse.status, errText)
+        return res.status(502).json({ error: 'Ошибка связи с AI-сервисом' })
+      }
+
+      const aiContentType = aiResponse.headers.get('content-type') || ''
+
+      if (!aiContentType.includes('text/event-stream')) {
+        const aiData = await aiResponse.json()
+        responseText = aiData.choices?.[0]?.message?.content || 'Не удалось получить ответ'
+      } else {
+        // Streaming
+        res.setHeader('Content-Type', 'text/event-stream')
+        res.setHeader('Cache-Control', 'no-cache')
+        res.setHeader('Connection', 'keep-alive')
+        res.setHeader('X-Accel-Buffering', 'no')
+
+        let fullResponse = ''
+        const reader = aiResponse.body.getReader()
+        const decoder = new TextDecoder()
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            const chunk = decoder.decode(value, { stream: true })
+            res.write(chunk)
+
+            const lines = chunk.split('\n')
+            for (const line of lines) {
+              if (!line.startsWith('data: ') || line === 'data: [DONE]') continue
+              try {
+                const data = JSON.parse(line.slice(6))
+                const delta = data.choices?.[0]?.delta?.content
+                if (delta) fullResponse += delta
+              } catch {}
+            }
+          }
+        } catch (e) {
+          console.error('Stream error:', e)
+        }
+
+        res.end()
+        responseText = fullResponse
+      }
     }
 
-    const aiContentType = aiResponse.headers.get('content-type') || ''
-
-    if (!aiContentType.includes('text/event-stream')) {
-      const aiData = await aiResponse.json()
-      const responseText = aiData.choices?.[0]?.message?.content || 'Не удалось получить ответ'
-
+    if (responseText) {
       await query(
         `INSERT INTO assistant_messages (session_id, user_id, role, content) VALUES ($1, $2, 'assistant', $3)`,
         [sessionId, userId, responseText]
       )
+    }
 
+    if (config.agentEnabled || !res.headersSent) {
       return res.json({ response: responseText })
-    }
-
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
-    res.setHeader('Connection', 'keep-alive')
-    res.setHeader('X-Accel-Buffering', 'no')
-
-    let fullResponse = ''
-    const reader = aiResponse.body.getReader()
-    const decoder = new TextDecoder()
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value, { stream: true })
-        res.write(chunk)
-
-        const lines = chunk.split('\n')
-        for (const line of lines) {
-          if (!line.startsWith('data: ') || line === 'data: [DONE]') continue
-          try {
-            const data = JSON.parse(line.slice(6))
-            const content = data.choices?.[0]?.delta?.content
-            if (content) fullResponse += content
-          } catch {}
-        }
-      }
-    } catch (error) {
-      console.error('Stream read error:', error.message)
-    }
-
-    res.write('data: [DONE]\n\n')
-
-    if (fullResponse) {
-      await query(
-        `INSERT INTO assistant_messages (session_id, user_id, role, content) VALUES ($1, $2, 'assistant', $3)`,
-        [sessionId, userId, fullResponse]
-      )
     }
 
     const updatedSession = await query(
@@ -308,8 +336,6 @@ router.post('/chat', authenticateToken, async (req, res) => {
         [message.slice(0, 40) + (message.length > 40 ? '...' : ''), sessionId]
       )
     }
-
-    res.end()
   } catch (error) {
     console.error('Assistant error:', error.message)
     res.status(500).json({ error: 'Внутренняя ошибка сервера' })
