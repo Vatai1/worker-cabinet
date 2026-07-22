@@ -6,7 +6,7 @@ import { query } from '../config/database.js'
 import { authLimiter } from '../middleware/rateLimiter.js'
 import { validateLogin, validateRegister, sanitizeInput } from '../middleware/validation.js'
 import { asyncHandler, ValidationError, UnauthorizedError } from '../middleware/errors.js'
-import { authenticateToken } from '../middleware/auth.js'
+import { authenticateToken, logScopes } from '../middleware/auth.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
 
 const router = express.Router()
@@ -15,12 +15,14 @@ router.use(sanitizeInput)
 
 router.get('/config', asyncHandler(async (req, res) => {
   if (!keycloakConfig.enabled) {
+    console.log('[KC] /config: keycloak disabled, local auth mode')
     return res.json({ keycloak: false })
   }
 
+  console.log('[KC] /config: keycloak enabled, realm=', keycloakConfig.realm, 'clientId=', keycloakConfig.clientId, 'publicUrl=', keycloakConfig.publicUrl)
   res.json({
     keycloak: true,
-    authUrl: `${getPublicAuthUrl()}?client_id=${keycloakConfig.clientId}&response_type=code&scope=openid email profile&prompt=login`,
+    authUrl: `${getPublicAuthUrl()}?client_id=${keycloakConfig.clientId}&response_type=code&scope=openid cabinet&prompt=login`,
     tokenUrl: `${keycloakConfig.publicUrl}/realms/${keycloakConfig.realm}/protocol/openid-connect/token`,
     logoutUrl: getPublicLogoutUrl(process.env.FRONTEND_URL || '/'),
     clientId: keycloakConfig.clientId,
@@ -29,12 +31,14 @@ router.get('/config', asyncHandler(async (req, res) => {
 
 router.post('/callback', asyncHandler(async (req, res) => {
   const { code, code_verifier, redirect_uri } = req.body
+  console.log('[KC] /callback: code=', code ? code.slice(0, 8) + '…' : 'null', 'verifier present=', !!code_verifier, 'redirect_uri=', redirect_uri)
 
   if (!code || !code_verifier) {
     throw new ValidationError('Отсутствует код или PKCE verifier')
   }
 
 
+  console.log('[KC] /callback: exchanging code at', getTokenEndpoint())
   const tokenRes = await fetch(getTokenEndpoint(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -49,16 +53,35 @@ router.post('/callback', asyncHandler(async (req, res) => {
   })
 
   if (!tokenRes.ok) {
-    const err = await tokenRes.json().catch(() => ({}))
-    throw new ValidationError(err.error_description || 'Ошибка обмена токена')
+    const errBody = await tokenRes.json().catch(() => ({}))
+    console.error('[KC] /callback: token exchange failed:', tokenRes.status, JSON.stringify(errBody))
+    throw new ValidationError(errBody.error_description || 'Ошибка обмена токена')
   }
 
   const tokenData = await tokenRes.json()
-  console.log('[KC] /callback token response keys:', Object.keys(tokenData).join(', '))
+  console.log('[KC] /callback: token response keys:', Object.keys(tokenData).join(', '))
+  console.log('[KC] /callback: token_type=', tokenData.token_type, 'expires_in=', tokenData.expires_in, 'refresh_expires_in=', tokenData.refresh_expires_in, 'scope=', tokenData.scope, 'not-before-policy=', tokenData['not-before-policy'])
+  if (tokenData.access_token) {
+    const accParts = tokenData.access_token.split('.')
+    if (accParts.length === 3) {
+      const accPayload = JSON.parse(Buffer.from(accParts[1], 'base64url').toString())
+      logScopes(accPayload, '/callback access_token')
+      console.log('[KC] /callback: access_token realm_access roles:', JSON.stringify(accPayload.realm_access?.roles || []))
+      const accResourceAccess = accPayload.resource_access || {}
+      for (const [resource, access] of Object.entries(accResourceAccess)) {
+        console.log('[KC] /callback: access_token resource_access[' + resource + '] roles:', JSON.stringify(access.roles || []))
+      }
+      console.log('[KC] /callback: access_token allowed-origins:', JSON.stringify(accPayload['allowed-origins'] || []))
+      console.log('[KC] /callback: access_token claim keys:', Object.keys(accPayload).join(', '))
+      console.log('[KC] /callback: access_token full payload:', JSON.stringify(accPayload, null, 2))
+    }
+  }
   if (tokenData.id_token) {
     const idParts = tokenData.id_token.split('.')
     const idPayload = JSON.parse(Buffer.from(idParts[1], 'base64url').toString())
-    console.log('[KC] /callback id_token payload:', JSON.stringify(idPayload, null, 2))
+    logScopes(idPayload, '/callback id_token')
+    console.log('[KC] /callback: id_token claim keys:', Object.keys(idPayload).join(', '))
+    console.log('[KC] /callback: id_token full payload:', JSON.stringify(idPayload, null, 2))
   }
   const accessToken = tokenData.access_token
   const idToken = tokenData.id_token
@@ -105,10 +128,13 @@ router.post('/refresh', asyncHandler(async (req, res) => {
   }
 
   const refreshToken = req.cookies?.kc_refresh_token
+  console.log('[KC] /refresh: refresh_token present=', !!refreshToken)
   if (!refreshToken) {
+    console.error('[KC] /refresh: no refresh token cookie')
     return res.status(401).json({ error: 'No refresh token' })
   }
 
+  console.log('[KC] /refresh: requesting new tokens at', getTokenEndpoint())
   const tokenRes = await fetch(getTokenEndpoint(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -121,6 +147,8 @@ router.post('/refresh', asyncHandler(async (req, res) => {
   })
 
   if (!tokenRes.ok) {
+    const errBody = await tokenRes.json().catch(() => ({}))
+    console.error('[KC] /refresh: failed:', tokenRes.status, JSON.stringify(errBody))
     res.clearCookie('auth_token', cookieOptions(req))
     res.clearCookie('kc_id_token', cookieOptions(req))
     res.clearCookie('kc_refresh_token', cookieOptions(req))
@@ -128,6 +156,7 @@ router.post('/refresh', asyncHandler(async (req, res) => {
   }
 
   const tokenData = await tokenRes.json()
+  console.log('[KC] /refresh: success, expires_in=', tokenData.expires_in, 'refresh_expires_in=', tokenData.refresh_expires_in)
   const opts = cookieOptions(req)
   const maxAge = 7 * 24 * 60 * 60 * 1000
 
@@ -156,10 +185,12 @@ router.post('/logout', asyncHandler(async (req, res) => {
   const opts = cookieOptions(req)
   if (keycloakConfig.enabled) {
     const idToken = req.cookies?.kc_id_token
+    console.log('[KC] /logout: id_token present=', !!idToken, 'cookies=', Object.keys(req.cookies || {}))
     let logoutUrl = getPublicLogoutUrl(process.env.FRONTEND_URL || '/')
     if (idToken) {
       logoutUrl += `&id_token_hint=${encodeURIComponent(idToken)}`
     }
+    console.log('[KC] /logout: redirect to keycloak end_session_endpoint')
     res.clearCookie('auth_token', opts)
     res.clearCookie('kc_id_token', opts)
     res.clearCookie('kc_refresh_token', opts)
