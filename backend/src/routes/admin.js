@@ -5,7 +5,10 @@ import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '../middleware/errors.js'
 import { query, getClient } from '../config/database.js'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 const COMPOSE_ROOT = path.resolve(__dirname, '../../..')
 
 const router = express.Router()
