@@ -1864,12 +1864,8 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
 // ===================== OLLAMA MODELS =====================
 
 router.get('/assistant/models', asyncHandler(async (req, res) => {
-  const { rows } = await query(
-    `SELECT value FROM system_settings WHERE key = 'assistant_agent_port'`
-  )
-  const port = rows[0]?.value || '8642'
   try {
-    const r = await fetch(`http://127.0.0.1:${port}/api/tags`, { signal: AbortSignal.timeout(5000) })
+    const r = await fetch('http://127.0.0.1:11434/api/tags', { signal: AbortSignal.timeout(5000) })
     const data = await r.json()
     res.json(data)
   } catch {
@@ -1885,11 +1881,20 @@ router.post('/assistant/models/pull', asyncHandler(async (req, res) => {
     `SELECT value FROM system_settings WHERE key = 'assistant_agent_port'`
   )
   const port = rows[0]?.value || '8642'
-  const { execSync } = await import('child_process')
 
   try {
-    execSync(`docker exec worker-cabinet-ollama ollama pull ${model}`, { timeout: 300000 })
-    res.json({ success: true, model })
+    const pullRes = await fetch('http://127.0.0.1:11434/api/pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: model, stream: false }),
+      signal: AbortSignal.timeout(300000),
+    })
+    if (!pullRes.ok) {
+      const errText = await pullRes.text().catch(() => '')
+      return res.status(502).json({ error: `Ollama: ${pullRes.status} ${errText}` })
+    }
+    const data = await pullRes.json()
+    res.json({ success: true, model: data.model || model })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
