@@ -247,7 +247,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
         return res.status(502).json({ error: 'Ошибка связи с Mini-Agent' })
       }
       const agentData = await agentRes.json()
-      responseText = agentData.response || 'Не удалось получить ответ'
+      responseText = agentData.reply || agentData.response || 'Не удалось получить ответ'
     } else {
       const aiResponse = await fetch(config.apiUrl, {
         method: 'POST',
