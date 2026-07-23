@@ -88,6 +88,7 @@ export function ModelsModal() {
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let hasError = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -98,16 +99,20 @@ export function ModelsModal() {
         buffer = lines.pop() || ''
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          // Ollama возвращает NDJSON — парсим каждую строку
+          // Может быть обёрнуто в SSE: "data: {...}" или просто "{...}"
+          const jsonStr = trimmed.startsWith('data: ') ? trimmed.slice(6) : trimmed
           try {
-            const data = JSON.parse(line.slice(6))
-            if (data.error) { setError(data.error); continue }
+            const data = JSON.parse(jsonStr)
+            if (data.error) { setError(data.error); hasError = true; continue }
             if (data.status) setProgress({ status: data.status, percent: data.completed && data.total ? Math.round((data.completed / data.total) * 100) : 0 })
           } catch {}
         }
       }
 
-      await fetchModels()
+      if (!hasError) await fetchModels()
     } catch (e) { setError(e instanceof Error ? e.message : 'Ошибка загрузки') }
     finally { setPulling(null); setPullInput(''); setProgress({ status: '', percent: 0 }) }
   }
