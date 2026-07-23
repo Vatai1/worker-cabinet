@@ -1877,24 +1877,37 @@ router.post('/assistant/models/pull', asyncHandler(async (req, res) => {
   const { model } = req.body
   if (!model) return res.status(400).json({ error: 'Укажите модель' })
 
-  const { rows } = await query(
-    `SELECT value FROM system_settings WHERE key = 'assistant_agent_port'`
-  )
-  const port = rows[0]?.value || '8642'
-
   try {
     const pullRes = await fetch('http://127.0.0.1:11434/api/pull', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: model, stream: false }),
-      signal: AbortSignal.timeout(300000),
+      body: JSON.stringify({ name: model, stream: true }),
+      signal: AbortSignal.timeout(600000),
     })
-    if (!pullRes.ok) {
+
+    if (!pullRes.ok || !pullRes.body) {
       const errText = await pullRes.text().catch(() => '')
       return res.status(502).json({ error: `Ollama: ${pullRes.status} ${errText}` })
     }
-    const data = await pullRes.json()
-    res.json({ success: true, model: data.model || model })
+
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+
+    const reader = pullRes.body.getReader()
+    const decoder = new TextDecoder()
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        res.write(decoder.decode(value, { stream: true }))
+      }
+    } catch (e) {
+      res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`)
+    }
+
+    res.end()
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

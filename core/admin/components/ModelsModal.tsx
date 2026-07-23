@@ -30,6 +30,7 @@ export function ModelsModal() {
   const [pulling, setPulling] = useState<string | null>(null)
   const [pullInput, setPullInput] = useState('')
   const [error, setError] = useState('')
+  const [progress, setProgress] = useState<{ status: string; percent: number }>({ status: '', percent: 0 })
 
   useEffect(() => {
     modalSetState = setState
@@ -64,18 +65,44 @@ export function ModelsModal() {
   }, [state.open, handleClose])
 
   const pullModel = async (model: string) => {
-    setPulling(model); setError('')
+    setPulling(model); setError(''); setProgress({ status: 'Подключение...', percent: 0 })
     try {
       const res = await fetch(`${API_URL}/admin/assistant/models/pull`, {
         method: 'POST',
         headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ model }),
       })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Ошибка загрузки'); return }
+
+      if (!res.body) {
+        if (!res.ok) { setError(`Ошибка: ${res.status}`); return }
+        await fetchModels(); return
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.error) { setError(data.error); continue }
+            if (data.status) setProgress({ status: data.status, percent: data.completed && data.total ? Math.round((data.completed / data.total) * 100) : 0 })
+          } catch {}
+        }
+      }
+
       await fetchModels()
-    } catch { setError('Ошибка загрузки') }
-    finally { setPulling(null); setPullInput('') }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Ошибка загрузки') }
+    finally { setPulling(null); setPullInput(''); setProgress({ status: '', percent: 0 }) }
   }
 
   const selectModel = (name: string) => {
@@ -171,6 +198,21 @@ export function ModelsModal() {
               {pulling ? 'Загрузка...' : 'Скачать'}
             </button>
           </div>
+
+          {pulling && progress.status && (
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="truncate">{progress.status}</span>
+                {progress.percent > 0 && <span className="shrink-0">{progress.percent}%</span>}
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{ width: `${progress.percent}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
