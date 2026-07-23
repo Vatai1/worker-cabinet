@@ -119,12 +119,13 @@ app = Flask(__name__)
 SYSTEM_BASE = "Ты мини-агент Worker Cabinet — кадровый ассистент. Отвечай кратко по-русски. Помогай с отпусками, балансом дней. Если пользователь просит что-то для чего нет инструмента — скажи что не умеешь. Никогда не показывай токены и API URL в ответе."
 
 
-def _build_system_prompt():
-    ctx = _session_context.get("default", {})
+def _build_system_prompt(session_id: str = "default"):
+    ctx = _session_context.get(session_id, {})
     user = ctx.get("user_name", "")
     position = ctx.get("user_position", "")
     role = ctx.get("user_role", "employee")
-    prompt = SYSTEM_BASE
+    system = ctx.get("system_prompt", "")
+    prompt = system if system else SYSTEM_BASE
     if user or position:
         prompt += f"\n\nПользователь: {user}"
         if position:
@@ -261,13 +262,13 @@ HANDLERS = {
 }
 
 
-def chat(message: str, history: list[dict]) -> str:
+def chat(message: str, history: list[dict], session_id: str = "default") -> str:
     history.append({"role": "user", "content": message})
 
     while True:
         resp = client.chat.completions.create(
             model=MODEL,
-            messages=[{"role": "system", "content": _build_system_prompt()}] + history,
+            messages=[{"role": "system", "content": _build_system_prompt(session_id)}] + history,
             tools=TOOLS,
             temperature=0.1,
         )
@@ -310,7 +311,7 @@ def handle_chat():
     if session_id not in sessions:
         sessions[session_id] = []
 
-    reply = chat(message, sessions[session_id])
+    reply = chat(message, sessions[session_id], session_id)
     return jsonify({"reply": reply})
 
 

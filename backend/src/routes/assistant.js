@@ -248,6 +248,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
             user_role: u?.role || 'employee',
             api_url: apiBaseUrl,
             token: assistantToken,
+            system_prompt: config.systemPrompt,
           },
         }),
       })
