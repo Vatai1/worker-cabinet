@@ -3,6 +3,7 @@ import { Toaster } from 'sonner'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { ModelsModal } from '@/core/admin/components/ModelsModal'
 
 export function Layout() {
   return (
@@ -18,6 +19,7 @@ export function Layout() {
       </div>
       <Toaster position="top-right" richColors closeButton />
       <ConfirmDialog />
+      <ModelsModal />
     </div>
   )
 }

@@ -1861,4 +1861,38 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
   res.json({ success: true })
 }))
 
+// ===================== OLLAMA MODELS =====================
+
+router.get('/assistant/models', asyncHandler(async (req, res) => {
+  const { rows } = await query(
+    `SELECT value FROM system_settings WHERE key = 'assistant_agent_port'`
+  )
+  const port = rows[0]?.value || '8642'
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/api/tags`, { signal: AbortSignal.timeout(5000) })
+    const data = await r.json()
+    res.json(data)
+  } catch {
+    res.json({ models: [] })
+  }
+}))
+
+router.post('/assistant/models/pull', asyncHandler(async (req, res) => {
+  const { model } = req.body
+  if (!model) return res.status(400).json({ error: 'Укажите модель' })
+
+  const { rows } = await query(
+    `SELECT value FROM system_settings WHERE key = 'assistant_agent_port'`
+  )
+  const port = rows[0]?.value || '8642'
+  const { execSync } = await import('child_process')
+
+  try {
+    execSync(`docker exec worker-cabinet-ollama ollama pull ${model}`, { timeout: 300000 })
+    res.json({ success: true, model })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+}))
+
 export default router

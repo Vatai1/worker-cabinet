@@ -13,6 +13,7 @@ import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Switch } from '@/shared/components/ui/Switch'
 import { ModuleSettingsModal } from '@/core/admin/components/modules/ModuleSettingsModal'
+import { openModelsModal } from '@/core/admin/components/ModelsModal'
 import type { ModuleId } from '@/core/admin/components/modules/types'
 import {
   Users, Key, Building2, Settings2, ScrollText, Search,
@@ -24,7 +25,7 @@ import {
   HardDrive, Server, AlertCircle, Unlock, UserPlus, Boxes,
   TrendingUp, Clock3, FolderKanban, CalendarX, Settings,
   Calendar, Zap, Briefcase, Wrench, Plane,
-  Pencil, Save, Bot,
+  Pencil, Save, Bot, Package,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
@@ -1951,7 +1952,12 @@ function AssistantSettingsTab() {
                 <div className="flex-1">
                   <p className="text-sm font-medium">Модель Ollama</p>
                 </div>
-                <Input value={getValue('assistant_agent_model')} onChange={(e) => updateValue('assistant_agent_model', e.target.value)} className="sm:w-64" placeholder="qwen2.5:3b" />
+                <div className="flex items-center gap-2">
+                  <Input value={getValue('assistant_agent_model')} readOnly className="sm:w-48 bg-muted cursor-pointer" placeholder="qwen2.5:3b" onClick={() => openModelsModal(getValue('assistant_agent_model'), (m) => updateValue('assistant_agent_model', m))} />
+                  <Button variant="outline" size="sm" onClick={() => openModelsModal(getValue('assistant_agent_model'), (m) => updateValue('assistant_agent_model', m))}>
+                    <Package className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
