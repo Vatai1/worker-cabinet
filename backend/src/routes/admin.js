@@ -1877,40 +1877,35 @@ router.post('/assistant/models/pull', asyncHandler(async (req, res) => {
   const { model } = req.body
   if (!model) return res.status(400).json({ error: 'Укажите модель' })
 
-  try {
-    const pullRes = await fetch('http://127.0.0.1:11434/api/pull', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: model, stream: true }),
-      signal: AbortSignal.timeout(600000),
-    })
+  const pullRes = await fetch('http://127.0.0.1:11434/api/pull', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: model, stream: true }),
+  })
 
-    if (!pullRes.ok || !pullRes.body) {
-      const errText = await pullRes.text().catch(() => '')
-      return res.status(502).json({ error: `Ollama: ${pullRes.status} ${errText}` })
-    }
+  if (!pullRes.ok) {
+    const errText = await pullRes.text().catch(() => 'unknown')
+    return res.status(502).json({ error: `Ollama: ${pullRes.status} ${errText}` })
+  }
 
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
-    res.setHeader('Connection', 'keep-alive')
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
 
+  if (pullRes.body) {
     const reader = pullRes.body.getReader()
-    const decoder = new TextDecoder()
-
     try {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        res.write(decoder.decode(value, { stream: true }))
+        res.write(value)
       }
     } catch (e) {
-      res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`)
+      console.error('Pull stream error:', e.message)
     }
-
-    res.end()
-  } catch (e) {
-    res.status(500).json({ error: e.message })
   }
+
+  res.end()
 }))
 
 export default router
