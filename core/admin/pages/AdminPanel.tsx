@@ -1822,6 +1822,29 @@ function SettingsTab() {
 
 // ===================== ASSISTANT SETTINGS TAB =====================
 
+function SectionCard({ name, icon: Icon, desc, collapsed, onToggle, children }: {
+  name: string; icon: React.ComponentType<{ className?: string }>; desc: string;
+  collapsed: boolean; onToggle: () => void; children: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <button onClick={onToggle} className="w-full text-left">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon className="h-5 w-5" />
+            <div>
+              <CardTitle>{name}</CardTitle>
+              <CardDescription>{desc}</CardDescription>
+            </div>
+          </div>
+          <ChevronRight className={cn('h-4 w-4 text-muted-foreground/50 transition-transform duration-200 shrink-0', !collapsed && 'rotate-90')} />
+        </CardHeader>
+      </button>
+      {!collapsed && <CardContent className="space-y-4">{children}</CardContent>}
+    </Card>
+  )
+}
+
 function AssistantSettingsTab() {
   const [settings, setSettings] = useState<SystemSetting[]>([])
   const [loading, setLoading] = useState(true)
@@ -1847,40 +1870,8 @@ function AssistantSettingsTab() {
       return next
     })
   }
-  const SectionCard = ({ name, icon: Icon, desc, children }: { name: string; icon: React.ComponentType<{ className?: string }>; desc: string; children: React.ReactNode }) => {
-    const collapsed = collapsedSections.has(name)
-    return (
-      <Card>
-        <button onClick={() => toggleSection(name)} className="w-full text-left">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Icon className="h-5 w-5" />
-              <div>
-                <CardTitle>{name}</CardTitle>
-                <CardDescription>{desc}</CardDescription>
-              </div>
-            </div>
-            <ChevronRight className={cn('h-4 w-4 text-muted-foreground/50 transition-transform duration-200 shrink-0', !collapsed && 'rotate-90')} />
-          </CardHeader>
-        </button>
-        {!collapsed && <CardContent className="space-y-4">{children}</CardContent>}
-      </Card>
-    )
-  }
 
   useEffect(() => { fetchSettings(); checkAgent() }, [])
-
-  const PROVIDERS = [
-    { value: 'zai', label: 'Z.AI / GLM', envKey: 'GLM_API_KEY' },
-    { value: 'openrouter', label: 'OpenRouter', envKey: 'OPENROUTER_API_KEY' },
-    { value: 'anthropic', label: 'Anthropic', envKey: 'ANTHROPIC_API_KEY' },
-    { value: 'openai', label: 'OpenAI', envKey: 'OPENAI_API_KEY' },
-    { value: 'deepseek', label: 'DeepSeek', envKey: 'DEEPSEEK_API_KEY' },
-    { value: 'xai', label: 'xAI / Grok', envKey: 'XAI_API_KEY' },
-    { value: 'google', label: 'Google Gemini', envKey: 'GOOGLE_API_KEY' },
-  ]
-
-  useEffect(() => { fetchSettings() }, [])
 
   const fetchSettings = async () => {
     setLoading(true)
@@ -1980,7 +1971,7 @@ function AssistantSettingsTab() {
         </div>
       )}
 
-      <SectionCard name="Mini-Agent" icon={Boxes} desc="Локальный AI-агент (Ollama + инструменты)">
+      <SectionCard name="Mini-Agent" icon={Boxes} desc="Локальный AI-агент (Ollama + инструменты)" collapsed={collapsedSections.has('Mini-Agent')} onToggle={() => toggleSection('Mini-Agent')}>
         <div className="flex items-center justify-between">
           <div>
             <p className="font-medium text-sm">Включить Mini-Agent</p>
@@ -2056,7 +2047,7 @@ function AssistantSettingsTab() {
         )}
       </SectionCard>
 
-      <SectionCard name="Параметры модели" icon={Sliders} desc="Настройки генерации ответов">
+      <SectionCard name="Параметры модели" icon={Sliders} desc="Настройки генерации ответов" collapsed={collapsedSections.has('Параметры модели')} onToggle={() => toggleSection('Параметры модели')}>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <div className="flex-1">
             <p className="text-sm font-medium">Модель</p>
@@ -2101,7 +2092,7 @@ function AssistantSettingsTab() {
         </div>
       </SectionCard>
 
-      <SectionCard name="API подключение" icon={Key} desc="OpenAI-совместимый API endpoint">
+      <SectionCard name="API подключение" icon={Key} desc="OpenAI-совместимый API endpoint" collapsed={collapsedSections.has('API подключение')} onToggle={() => toggleSection('API подключение')}>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <div className="flex-1">
             <p className="text-sm font-medium">API URL</p>
@@ -2118,7 +2109,7 @@ function AssistantSettingsTab() {
         </div>
       </SectionCard>
 
-      <SectionCard name="Системный промпт" icon={Bot} desc="Инструкция для AI — определяет поведение и стиль ответов">
+      <SectionCard name="Системный промпт" icon={Bot} desc="Инструкция для AI — определяет поведение и стиль ответов" collapsed={collapsedSections.has('Системный промпт')} onToggle={() => toggleSection('Системный промпт')}>
         <textarea
           value={getValue('assistant_system_prompt')}
           onChange={(e) => updateValue('assistant_system_prompt', e.target.value)}
