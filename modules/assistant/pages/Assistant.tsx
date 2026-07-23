@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Trash2, Plus, MessageSquare, Bot, User, Loader2, AlertCircle, Wrench } from 'lucide-react'
+import { Send, Trash2, Plus, MessageSquare, Bot, User, Loader2, AlertCircle, Wrench, ArrowLeft } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { assistantApi } from '@/modules/assistant/services/assistantApi'
 import { cn } from '@/shared/lib/utils'
+import { useNavigate } from 'react-router-dom'
 import type { ChatMessage, ChatSession } from '@/modules/assistant/types'
 
 const TOOL_LABELS: Record<string, string> = {
@@ -29,6 +30,7 @@ function generateId() {
 
 export function Assistant() {
   const user = useAuthStore((s) => s.user)
+  const navigate = useNavigate()
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [input, setInput] = useState('')
@@ -246,9 +248,13 @@ export function Assistant() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex">
+    <div className="fixed top-[57px] left-[272px] right-0 bottom-0 flex overflow-hidden gradient-bg z-10 bg-background">
       <div className="w-64 border-r border-border flex flex-col bg-card">
         <div className="p-3 border-b border-border">
+          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3 w-full">
+            <ArrowLeft className="w-4 h-4" />
+            Назад
+          </button>
           <Button onClick={createNewSession} className="w-full flex items-center gap-2" size="sm">
             <Plus className="w-4 h-4" />
             Новый чат
