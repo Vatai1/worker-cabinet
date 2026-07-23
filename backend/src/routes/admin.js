@@ -1879,8 +1879,9 @@ router.post('/assistant/models/pull', asyncHandler(async (req, res) => {
 
   // Проверяем что модель существует в Ollama registry
   const manifest = model.includes(':') ? model : `${model}:latest`
+  const [name, tag] = manifest.split(':')
   try {
-    const checkRes = await fetch(`https://registry.ollama.ai/v2/library/${manifest.replace(':', '/tags/')}/manifests/${manifest.split(':')[1]}`, { signal: AbortSignal.timeout(10000) })
+    const checkRes = await fetch(`https://registry.ollama.ai/v2/library/${name}/manifests/${tag}`, { signal: AbortSignal.timeout(10000) })
     if (checkRes.status === 404) {
       return res.status(404).json({ error: `Модель "${model}" не найдена в реестре Ollama` })
     }
