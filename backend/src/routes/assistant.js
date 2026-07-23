@@ -234,12 +234,22 @@ router.post('/chat', authenticateToken, async (req, res) => {
     let responseText = ''
 
     if (config.agentEnabled) {
-      // Запрос к встроенному mini-agent
       const agentUrl = `http://127.0.0.1:${config.agentPort}/v1/chat`
       const agentRes = await fetch(agentUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message }),
+        body: JSON.stringify({
+          session_id: sessionId,
+          message,
+          context: {
+            user_id: userId,
+            user_name: `${u?.first_name || ''} ${u?.last_name || ''}`,
+            user_position: u?.position || '',
+            user_role: u?.role || 'employee',
+            api_url: apiBaseUrl,
+            token: assistantToken,
+          },
+        }),
       })
       if (!agentRes.ok) {
         const errText = await agentRes.text().catch(() => '')

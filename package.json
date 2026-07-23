@@ -4,10 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run dev:infra && npm run dev:setup && concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:notifications\"",
+    "dev": "npm run dev:infra && npm run dev:setup && concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:notifications\" \"npm run dev:mini-agent\"",
     "dev:frontend": "vite",
     "dev:backend": "cd backend && npm run dev",
     "dev:notifications": "cd notification-service && npm run dev",
+    "dev:mini-agent": "bash scripts/run-mini-agent.sh",
     "dev:infra": "docker compose --env-file backend/.env -f deploy/docker-compose.dev-no-kc.yml up -d",
     "dev:infra:down": "docker compose --env-file backend/.env -f deploy/docker-compose.dev-no-kc.yml down",
     "dev:infra:logs": "docker compose --env-file backend/.env -f deploy/docker-compose.dev-no-kc.yml logs -f",

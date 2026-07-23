@@ -108,20 +108,6 @@ services:
     networks:
       - worker-cabinet-network
 
-  mini-agent:
-    image: vatai12/worker-cabinet-mini-agent:latest
-    container_name: worker-cabinet-mini-agent
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      MODEL: ${MINI_AGENT_MODEL:-qwen2.5:3b}
-      BASE_URL: http://localhost:11434/v1
-    ports:
-      - "127.0.0.1:8642:8642"
-    networks:
-      - worker-cabinet-network
-
 volumes:
   postgres_data:
   minio_data:
