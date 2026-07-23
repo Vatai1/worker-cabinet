@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { X, Download, Loader2, Package, HardDrive, Check } from 'lucide-react'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 interface OllamaModel {
   name: string
@@ -36,9 +39,8 @@ export function ModelsModal() {
   const fetchModels = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/assistant/models`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`${API_URL}/admin/assistant/models`, {
+        headers: getAuthHeaders(),
       })
       const data = await res.json()
       setModels(data.models || [])
@@ -64,10 +66,9 @@ export function ModelsModal() {
   const pullModel = async (model: string) => {
     setPulling(model); setError('')
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/assistant/models/pull`, {
+      const res = await fetch(`${API_URL}/admin/assistant/models/pull`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ model }),
       })
       const data = await res.json()
