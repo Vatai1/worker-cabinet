@@ -137,15 +137,20 @@ def _build_system_prompt(session_id: str = "default"):
 sessions: dict[str, list[dict]] = {}
 
 _session_context: dict = {}
+_current_session_id: str = "default"
+
+
+def _ctx():
+    return _session_context.get(_current_session_id, {})
 
 
 def _api_headers():
-    ctx = _session_context.get("default", {})
+    ctx = _ctx()
     return {"Authorization": f"Bearer {ctx.get('token', '')}", "Content-Type": "application/json"}
 
 
 def _api_url():
-    ctx = _session_context.get("default", {})
+    ctx = _ctx()
     url = ctx.get("api_url", "http://localhost:5000/api")
     if "host.docker.internal" in url:
         url = url.replace("host.docker.internal", "localhost")
@@ -153,7 +158,7 @@ def _api_url():
 
 
 def _user_id():
-    ctx = _session_context.get("default", {})
+    ctx = _ctx()
     return ctx.get("user_id", 0)
 
 
@@ -307,6 +312,7 @@ def handle_chat():
 
     if context:
         _session_context[session_id] = context
+    _current_session_id = session_id
 
     if session_id not in sessions:
         sessions[session_id] = []
