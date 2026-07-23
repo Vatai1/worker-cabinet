@@ -74,8 +74,15 @@ export function ModelsModal() {
       })
 
       if (!res.body) {
-        if (!res.ok) { setError(`Ошибка: ${res.status}`); return }
-        await fetchModels(); return
+        const data = await res.json().catch(() => null)
+        setError(data?.error || `Ошибка: ${res.status}`)
+        return
+      }
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setError(data?.error || `Ошибка: ${res.status}`)
+        return
       }
 
       const reader = res.body.getReader()

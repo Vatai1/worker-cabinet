@@ -1877,6 +1877,17 @@ router.post('/assistant/models/pull', asyncHandler(async (req, res) => {
   const { model } = req.body
   if (!model) return res.status(400).json({ error: 'Укажите модель' })
 
+  // Проверяем что модель существует в Ollama registry
+  const manifest = model.includes(':') ? model : `${model}:latest`
+  try {
+    const checkRes = await fetch(`https://registry.ollama.ai/v2/library/${manifest.replace(':', '/tags/')}/manifests/${manifest.split(':')[1]}`, { signal: AbortSignal.timeout(10000) })
+    if (checkRes.status === 404) {
+      return res.status(404).json({ error: `Модель "${model}" не найдена в реестре Ollama` })
+    }
+  } catch {
+    // Registry недоступен — не блокируем, пусть Ollama сам выдаст ошибку
+  }
+
   const pullRes = await fetch('http://127.0.0.1:11434/api/pull', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
