@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import jwt from 'jsonwebtoken'
 
 /**
  * CSRF protection middleware using double-submit cookie pattern.
@@ -12,6 +13,16 @@ export function csrfMiddleware(req, res, next) {
 
   if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/callback') {
     return next()
+  }
+
+  const authHeader = req.headers['authorization'] || ''
+  if (authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET)
+      if (decoded.scope === 'assistant') {
+        return next()
+      }
+    } catch {}
   }
 
   const cookieToken = req.cookies?.csrf_token

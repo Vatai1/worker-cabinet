@@ -218,7 +218,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
     )
     const u = userResult.rows[0]
     const assistantToken = generateAssistantToken(userId)
-    const apiBaseUrl = process.env.ASSISTANT_API_BASE_URL || 'http://host.docker.internal:5000/api'
+    const apiBaseUrl = process.env.ASSISTANT_API_BASE_URL || 'http://127.0.0.1:5000/api'
 
     const systemMessage = {
       role: 'system',

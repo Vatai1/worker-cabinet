@@ -90,7 +90,11 @@ if (process.env.NODE_ENV !== 'production') {
 
 app.use((req, res, next) => {
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress
-  console.log(`${req.method} ${req.path} - ${ip}`)
+  const start = Date.now()
+  res.on('finish', () => {
+    const duration = Date.now() - start
+    console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms - ${ip}`)
+  })
   next()
 })
 

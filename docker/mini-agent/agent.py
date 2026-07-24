@@ -24,15 +24,10 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_vacation_balance",
-            "description": "Получить баланс отпускных дней сотрудника на текущий год. Показывает общее количество дней, использованные, забронированные и доступные дни.",
+            "description": "Получить баланс отпускных дней текущего сотрудника. НЕ требует никаких параметров — вызывай без аргументов.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "year": {
-                        "type": "integer",
-                        "description": "Год для баланса. Если не указан — текущий год.",
-                    },
-                },
+                "properties": {},
             },
         },
     },
@@ -40,7 +35,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_vacation_requests",
-            "description": "Получить список заявок на отпуск текущего пользователя. Можно фильтровать по статусу и году.",
+            "description": "Получить список заявок на отпуск текущего сотрудника. Можно фильтровать по статусу (on_approval, approved, rejected, cancelled) и году.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -77,16 +72,16 @@ TOOLS = [
                     },
                     "vacation_type": {
                         "type": "string",
-                        "description": "Тип отпуска. Один из: annual_paid (ежегодный оплачиваемый), unpaid (без сохранения ЗП), educational (учебный), maternity (по беременности), child_care (по уходу за ребёнком), additional (дополнительный), veteran (ветеранский)",
+                        "description": "Тип отпуска: annual_paid (ежегодный), unpaid (без ЗП), educational (учебный), maternity (по беременности), child_care (по уходу за ребёнком), additional (дополнительный), veteran (ветеранский)",
                         "enum": ["annual_paid", "unpaid", "educational", "maternity", "child_care", "additional", "veteran"],
                     },
                     "comment": {
                         "type": "string",
-                        "description": "Комментарий к заявке (необязательно)",
+                        "description": "Комментарий (необязательно)",
                     },
                     "has_travel": {
                         "type": "boolean",
-                        "description": "Есть ли проезд (добавляет 2 дня к отпуску). По умолчанию false",
+                        "description": "Есть ли проезд (добавляет 2 дня). По умолчанию false",
                     },
                 },
                 "required": ["start_date", "end_date", "vacation_type"],
@@ -116,7 +111,7 @@ client = OpenAI(base_url=BASE_URL, api_key="ollama")
 
 app = Flask(__name__)
 
-SYSTEM_BASE = "Ты мини-агент Worker Cabinet — кадровый ассистент. Отвечай кратко по-русски. Помогай с отпусками, балансом дней. Если пользователь просит что-то для чего нет инструмента — скажи что не умеешь. Никогда не показывай токены и API URL в ответе."
+SYSTEM_BASE = "Ты мини-агент Worker Cabinet — кадровый ассистент. Отвечай кратко по-русски. Помогай с отпусками, балансом дней. ОБЯЗАТЕЛЬНО вызывай инструменты для получения данных — никогда не придумывай данные. Если спрашивают про баланс отпусков, заявок на отпуск — всегда вызывай соответствующий инструмент. Никогда не показывай токены и API URL в ответе."
 
 
 def _build_system_prompt(session_id: str = "default"):
@@ -126,6 +121,7 @@ def _build_system_prompt(session_id: str = "default"):
     role = ctx.get("user_role", "employee")
     system = ctx.get("system_prompt", "")
     prompt = system if system else SYSTEM_BASE
+    prompt += "\n\nВажно: ОБЯЗАТЕЛЬНО вызывай инструменты для получения данных о отпусках, балансе дней, заявках. Никогда не придумывай данные — всегда используй инструменты."
     if user or position:
         prompt += f"\n\nПользователь: {user}"
         if position:
@@ -162,12 +158,12 @@ def _user_id():
     return ctx.get("user_id", 0)
 
 
-def get_vacation_balance(year: int = None) -> str:
-    if year is None:
-        year = __import__("datetime").datetime.now().year
+def get_vacation_balance() -> str:
+    year = __import__("datetime").datetime.now().year
     uid = _user_id()
     url = f"{_api_url()}/vacation/balance/{uid}?year={year}"
     r = requests.get(url, headers=_api_headers(), timeout=10)
+    print(f"[tool] GET {url} -> {r.status_code}", flush=True)
     if r.status_code != 200:
         return json.dumps({"error": f"Ошибка API: {r.status_code}", "detail": r.text[:200]}, ensure_ascii=False)
     data = r.json()
@@ -190,6 +186,7 @@ def get_vacation_requests(status: str = None, year: int = None) -> str:
         params += f"&year={year}"
     url = f"{_api_url()}/vacation/requests?{params}"
     r = requests.get(url, headers=_api_headers(), timeout=10)
+    print(f"[tool] GET {url} -> {r.status_code}", flush=True)
     if r.status_code != 200:
         return json.dumps({"error": f"Ошибка API: {r.status_code}", "detail": r.text[:200]}, ensure_ascii=False)
     data = r.json()
@@ -221,6 +218,7 @@ def create_vacation_request(start_date: str, end_date: str, vacation_type: str, 
         "hasTravel": has_travel,
     }
     r = requests.post(url, headers=_api_headers(), json=payload, timeout=10)
+    print(f"[tool] POST {url} -> {r.status_code}", flush=True)
     if r.status_code == 201:
         data = r.json()
         type_name = VACATION_TYPE_NAMES.get(vacation_type, vacation_type)
@@ -244,6 +242,7 @@ def create_vacation_request(start_date: str, end_date: str, vacation_type: str, 
 def cancel_vacation_request(request_id: int) -> str:
     url = f"{_api_url()}/vacation/requests/{request_id}/cancel"
     r = requests.post(url, headers=_api_headers(), timeout=10)
+    print(f"[tool] POST {url} -> {r.status_code}", flush=True)
     if r.status_code == 200:
         data = r.json()
         return json.dumps({
@@ -287,8 +286,10 @@ def chat(message: str, history: list[dict], session_id: str = "default") -> str:
                 fn_args = json.loads(tc.function.arguments)
                 try:
                     result = HANDLERS[fn_name](**fn_args)
+                    print(f"[tool] {fn_name}({fn_args}) -> {result[:200]}")
                 except Exception as e:
                     result = json.dumps({"error": str(e)}, ensure_ascii=False)
+                    print(f"[tool] {fn_name} ERROR: {e}")
                 history.append({
                     "role": "tool",
                     "tool_call_id": tc.id,
@@ -310,9 +311,12 @@ def handle_chat():
     session_id = data.get("session_id", "default")
     context = data.get("context", {})
 
+    global _current_session_id
     if context:
         _session_context[session_id] = context
     _current_session_id = session_id
+
+    print(f"[chat] session={session_id} user_id={_user_id()} api_url={_api_url()} has_token={bool(_ctx().get('token'))}", flush=True)
 
     if session_id not in sessions:
         sessions[session_id] = []
@@ -324,6 +328,20 @@ def handle_chat():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+@app.route("/debug/context", methods=["GET"])
+def debug_context():
+    sid = request.args.get("session_id", _current_session_id)
+    ctx = _session_context.get(sid, {})
+    return jsonify({
+        "session_id": sid,
+        "current_session_id": _current_session_id,
+        "context_keys": list(ctx.keys()),
+        "has_token": bool(ctx.get("token")),
+        "token_prefix": (ctx.get("token") or "")[:20] + "...",
+        "api_url": ctx.get("api_url"),
+        "user_id": ctx.get("user_id"),
+    })
 
 
 if __name__ == "__main__":
