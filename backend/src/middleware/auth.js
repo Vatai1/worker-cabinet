@@ -25,18 +25,6 @@ async function verifyKeycloakToken(token) {
     throw new Error('Invalid token issuer')
   }
 
-  console.log('[KC] verify token: sub=', payload.sub, 'email=', payload.email, 'preferred_username=', payload.preferred_username, 'exp=', payload.exp, 'iat=', payload.iat, 'iss=', payload.iss)
-  logScopes(payload, 'token')
-  console.log('[KC] token realm_access roles:', JSON.stringify(payload.realm_access?.roles || []))
-  const resourceAccess = payload.resource_access || {}
-  for (const [resource, access] of Object.entries(resourceAccess)) {
-    console.log('[KC] token resource_access[' + resource + '] roles:', JSON.stringify(access.roles || []))
-  }
-  console.log('[KC] token allowed-origins:', JSON.stringify(payload['allowed-origins'] || []))
-  console.log('[KC] token azp:', payload.azp, 'session_state=', payload.session_state, 'sid=', payload.sid, 'acr=', payload.acr, 'typ=', payload.typ)
-  console.log('[KC] token all claim keys:', Object.keys(payload).join(', '))
-  console.log('[KC] token full payload:', JSON.stringify(payload, null, 2))
-
   return payload
 }
 
@@ -66,10 +54,8 @@ export function logScopes(payload, label) {
   const scopeStr = payload.scope || ''
   const scopes = scopeStr.split(/\s+/).filter(Boolean)
   if (scopes.length === 0) {
-    console.log(`[KC] ${label}: no scope claim present`)
     return
   }
-  console.log(`[KC] ${label} scopes (${scopes.length}):`, scopes.join(', '))
 
   const allMappedKeys = new Set()
   for (const arr of Object.values(SCOPE_CLAIMS)) {
@@ -79,7 +65,6 @@ export function logScopes(payload, label) {
   for (const scope of scopes) {
     const claimKeys = SCOPE_CLAIMS[scope]
     if (!claimKeys) {
-      console.log(`[KC] ${label} scope "${scope}": (custom/unknown — claims shown in orphan section below)`)
       continue
     }
     const present = {}
@@ -88,9 +73,7 @@ export function logScopes(payload, label) {
     }
     const presentKeys = Object.keys(present)
     if (presentKeys.length === 0) {
-      console.log(`[KC] ${label} scope "${scope}": none of [${claimKeys.join(', ')}] present in token`)
     } else {
-      console.log(`[KC] ${label} scope "${scope}" (${presentKeys.length}/${claimKeys.length} claims):`)
       console.log('   ', JSON.stringify(present, null, 2).replace(/\n/g, '\n    '))
     }
   }
@@ -105,7 +88,6 @@ export function logScopes(payload, label) {
   if (orphanKeys.length > 0) {
     const orphanClaims = {}
     for (const k of orphanKeys) orphanClaims[k] = payload[k]
-    console.log(`[KC] ${label} orphan claims (not from any mapped scope, ${orphanKeys.length}):`)
     console.log('   ', JSON.stringify(orphanClaims, null, 2).replace(/\n/g, '\n    '))
   }
 }
@@ -209,10 +191,8 @@ async function findOrCreateUser(kcPayload) {
     if (updates.length > 0) {
       values.push(user.id)
       await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values)
-      console.log('[KC] user profile synced from KC: id=', user.id, 'updated=', updates.length, 'fields:', updates.map(u => u.split('=')[0].trim()).join(','))
     }
 
-    console.log('[KC] user matched by keycloak_guid sub=', sub, '→ db id=', user.id, 'role=', user.role)
     return user
   }
 
@@ -222,7 +202,6 @@ async function findOrCreateUser(kcPayload) {
   )
   if (result.rows.length > 0) {
     const user = result.rows[0]
-    console.log('[KC] user matched by email=', email, '→ db id=', user.id, 'linking keycloak_guid=', sub)
     await query('UPDATE users SET keycloak_guid = $1 WHERE id = $2', [sub, user.id])
     return user
   }
@@ -244,7 +223,6 @@ async function findOrCreateUser(kcPayload) {
 
   const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ')
 
-  console.log('[KC] creating new user from KC token: email=', email, 'name=', firstName, lastName, middleName, 'gender=', gender, 'phone=', phone, 'position=', position, 'sub=', sub)
 
   result = await query(
     `INSERT INTO users (${insertCols.join(', ')}, role, status, password_hash)
@@ -255,7 +233,6 @@ async function findOrCreateUser(kcPayload) {
 
   const user = result.rows[0]
   await query('INSERT INTO vacation_balances (user_id, total_days) VALUES ($1, 28)', [user.id]).catch(() => {})
-  console.log('[KC] new user created from KC, db id=', user.id, 'email=', user.email)
 
   return user
 }

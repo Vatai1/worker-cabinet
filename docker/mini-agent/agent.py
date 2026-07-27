@@ -304,6 +304,13 @@ def chat(message: str, history: list[dict], session_id: str = "default") -> str:
         return "(пустой ответ)"
 
 
+@app.before_request
+def _log_request():
+    if request.path == '/health':
+        return
+    print(f"[req] {request.method} {request.path} from {request.remote_addr}", flush=True)
+
+
 @app.route("/v1/chat", methods=["POST"])
 def handle_chat():
     data = request.get_json(force=True)
@@ -316,7 +323,7 @@ def handle_chat():
         _session_context[session_id] = context
     _current_session_id = session_id
 
-    print(f"[chat] session={session_id} user_id={_user_id()} api_url={_api_url()} has_token={bool(_ctx().get('token'))}", flush=True)
+    print(f"[chat] session={session_id} msg={message[:80]} user_id={_user_id()} api_url={_api_url()} has_token={bool(_ctx().get('token'))}", flush=True)
 
     if session_id not in sessions:
         sessions[session_id] = []

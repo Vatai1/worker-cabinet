@@ -7,7 +7,7 @@ const config = {
   enabled: !!process.env.KEYCLOAK_URL,
 }
 
-function kcLog(...args) { console.log('[KC]', ...args) }
+function kcLog() {}
 function kcErr(...args) { console.error('[KC]', ...args) }
 
 export function getIssuer() {
