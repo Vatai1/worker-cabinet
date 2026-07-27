@@ -197,6 +197,8 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
       NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
+      MINI_AGENT_URL: http://mini-agent:8642/v1/chat
+      ASSISTANT_API_BASE_URL: http://backend:5000/api
     ports:
       - "${BACKEND_PORT:-5000}:5000"
     depends_on:

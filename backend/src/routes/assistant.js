@@ -234,7 +234,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
     let responseText = ''
 
     if (config.agentEnabled) {
-      const agentUrl = `http://127.0.0.1:${config.agentPort}/v1/chat`
+      const agentUrl = process.env.MINI_AGENT_URL || `http://127.0.0.1:${config.agentPort}/v1/chat`
       const agentRes = await fetch(agentUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
