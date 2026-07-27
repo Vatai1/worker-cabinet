@@ -1848,8 +1848,8 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
 
   try {
     execSync(
-      `docker rm -f worker-cabinet-mini-agent 2>/dev/null; MINI_AGENT_MODEL=${model} MINI_AGENT_BASE_URL=${baseUrl} docker compose -f docker/mini-agent/docker-compose.yml up -d`,
-      { cwd: COMPOSE_ROOT, timeout: 30000 }
+      `docker rm -f worker-cabinet-mini-agent 2>/dev/null; docker run -d --name worker-cabinet-mini-agent --restart unless-stopped --network worker-cabinet-network -e MODEL=${model} -e BASE_URL=${baseUrl} -p 127.0.0.1:8642:8642 vatai12/worker-cabinet-mini-agent:latest`,
+      { timeout: 30000 }
     )
   } catch (e) {
     return res.json({ success: false, message: e.message })
