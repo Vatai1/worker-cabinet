@@ -2033,11 +2033,7 @@ function AssistantSettingsTab() {
               </div>
             )}
 
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Zap className="h-3.5 w-3.5" />
-                docker compose up -d mini-agent
-              </div>
+            <div className="flex justify-end pt-1">
               <Button onClick={applyAgentConfig} disabled={applyingAgent} size="sm">
                 {applyingAgent ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
                 Сохранить
