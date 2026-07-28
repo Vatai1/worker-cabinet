@@ -157,6 +157,16 @@ export function Sidebar() {
     })
   }, [location.pathname, navigation, expandedItems])
 
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024 && useUIStore.getState().sidebarOpen) {
+        useUIStore.setState({ sidebarOpen: false })
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   const toggleAccordion = (name: string) => {
     setExpandedItems((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]

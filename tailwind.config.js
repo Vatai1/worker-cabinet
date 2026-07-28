@@ -48,6 +48,10 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        sidebar: {
+          bg: 'hsl(var(--sidebar-bg))',
+          border: 'hsl(var(--sidebar-border))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',

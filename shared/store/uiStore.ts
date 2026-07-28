@@ -13,7 +13,7 @@ interface UIStore {
 }
 
 export const useUIStore = create<UIStore>()((set) => ({
-  sidebarOpen: true,
+  sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
   openModals: 0,
   darkMode: (() => {
     const saved = getCookie('darkMode')
