@@ -1847,8 +1847,12 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
   const { execSync } = await import('child_process')
 
   try {
+    const net = execSync(
+      `docker inspect $HOSTNAME --format '{{range \$k,\$v := .NetworkSettings.Networks}}{{\$k}}{{end}}'`,
+      { timeout: 5000, encoding: 'utf-8' }
+    ).trim()
     execSync(
-      `docker rm -f worker-cabinet-mini-agent 2>/dev/null; docker run -d --name worker-cabinet-mini-agent --restart unless-stopped --network worker-cabinet-network -e MODEL=${model} -e BASE_URL=${baseUrl} -p 127.0.0.1:8642:8642 vatai12/worker-cabinet-mini-agent:latest`,
+      `docker rm -f worker-cabinet-mini-agent 2>/dev/null; docker run -d --name worker-cabinet-mini-agent --restart unless-stopped --network ${net} --network-alias mini-agent -e MODEL=${model} -e BASE_URL=${baseUrl} -p 127.0.0.1:8642:8642 vatai12/worker-cabinet-mini-agent:latest`,
       { timeout: 30000 }
     )
   } catch (e) {
