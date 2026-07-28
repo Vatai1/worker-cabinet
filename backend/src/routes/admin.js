@@ -1867,9 +1867,11 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
 
 // ===================== OLLAMA MODELS =====================
 
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434'
+
 router.get('/assistant/models', asyncHandler(async (req, res) => {
   try {
-    const r = await fetch('http://127.0.0.1:11434/api/tags', { signal: AbortSignal.timeout(5000) })
+    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(5000) })
     const data = await r.json()
     res.json(data)
   } catch {
@@ -1881,7 +1883,7 @@ router.post('/assistant/models/pull', asyncHandler(async (req, res) => {
   const { model } = req.body
   if (!model) return res.status(400).json({ error: 'Укажите модель' })
 
-  const pullRes = await fetch('http://127.0.0.1:11434/api/pull', {
+  const pullRes = await fetch(`${OLLAMA_URL}/api/pull`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: model, stream: true }),
