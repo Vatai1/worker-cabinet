@@ -248,6 +248,23 @@ export const authenticateToken = async (req, res, next) => {
   try {
     let user
 
+    let decoded
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET)
+    } catch {}
+
+    if (decoded?.scope === 'assistant') {
+      const result = await query(
+        'SELECT id, email, role, first_name, last_name FROM users WHERE id = $1',
+        [decoded.id]
+      )
+      if (result.rows.length === 0) {
+        return res.status(403).json({ error: 'User not found' })
+      }
+      req.user = result.rows[0]
+      return next()
+    }
+
     if (keycloakConfig.enabled) {
       const kcPayload = await verifyKeycloakToken(token)
       user = await findOrCreateUser(kcPayload)
