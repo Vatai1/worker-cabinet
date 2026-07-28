@@ -121,6 +121,8 @@ def _build_system_prompt(session_id: str = "default"):
     role = ctx.get("user_role", "employee")
     system = ctx.get("system_prompt", "")
     prompt = system if system else SYSTEM_BASE
+    today = __import__("datetime").datetime.now().strftime("%Y-%m-%d")
+    prompt += f"\n\nТекущая дата: {today}. При создании заявок на отпуск используй только даты текущего или будущего года."
     prompt += "\n\nВажно: ОБЯЗАТЕЛЬНО вызывай инструменты для получения данных о отпусках, балансе дней, заявках. Никогда не придумывай данные — всегда используй инструменты."
     if user or position:
         prompt += f"\n\nПользователь: {user}"
