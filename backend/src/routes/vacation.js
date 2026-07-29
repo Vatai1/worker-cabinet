@@ -1498,13 +1498,7 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       next_year: String(year + 1),
       date_today: formatDate(today),
       travel_period_start: u.hire_date ? formatDate(u.hire_date) : '',
-      travel_period_end: (() => {
-        if (!u.hire_date) return ''
-        const d = new Date(u.hire_date)
-        d.setFullYear(d.getFullYear() + 2)
-        d.setDate(d.getDate() - 1)
-        return formatDate(d)
-      })(),
+      travel_period_end: u.hire_date ? formatDate(new Date(u.hire_date).setFullYear(new Date(u.hire_date).getFullYear() + 2)) : '',
       vacations,
       vacations_count: String(vacations.length),
       total_days: String(vacations.reduce((s, v) => s + Number(v.days), 0)),
@@ -1635,13 +1629,7 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       year: String(today.getFullYear()),
       next_year: String(today.getFullYear() + 1),
       travel_period_start: u.hire_date ? formatDate(u.hire_date) : '',
-      travel_period_end: (() => {
-        if (!u.hire_date) return ''
-        const d = new Date(u.hire_date)
-        d.setFullYear(d.getFullYear() + 2)
-        d.setDate(d.getDate() - 1)
-        return formatDate(d)
-      })(),
+      travel_period_end: u.hire_date ? formatDate(new Date(u.hire_date).setFullYear(new Date(u.hire_date).getFullYear() + 2)) : '',
       transfers: transfersResult.rows.map(t => {
         const delta = t.new_days - t.original_days
         const osp = dateParts(t.original_start)
