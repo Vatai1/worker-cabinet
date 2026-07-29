@@ -353,9 +353,13 @@ export function CreateVacationFormModal({
           )}
 
           {countsInCounter && duration > 0 && (
-            <div className={`p-3 rounded-lg ${hasEnoughDays ? 'bg-[hsl(var(--success)/0.1)] border border-[hsl(var(--success)/0.25)]' : 'bg-[hsl(var(--destructive)/0.1)] border border-[hsl(var(--destructive)/0.25)]'}`}>
+            <div className={`p-3 rounded-lg ${
+              hasEnoughDays
+                ? 'bg-success/10 dark:bg-success/25 border border-success/30 dark:border-success/60 text-success dark:text-success-foreground'
+                : 'bg-destructive/10 dark:bg-destructive/25 border border-destructive/30 dark:border-destructive/60 text-destructive dark:text-destructive-foreground'
+            }`}>
               <div className="text-sm">
-                <div className={`font-medium mb-1 ${hasEnoughDays ? 'text-[hsl(var(--success))]' : 'text-[hsl(var(--destructive))]'}`}>
+                <div className="font-medium mb-1">
                   {hasEnoughDays ? '✅ Достаточно дней' : '⚠️ Недостаточно дней'}
                 </div>
                 <div className="text-muted-foreground">

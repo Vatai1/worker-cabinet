@@ -343,12 +343,16 @@ export function CreateVacationModal({
 
           {/* Информация о днях */}
           {countsInCounter && (
-            <div className={`p-3 rounded-lg ${hasEnoughDays ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+            <div className={`p-3 rounded-lg ${
+              hasEnoughDays
+                ? 'bg-success/10 dark:bg-success/25 border border-success/30 dark:border-success/60 text-success dark:text-success-foreground'
+                : 'bg-destructive/10 dark:bg-destructive/25 border border-destructive/30 dark:border-destructive/60 text-destructive dark:text-destructive-foreground'
+            }`}>
               <div className="text-sm">
                 <div className="font-medium mb-1">
                   {hasEnoughDays ? '✅ Достаточно дней' : '⚠️ Недостаточно дней'}
                 </div>
-                <div className="text-muted-foreground">
+                <div className="opacity-70">
                   Требуется: {requiredDays} дней
                 </div>
                 {balance && (
