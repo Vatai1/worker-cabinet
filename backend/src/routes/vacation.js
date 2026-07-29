@@ -1401,7 +1401,7 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
 
     const [userResult, tmplResult, vacResult] = await Promise.all([
       query(
-        `SELECT u.first_name, u.last_name, u.middle_name, u.position, d.name as department_name
+        `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
          FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
         [userId]
       ),
@@ -1411,7 +1411,7 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       ),
       query(
         `SELECT vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name, rs.code as status,
-                vr.has_travel, vr.travel_destination, vr.travel_children_count
+                vr.has_travel, vr.travel_destination, vr.travel_children_count, vr.travel_children
          FROM vacation_requests vr
          JOIN vacation_types vt ON vr.vacation_type_id = vt.id
          JOIN request_statuses rs ON vr.status_id = rs.id
@@ -1473,6 +1473,7 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
         end_year: ep.year,
         days: String(v.duration),
         has_travel: v.has_travel || false,
+        has_children: Array.isArray(v.travel_children) && v.travel_children.length > 0,
         travel_destination: v.travel_destination || '',
         travel_children_count: String(v.travel_children_count || 0),
         travel_children_list: Array.isArray(v.travel_children) ? v.travel_children.map(c => {
@@ -1496,6 +1497,14 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       year: String(year),
       next_year: String(year + 1),
       date_today: formatDate(today),
+      travel_period_start: u.hire_date ? formatDate(u.hire_date) : '',
+      travel_period_end: (() => {
+        if (!u.hire_date) return ''
+        const d = new Date(u.hire_date)
+        d.setFullYear(d.getFullYear() + 2)
+        d.setDate(d.getDate() - 1)
+        return formatDate(d)
+      })(),
       vacations,
       vacations_count: String(vacations.length),
       total_days: String(vacations.reduce((s, v) => s + Number(v.days), 0)),
@@ -1558,7 +1567,7 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
 
     const [userResult, tmplResult, transfersResult] = await Promise.all([
       query(
-        `SELECT u.first_name, u.last_name, u.middle_name, u.position, d.name as department_name
+        `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
          FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
         [userId]
       ),
@@ -1625,6 +1634,14 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       date_today: formatDate(today),
       year: String(today.getFullYear()),
       next_year: String(today.getFullYear() + 1),
+      travel_period_start: u.hire_date ? formatDate(u.hire_date) : '',
+      travel_period_end: (() => {
+        if (!u.hire_date) return ''
+        const d = new Date(u.hire_date)
+        d.setFullYear(d.getFullYear() + 2)
+        d.setDate(d.getDate() - 1)
+        return formatDate(d)
+      })(),
       transfers: transfersResult.rows.map(t => {
         const delta = t.new_days - t.original_days
         const osp = dateParts(t.original_start)

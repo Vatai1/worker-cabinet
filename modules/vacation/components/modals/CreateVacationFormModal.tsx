@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
-import { X, FileText, Upload, AlertTriangle } from 'lucide-react'
+import { X, FileText, Upload, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 
 interface CreateVacationFormModalProps {
   isOpen: boolean
@@ -13,6 +13,7 @@ interface CreateVacationFormModalProps {
     vacationType: VacationType
     hasTravel: boolean
     travelDestination?: string
+    travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
     referenceDocument?: string
   }) => void
@@ -47,6 +48,7 @@ export function CreateVacationFormModal({
   const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
   const [hasTravel, setHasTravel] = useState(false)
   const [travelDestination, setTravelDestination] = useState('')
+  const [travelChildren, setTravelChildren] = useState<Array<{ fullName: string; birthDate: string }>>([])
   const [comment, setComment] = useState('')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -92,24 +94,6 @@ export function CreateVacationFormModal({
     }
   }
 
-  const validateDates = () => {
-    const newErrors: Record<string, string> = {}
-
-    if (!startDate) {
-      newErrors.startDate = 'Выберите дату начала'
-    } else if (new Date(startDate) < new Date(new Date().setHours(0, 0, 0, 0))) {
-      newErrors.startDate = 'Дата начала не может быть в прошлом'
-    }
-
-    if (!endDate) {
-      newErrors.endDate = 'Выберите дату окончания'
-    } else if (startDate && new Date(endDate) < new Date(startDate)) {
-      newErrors.endDate = 'Дата окончания не может быть раньше даты начала'
-    }
-
-    return newErrors
-  }
-
   const calculateDuration = () => {
     if (!startDate || !endDate) return 0
     const start = new Date(startDate)
@@ -117,12 +101,37 @@ export function CreateVacationFormModal({
     return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setErrors({})
 
-    const validationErrors = validateDates()
+    const validationErrors: Record<string, string> = {}
+    if (!startDate) validationErrors.startDate = 'Укажите дату начала'
+    if (!endDate) validationErrors.endDate = 'Укажите дату окончания'
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) validationErrors.endDate = 'Дата окончания раньше даты начала'
+
+    if (hasTravel) {
+      if (!travelDestination.trim()) {
+        validationErrors.travelDestination = 'Укажите город проезда'
+      }
+      for (let i = 0; i < travelChildren.length; i++) {
+        if (!travelChildren[i].fullName.trim()) {
+          validationErrors[`child_${i}_name`] = 'Укажите ФИО ребёнка'
+          break
+        }
+        if (!travelChildren[i].birthDate) {
+          validationErrors[`child_${i}_dob`] = 'Укажите дату рождения ребёнка'
+          break
+        }
+        const age = (Date.now() - new Date(travelChildren[i].birthDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+        if (age >= 18) {
+          validationErrors[`child_${i}_age`] = 'Ребёнок должен быть младше 18 лет'
+          break
+        }
+      }
+    }
+
     setErrors(validationErrors)
-
     if (Object.keys(validationErrors).length > 0) return
 
     const referenceDocument = referenceFile ? referenceFile.name : undefined
@@ -132,7 +141,8 @@ export function CreateVacationFormModal({
       endDate,
       vacationType,
       hasTravel,
-      travelDestination: hasTravel ? travelDestination : undefined,
+      travelDestination: hasTravel ? travelDestination.trim() || undefined : undefined,
+      travelChildren: hasTravel ? travelChildren : [],
       comment,
       referenceDocument,
     })
@@ -268,19 +278,71 @@ export function CreateVacationFormModal({
             </div>
 
             {hasTravel && (
-              <div>
-                <label htmlFor="travelDestination" className="block text-sm font-medium text-muted-foreground mb-1.5">
-                  Город назначения
-                </label>
-                <input
-                  type="text"
-                  id="travelDestination"
-                  value={travelDestination}
-                  onChange={(e) => setTravelDestination(e.target.value)}
-                  className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Введите город проезда"
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="travelDestination" className="block text-sm font-medium text-muted-foreground mb-1.5">
+                    Город назначения
+                  </label>
+                  <input
+                    type="text"
+                    id="travelDestination"
+                    value={travelDestination}
+                    onChange={(e) => setTravelDestination(e.target.value)}
+                    className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="Введите город проезда"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                <label className="block text-sm font-medium text-muted-foreground">Несовершеннолетние дети</label>
+                {travelChildren.map((child, index) => (
+                  <div key={index} className="flex gap-2 items-start">
+                    <div className="flex-1 space-y-2">
+                      <input
+                        type="text"
+                        placeholder="ФИО ребёнка"
+                        value={child.fullName}
+                        onChange={(e) => {
+                          const updated = [...travelChildren]
+                          updated[index] = { ...updated[index], fullName: e.target.value }
+                          setTravelChildren(updated)
+                        }}
+                        className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                        disabled={loading}
+                      />
+                      <input
+                        type="date"
+                        value={child.birthDate}
+                        onChange={(e) => {
+                          const updated = [...travelChildren]
+                          updated[index] = { ...updated[index], birthDate: e.target.value }
+                          setTravelChildren(updated)
+                        }}
+                        className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                        disabled={loading}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTravelChildren(travelChildren.filter((_, i) => i !== index))}
+                      className="p-2 text-destructive hover:text-destructive/80 mt-0.5"
+                      disabled={loading}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setTravelChildren([...travelChildren, { fullName: '', birthDate: '' }])}
+                  className="flex items-center gap-1 text-sm text-primary hover:text-primary/80"
                   disabled={loading}
-                />
+                >
+                  <Plus className="w-4 h-4" />
+                  Добавить ребёнка
+                </button>
+              </div>
               </div>
             )}
 
