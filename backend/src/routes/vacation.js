@@ -164,6 +164,8 @@ router.get('/requests', authenticateToken, async (req, res) => {
         u.last_name,
         u.middle_name,
         u.position,
+        u.avatar,
+        u.gender,
         u.department_id,
         d.name as department_name,
         d.manager_id as department_manager_id,
@@ -245,7 +247,14 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
     }
 
     const result = await query(
-      'SELECT * FROM vacation_balances WHERE user_id = $1 AND year = $2',
+      `SELECT vb.*,
+              u.hire_date,
+              CASE WHEN vb.travel_next_available_date IS NULL THEN u.hire_date + INTERVAL '2 years'
+                   ELSE vb.travel_next_available_date
+              END as effective_travel_next
+       FROM vacation_balances vb
+       LEFT JOIN users u ON u.id = vb.user_id
+       WHERE vb.user_id = $1 AND vb.year = $2`,
       [userId, targetYear]
     )
 
@@ -256,10 +265,35 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
          RETURNING *`,
         [userId, targetYear]
       )
+      await query(
+        `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'
+         FROM users WHERE users.id = vacation_balances.user_id AND vacation_balances.user_id = $1`,
+        [userId]
+      ).catch(() => {})
       return res.json(newBalance.rows[0])
     }
 
-    res.json(result.rows[0])
+    const row = result.rows[0]
+    const dateOk = row.effective_travel_next && new Date() >= new Date(row.effective_travel_next)
+
+    const pendingTravel = await query(
+      `SELECT 1 FROM vacation_requests vr
+       JOIN request_statuses rs ON rs.id = vr.status_id
+       WHERE vr.user_id = $1 AND vr.has_travel = true AND rs.code IN ('on_approval')
+       LIMIT 1`,
+      [userId]
+    )
+    const travelAvailable = dateOk && pendingTravel.rows.length === 0
+    const travelAvailableUntil = travelAvailable
+      ? new Date(new Date(row.effective_travel_next).getTime() + 2 * 365 * 24 * 60 * 60 * 1000)
+      : null
+    const balance = {
+      ...row,
+      travel_available: travelAvailable,
+      travel_next_available_date: row.effective_travel_next,
+      travel_available_until: travelAvailableUntil ? travelAvailableUntil.toISOString().split('T')[0] : null,
+    }
+    res.json(balance)
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch vacation balance' })
   }
@@ -304,7 +338,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
   const client = await getClient()
   
   try {
-    const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, referenceDocument } = req.body
+    const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, travelChildren, referenceDocument } = req.body
     const userId = req.user.id
 
     const blockCheck = await query(
@@ -374,6 +408,36 @@ router.post('/requests', authenticateToken, async (req, res) => {
       })
     }
 
+    if (hasTravel) {
+      const pendingTravel = await client.query(
+        `SELECT 1 FROM vacation_requests vr
+         JOIN request_statuses rs ON rs.id = vr.status_id
+         WHERE vr.user_id = $1 AND vr.has_travel = true AND rs.code IN ('on_approval')
+         LIMIT 1`,
+        [userId]
+      )
+      if (pendingTravel.rows.length > 0) {
+        await client.query('ROLLBACK')
+        return res.status(409).json({ error: 'Уже есть заявка с проездом на согласовании' })
+      }
+      if (!travelDestination || !travelDestination.trim()) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'Укажите город проезда' })
+      }
+      if (Array.isArray(travelChildren) && travelChildren.length > 0) {
+        for (const child of travelChildren) {
+          if (!child.fullName || !child.fullName.trim()) {
+            await client.query('ROLLBACK')
+            return res.status(400).json({ error: 'Укажите ФИО ребёнка' })
+          }
+          if (!child.birthDate) {
+            await client.query('ROLLBACK')
+            return res.status(400).json({ error: 'Укажите дату рождения ребёнка' })
+          }
+        }
+      }
+    }
+
     const overlapResult = await client.query(
       `SELECT vr.id FROM vacation_requests vr
         JOIN request_statuses rs ON vr.status_id = rs.id
@@ -392,10 +456,14 @@ router.post('/requests', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Пересечение с существующей заявкой' })
     }
 
+    const travelChildrenParsed = (hasTravel && Array.isArray(travelChildren)) ? travelChildren : []
+    const travelChildrenJson = JSON.stringify(travelChildrenParsed)
+    const travelChildrenCount = travelChildrenParsed.length
+
     const result = await client.query(
       `INSERT INTO vacation_requests 
-        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, reference_document, status_id)
-        VALUES ($1, $2, $3, $4, (SELECT id FROM vacation_types WHERE code = $5), $6, $7, $8, $9, (SELECT id FROM request_statuses WHERE code = 'on_approval'))
+        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, travel_children, travel_children_count, reference_document, status_id)
+        VALUES ($1, $2, $3, $4, (SELECT id FROM vacation_types WHERE code = $5), $6, $7, $8, $9, $10, $11, (SELECT id FROM request_statuses WHERE code = 'on_approval'))
         RETURNING *`,
       [
         userId,
@@ -406,6 +474,8 @@ router.post('/requests', authenticateToken, async (req, res) => {
         comment,
         hasTravel || false,
         travelDestination || null,
+        travelChildrenJson,
+        travelChildrenCount,
         referenceDocument || null
       ]
     )
@@ -589,6 +659,17 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
     await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1), used_days = used_days + $1 WHERE user_id = $2 AND year = $3',
       [request.rows[0].duration, request.rows[0].user_id, origYear])
 
+    if (request.rows[0].has_travel) {
+      await client.query(
+        `UPDATE vacation_balances
+         SET travel_last_used_date = CURRENT_DATE,
+             travel_next_available_date = CURRENT_DATE + INTERVAL '2 years',
+             travel_available = false
+         WHERE user_id = $1`,
+        [request.rows[0].user_id]
+      )
+    }
+
     await client.query(
       `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2)`,
       [id, req.user.id])
@@ -634,6 +715,19 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
       [request.rows[0].duration, request.rows[0].user_id, origYear])
 
+    if (request.rows[0].has_travel) {
+      await client.query(
+        `UPDATE vacation_balances
+         SET travel_available = true,
+             travel_last_used_date = NULL,
+             travel_next_available_date = (
+               SELECT hire_date + INTERVAL '2 years' FROM users WHERE id = $1
+             )
+         WHERE user_id = $1`,
+        [request.rows[0].user_id]
+      )
+    }
+
     await client.query(
       `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, comment) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
       [id, req.user.id, reason])
@@ -671,6 +765,19 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     } else {
       await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
         [request.rows[0].duration, request.rows[0].user_id, origYear])
+    }
+
+    if (request.rows[0].has_travel) {
+      await client.query(
+        `UPDATE vacation_balances
+         SET travel_available = true,
+             travel_last_used_date = NULL,
+             travel_next_available_date = (
+               SELECT hire_date + INTERVAL '2 years' FROM users WHERE id = $1
+             )
+         WHERE user_id = $1`,
+        [request.rows[0].user_id]
+      )
     }
 
     await client.query(
@@ -1303,7 +1410,8 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
         [templateId]
       ),
       query(
-        `SELECT vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name, rs.code as status
+        `SELECT vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name, rs.code as status,
+                vr.has_travel, vr.travel_destination, vr.travel_children_count
          FROM vacation_requests vr
          JOIN vacation_types vt ON vr.vacation_type_id = vt.id
          JOIN request_statuses rs ON vr.status_id = rs.id
@@ -1331,14 +1439,50 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
     }
 
-    const vacations = vacResult.rows.map((v, i) => ({
-      num: String(i + 1),
-      type: v.vacation_type_name,
-      start: formatDate(v.start_date),
-      end: formatDate(v.end_date),
-      days: String(v.duration),
-      status: { on_approval: 'На согласовании', approved: 'Согласовано', rejected: 'Отклонено', cancelled_by_employee: 'Отменено', cancelled_by_manager: 'Отменено' }[v.status] || v.status,
-    }))
+    const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+    const dateParts = (d) => {
+      if (!d) return {}
+      const dt = new Date(d)
+      const day = dt.getDate()
+      const month = dt.getMonth() + 1
+      const year = dt.getFullYear()
+      return {
+        day: String(day).padStart(2, '0'),
+        month: String(month).padStart(2, '0'),
+        month_name: MONTHS_GENITIVE[month - 1],
+        year: String(year),
+      }
+    }
+
+    const vacations = vacResult.rows.map((v, i, arr) => {
+      const sp = dateParts(v.start_date)
+      const ep = dateParts(v.end_date)
+      return {
+        num: String(i + 1),
+        is_last: i === arr.length - 1,
+        type: v.vacation_type_name,
+        start: formatDate(v.start_date),
+        start_day: sp.day,
+        start_month: sp.month,
+        start_month_name: sp.month_name,
+        start_year: sp.year,
+        end: formatDate(v.end_date),
+        end_day: ep.day,
+        end_month: ep.month,
+        end_month_name: ep.month_name,
+        end_year: ep.year,
+        days: String(v.duration),
+        has_travel: v.has_travel || false,
+        travel_destination: v.travel_destination || '',
+        travel_children_count: String(v.travel_children_count || 0),
+        travel_children_list: Array.isArray(v.travel_children) ? v.travel_children.map(c => {
+          const name = c.fullName || c.full_name || ''
+          const birth = c.birthDate || c.birth_date || ''
+          return birth ? `${name}, ${birth}` : name
+        }).join('\n') : '',
+        status: { on_approval: 'На согласовании', approved: 'Согласовано', rejected: 'Отклонено', cancelled_by_employee: 'Отменено', cancelled_by_manager: 'Отменено' }[v.status] || v.status,
+      }
+    })
 
     const today = new Date()
     const data = {
@@ -1350,6 +1494,7 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       position: u.position || '',
       department: u.department_name || '',
       year: String(year),
+      next_year: String(year + 1),
       date_today: formatDate(today),
       vacations,
       vacations_count: String(vacations.length),
@@ -1453,6 +1598,21 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
     }
 
+    const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+    const dateParts = (d) => {
+      if (!d) return {}
+      const dt = new Date(d)
+      const day = dt.getDate()
+      const month = dt.getMonth() + 1
+      const year = dt.getFullYear()
+      return {
+        day: String(day).padStart(2, '0'),
+        month: String(month).padStart(2, '0'),
+        month_name: MONTHS_GENITIVE[month - 1],
+        year: String(year),
+      }
+    }
+
     const today = new Date()
     const data = {
       full_name: fullName,
@@ -1464,12 +1624,23 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       department: u.department_name || '',
       date_today: formatDate(today),
       year: String(today.getFullYear()),
+      next_year: String(today.getFullYear() + 1),
       transfers: transfersResult.rows.map(t => {
         const delta = t.new_days - t.original_days
+        const osp = dateParts(t.original_start)
+        const nsp = dateParts(t.new_start)
         return {
           original_start: formatDate(t.original_start),
+          original_start_day: osp.day,
+          original_start_month: osp.month,
+          original_start_month_name: osp.month_name,
+          original_start_year: osp.year,
           original_days: String(t.original_days),
           new_start: formatDate(t.new_start),
+          new_start_day: nsp.day,
+          new_start_month: nsp.month,
+          new_start_month_name: nsp.month_name,
+          new_start_year: nsp.year,
           new_days: String(t.new_days),
           delta_direction: delta >= 0 ? 'увеличив' : 'сократив',
           delta_days: String(Math.abs(delta)),

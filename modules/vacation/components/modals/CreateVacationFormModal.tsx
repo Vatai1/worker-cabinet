@@ -21,6 +21,7 @@ interface CreateVacationFormModalProps {
     availableDays: number
     travelAvailable: boolean
     travelNextAvailableDate?: string
+    travelAvailableUntil?: string
   }
   restrictionWarnings?: Array<{
     message: string
@@ -255,16 +256,14 @@ export function CreateVacationFormModal({
                 С проездом к месту проведения отпуска
               </label>
                {balance?.travelAvailable ? (
-                 <p className="text-xs text-muted-foreground mt-1">
-                   Доступно
-                   {balance.travelNextAvailableDate && ` до ${new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')}`}
-                  </p>
-                ) : (
-                  <p className="text-xs text-destructive mt-1">
-                    Недоступно
-                    {balance?.travelNextAvailableDate && ` (доступно с ${new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')})`}
-                  </p>
-                )}
+                 <p className="text-xs text-green-600 mt-1">
+                   Проезд доступен{balance.travelAvailableUntil ? ` до ${new Date(balance.travelAvailableUntil).toLocaleDateString('ru-RU')}` : ''}
+                 </p>
+               ) : (
+                 <p className="text-xs text-destructive mt-1">
+                   Проезд недоступен до {balance?.travelNextAvailableDate ? new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU') : 'неизвестной даты'}
+                 </p>
+               )}
               </div>
             </div>
 

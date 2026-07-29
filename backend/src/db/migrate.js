@@ -1545,9 +1545,12 @@ async function runMigrations() {
     }
     console.log('  ✓ extra performance indexes')
 
+    await migrateTravelChildren(db)
+    await migrateTravelBalance(db)
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
-    
+
   } catch (error) {
     console.error('❌ Migration error:', error)
     throw error
@@ -1570,3 +1573,46 @@ if (isMainModule) {
 }
 
 export { runMigrations }
+
+async function migrateTravelChildren(db) {
+  console.log('Checking travel_children JSONB column...')
+  try {
+    await db.query('ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS travel_children JSONB DEFAULT \'[]\'')
+    await db.query('ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS travel_children_count INTEGER DEFAULT 0')
+    console.log('  ✓ travel_children + travel_children_count ready')
+  } catch (e) {
+    console.log('  - travel_children:', e.message)
+  }
+}
+
+async function migrateTravelBalance(db) {
+  console.log('Checking travel balance logic...')
+  const balResult = await db.query(`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name = 'vacation_balances' AND column_name = 'travel_next_available_date'
+  `)
+
+  if (balResult.rows.length > 0) {
+    const initialized = await db.query(`
+      SELECT COUNT(*) as cnt FROM vacation_balances
+      WHERE travel_next_available_date IS NOT NULL
+    `)
+
+    if (initialized.rows[0].cnt === 0) {
+      console.log('  Initializing travel_next_available_date from hire_date + 2 years...')
+      await db.query(`
+        UPDATE vacation_balances vb
+        SET travel_next_available_date = (
+          SELECT u.hire_date + INTERVAL '2 years'
+          FROM users u WHERE u.id = vb.user_id
+        )
+        WHERE vb.travel_last_used_date IS NULL
+      `)
+      console.log('  ✓ travel_next_available_date initialized')
+    } else {
+      console.log('  ✓ travel_next_available_date (already set)')
+    }
+  } else {
+    console.log('  - travel columns not found, skipping')
+  }
+}

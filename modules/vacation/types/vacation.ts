@@ -76,6 +76,8 @@ export interface VacationRequest {
   userMiddleName?: string
   userPosition: string
   userDepartment: string
+  userAvatar?: string
+  userGender?: 'male' | 'female' | 'other'
   departmentManagerId?: string
   
   startDate: string
@@ -91,7 +93,8 @@ export interface VacationRequest {
   
   hasTravel: boolean
   travelDestination?: string
-  travelDays?: number
+  travelChildrenCount?: number
+  travelChildren?: Array<{ fullName: string; birthDate: string }>
   
   referenceDocument?: string
   
@@ -127,6 +130,7 @@ export interface VacationBalance {
   
   travelAvailable: boolean
   travelNextAvailableDate?: string
+  travelAvailableUntil?: string
   travelLastUsedDate?: string
   hireDate: string
 }
@@ -167,6 +171,7 @@ export interface VacationFormData {
   comment?: string
   hasTravel: boolean
   travelDestination?: string
+  travelChildren?: Array<{ fullName: string; birthDate: string }>
   referenceDocument?: string
 }
 

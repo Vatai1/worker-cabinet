@@ -6,6 +6,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { X } from 'lucide-react'
+import { formatDate } from '@/shared/lib/utils'
 
 interface VacationDetailModalProps {
   isOpen: boolean
@@ -85,9 +86,35 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
           </div>
 
           {request.hasTravel && (
-            <div className="flex items-center gap-2 text-blue-600">
-              <span className="text-lg">✈️</span>
-              <span className="font-semibold">С проездом к месту проведения отпуска</span>
+            <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 space-y-1">
+              <div className="flex items-center gap-2 text-blue-600">
+                <span className="text-lg">✈️</span>
+                <span className="font-semibold">С проездом к месту проведения отпуска</span>
+              </div>
+              {request.travelDestination && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Город: </span>
+                  <span className="font-medium">{request.travelDestination}</span>
+                </div>
+              )}
+              {request.travelChildrenCount != null && request.travelChildrenCount > 0 && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Несовершеннолетних детей: </span>
+                  <span className="font-medium">{request.travelChildrenCount}</span>
+                </div>
+              )}
+              {request.travelChildren && request.travelChildren.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {request.travelChildren.map((child, index) => (
+                    <div key={index} className="text-sm pl-1 border-l-2 border-blue-300">
+                      <span className="font-medium">{child.fullName}</span>
+                      {child.birthDate && (
+                        <span className="text-muted-foreground ml-2">({formatDate(child.birthDate)})</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

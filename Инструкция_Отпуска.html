@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Инструкция: модуль «Отпуска» в Worker Cabinet</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e1e4ed;
+    --text-muted: #8b8fa3;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --green: #22c55e;
+    --red: #ef4444;
+    --orange: #f59e0b;
+    --blue: #3b82f6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 40px 20px;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 2.2em; font-weight: 800; margin-bottom: 8px; background: linear-gradient(135deg, var(--accent), var(--blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  h2 { font-size: 1.5em; font-weight: 700; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border); color: var(--accent-hover); }
+  h3 { font-size: 1.2em; font-weight: 600; margin: 32px 0 12px; color: var(--text); }
+  p, li { color: var(--text-muted); margin-bottom: 8px; }
+  strong { color: var(--text); font-weight: 600; }
+  .subtitle { font-size: 1.05em; color: var(--text-muted); margin-bottom: 32px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+  .card h3 { margin-top: 0; }
+  .step { counter-increment: step; margin-bottom: 14px; padding-left: 32px; position: relative; }
+  .step::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 1px;
+    width: 22px; height: 22px;
+    background: var(--accent); color: #fff;
+    border-radius: 50%; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+  }
+  ol { list-style: none; counter-reset: step; padding: 0; }
+  ul { padding-left: 20px; }
+  ul li { list-style: disc; margin-bottom: 6px; }
+
+  .screenshot {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin: 16px 0;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    image-rendering: -webkit-optimize-contrast;
+  }
+  .screenshot-caption {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    text-align: center;
+    margin: -8px 0 24px;
+    font-style: italic;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 0.78em;
+    font-weight: 600;
+  }
+  .badge-green { background: #22c55e20; color: var(--green); border: 1px solid #22c55e30; }
+  .badge-red { background: #ef444420; color: var(--red); border: 1px solid #ef444430; }
+  .badge-blue { background: #3b82f620; color: var(--blue); border: 1px solid #3b82f630; }
+  .badge-orange { background: #f59e0b20; color: var(--orange); border: 1px solid #f59e0b30; }
+  .badge-gray { background: #6b728020; color: #9ca3af; border: 1px solid #6b728030; }
+
+  .tabs {
+    display: flex; gap: 8px; margin: 24px 0 16px;
+  }
+  .tab {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: default;
+  }
+  .tab-employee { background: var(--accent); color: #fff; }
+  .tab-manager { background: var(--orange); color: #000; }
+
+  .important {
+    background: #3b82f610;
+    border: 1px solid #3b82f630;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+  .important strong { color: var(--blue); }
+  .warning {
+    background: #f59e0b10;
+    border: 1px solid #f59e0b30;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+  .warning strong { color: var(--orange); }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+  .toc { margin: 24px 0; }
+  .toc a { color: var(--accent-hover); text-decoration: none; display: block; padding: 4px 0; }
+  .toc a:hover { color: #a5b4fc; }
+  .toc-section { font-weight: 600; color: var(--text); margin-top: 12px; }
+  .footer { text-align: center; margin-top: 60px; color: var(--text-muted); font-size: 0.85em; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--text); font-weight: 600; background: var(--card); }
+  td { color: var(--text-muted); }
+  code { background: #2a2d3a; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; color: var(--text); }
+  .kbd { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 0.85em; font-family: monospace; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>📋 Инструкция: модуль «Отпуска»</h1>
+<p class="subtitle">Worker Cabinet — Личный кабинет сотрудника. Подробное руководство для сотрудников и руководителей отделов.</p>
+
+<div class="important">
+  <strong>ℹ️ О системе</strong>
+  <p style="margin-top: 8px">Worker Cabinet — корпоративная система управления персоналом. Модуль «Отпуска» позволяет: подавать заявления, отслеживать баланс дней, переносить отпуска, согласовывать заявки подчинённых и управлять пересечениями.</p>
+</div>
+
+<!-- ========== ОГЛАВЛЕНИЕ ========== -->
+<h2>📑 Содержание</h2>
+<div class="toc">
+  <a href="#enter">1. Вход в систему</a>
+  <div class="toc-section">Для сотрудника</div>
+  <a href="#emp">2. Страница «Отпуск» — обзор</a>
+  <a href="#emp-balance">2.1. Баланс отпускных дней</a>
+  <a href="#emp-calendar">2.2. Календарь отпусков</a>
+  <a href="#emp-create">2.3. Создание заявки через календарь</a>
+  <a href="#emp-application">2.4. Генерация документа-заявления (.docx)</a>
+  <a href="#emp-transfer">2.5. Перенос отпуска</a>
+  <a href="#emp-history">2.6. История отпусков</a>
+  <a href="#emp-cancel">2.7. Отмена заявки</a>
+  <div class="toc-section">Для начальника отдела</div>
+  <a href="#mgr">3. Страница «Отпуск» руководителя — обзор</a>
+  <a href="#mgr-leader">3.1. Панель лидера</a>
+  <a href="#mgr-review">3.2. Согласование заявок подчинённых</a>
+  <a href="#mgr-detail">3.3. Детальный просмотр заявки</a>
+  <a href="#mgr-reject">3.4. Отклонение заявки с причиной</a>
+  <a href="#mgr-restrictions">3.5. Управление пересечениями отпусков</a>
+  <div class="toc-section">Для HR-менеджера</div>
+  <a href="#hr">4. HR-панель — управление отпусками организации</a>
+  <a href="#hr-block">4.1. Блокировка подачи заявок по отделам</a>
+  <a href="#hr-templates">4.2. Управление шаблонами документов</a>
+  <a href="#status">5. Статусы заявок — справочник</a>
+  <a href="#types">6. Типы отпусков — справочник</a>
+  <a href="#faq">7. Часто задаваемые вопросы</a>
+</div>
+
+<hr>
+
+<!-- ========== 1. ВХОД ========== -->
+<h2 id="enter">1️⃣ Вход в систему</h2>
+<div class="card">
+  <p>Откройте браузер и перейдите по адресу системы. Откроется страница входа:</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/01_login.png" alt="Страница входа">
+  <p class="screenshot-caption">Рис. 1: Страница входа в Worker Cabinet</p>
+
+  <p><strong>Способы входа:</strong></p>
+  <ul>
+    <li><strong>Email + пароль</strong> — введите корпоративную почту и пароль, нажмите «Войти».</li>
+    <li><strong>Демо-доступ</strong> (только в режиме разработки) — четыре кнопки быстрого входа под формой.</li>
+    <li><strong>Keycloak SSO</strong> — при включённой корпоративной авторизации.</li>
+  </ul>
+
+  <div class="important">
+    <strong>🔑 Демо-учётные записи для тестирования:</strong>
+    <ul style="margin-top: 8px">
+      <li><strong>Сотрудник:</strong> <code>ivanov@example.com</code> / <code>password123</code></li>
+      <li><strong>Начальник отдела:</strong> <code>petrov@example.com</code> / <code>password123</code></li>
+      <li><strong>HR:</strong> <code>elena@example.com</code> / <code>password123</code></li>
+      <li><strong>Администратор:</strong> <code>admin@example.com</code> / <code>password123</code></li>
+    </ul>
+  </div>
+
+  <p>После успешного входа вы попадаете на дашборд. В левом меню найдите раздел <strong>«Отпуск»</strong> и нажмите на него.</p>
+</div>
+
+<hr>
+
+<!-- ========== 2. СОТРУДНИК ========== -->
+<h2 id="emp">2️⃣ Страница «Отпуск» — обзор для сотрудника</h2>
+
+<div class="tabs">
+  <span class="tab tab-employee">👤 Сотрудник (Иван Иванов)</span>
+</div>
+
+<div class="card">
+  <p>После входа как <strong>ivanov@example.com</strong> и перехода в раздел «Отпуск» вы видите:</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/02_employee_vacation.png" alt="Страница отпусков сотрудника">
+  <p class="screenshot-caption">Рис. 2: Страница «Отпуск» для сотрудника</p>
+
+  <p>Страница состоит из следующих блоков <strong>сверху вниз</strong>:</p>
+  <ol>
+    <li class="step"><strong>Шапка (hero-блок)</strong> — заголовок «Отпуск», подзаголовок «Управление вашими отпусками», три индикатора: <strong>«N дн. доступно»</strong> (часы), <strong>«N на согласовании»</strong> (песочные часы), <strong>«N согласовано»</strong> (галочка). Кнопки справа: <strong>«Заявление»</strong>, <strong>«Перенос»</strong>, <strong>«История»</strong>.</li>
+    <li class="step"><strong>Баланс отпускных дней</strong> — карточка с тремя цифрами и переключателем года.</li>
+    <li class="step"><strong>Календарь отпусков</strong> — 12 месяцев текущего года, дни с отпусками выделены.</li>
+  </ol>
+</div>
+
+<!-- 2.1 Баланс -->
+<h3 id="emp-balance">2.1 📊 Баланс отпускных дней</h3>
+<div class="card">
+  <p>Карточка баланса показывает:</p>
+  <table>
+    <tr><th>Поле</th><th>Описание</th></tr>
+    <tr><td><strong>Всего дней</strong></td><td>Количество дней, положенных за год (обычно 28 или 30)</td></tr>
+    <tr><td><strong>Использовано</strong></td><td>Дни, уже потраченные на согласованные отпуска</td></tr>
+    <tr><td><strong>Доступно</strong></td><td>Остаток = Всего − Использовано</td></tr>
+  </table>
+  <p>Справа от цифр — переключатель года: кнопки <span class="kbd">←</span> и <span class="kbd">→</span> рядом с номером года (например, <code>2026</code>). Используйте их для просмотра баланса и календаря за другие годы.</p>
+
+  <p><strong>Индикаторы в шапке</strong> (над балансом) показывают быструю сводку:</p>
+  <ul>
+    <li>🕐 <strong>«14 дн. доступно»</strong> — остаток дней отпуска</li>
+    <li>⏳ <strong>«3 на согласовании»</strong> — заявки, ожидающие решения руководителя</li>
+    <li>✅ <strong>«2 согласовано»</strong> — одобренные руководителем отпуска</li>
+  </ul>
+</div>
+
+<!-- 2.2 Календарь -->
+<h3 id="emp-calendar">2.2 📅 Календарь отпусков</h3>
+<div class="card">
+  <p>Календарь занимает основную часть страницы. Особенности:</p>
+  <ul>
+    <li><strong>Дни с заявками заштрихованы</strong> — подсвечены цветом в зависимости от статуса.</li>
+    <li>Два режима просмотра (кнопки под балансом):
+      <ul>
+        <li><strong>«Отдел»</strong> — показывает отпуска всех сотрудников вашего отдела. Помогает планировать отпуск так, чтобы не пересекаться с коллегами.</li>
+        <li><strong>«Мои отпуска»</strong> — показывает только ваши заявки.</li>
+      </ul>
+    </li>
+    <li><strong>Создание заявки через календарь:</strong> кликните на день начала отпуска, затем на день окончания — откроется модальное окно создания заявки (см. раздел 2.3).</li>
+  </ul>
+
+  <div class="important">
+    <strong>💡 Подсказка:</strong> над календарём есть текст-подсказка: «Дни с заявками на отпуск заштрихованы. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки».
+  </div>
+</div>
+
+<!-- 2.3 Создание заявки -->
+<h3 id="emp-create">2.3 ✏️ Создание заявки на отпуск через календарь</h3>
+<div class="card">
+  <p>Основной способ подать заявку на отпуск:</p>
+  <ol>
+    <li class="step">В календаре <strong>кликните левой кнопкой мыши</strong> на дату начала отпуска.</li>
+    <li class="step"><strong>Кликните на дату окончания</strong> отпуска.</li>
+    <li class="step">Откроется модальное окно <strong>«Создать заявку на отпуск»</strong> с уже заполненными датами.</li>
+    <li class="step">Выберите <strong>тип отпуска</strong> из выпадающего списка (ежегодный, без оплаты, учебный и т.д. — полный список в разделе 5).</li>
+    <li class="step">При необходимости отметьте <strong>«С проездом к месту проведения отпуска»</strong>.</li>
+    <li class="step">Добавьте <strong>комментарий</strong> (необязательно).</li>
+    <li class="step">Проверьте зелёный индикатор <strong>«Достаточно дней ✅»</strong> — если дней не хватает, появится предупреждение.</li>
+    <li class="step">Нажмите <strong>«Создать заявку»</strong>.</li>
+  </ol>
+
+  <div class="warning">
+    <strong>⚠️ Важно:</strong> Система автоматически проверяет ограничения (пересечения с другими сотрудниками). Если в отделе настроено ограничение и ваша заявка его нарушает — появится красное предупреждение, и заявка может быть заблокирована.
+  </div>
+</div>
+
+<!-- 2.4 Заявление -->
+<h3 id="emp-application">2.4 📄 Генерация документа-заявления (.docx)</h3>
+<div class="card">
+  <p>Кнопка <strong>«Заявление»</strong> генерирует готовый документ Word по шаблону для печати.</p>
+  <ol>
+    <li class="step">Нажмите кнопку <strong>«Заявление»</strong> в шапке страницы.</li>
+    <li class="step">Откроется модальное окно <strong>«Заявление на отпуск»</strong>.</li>
+  </ol>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/03_employee_application.png" alt="Модальное окно генерации заявления">
+  <p class="screenshot-caption">Рис. 3: Модальное окно «Заявление на отпуск» — генерация документа по шаблону</p>
+
+  <ol start="3">
+    <li class="step">Выберите <strong>год</strong> (выпадающий список, по умолчанию текущий).</li>
+    <li class="step">Выберите <strong>шаблон документа</strong> из справочника (если доступно несколько).</li>
+    <li class="step">При необходимости разверните блок <strong>«Показать доступные плейсхолдеры»</strong> — там перечислены теги шаблона (<code>{full_name}</code>, <code>{#vacations}</code> и т.д.).</li>
+    <li class="step">Нажмите <strong>«Скачать»</strong>.</li>
+    <li class="step">Файл <code>Заявление_2026.docx</code> скачается на ваше устройство.</li>
+  </ol>
+
+  <div class="important">
+    <strong>💡 Разница между «Заявление» и заявкой через календарь:</strong> Кнопка «Заявление» генерирует <strong>печатный документ</strong> (.docx) по шаблону. Заявка через календарь создаёт <strong>электронную заявку</strong> в системе, которая уходит руководителю на согласование.
+  </div>
+</div>
+
+<!-- 2.5 Перенос -->
+<h3 id="emp-transfer">2.5 🔄 Перенос отпуска</h3>
+<div class="card">
+  <p>Кнопка <strong>«Перенос»</strong> позволяет создать заявление о переносе ранее согласованного отпуска.</p>
+  <ol>
+    <li class="step">Нажмите кнопку <strong>«Перенос»</strong> в шапке страницы.</li>
+    <li class="step">Откроется модальное окно <strong>«Заявление о переносе отпуска»</strong>.</li>
+  </ol>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/04_employee_transfer.png" alt="Модальное окно переноса отпуска">
+  <p class="screenshot-caption">Рис. 4: Модальное окно «Заявление о переносе отпуска»</p>
+
+  <ol start="3">
+    <li class="step">Выберите <strong>шаблон документа</strong>.</li>
+    <li class="step">Нажмите <strong>«Добавить перенос»</strong> — появится форма:</li>
+  </ol>
+  <ul>
+    <li><strong>«Отпуск для переноса»</strong> — выберите из списка ваших согласованных отпусков.</li>
+    <li>Отобразится текущий <strong>баланс дней</strong> (всего / использовано / доступно).</li>
+    <li><strong>«Новая дата начала»</strong> — укажите новую дату.</li>
+    <li><strong>«Новое количество дней»</strong> — сколько дней в новом периоде.</li>
+    <li>Система покажет расчёт: <em>«увеличив на N дн.»</em> или <em>«сократив на N дн.»</em>.</li>
+    <li><strong>«Причина переноса»</strong> — обязательное поле.</li>
+  </ul>
+  <ol start="5">
+    <li class="step">Нажмите <strong>«Подать на согласование»</strong>.</li>
+    <li class="step">Перенос появится в списке поданных. После согласования руководителем — нажмите <strong>«Создать заявление»</strong> для генерации документа.</li>
+  </ol>
+
+  <div class="warning">
+    <strong>⚠️ Важно:</strong> После одобрения переноса <strong>старая заявка будет отменена</strong>, а дни вернутся на баланс. Новая заявка создаётся со статусом «На согласовании».
+  </div>
+</div>
+
+<!-- 2.6 История -->
+<h3 id="emp-history">2.6 📜 История отпусков</h3>
+<div class="card">
+  <p>Просмотр всех ваших заявок с фильтрацией:</p>
+  <ol>
+    <li class="step">Нажмите кнопку <strong>«История»</strong> в шапке страницы.</li>
+    <li class="step">Откроется модальное окно <strong>«История отпусков»</strong> со списком всех ваших заявок.</li>
+  </ol>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/05_employee_history.png" alt="Модальное окно истории отпусков">
+  <p class="screenshot-caption">Рис. 5: Модальное окно «История отпусков» — список всех заявок с фильтрами</p>
+
+  <p><strong>Фильтры в окне истории:</strong></p>
+  <ul>
+    <li><strong>«Год»</strong> — выпадающий список («Все года» или конкретный год).</li>
+    <li><strong>«Статус»</strong> — выпадающий список («Все статусы» / «На согласовании» / «Согласовано» / «Не согласовано» / «Отменено сотрудником» / «Отменено руководителем»).</li>
+    <li>Кнопка <strong>«Сбросить»</strong> — очищает фильтры (появляется только при активных фильтрах).</li>
+  </ul>
+
+  <p><strong>Каждая заявка в списке показывает:</strong></p>
+  <ul>
+    <li>Бейдж <strong>статуса</strong> (жёлтый / зелёный / красный / серый / оранжевый).</li>
+    <li><strong>Тип отпуска</strong> (ежегодный оплачиваемый, больничный и т.д.).</li>
+    <li><strong>Период</strong> дат и количество дней.</li>
+    <li><strong>Комментарий</strong> (если был указан).</li>
+    <li>При наличии — <strong>причину отклонения</strong> или отмены.</li>
+  </ul>
+
+  <p>Счётчик внизу: <strong>«Всего заявок: N»</strong> или <strong>«Найдено: N из M»</strong> (при фильтрации).</p>
+</div>
+
+<!-- 2.7 Отмена -->
+<h3 id="emp-cancel">2.7 ❌ Отмена заявки</h3>
+<div class="card">
+  <p>Вы можете отменить свою заявку, пока она на согласовании или уже согласована:</p>
+  <ol>
+    <li class="step">В блоке <strong>«Мои заявки»</strong> (если отображается) найдите нужную заявку.</li>
+    <li class="step">Нажмите <strong>«Отменить заявку»</strong> (красная кнопка с иконкой ✕).</li>
+    <li class="step">Появится окно подтверждения: <strong>«Отменить заявку?»</strong> с текстом «Дни отпуска будут возвращены на ваш баланс».</li>
+    <li class="step">Нажмите <strong>«Отменить»</strong> для подтверждения или <strong>«Вернуться»</strong> для отказа.</li>
+  </ol>
+  <p>После отмены заявка получит статус <span class="badge badge-gray">Отменено сотрудником</span>, а дни вернутся в баланс.</p>
+</div>
+
+<hr>
+
+<!-- ========== 3. НАЧАЛЬНИК ОТДЕЛА ========== -->
+<h2 id="mgr">3️⃣ Страница «Отпуск» — обзор для начальника отдела</h2>
+
+<div class="tabs">
+  <span class="tab tab-manager">👔 Начальник отдела (Пётр Петров)</span>
+</div>
+
+<div class="card">
+  <p>Войдите под учётной записью <strong>petrov@example.com</strong>. У руководителя расширенный интерфейс:</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/06_manager_vacation.png" alt="Страница отпусков руководителя">
+  <p class="screenshot-caption">Рис. 6: Страница «Отпуск» для руководителя — обратите внимание на кнопку «Пересечения»</p>
+
+  <p><strong>Отличия от страницы сотрудника:</strong></p>
+  <table>
+    <tr><th>Элемент</th><th>У сотрудника</th><th>У руководителя</th></tr>
+    <tr><td>Кнопки действий</td><td>Заявление, Перенос, История</td><td><strong>Пересечения</strong>, Заявление, Перенос, История</td></tr>
+    <tr><td>Блок «Заявки на согласовании»</td><td>Отсутствует</td><td><strong>Показывается</strong> — все заявки отдела</td></tr>
+    <tr><td>Боковое меню «УПРАВЛЕНИЕ»</td><td>Отсутствует</td><td>Табель, Сотрудники, Рассмотреть заявки</td></tr>
+    <tr><td>Доступ к «Панели лидера»</td><td>Нет</td><td><strong>Да</strong> — через «Дашборд»</td></tr>
+  </table>
+
+  <p><strong>Дополнительно в боковом меню</strong> появляется раздел <strong>«УПРАВЛЕНИЕ»</strong> с пунктами: Отдел, Табель, Отпуск, Сотрудники, Рассмотреть заявки, Проекты.</p>
+</div>
+
+<!-- 3.1 Панель лидера -->
+<h3 id="mgr-leader">3.1 🏠 Панель лидера</h3>
+<div class="card">
+  <p>Нажмите <strong>«Дашборд»</strong> в боковом меню — откроется панель лидера с ключевыми показателями отдела:</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/12_manager_leader.png" alt="Панель лидера">
+  <p class="screenshot-caption">Рис. 7: Панель лидера — дашборд руководителя</p>
+
+  <p><strong>Четыре статистические карточки:</strong></p>
+  <ul>
+    <li>👥 <strong>«Сотрудники»</strong> — количество человек в отделе (+ сколько сейчас в отпуске).</li>
+    <li>⏳ <strong>«На рассмотрении»</strong> — заявки, ожидающие вашего решения.</li>
+    <li>✅ <strong>«Одобрено»</strong> — согласованные отпуска (+ отклонённые).</li>
+    <li>📅 <strong>«Стаж»</strong> — средний стаж сотрудников отдела.</li>
+  </ul>
+
+  <p><strong>Блок «Требуют рассмотрения»</strong> — список последних заявок подчинённых с типом (Отпуск, Больничный, Удалённая работа) и датами. Ссылка <strong>«Показать все»</strong> ведёт на полный список.</p>
+
+  <p><strong>Блок «Быстрые действия»</strong> — три плитки-ссылки:</p>
+  <ul>
+    <li>🔍 <strong>«Рассмотреть заявки»</strong> → переход к списку всех заявок</li>
+    <li>📅 <strong>«Календарь отпусков»</strong> → страница отпусков</li>
+    <li>📄 <strong>«Документы»</strong> → доступ к трудовым документам</li>
+  </ul>
+
+  <p><strong>Блок «Статус отпусков команды»</strong> — список сотрудников с индикатором «В отпуске» или «На работе».</p>
+</div>
+
+<!-- 3.2 Согласование -->
+<h3 id="mgr-review">3.2 ✅ Согласование заявок подчинённых</h3>
+<div class="card">
+  <p>Согласование происходит <strong>прямо на странице отпусков</strong>. Прокрутите страницу вниз — под календарём находится блок <strong>«Заявки на согласовании»</strong>.</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/07_manager_approvals.png" alt="Блок Заявки на согласовании">
+  <p class="screenshot-caption">Рис. 8: Блок «Заявки на согласовании» — все ожидающие заявки отдела</p>
+
+  <p>Каждая карточка в блоке показывает:</p>
+  <ul>
+    <li>👤 <strong>Аватар</strong> (инициалы) и <strong>ФИО</strong> сотрудника</li>
+    <li>💼 <strong>Должность</strong></li>
+    <li>🗓️ <strong>Тип отпуска</strong> и даты в формате <code>DD.MM.YYYY — DD.MM.YYYY (N дней)</code></li>
+  </ul>
+
+  <ol>
+    <li class="step">Найдите нужную заявку в блоке «Заявки на согласовании».</li>
+    <li class="step"><strong>Кликните на карточку</strong> — откроется детальное окно (см. раздел 3.3).</li>
+    <li class="step">В окне деталей нажмите <strong>«Согласовать»</strong> (зелёная кнопка) или <strong>«Отклонить»</strong> (красная кнопка).</li>
+  </ol>
+
+  <div class="important">
+    <strong>💡 Быстрый совет:</strong> Если заявок нет — блок отображает текст «Нет заявок на согласовании». Проверяйте страницу регулярно, чтобы не задерживать сотрудников.
+  </div>
+</div>
+
+<!-- 3.3 Детальный просмотр -->
+<h3 id="mgr-detail">3.3 🔍 Детальный просмотр заявки</h3>
+<div class="card">
+  <p>При клике на карточку в блоке «Заявки на согласовании» открывается модальное окно <strong>«Детали отпуска»</strong>:</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/08_manager_detail.png" alt="Детальный просмотр заявки">
+  <p class="screenshot-caption">Рис. 9: Модальное окно «Детали отпуска» — просмотр заявки с кнопками согласования</p>
+
+  <p><strong>В окне отображается:</strong></p>
+  <ul>
+    <li>👤 <strong>Сотрудник</strong> — ФИО, должность, отдел</li>
+    <li>📅 <strong>Период отпуска</strong> — даты в формате «20 апреля 2026 — 24 апреля 2026» и количество дней</li>
+    <li>🏖️ <strong>Вид отпуска</strong> — название и описание (например, «Отпуск без сохранения заработной платы — Неоплачиваемый отпуск по соглашению»)</li>
+    <li>✈️ <strong>Проезд</strong> — «С проездом к месту проведения отпуска» (если указано)</li>
+    <li>⚠️ <strong>Пересечения</strong> — предупреждение, если даты пересекаются с отпусками других сотрудников</li>
+    <li>📝 <strong>Комментарий</strong> сотрудника</li>
+    <li>📄 <strong>Справка</strong> (если приложена, например для учебного отпуска)</li>
+    <li>🕐 <strong>История изменений</strong> — таймлайн всех смен статуса с датами и именами</li>
+  </ul>
+
+  <p><strong>Кнопки действий</strong> (внизу окна):</p>
+  <ul>
+    <li><span class="badge badge-green">✅ Согласовать</span> — одобрить отпуск одним кликом</li>
+    <li><span class="badge badge-red">❌ Отклонить</span> — отклонить с указанием причины (см. раздел 3.4)</li>
+    <li><strong>«Закрыть»</strong> — закрыть окно без действия</li>
+  </ul>
+</div>
+
+<!-- 3.4 Отклонение -->
+<h3 id="mgr-reject">3.4 ❌ Отклонение заявки с причиной</h3>
+<div class="card">
+  <p>При нажатии <strong>«Отклонить»</strong> в окне деталей появляется форма:</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/09_manager_reject.png" alt="Форма отклонения заявки">
+  <p class="screenshot-caption">Рис. 10: Форма отклонения — поле «Причина отклонения» и кнопки подтверждения</p>
+
+  <ol>
+    <li class="step">В поле <strong>«Причина отклонения»</strong> обязательно укажите, почему отпуск отклонён.</li>
+    <li class="step">Нажмите <strong>«Подтвердить»</strong> — заявка получит статус <span class="badge badge-red">Не согласовано</span>.</li>
+    <li class="step">Сотрудник увидит причину отклонения в истории заявок.</li>
+  </ol>
+
+  <div class="warning">
+    <strong>⚠️ Важно:</strong> Без указания причины отклонение невозможно. Это сделано для прозрачности — сотрудник всегда понимает, почему отпуск не согласован.
+  </div>
+</div>
+
+<!-- 3.5 Пересечения -->
+<h3 id="mgr-restrictions">3.5 🔀 Управление пересечениями отпусков</h3>
+<div class="card">
+  <p>Кнопка <strong>«Пересечения»</strong> (доступна только руководителям) позволяет настроить ограничения на одновременный отпуск сотрудников.</p>
+  <ol>
+    <li class="step">Нажмите кнопку <strong>«Пересечения»</strong> в шапке страницы отпусков.</li>
+    <li class="step">Откроется модальное окно <strong>«Настроить пересечения отпусков»</strong>.</li>
+  </ol>
+
+  <p><strong>Слева — создание ограничения:</strong></p>
+  <p>Доступны два типа ограничений:</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/10_manager_restrictions_pair.png" alt="Парное ограничение">
+  <p class="screenshot-caption">Рис. 11: Тип «Парное» — два сотрудника не могут одновременно в отпуске</p>
+
+  <table>
+    <tr><th>Тип</th><th>Описание</th><th>Применение</th></tr>
+    <tr>
+      <td><strong>Парное</strong></td>
+      <td>Выбираются ровно 2 сотрудника, которые не могут одновременно отсутствовать</td>
+      <td>Team lead и его заместитель; два ключевых разработчика</td>
+    </tr>
+    <tr>
+      <td><strong>Групповое</strong></td>
+      <td>Выбирается группа (от 2 человек) + указывается «Максимум одновременно в отпуске»</td>
+      <td>В отделе из 10 человек максимум 2 могут быть в отпуске одновременно</td>
+    </tr>
+  </table>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/11_manager_restrictions_group.png" alt="Групповое ограничение">
+  <p class="screenshot-caption">Рис. 12: Тип «Групповое» — поле «Максимум одновременно в отпуске»</p>
+
+  <ol start="3">
+    <li class="step">Выберите тип: <strong>«Парное»</strong> или <strong>«Групповое»</strong>.</li>
+    <li class="step">Отметьте нужных сотрудников чекбоксами (счётчик «Выбрано: N»).</li>
+    <li class="step">Для группового — укажите <strong>«Максимум одновременно в отпуске»</strong>.</li>
+    <li class="step">Добавьте <strong>описание</strong> (необязательно).</li>
+    <li class="step">Нажмите <strong>«Создать ограничение»</strong>.</li>
+  </ol>
+
+  <p><strong>Справа — список текущих ограничений</strong> с возможностью удаления (иконка-корзина). Каждое ограничение показывает тип, сотрудников и описание.</p>
+
+  <div class="important">
+    <strong>💡 Как это работает на практике:</strong> Когда сотрудник пытается создать заявку на отпуск, система проверяет все ограничения. Если парное ограничение нарушено (второй сотрудник уже в отпуске на эти даты) или превышен лимит группового ограничения — заявка блокируется с предупреждающим сообщением.
+  </div>
+</div>
+
+<hr>
+
+<!-- ========== 4. HR ========== -->
+<h2 id="hr">4️⃣ HR-панель — управление отпусками организации</h2>
+
+<div class="tabs">
+  <span class="tab" style="background: #ec4899; color: #fff;">👤 HR-менеджер (Елена Смирнова)</span>
+</div>
+
+<div class="card">
+  <p>Войдите под учётной записью <strong>elena@example.com</strong> / <code>password123</code>. В боковом меню нажмите <strong>«HR-панель»</strong>.</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/13_hr_panel.png" alt="HR-панель">
+  <p class="screenshot-caption">Рис. 13: HR-панель — главная страница с вкладками разделов</p>
+
+  <p>HR-панель содержит <strong>7 вкладок</strong> (левая навигация внутри панели):</p>
+  <table>
+    <tr><th>Вкладка</th><th>Раздел</th><th>Назначение</th></tr>
+    <tr><td>📊 Опросы</td><td>Управление персоналом</td><td>Создание и управление опросами сотрудников</td></tr>
+    <tr><td>👤 Онбординг</td><td>Управление персоналом</td><td>Адаптация новых сотрудников</td></tr>
+    <tr><td>📅 Табель</td><td>Управление персоналом</td><td>Учёт рабочего времени</td></tr>
+    <tr><td>✈️ <strong>Отпуск</strong></td><td>Отпуска и структура</td><td><strong>Блокировка отпусков + календарь по отделам</strong></td></tr>
+    <tr><td>🗂 Иерархия</td><td>Отпуска и структура</td><td>Структура подчинения</td></tr>
+    <tr><td>📚 <strong>Справочники</strong></td><td>Справочники и аналитика</td><td><strong>Шаблоны документов, типы отпусков, должности</strong></td></tr>
+    <tr><td>📈 Аналитика</td><td>Справочники и аналитика</td><td>Отчёты и статистика</td></tr>
+  </table>
+
+  <div class="important">
+    <strong>🔑 Демо-доступ HR:</strong> <code>elena@example.com</code> / <code>password123</code>
+  </div>
+</div>
+
+<!-- 4.1 Блокировка отпусков -->
+<h3 id="hr-block">4.1 🔒 Блокировка подачи заявок на отпуск по отделам</h3>
+<div class="card">
+  <p>HR может временно запретить сотрудникам одного или всех отделов подавать заявки на отпуск (например, в период сдачи проекта или аврала).</p>
+
+  <h3>Открытие страницы управления</h3>
+  <ol>
+    <li class="step">В HR-панели нажмите вкладку <strong>«Отпуск»</strong> (раздел «Отпуска и структура»).</li>
+    <li class="step">Откроется страница <strong>«Календарь отпусков»</strong> с фильтром по отделам, статистикой и блоком управления.</li>
+  </ol>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/14_hr_vacation_top.png" alt="HR календарь отпусков">
+  <p class="screenshot-caption">Рис. 14: Вкладка «Отпуск» в HR-панели — календарь, статистика, управление заявками</p>
+
+  <p>Верхняя часть страницы содержит:</p>
+  <ul>
+    <li><strong>Фильтр «Все отделы»</strong> — выпадающий список для фильтрации по конкретному отделу.</li>
+    <li><strong>Статистика:</strong> «Сотрудников», «Согласовано», «На согласовании» — показатели по выбранному отделу или по всем.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h3>Блокировка одного отдела</h3>
+  <p>Прокрутите страницу вниз до блока <strong>«Управление заявками по отделам»</strong>:</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/15_hr_dept_management.png" alt="Управление заявками по отделам">
+  <p class="screenshot-caption">Рис. 15: Блок «Управление заявками по отделам» — карточки с кнопками блокировки</p>
+
+  <p>Каждый отдел представлен карточкой с:</p>
+  <ul>
+    <li>Названием отдела и количеством сотрудников.</li>
+    <li>Кнопкой <strong>«Активно»</strong> (зелёная, иконка 🔓) — отпуск можно подавать.</li>
+    <li>Кнопкой <strong>«Заблокировано»</strong> (красная, иконка 🔒) — отпуск заблокирован.</li>
+  </ul>
+
+  <ol>
+    <li class="step">Найдите нужный отдел в списке карточек.</li>
+    <li class="step">Нажмите кнопку <strong>«Активно»</strong> — она сменится на <strong>«Заблокировано»</strong> (красная).</li>
+    <li class="step">Карточка подсветится красной рамкой и фоном.</li>
+    <li class="step">Сотрудники этого отдела увидят <strong>жёлтое предупреждение</strong> на странице «Отпуск»: «Подача заявок на отпуск для вашего отдела временно заблокирована HR». Выбор дат в календаре будет отключён.</li>
+  </ol>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/19_hr_dept_blocked.png" alt="Заблокированный отдел">
+  <p class="screenshot-caption">Рис. 16: Один отдел заблокирован — красная карточка с иконкой 🔒</p>
+</div>
+
+<div class="card">
+  <h3>Массовая блокировка всех отделов</h3>
+  <ol>
+    <li class="step">В правом верхнем углу блока «Управление заявками по отделам» нажмите <strong>«Заблокировать все»</strong> (красная кнопка с иконкой 🔒).</li>
+    <li class="step">Все отделы мгновенно заблокируются — кнопки сменятся на «Заблокировано», карточки станут красными.</li>
+    <li class="step">Кнопка наверху сменится на <strong>«Разблокировать все»</strong> (иконка 🔓).</li>
+  </ol>
+
+  <div class="warning">
+    <strong>⚠️ Важно:</strong> Блокировка действует <strong>только на подачу новых заявок</strong>. Уже поданные и согласованные отпуска остаются в силе. Чтобы разблокировать — нажмите «Разблокировать все» или «Заблокировано» на конкретном отделе.
+  </div>
+
+  <div class="important">
+    <strong>💡 Что видит заблокированный сотрудник:</strong> На странице «Отпуск» появляется жёлтый баннер: <em>«Подача заявок на отпуск для вашего отдела временно заблокирована HR»</em>. Кнопки «Заявление» и «Перенос» остаются доступными (для генерации документов), но создание новой заявки через календарь невозможно. Даже при обходе фронтенда — бэкенд вернёт ошибку 403.
+  </div>
+</div>
+
+<!-- 4.2 Шаблоны документов -->
+<h3 id="hr-templates">4.2 📄 Управление шаблонами документов</h3>
+<div class="card">
+  <p>HR управляет шаблонами документов (.docx), которые сотрудники используют для генерации заявлений на отпуск и переноса. Шаблон содержит <strong>плейсхолдеры</strong> — специальные теги вида <code>{full_name}</code>, которые автоматически заменяются данными сотрудника при генерации.</p>
+
+  <h3>Открытие справочника шаблонов</h3>
+  <ol>
+    <li class="step">В HR-панели нажмите вкладку <strong>«Справочники»</strong> (раздел «Справочники и аналитика»).</li>
+    <li class="step">Откроется страница со вкладками: Отделы, Навыки, Типы отпусков, Должности.</li>
+    <li class="step">Нажмите вкладку <strong>«Шаблоны документов»</strong> (иконка 📄).</li>
+  </ol>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/16_hr_templates.png" alt="Справочник Шаблоны документов">
+  <p class="screenshot-caption">Рис. 17: Вкладка «Шаблоны документов» в справочниках</p>
+</div>
+
+<div class="card">
+  <h3>Загрузка нового шаблона</h3>
+  <ol>
+    <li class="step">Нажмите кнопку <strong>«Добавить шаблон»</strong> (иконка ➕).</li>
+    <li class="step">Откроется модальное окно <strong>«Добавить шаблон документа»</strong>.</li>
+  </ol>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/17_hr_add_template.png" alt="Добавление шаблона документа">
+  <p class="screenshot-caption">Рис. 18: Модальное окно добавления шаблона — поля и загрузка файла</p>
+
+  <p><strong>Поля формы:</strong></p>
+  <table>
+    <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr>
+      <td><strong>Название *</strong></td>
+      <td>Текстовое (обязательно)</td>
+      <td>Например, «Заявление на ежегодный оплачиваемый отпуск»</td>
+    </tr>
+    <tr>
+      <td><strong>Назначение</strong></td>
+      <td>Выпадающий список</td>
+      <td>
+        <strong>«Шаблон отпуска»</strong> — используется при генерации заявления на отпуск (кнопка «Заявление» на странице сотрудника)<br>
+        <strong>«Шаблон переноса отпуска»</strong> — используется при генерации заявления о переносе<br>
+        <strong>«Не указано»</strong> — шаблон без привязки (доступен только для скачивания)
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Файл шаблона</strong></td>
+      <td>Загрузка файла</td>
+      <td>Файл <code>.docx</code> с плейсхолдерами. Поддерживаемые форматы: PDF, DOC, DOCX, XLS, XLSX.</td>
+    </tr>
+    <tr>
+      <td><strong>Описание</strong></td>
+      <td>Многострочное</td>
+      <td>Произвольный комментарий для других HR</td>
+    </tr>
+  </table>
+
+  <ol start="3">
+    <li class="step">Заполните <strong>«Название»</strong> (обязательно).</li>
+    <li class="step">Выберите <strong>«Назначение»</strong> — «Шаблон отпуска» или «Шаблон переноса отпуска».</li>
+    <li class="step">Нажмите на <strong>«Файл шаблона»</strong> и выберите <code>.docx</code> файл.</li>
+    <li class="step">При необходимости добавьте описание.</li>
+    <li class="step">Нажмите <strong>«Добавить»</strong>.</li>
+  </ol>
+
+  <div class="warning">
+    <strong>⚠️ Важно:</strong> Назначение уникально — можно создать только <strong>один</strong> шаблон с назначением «Шаблон отпуска» и <strong>один</strong> с «Шаблон переноса отпуска». При попытке создать второй — система вернёт ошибку: «Шаблон с таким назначением уже существует». Чтобы заменить — отредактируйте существующий или удалите его.
+  </div>
+</div>
+
+<div class="card">
+  <h3>Плейсхолдеры для шаблонов DOCX</h3>
+  <p>В шаблоне <code>.docx</code> используются специальные теги, которые автоматически заменяются данными при генерации. Нажмите <strong>«Показать доступные плейсхолдеры»</strong> в форме для просмотра всех тегов:</p>
+
+  <img class="screenshot" src="file:///Users/vatai/.hermes/cache/screenshots/hires/18_hr_template_placeholders.png" alt="Плейсхолдеры DOCX">
+  <p class="screenshot-caption">Рис. 19: Раскрытый блок с доступными плейсхолдерами для вставки в шаблон</p>
+
+  <table>
+    <tr><th colspan="2">📋 Базовые теги (одиночные)</th></tr>
+    <tr><td><code>{full_name}</code></td><td>Полное ФИО сотрудника (Иванов Иван Иванович)</td></tr>
+    <tr><td><code>{short_name}</code></td><td>Краткое ФИО (Иванов И. И.)</td></tr>
+    <tr><td><code>{last_name}</code></td><td>Фамилия</td></tr>
+    <tr><td><code>{first_name}</code></td><td>Имя</td></tr>
+    <tr><td><code>{middle_name}</code></td><td>Отчество</td></tr>
+    <tr><td><code>{position}</code></td><td>Должность</td></tr>
+    <tr><td><code>{department}</code></td><td>Название отдела</td></tr>
+    <tr><td><code>{year}</code></td><td>Год (например, 2026)</td></tr>
+    <tr><td><code>{date_today}</code></td><td>Текущая дата</td></tr>
+    <tr><td><code>{vacations_count}</code></td><td>Количество отпусков за год</td></tr>
+    <tr><td><code>{total_days}</code></td><td>Всего дней отпуска за год</td></tr>
+  </table>
+
+  <table>
+    <tr><th colspan="2">🔁 Цикл по отпускам (для списка)</th></tr>
+    <tr><td><code>{#vacations}...{/vacations}</code></td><td>Начало и конец цикла — повторяет содержимое для каждого отпуска</td></tr>
+    <tr><td><code>{num}</code></td><td>Порядковый номер отпуска (внутри цикла)</td></tr>
+    <tr><td><code>{type}</code></td><td>Тип отпуска (внутри цикла)</td></tr>
+    <tr><td><code>{start}</code></td><td>Дата начала (внутри цикла)</td></tr>
+    <tr><td><code>{end}</code></td><td>Дата окончания (внутри цикла)</td></tr>
+    <tr><td><code>{days}</code></td><td>Количество дней (внутри цикла)</td></tr>
+    <tr><td><code>{status}</code></td><td>Статус отпуска (внутри цикла)</td></tr>
+  </table>
+
+  <div class="important">
+    <strong>💡 Пример использования:</strong> В Word-документе напишите:<br>
+    <code>Я, {full_name}, работающий в должности {position}, прошу предоставить отпуск:</code><br>
+    <code>{#vacations} {num}. С {start} по {end} ({days} дн.) — {type}{/vacations}</code><br><br>
+    При генерации теги заменятся на реальные данные сотрудника.
+  </div>
+</div>
+
+<div class="card">
+  <h3>Редактирование и удаление шаблонов</h3>
+  <p>У каждого шаблона в списке есть три кнопки действий (появляются при наведении):</p>
+  <table>
+    <tr><th>Кнопка</th><th>Действие</th></tr>
+    <tr><td>👁 <strong>Открыть</strong></td><td>Открывает шаблон в OnlyOffice для <strong>inline-редактирования</strong> прямо в браузере. Изменения сохраняются автоматически.</td></tr>
+    <tr><td>✏️ <strong>Редактировать</strong></td><td>Открывает модальное окно для изменения названия, описания, назначения и замены файла.</td></tr>
+    <tr><td>🗑 <strong>Удалить</strong></td><td>Удаляет шаблон и связанный файл из хранилища.</td></tr>
+  </table>
+
+  <div class="warning">
+    <strong>⚠️ Важно:</strong> Если удалить шаблон с назначением «Шаблон отпуска», сотрудники увидят сообщение: <em>«Нет шаблонов с назначением "Шаблон отпуска". Добавьте шаблон в справочнике документов.»</em> — генерация заявлений станет недоступной.
+  </div>
+</div>
+
+<div class="card">
+  <h3>Как сотрудник использует загруженный шаблон</h3>
+  <p>Когда HR загрузил шаблон с назначением «Шаблон отпуска», на странице сотрудника появляется возможность генерации:</p>
+  <ol>
+    <li class="step">Сотрудник открывает <strong>«Отпуск»</strong> → нажимает <strong>«Заявление»</strong>.</li>
+    <li class="step">В модальном окне выбирает <strong>год</strong> и <strong>шаблон документа</strong>.</li>
+    <li class="step">Нажимает <strong>«Скачать»</strong> — система подставляет данные в шаблон и скачивает готовый <code>.docx</code> файл <code>Заявление_2026.docx</code>.</li>
+  </ol>
+  <p>Аналогично для переноса — используется шаблон с назначением «Шаблон переноса отпуска» в модальном окне «Перенос».</p>
+</div>
+
+<hr>
+
+<!-- ========== 5. СТАТУСЫ ========== -->
+<h2 id="status">5️⃣ Статусы заявок — справочник</h2>
+<div class="card">
+  <table>
+    <tr><th>Статус</th><th>Цвет</th><th>Описание</th><th>Что делать</th></tr>
+    <tr>
+      <td><span class="badge badge-orange">На согласовании</span></td>
+      <td>🟡 Жёлтый</td>
+      <td>Заявка отправлена, ждёт решения руководителя</td>
+      <td>Ожидать. Можно отменить.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">Согласовано</span></td>
+      <td>🟢 Зелёный</td>
+      <td>Руководитель одобрил отпуск</td>
+      <td>Можно идти в отпуск. Можно перенести или отменить.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">Не согласовано</span></td>
+      <td>🔴 Красный</td>
+      <td>Руководитель отклонил (с причиной)</td>
+      <td>Подать новую заявку на другие даты.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-gray">Отменено сотрудником</span></td>
+      <td>⚪ Серый</td>
+      <td>Сотрудник сам отменил заявку</td>
+      <td>Дни возвращены на баланс.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-orange">Отменено руководителем</span></td>
+      <td>🟠 Оранжевый</td>
+      <td>Руководитель отменил согласованный отпуск</td>
+      <td>Сотрудник уведомляется. Дни возвращены.</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ========== 5. ТИПЫ ОТПУСКОВ ========== -->
+<h2 id="types">6️⃣ Типы отпусков — справочник</h2>
+<div class="card">
+  <table>
+    <tr><th>Тип</th><th>Описание</th><th>Списывается с баланса</th></tr>
+    <tr>
+      <td><strong>Ежегодный оплачиваемый отпуск</strong></td>
+      <td>Стандартный оплачиваемый отпуск (28 дней)</td>
+      <td>✅ Да</td>
+    </tr>
+    <tr>
+      <td><strong>Отпуск без сохранения заработной платы</strong></td>
+      <td>Неоплачиваемый отпуск по соглашению сторон</td>
+      <td>❌ Нет</td>
+    </tr>
+    <tr>
+      <td><strong>Учебный отпуск</strong></td>
+      <td>Для обучения и сдачи экзаменов (требует справку!)</td>
+      <td>❌ Нет</td>
+    </tr>
+    <tr>
+      <td><strong>Отпуск по беременности и родам</strong></td>
+      <td>Декретный отпуск</td>
+      <td>❌ Нет</td>
+    </tr>
+    <tr>
+      <td><strong>Отпуск по уходу за ребёнком</strong></td>
+      <td>До достижения ребёнком 3 лет</td>
+      <td>❌ Нет</td>
+    </tr>
+    <tr>
+      <td><strong>Дополнительный отпуск</strong></td>
+      <td>За вредные условия, работу на Крайнем Севере и т.д.</td>
+      <td>✅ Да</td>
+    </tr>
+    <tr>
+      <td><strong>Ветеранский отпуск</strong></td>
+      <td>Для участников боевых действий</td>
+      <td>❌ Нет</td>
+    </tr>
+  </table>
+
+  <div class="important">
+    <strong>💡 Важно:</strong> Только «Ежегодный оплачиваемый» и «Дополнительный» отпуска списывают дни из баланса. Остальные типы создаются без расхода дней.
+  </div>
+</div>
+
+<!-- ========== 7. FAQ ========== -->
+<h2 id="faq">7️⃣ Часто задаваемые вопросы</h2>
+<div class="card">
+
+  <h3>❓ Как создать заявку на отпуск?</h3>
+  <p>В календаре на странице «Отпуск» кликните на дату начала, затем на дату окончания. Откроется форма создания заявки — выберите тип, добавьте комментарий и нажмите «Создать заявку».</p>
+
+  <h3>❓ Чем отличается кнопка «Заявление» от создания заявки?</h3>
+  <p>Кнопка «Заявление» генерирует <strong>Word-документ</strong> (.docx) по шаблону — для печати и подачи в HR. Создание заявки через календарь отправляет <strong>электронную заявку</strong> руководителю на согласование.</p>
+
+  <h3>❓ Как отменить уже отправленную заявку?</h3>
+  <p>Откройте «Историю», найдите заявку и отмените её, или используйте кнопку «Отменить заявку» в блоке «Мои заявки». Дни вернутся на баланс.</p>
+
+  <h3>❓ Руководитель видит мои заявки?</h3>
+  <p>Да. Руководитель отдела видит все заявки своих подчинённых в блоке «Заявки на согласовании» и может согласовать или отклонить их.</p>
+
+  <h3>❓ Что делать, если руководитель отклонил заявку?</h3>
+  <p>В истории заявок будет указана <strong>причина отклонения</strong>. Создайте новую заявку на другие даты, учитывая причину.</p>
+
+  <h3>❓ Как перенести уже согласованный отпуск?</h3>
+  <p>Нажмите кнопку «Перенос», выберите отпуск для переноса, укажите новые даты и причину. После согласования руководителем старая заявка будет отменена.</p>
+
+  <h3>❓ Что такое «Пересечения» и зачем это нужно?</h3>
+  <p>Это инструмент для руководителя, чтобы настроить ограничения: например, «в отделе максимум 2 человека могут быть в отпуске одновременно» или «эти два сотрудника не могут отсутствовать одновременно». Система автоматически блокирует заявки, нарушающие ограничения.</p>
+
+  <h3>❓ Почему не могу выбрать даты в календаре?</h3>
+  <p>Возможно, руководитель включил <strong>запрет на создание заявок</strong> для отдела (например, в период аврала). В этом случае вверху страницы появится предупреждение, а кнопки «Заявление» и «Перенос» будут неактивны.</p>
+
+  <h3>❓ Как узнать, сколько дней отпуска осталось?</h3>
+  <p>Откройте страницу «Отпуск» — баланс дней отображается в шапке (индикатор «N дн. доступно») и в карточке «Баланс отпускных дней».</p>
+</div>
+
+<hr>
+
+<div class="footer">
+  <p>Worker Cabinet — Личный кабинет сотрудника © 2026</p>
+  <p>Инструкция сгенерирована для демонстрации функционала модуля «Отпуска»</p>
+</div>
+
+</div>
+</body>
+</html>

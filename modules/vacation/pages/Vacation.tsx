@@ -18,6 +18,8 @@ import type { VacationRequest } from '@/shared/types'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { generateAvatarUrl } from '@/shared/lib/avatar'
+import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
 import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon } from 'lucide-react'
 import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
 import { VacationTransferApplicationModal } from '@/modules/vacation/components/modals/VacationTransferApplicationModal'
@@ -70,9 +72,12 @@ export function Vacation() {
       fetchBalance(user.id, year).then(setBalance)
 
       if (isManager) {
-        fetchAllRequests()
         fetchRestrictions(user.departmentId || '1')
-        fetchDepartmentRequests(user.departmentId || '1')
+        if (user.role === 'manager') {
+          fetchDepartmentRequests(user.departmentId || '1')
+        } else {
+          fetchAllRequests()
+        }
       } else {
         fetchDepartmentRequests(user.departmentId || '1')
       }
@@ -199,6 +204,8 @@ export function Vacation() {
   const handleCreateFromModal = async (data: {
     vacationType: VacationType
     hasTravel: boolean
+    travelDestination?: string
+    travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
   }) => {
     if (!user || !selectedStartDate || !selectedEndDate) return
@@ -210,6 +217,8 @@ export function Vacation() {
         vacationType: data.vacationType,
         comment: data.comment,
         hasTravel: data.hasTravel,
+        travelDestination: data.travelDestination,
+        travelChildren: data.travelChildren,
       })
       setSelectedStartDate(null)
       setSelectedEndDate(null)
@@ -231,6 +240,7 @@ export function Vacation() {
     vacationType: VacationType
     hasTravel: boolean
     travelDestination?: string
+    travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
     referenceDocument?: string
   }) => {
@@ -244,6 +254,7 @@ export function Vacation() {
         comment: data.comment,
         hasTravel: data.hasTravel,
         travelDestination: data.travelDestination,
+        travelChildren: data.travelChildren,
         referenceDocument: data.referenceDocument,
       })
       setShowCreateForm(false)
@@ -471,19 +482,27 @@ export function Vacation() {
                 <div className="text-sm text-muted-foreground mt-2 font-medium">Доступно</div>
               </div>
             </div>
-            {balance.travelAvailable && (
+            {balance.travelAvailable ? (
               <div className="mt-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                 <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="font-semibold">Проезд доступен</span>
-                  {balance.travelNextAvailableDate && (
-                    <span className="text-muted-foreground"> (следующая дата: {new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')})</span>
-                  )}
+                  <span className="font-semibold">
+                    Проезд доступен{balance.travelAvailableUntil ? ` до ${new Date(balance.travelAvailableUntil).toLocaleDateString('ru-RU')}` : ''}
+                  </span>
                 </div>
               </div>
-            )}
+            ) : balance.travelNextAvailableDate ? (
+              <div className="mt-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="font-semibold">Проезд недоступен до {new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')}</span>
+                </div>
+              </div>
+            ) : null}
           </div>
         </Card>
       )}
@@ -584,9 +603,12 @@ export function Vacation() {
                       onClick={() => handleOpenDetailModal(request)}
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary font-bold shrink-0">
-                          {request.userFirstName[0]}{request.userLastName[0]}
-                        </div>
+                        <Avatar className="w-10 h-10 rounded-xl shrink-0">
+                          <AvatarImage src={request.userAvatar || generateAvatarUrl(request.userId, request.userGender)} alt={`${request.userLastName} ${request.userFirstName}`} />
+                          <AvatarFallback className="rounded-xl bg-primary/10 text-primary font-bold">
+                            {request.userFirstName[0]}{request.userLastName[0]}
+                          </AvatarFallback>
+                        </Avatar>
                         <div className="flex-1">
                           <div className="font-bold text-sm">
                             {request.userLastName} {request.userFirstName}

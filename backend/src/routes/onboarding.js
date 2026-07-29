@@ -650,6 +650,11 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
         'INSERT INTO vacation_balances (user_id, total_days) VALUES ($1, 28)',
         [userId]
       )
+      await client.query(
+        `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'
+         FROM users WHERE users.id = vacation_balances.user_id AND travel_next_available_date IS NULL AND users.id = $1`,
+        [userId]
+      )
 
       const onboardingResult = await client.query(
         `INSERT INTO employee_onboarding (user_id, started_by) VALUES ($1, $2) RETURNING id`,

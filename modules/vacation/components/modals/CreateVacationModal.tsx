@@ -2,7 +2,7 @@
 import { VacationType, VACATION_TYPES } from '@/shared/types'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
-import { Upload, FileText, X, AlertTriangle } from 'lucide-react'
+import { Upload, FileText, X, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 
@@ -14,6 +14,8 @@ interface CreateVacationModalProps {
   onSubmit: (data: {
     vacationType: VacationType
     hasTravel: boolean
+    travelDestination?: string
+    travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
     referenceDocument?: string
   }) => void
@@ -22,6 +24,7 @@ interface CreateVacationModalProps {
     availableDays: number
     travelAvailable: boolean
     travelNextAvailableDate?: string
+    travelAvailableUntil?: string
   }
   userId?: string
   restrictionWarnings?: Array<{
@@ -46,7 +49,10 @@ export function CreateVacationModal({
   useModalOpen(isOpen)
   const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
   const [hasTravel, setHasTravel] = useState(false)
+  const [travelDestination, setTravelDestination] = useState('')
+  const [travelChildren, setTravelChildren] = useState<Array<{ fullName: string; birthDate: string }>>([])
   const [comment, setComment] = useState('')
+  const [travelError, setTravelError] = useState<string | null>(null)
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
 
@@ -77,12 +83,37 @@ export function CreateVacationModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+    setTravelError(null)
+
+    if (hasTravel) {
+      if (!travelDestination.trim()) {
+        setTravelError('Укажите город проезда')
+        return
+      }
+      for (let i = 0; i < travelChildren.length; i++) {
+        if (!travelChildren[i].fullName.trim()) {
+          setTravelError('Укажите ФИО ребёнка')
+          return
+        }
+        if (!travelChildren[i].birthDate) {
+          setTravelError('Укажите дату рождения ребёнка')
+          return
+        }
+        const age = (Date.now() - new Date(travelChildren[i].birthDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+        if (age >= 18) {
+          setTravelError('Ребёнок должен быть младше 18 лет')
+          return
+        }
+      }
+    }
+
     const referenceDocument = referenceFile ? referenceFile.name : undefined
     
     onSubmit({
       vacationType,
       hasTravel,
+      travelDestination: hasTravel ? travelDestination.trim() || undefined : undefined,
+      travelChildren: hasTravel ? travelChildren : [],
       comment,
       referenceDocument,
     })
@@ -156,14 +187,86 @@ export function CreateVacationModal({
                 С проездом к месту проведения отпуска
               </label>
               {balance?.travelAvailable ? (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Доступно до: {balance.travelNextAvailableDate ? new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU') : 'Не ограничено'}
+                <p className="text-xs text-green-600 mt-1">
+                  Проезд доступен{balance.travelAvailableUntil ? ` до ${new Date(balance.travelAvailableUntil).toLocaleDateString('ru-RU')}` : ''}
                 </p>
               ) : (
                 <p className="text-xs text-destructive mt-1">
-                  Недоступно
-                  {balance?.travelNextAvailableDate && ` (доступно с ${new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')})`}
+                  Проезд недоступен до {balance?.travelNextAvailableDate ? new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU') : 'неизвестной даты'}
                 </p>
+              )}
+              {hasTravel && (
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label htmlFor="travelDestination" className="block text-sm font-medium text-muted-foreground mb-1">
+                      Город (страна — при выезде за границу)
+                    </label>
+                    <input
+                      type="text"
+                      id="travelDestination"
+                      value={travelDestination}
+                      onChange={(e) => setTravelDestination(e.target.value)}
+                      placeholder="Напр. Москва"
+                      className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Несовершеннолетние дети
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setTravelChildren([...travelChildren, { fullName: '', birthDate: '' }])}
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Добавить ребёнка
+                      </button>
+                    </div>
+
+                    {travelChildren.map((child, index) => (
+                      <div key={index} className="flex gap-2 items-start">
+                        <input
+                          type="text"
+                          placeholder="ФИО ребёнка"
+                          value={child.fullName}
+                          onChange={(e) => {
+                            const updated = [...travelChildren]
+                            updated[index] = { ...updated[index], fullName: e.target.value }
+                            setTravelChildren(updated)
+                          }}
+                          className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                        />
+                        <input
+                          type="date"
+                          value={child.birthDate}
+                          onChange={(e) => {
+                            const updated = [...travelChildren]
+                            updated[index] = { ...updated[index], birthDate: e.target.value }
+                            setTravelChildren(updated)
+                          }}
+                          className="w-[140px] rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setTravelChildren(travelChildren.filter((_, i) => i !== index))}
+                          className="p-2 text-destructive hover:text-destructive/80 mt-0.5"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+
+                    {travelChildren.length === 0 && (
+                      <p className="text-xs text-muted-foreground">Нет детей для проезда</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {travelError && (
+                <p className="text-xs text-destructive mt-2">{travelError}</p>
               )}
             </div>
           </div>
