@@ -1,6 +1,9 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Edit, Loader2, CheckCircle2, Copy, Check as CheckIcon, ChevronDown, ChevronUp, Save } from 'lucide-react'
 import { formatFileSize } from '@/shared/lib/documentUtils'
+import { apiPost } from '@/shared/lib/apiClient'
+import { useUIStore } from '@/shared/store/uiStore'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 
@@ -37,7 +40,7 @@ const ONLYOFFICE_API_URL = `${ONLYOFFICE_URL}/web-apps/apps/api/documents/api.js
 
 let editorCounter = 0
 
-export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, callbackUrl, onSave, onAcknowledge, acknowledged, placeholders }: OnlyOfficePreviewModalProps) {
+export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, onSave, onAcknowledge, acknowledged, placeholders }: OnlyOfficePreviewModalProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showPlaceholders, setShowPlaceholders] = useState(true)
@@ -114,6 +117,14 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
     setShowConfirmModal(true)
   }
 
+  const { openModal, closeModal } = useUIStore()
+
+  useEffect(() => {
+    if (!open) return
+    openModal()
+    return () => closeModal()
+  }, [open, openModal, closeModal])
+
   useEffect(() => {
     if (!open) {
       destroyEditor()
@@ -162,6 +173,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
         const key = `${doc.id}-${Date.now()}`
         keyRef.current = key
         fileTypeRef.current = fileType
+        const ooCallbackUrl = `${fileUrl.match(/^https?:\/\/[^/]+/)?.[0] || ''}/api/onlyoffice/callback`
         const config = {
           document: {
             fileType: fileType,
@@ -177,7 +189,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           editorConfig: {
             lang: 'ru',
             mode: editable ? 'edit' : 'view',
-            callbackUrl: editable ? callbackUrl : '',
+            callbackUrl: ooCallbackUrl,
             user: {
               id: 'preview-user',
               name: 'Preview User',
@@ -201,6 +213,9 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
         if (!container) {
           throw new Error(`Container #${editorId} not found`)
         }
+
+        const tokenRes = await apiPost<{ token: string }>('/onlyoffice/sign', config)
+        ;(config as any).token = tokenRes.token
 
         editorRef.current = new DocsAPI.DocEditor(editorId, config)
         isInitializedRef.current = true
@@ -258,11 +273,11 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
 
   if (!open) return null
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-7xl mx-4 flex flex-col h-[95vh] animate-scale-in">
-        <div className="flex items-center justify-between p-4 border-b border-border/60 shrink-0">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-7xl mx-4 flex flex-col h-[95vh]">
+        <div className="flex items-center justify-between p-4 border-b border-border/60 shrink-0 relative z-[200]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 shrink-0">
               <Edit className="h-5 w-5 text-primary" />
@@ -279,7 +294,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           </Button>
         </div>
 
-        <div className="flex-1 overflow-hidden relative" style={{ minHeight: '500px' }}>
+        <div className="flex-1 overflow-hidden relative isolate z-[1]" style={{ minHeight: '500px' }}>
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
               <div className="text-center">
@@ -389,7 +404,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           </div>
         )}
 
-        <div className="flex items-center justify-between p-4 border-t border-border/60 shrink-0">
+        <div className="flex items-center justify-between p-4 border-t border-border/60 shrink-0 relative z-[200]">
           <p className="text-sm text-muted-foreground">Powered by OnlyOffice</p>
           <div className="flex gap-3">
             <Button variant="outline" onClick={onClose}>Закрыть</Button>
@@ -416,6 +431,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

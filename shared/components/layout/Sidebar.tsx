@@ -189,7 +189,7 @@ export function Sidebar() {
       )}
 
       <aside className={cn(
-        'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-sidebar-border bg-sidebar-bg transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] lg:translate-x-0',
+        'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-sidebar-border bg-sidebar-bg transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
         openModals ? '-translate-x-full' : sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         <div className="relative overflow-hidden px-5 pt-5 pb-4">
