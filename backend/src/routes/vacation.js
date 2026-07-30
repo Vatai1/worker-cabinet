@@ -1571,6 +1571,7 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       ),
       query(
         `SELECT nr.id, nr.start_date as new_start, nr.duration as new_days, nr.transfer_note as note,
+                nr.has_travel, nr.travel_destination, nr.travel_children, nr.travel_children_count,
                 orig.start_date as original_start, orig.duration as original_days,
                 rs.code as status
          FROM vacation_requests nr
@@ -1641,12 +1642,63 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
           original_start_month_name: osp.month_name,
           original_start_year: osp.year,
           original_days: String(t.original_days),
+          original_end: (() => {
+            if (!t.original_start) return ''
+            const d = new Date(t.original_start)
+            d.setDate(d.getDate() + t.original_days - 1)
+            return formatDate(d)
+          })(),
+          original_end_day: (() => {
+            const d = new Date(t.original_start)
+            d.setDate(d.getDate() + t.original_days - 1)
+            return String(d.getDate()).padStart(2, '0')
+          })(),
+          original_end_month_name: (() => {
+            const d = new Date(t.original_start)
+            d.setDate(d.getDate() + t.original_days - 1)
+            return MONTHS_GENITIVE[d.getMonth()]
+          })(),
+          original_end_year: (() => {
+            const d = new Date(t.original_start)
+            d.setDate(d.getDate() + t.original_days - 1)
+            return String(d.getFullYear())
+          })(),
           new_start: formatDate(t.new_start),
           new_start_day: nsp.day,
           new_start_month: nsp.month,
           new_start_month_name: nsp.month_name,
           new_start_year: nsp.year,
           new_days: String(t.new_days),
+          new_end: (() => {
+            if (!t.new_start) return ''
+            const d = new Date(t.new_start)
+            d.setDate(d.getDate() + t.new_days - 1)
+            return formatDate(d)
+          })(),
+          new_end_day: (() => {
+            const d = new Date(t.new_start)
+            d.setDate(d.getDate() + t.new_days - 1)
+            return String(d.getDate()).padStart(2, '0')
+          })(),
+          new_end_month_name: (() => {
+            const d = new Date(t.new_start)
+            d.setDate(d.getDate() + t.new_days - 1)
+            return MONTHS_GENITIVE[d.getMonth()]
+          })(),
+          new_end_year: (() => {
+            const d = new Date(t.new_start)
+            d.setDate(d.getDate() + t.new_days - 1)
+            return String(d.getFullYear())
+          })(),
+          has_travel: Boolean(t.has_travel),
+          travel_destination: t.travel_destination || '',
+          travel_children_count: String(t.travel_children_count || 0),
+          has_children: Array.isArray(t.travel_children) && t.travel_children.length > 0,
+          travel_children_list: (() => {
+            if (!Array.isArray(t.travel_children) || t.travel_children.length === 0) return ''
+            const childrenList = t.travel_children.map(child => `${child.fullName}, ${child.birthDate}`)
+            return childrenList.join('; ')
+          })(),
           delta_direction: delta >= 0 ? 'увеличив' : 'сократив',
           delta_days: String(Math.abs(delta)),
           note: t.note ? ` ${t.note}` : '',
