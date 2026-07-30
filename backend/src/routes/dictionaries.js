@@ -625,7 +625,7 @@ router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'
   const { name, description, purpose } = req.body
   if (!name?.trim()) throw new ValidationError('Название шаблона обязательно')
 
-  const existing = await query('SELECT id, file_key FROM document_templates WHERE id = $1', [id])
+  const existing = await query('SELECT id, file_key, mime_type FROM document_templates WHERE id = $1', [id])
   if (existing.rows.length === 0) throw new NotFoundError('Шаблон не найден')
 
   if (purpose?.trim()) {
@@ -634,7 +634,7 @@ router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'
   }
 
   let fileKey = existing.rows[0].file_key
-  let mimeType = null
+  let mimeType = existing.rows[0].mime_type
   let fileSize = null
   if (req.file) {
     if (fileKey) await deleteFromS3(fileKey).catch(() => {})
