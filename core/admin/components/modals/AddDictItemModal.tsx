@@ -308,42 +308,44 @@ export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Prop
                   </select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Файл шаблона</Label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png"
-                    className="hidden"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  />
-                  {file ? (
-                    <div className="flex items-center gap-2 p-3 rounded-lg border border-input bg-muted/30">
-                      <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="text-sm truncate flex-1">{file.name}</span>
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {(file.size / 1024).toFixed(0)} КБ
-                      </span>
+                {!isEdit && (
+                  <div className="space-y-2">
+                    <Label>Файл шаблона</Label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    />
+                    {file ? (
+                      <div className="flex items-center gap-2 p-3 rounded-lg border border-input bg-muted/30">
+                        <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-sm truncate flex-1">{file.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {(file.size / 1024).toFixed(0)} КБ
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                          className="p-1 rounded hover:bg-muted"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         type="button"
-                        onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
-                        className="p-1 rounded hover:bg-muted"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full flex flex-col items-center justify-center gap-2 p-6 rounded-lg border-2 border-dashed border-input hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <Upload className="h-6 w-6 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Нажмите для выбора файла</span>
+                        <span className="text-xs text-muted-foreground/60">PDF, DOC, DOCX, XLS, XLSX, TXT, JPG, PNG</span>
                       </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex flex-col items-center justify-center gap-2 p-6 rounded-lg border-2 border-dashed border-input hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
-                    >
-                      <Upload className="h-6 w-6 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Нажмите для выбора файла</span>
-                      <span className="text-xs text-muted-foreground/60">PDF, DOC, DOCX, XLS, XLSX, TXT, JPG, PNG</span>
-                    </button>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="dict-desc-tmpl">Описание</Label>
