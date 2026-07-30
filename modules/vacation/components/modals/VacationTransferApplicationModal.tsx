@@ -93,8 +93,13 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
     ])
       .then(([tv, tr]) => {
         setTransferable(tv)
+        const approvedIds = new Set(tr.filter((t: TransferRequest) => t.status === 'approved').map((t: TransferRequest) => t.id))
         setTransfers(tr)
-        setSelected(new Set(tr.filter((t: TransferRequest) => t.status === 'approved').map((t: TransferRequest) => t.id)))
+        setSelected(prev => {
+          const next = new Set<number>()
+          for (const id of prev) if (approvedIds.has(id)) next.add(id)
+          return next
+        })
       })
       .catch(() => {})
       .finally(() => setDataLoading(false))
