@@ -56,6 +56,16 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       include: ['react-pdf', '@xyflow/react'],
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+            'ui-vendor': ['lucide-react', 'clsx', 'tailwind-merge', 'date-fns'],
+          },
+        },
+      },
+    },
     server: {
       host: '0.0.0.0',
       port: 3000,
