@@ -18,27 +18,6 @@ interface Props {
   defaultYear?: number
 }
 
-const PLACEHOLDERS = [
-  { tag: '{full_name}', desc: 'Полное ФИО (Фамилия Имя Отчество)' },
-  { tag: '{short_name}', desc: 'Краткое ФИО (Фамилия И.О.)' },
-  { tag: '{last_name}', desc: 'Фамилия' },
-  { tag: '{first_name}', desc: 'Имя' },
-  { tag: '{middle_name}', desc: 'Отчество' },
-  { tag: '{position}', desc: 'Должность' },
-  { tag: '{department}', desc: 'Отдел' },
-  { tag: '{year}', desc: 'Выбранный год' },
-  { tag: '{date_today}', desc: 'Дата генерации (ДД.ММ.ГГГГ)' },
-  { tag: '{vacations_count}', desc: 'Количество отпусков' },
-  { tag: '{total_days}', desc: 'Суммарное количество дней' },
-  { tag: '{#vacations}...{/vacations}', desc: 'Блок для каждого отпуска (цикл)' },
-  { tag: '{num}', desc: 'Порядковый номер (внутри цикла)' },
-  { tag: '{type}', desc: 'Тип отпуска (внутри цикла)' },
-  { tag: '{start}', desc: 'Дата начала (внутри цикла)' },
-  { tag: '{end}', desc: 'Дата окончания (внутри цикла)' },
-  { tag: '{days}', desc: 'Количество дней (внутри цикла)' },
-  { tag: '{status}', desc: 'Статус заявки (внутри цикла)' },
-]
-
 export function VacationApplicationModal({ open, onClose, defaultYear }: Props) {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(defaultYear ?? currentYear)
@@ -47,7 +26,6 @@ export function VacationApplicationModal({ open, onClose, defaultYear }: Props) 
   const [loading, setLoading] = useState(false)
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showPlaceholders, setShowPlaceholders] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -156,31 +134,6 @@ export function VacationApplicationModal({ open, onClose, defaultYear }: Props) 
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
-              )}
-            </div>
-
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowPlaceholders(v => !v)}
-                className="text-xs text-primary hover:underline"
-              >
-                {showPlaceholders ? 'Скрыть' : 'Показать'} доступные плейсхолдеры для шаблона
-              </button>
-              {showPlaceholders && (
-                <div className="mt-2 rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
-                  <div className="px-3 py-2 border-b border-border/40 bg-muted/40">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Плейсхолдеры DOCX</p>
-                  </div>
-                  <div className="divide-y divide-border/20 max-h-52 overflow-y-auto">
-                    {PLACEHOLDERS.map(p => (
-                      <div key={p.tag} className="flex items-baseline gap-3 px-3 py-1.5">
-                        <code className="text-xs font-mono text-primary shrink-0">{p.tag}</code>
-                        <span className="text-xs text-muted-foreground">{p.desc}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               )}
             </div>
           </div>

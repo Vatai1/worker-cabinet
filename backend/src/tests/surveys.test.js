@@ -1,6 +1,8 @@
 import { describe, it, before } from 'node:test'
 import assert from 'node:assert'
-import { BASE, headers, headersJSON, getAdminToken, getHrToken, getEmployeeToken, getFirstDepartment } from './helpers.js'
+import { BASE, headers, headersJSON, getAdminToken, getHrToken, getEmployeeToken, getHrUser, getFirstDepartment } from './helpers.js'
+import { query } from '../config/database.js'
+import { publishSurvey } from '../services/surveyService.js'
 
 describe('Surveys API', () => {
   let adminToken, hrToken, employeeToken
@@ -138,5 +140,46 @@ describe('Surveys API', () => {
   it('GET /surveys/:id/view returns 404 for non-existent', async () => {
     const res = await fetch(`${BASE}/surveys/999999/view`, { headers: headers(hrToken) })
     assert.ok(res.status === 404 || res.status === 403)
+  })
+
+  it('publishSurvey sends survey_assigned notifications to all active users except author', async () => {
+    await query("DELETE FROM notification_queue WHERE type = 'survey_assigned'")
+
+    const adminRes = await query("SELECT id FROM users WHERE email = 'admin@example.com'")
+    const authorId = adminRes.rows[0].id
+
+    const title = 'Уведомляющий опрос ' + Date.now()
+    const insertRes = await query(
+      `INSERT INTO surveys (title, description, created_by, target_type, target_ids, deadline, anonymous, status)
+       VALUES ($1, $2, $3, 'all', '[]', NULL, false, 'draft') RETURNING *`,
+      [title, 'Для теста уведомлений', authorId]
+    )
+    const survey = insertRes.rows[0]
+
+    await publishSurvey(survey.id, authorId)
+
+    const notifs = await query(
+      "SELECT user_id, data FROM notification_queue WHERE type = 'survey_assigned' AND data->>'title' = $1",
+      [title]
+    )
+
+    const activeRes = await query("SELECT id FROM users WHERE status = 'active'")
+    const expectedIds = new Set(
+      activeRes.rows.map((r) => r.id).filter((id) => id !== authorId)
+    )
+    const notifIds = new Set(notifs.rows.map((r) => r.user_id))
+
+    assert.strictEqual(
+      notifs.rows.length,
+      expectedIds.size,
+      `Expected ${expectedIds.size} notifications, got ${notifs.rows.length}`
+    )
+    for (const id of expectedIds) {
+      assert.ok(notifIds.has(id), `Missing notification for user ${id}`)
+    }
+    assert.ok(!notifIds.has(authorId), 'Author should not receive own survey notification')
+
+    await query('DELETE FROM surveys WHERE id = $1', [survey.id])
+    await query("DELETE FROM notification_queue WHERE type = 'survey_assigned'")
   })
 })

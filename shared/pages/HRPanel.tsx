@@ -181,14 +181,16 @@ export function HRPanel() {
                 <Component />
               </div>
             ))}
-            <div className={cn(
-              'transition-opacity duration-200',
-              safeActiveTab === 'hierarchy' ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
-            )}>
-              <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-                <HRHierarchy />
-              </Suspense>
-            </div>
+            {safeActiveTab === 'hierarchy' && isModuleEnabled('hierarchy') && (
+              <div className={cn(
+                'transition-opacity duration-200',
+                safeActiveTab === 'hierarchy' ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
+              )}>
+                <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                  <HRHierarchy />
+                </Suspense>
+              </div>
+            )}
           </div>
         </div>
       )}

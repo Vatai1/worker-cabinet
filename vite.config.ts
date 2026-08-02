@@ -66,6 +66,10 @@ export default defineConfig(({ mode }) => {
           target: 'http://localhost:5000',
           changeOrigin: true,
         },
+        '/ws': {
+          target: 'ws://localhost:5000',
+          ws: true,
+        },
       },
       fs: {
         strict: false,

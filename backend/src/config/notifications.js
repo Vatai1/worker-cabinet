@@ -1,11 +1,21 @@
 import { query } from './database.js'
 import * as rabbitmq from './rabbitmq.js'
+import { sendToUser } from './ws.js'
 
 async function isModuleEnabled() {
   const result = await query(
     "SELECT is_enabled FROM modules WHERE code = 'notifications'"
   )
   return result.rows.length > 0 && result.rows[0].is_enabled
+}
+
+async function getUnreadCount(userId) {
+  const result = await query(
+    `SELECT COUNT(*) as count FROM notification_queue
+     WHERE user_id = $1 AND read_at IS NULL AND status IN ('pending', 'processing', 'sent')`,
+    [userId]
+  )
+  return parseInt(result.rows[0].count)
 }
 
 export async function notify({ userId, type, data, channel = 'email' }) {
@@ -32,6 +42,8 @@ export async function notify({ userId, type, data, channel = 'email' }) {
   } catch (err) {
     console.warn(`[NOTIFY] RabbitMQ publish failed (id=${notificationId}): ${err.message}`)
   }
+
+  sendToUser(userId, 'notification', { unreadCount: await getUnreadCount(userId) }).catch(() => {})
 
   return notificationId
 }

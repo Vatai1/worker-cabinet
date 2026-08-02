@@ -1,4 +1,5 @@
 import express from 'express'
+import http from 'http'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import path from 'path'
@@ -27,6 +28,7 @@ import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { runMigrations } from './db/migrate.js'
 import { errorHandler } from './middleware/errors.js'
 import * as rabbitmq from './config/rabbitmq.js'
+import { initWsServer } from './config/ws.js'
 import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 import bcrypt from 'bcryptjs'
@@ -185,9 +187,13 @@ async function ensureAdmin() {
 
 await ensureAdmin()
 
-app.listen(PORT, async () => {
+const server = http.createServer(app)
+
+server.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`)
   console.log(`Environment: ${process.env.NODE_ENV}`)
+
+  initWsServer(server)
   scheduleTimesheetCron()
 
   if (process.env.RABBITMQ_URL) {

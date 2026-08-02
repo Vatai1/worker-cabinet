@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { FileText, X, Download, Loader2, Plus, ChevronUp } from 'lucide-react'
+import { FileText, X, Download, Loader2, Plus, ChevronUp, Trash2 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
@@ -50,6 +50,9 @@ interface AddForm {
   newDays: string
   reason: string
   note: string
+  hasTravel: boolean
+  travelDestination: string
+  travelChildren: Array<{ fullName: string; birthDate: string }>
 }
 
 interface Props {
@@ -65,7 +68,7 @@ const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   cancelled_by_manager: { label: 'Отменено', className: 'bg-muted text-muted-foreground' },
 }
 
-const emptyForm = (): AddForm => ({ vacationId: '', newStartDate: '', newDays: '', reason: '', note: '' })
+const emptyForm = (): AddForm => ({ vacationId: '', newStartDate: '', newDays: '', reason: '', note: '', hasTravel: false, travelDestination: '', travelChildren: [] })
 
 export function VacationTransferApplicationModal({ open, onClose }: Props) {
   const user = useAuthStore(s => s.user)
@@ -153,6 +156,16 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
     const days = Number(form.newDays)
     if (isNaN(days) || days < 1) { setFormError('Некорректное количество дней'); return }
 
+    if (form.hasTravel) {
+      if (!form.travelDestination.trim()) { setFormError('Укажите город проезда'); return }
+      for (const child of form.travelChildren) {
+        if (!child.fullName.trim()) { setFormError('Укажите ФИО ребёнка'); return }
+        if (!child.birthDate) { setFormError('Укажите дату рождения ребёнка'); return }
+        const age = (Date.now() - new Date(child.birthDate).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+        if (age >= 18) { setFormError('Ребёнок должен быть младше 18 лет'); return }
+      }
+    }
+
     const startParts = form.newStartDate.split('-').map(Number)
     const newEnd = new Date(startParts[0], startParts[1] - 1, startParts[2] + days - 1)
     const newEndDate = `${newEnd.getFullYear()}-${String(newEnd.getMonth() + 1).padStart(2, '0')}-${String(newEnd.getDate()).padStart(2, '0')}`
@@ -168,6 +181,9 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
           newEndDate,
           reason: form.reason,
           note: form.note || undefined,
+          hasTravel: form.hasTravel,
+          travelDestination: form.hasTravel ? form.travelDestination.trim() || undefined : undefined,
+          travelChildren: form.hasTravel ? form.travelChildren : [],
         }),
       })
       if (!res.ok) {
@@ -391,6 +407,80 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
                     value={form.note}
                     onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
                   />
+                </div>
+
+                <div className="flex items-start gap-3 pt-1">
+                  <input
+                    type="checkbox"
+                    id="transferHasTravel"
+                    checked={form.hasTravel}
+                    onChange={e => setForm(f => ({ ...f, hasTravel: e.target.checked }))}
+                    className="mt-1 h-4 w-4 text-primary focus:ring-ring border-input rounded"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="transferHasTravel" className="block text-sm font-medium text-muted-foreground">
+                      С проездом к месту проведения отпуска
+                    </label>
+                    {form.hasTravel && (
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <Label className="text-xs block mb-1">Город (страна — при выезде за границу)</Label>
+                          <Input
+                            placeholder="Напр. Москва"
+                            value={form.travelDestination}
+                            onChange={e => setForm(f => ({ ...f, travelDestination: e.target.value }))}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs">Несовершеннолетние дети</Label>
+                            <button
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, travelChildren: [...f.travelChildren, { fullName: '', birthDate: '' }] }))}
+                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Добавить ребёнка
+                            </button>
+                          </div>
+                          {form.travelChildren.map((child, index) => (
+                            <div key={index} className="flex gap-2 items-start">
+                              <Input
+                                placeholder="ФИО ребёнка"
+                                value={child.fullName}
+                                onChange={e => {
+                                  const updated = [...form.travelChildren]
+                                  updated[index] = { ...updated[index], fullName: e.target.value }
+                                  setForm(f => ({ ...f, travelChildren: updated }))
+                                }}
+                                className="flex-1"
+                              />
+                              <input
+                                type="date"
+                                value={child.birthDate}
+                                onChange={e => {
+                                  const updated = [...form.travelChildren]
+                                  updated[index] = { ...updated[index], birthDate: e.target.value }
+                                  setForm(f => ({ ...f, travelChildren: updated }))
+                                }}
+                                className="w-[140px] rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setForm(f => ({ ...f, travelChildren: f.travelChildren.filter((_, i) => i !== index) }))}
+                                className="p-2 text-destructive hover:text-destructive/80 mt-0.5"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                          {form.travelChildren.length === 0 && (
+                            <p className="text-xs text-muted-foreground">Нет детей для проезда</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex justify-end">

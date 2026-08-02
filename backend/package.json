@@ -53,7 +53,8 @@
     "pdfkit": "^0.18.0",
     "pg": "^8.11.3",
     "pizzip": "^3.2.0",
-    "swagger-jsdoc": "^6.2.8"
+    "swagger-jsdoc": "^6.2.8",
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

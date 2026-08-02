@@ -1,4 +1,5 @@
 import { query } from '../config/database.js'
+import { notifyBatch } from '../config/notifications.js'
 
 // Check if a user is in a survey's target audience
 export async function isUserInTarget(survey, userId, departmentId) {
@@ -9,8 +10,7 @@ export async function isUserInTarget(survey, userId, departmentId) {
   return false
 }
 
-// Get list of user IDs in target
-async function resolveTargetUserIds(survey, excludeUserId = null) {
+export async function resolveTargetUserIds(survey, excludeUserId = null) {
   let rows
   if (survey.target_type === 'all') {
     const r = await query("SELECT id FROM users WHERE status = 'active'")
@@ -42,6 +42,19 @@ export async function publishSurvey(surveyId, publisherUserId) {
   )
   if (!result.rows.length) throw new Error('Опрос не найден или уже опубликован')
   const survey = result.rows[0]
+
+  const userIds = await resolveTargetUserIds(survey, publisherUserId)
+  if (userIds.length > 0) {
+    try {
+      await notifyBatch({
+        userIds,
+        type: 'survey_assigned',
+        data: { title: survey.title, deadline: survey.deadline || null, link: '/surveys' },
+      })
+    } catch (err) {
+      console.warn(`[NOTIFY] survey publish #${survey.id}: ${err.message}`)
+    }
+  }
 
   return survey
 }

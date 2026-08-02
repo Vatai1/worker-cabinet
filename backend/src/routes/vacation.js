@@ -2,12 +2,33 @@ import express from 'express'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { getFromS3 } from '../config/s3.js'
+import { notify } from '../config/notifications.js'
 import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
 
 const router = express.Router()
 
 const VALID_VACATION_TYPES = ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran']
+
+function fmtDate(d) {
+  if (!d) return ''
+  const dt = new Date(d)
+  return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()}`
+}
+
+async function getEmpName(userId) {
+  const r = await query('SELECT first_name, last_name FROM users WHERE id = $1', [userId])
+  const row = r.rows[0]
+  return row ? `${row.last_name} ${row.first_name}` : ''
+}
+
+async function getDeptManagerId(userId) {
+  const r = await query(
+    'SELECT d.manager_id FROM users u JOIN departments d ON u.department_id = d.id WHERE u.id = $1',
+    [userId]
+  )
+  return r.rows[0]?.manager_id || null
+}
 
 async function vacationDatesByMonth(startDate, endDate) {
   const byMonth = {}
@@ -390,7 +411,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     }
 
     const duration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
-    const finalDuration = hasTravel ? duration + 2 : duration
+    const finalDuration = duration
     const requestYear = start.getFullYear()
 
     const balanceResult = await client.query(
@@ -499,6 +520,21 @@ router.post('/requests', authenticateToken, async (req, res) => {
     await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date)
 
     await client.query('COMMIT')
+
+    const managerId = await getDeptManagerId(userId)
+    if (managerId) {
+      notify({
+        userId: managerId,
+        type: 'vacation_created',
+        data: {
+          employeeName: await getEmpName(userId),
+          startDate: fmtDate(request.start_date),
+          endDate: fmtDate(request.end_date),
+          days: request.duration,
+          link: '/leader'
+        }
+      }).catch((err) => console.warn(`[NOTIFY] vacation create #${request.id}: ${err.message}`))
+    }
 
     res.status(201).json(request)
   } catch (error) {
@@ -679,6 +715,20 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
       [req.user.id, id])
 
     await client.query('COMMIT')
+
+    notify({
+      userId: request.rows[0].user_id,
+      type: 'vacation_status_changed',
+      data: {
+        employeeName: await getEmpName(request.rows[0].user_id),
+        status: 'approved',
+        startDate: fmtDate(request.rows[0].start_date),
+        endDate: fmtDate(request.rows[0].end_date),
+        comment: null,
+        link: '/vacation'
+      }
+    }).catch((err) => console.warn(`[NOTIFY] vacation approve #${id}: ${err.message}`))
+
     res.json({ ...result.rows[0], status: 'approved' })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -737,6 +787,20 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
       [reason, req.user.id, id])
 
     await client.query('COMMIT')
+
+    notify({
+      userId: request.rows[0].user_id,
+      type: 'vacation_status_changed',
+      data: {
+        employeeName: await getEmpName(request.rows[0].user_id),
+        status: 'rejected',
+        startDate: fmtDate(request.rows[0].start_date),
+        endDate: fmtDate(request.rows[0].end_date),
+        comment: reason,
+        link: '/vacation'
+      }
+    }).catch((err) => console.warn(`[NOTIFY] vacation reject #${id}: ${err.message}`))
+
     res.json({ ...result.rows[0], status: 'rejected' })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -831,11 +895,27 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
 
   try {
     const { id } = req.params
-    const { newStartDate, newEndDate, reason } = req.body
+    const { newStartDate, newEndDate, reason, hasTravel, travelDestination, travelChildren } = req.body
     const userId = req.user.id
 
     if (!newStartDate || !newEndDate || !reason?.trim()) {
       return res.status(400).json({ error: 'Укажите новые даты и причину переноса' })
+    }
+
+    if (hasTravel) {
+      if (!travelDestination || !travelDestination.trim()) {
+        return res.status(400).json({ error: 'Укажите город проезда' })
+      }
+      if (Array.isArray(travelChildren) && travelChildren.length > 0) {
+        for (const child of travelChildren) {
+          if (!child.fullName || !child.fullName.trim()) {
+            return res.status(400).json({ error: 'Укажите ФИО всех детей' })
+          }
+          if (!child.birthDate) {
+            return res.status(400).json({ error: 'Укажите дату рождения всех детей' })
+          }
+        }
+      }
     }
 
     await client.query('BEGIN')
@@ -864,12 +944,19 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       (new Date(newEndDate) - new Date(newStartDate)) / (1000 * 60 * 60 * 24)
     ) + 1
 
+    const travelChildrenParsed = (hasTravel && Array.isArray(travelChildren)) ? travelChildren : []
+    const travelChildrenJson = JSON.stringify(travelChildrenParsed)
+    const travelChildrenCount = travelChildrenParsed.length
+
     const insertResult = await client.query(
       `INSERT INTO vacation_requests
-        (user_id, vacation_type_id, start_date, end_date, duration, status_id, transfer_reason, transferred_from_id, transfer_requested_at)
-       VALUES ($1, $2, $3::date, $4::date, $5, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $6, $7, CURRENT_TIMESTAMP)
+        (user_id, vacation_type_id, start_date, end_date, duration, status_id, transfer_reason, transferred_from_id, transfer_requested_at,
+         has_travel, travel_destination, travel_children, travel_children_count)
+       VALUES ($1, $2, $3::date, $4::date, $5, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $6, $7, CURRENT_TIMESTAMP,
+         $8, $9, $10, $11)
        RETURNING *`,
-      [original.user_id, original.vacation_type_id, newStartDate, newEndDate, newDuration, reason, id]
+      [original.user_id, original.vacation_type_id, newStartDate, newEndDate, newDuration, reason, id,
+       hasTravel || false, hasTravel ? (travelDestination || null) : null, travelChildrenJson, travelChildrenCount]
     )
 
     await client.query(
@@ -891,7 +978,23 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       [insertResult.rows[0].id]
     )
 
-    res.status(201).json(fullResult.rows[0])
+    const newReq = fullResult.rows[0]
+    const managerId = await getDeptManagerId(userId)
+    if (managerId) {
+      notify({
+        userId: managerId,
+        type: 'vacation_created',
+        data: {
+          employeeName: await getEmpName(userId),
+          startDate: fmtDate(newReq.start_date),
+          endDate: fmtDate(newReq.end_date),
+          days: newReq.duration,
+          link: '/leader'
+        }
+      }).catch((err) => console.warn(`[NOTIFY] vacation transfer create #${newReq.id}: ${err.message}`))
+    }
+
+    res.status(201).json(newReq)
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Ошибка создания заявки на перенос' })
@@ -1009,6 +1112,19 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
     await fillVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date)
 
     await client.query('COMMIT')
+
+    notify({
+      userId: newRequest.user_id,
+      type: 'vacation_status_changed',
+      data: {
+        employeeName: await getEmpName(newRequest.user_id),
+        status: 'approved',
+        startDate: fmtDate(newRequest.start_date),
+        endDate: fmtDate(newRequest.end_date),
+        comment: 'Перенос одобрен',
+        link: '/vacation'
+      }
+    }).catch((err) => console.warn(`[NOTIFY] vacation transfer approve #${id}: ${err.message}`))
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
@@ -1135,6 +1251,19 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
     )
 
     await client.query('COMMIT')
+
+    notify({
+      userId: newRequest.user_id,
+      type: 'vacation_status_changed',
+      data: {
+        employeeName: await getEmpName(newRequest.user_id),
+        status: 'rejected',
+        startDate: fmtDate(newRequest.start_date),
+        endDate: fmtDate(newRequest.end_date),
+        comment: reason,
+        link: '/vacation'
+      }
+    }).catch((err) => console.warn(`[NOTIFY] vacation transfer reject #${id}: ${err.message}`))
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
