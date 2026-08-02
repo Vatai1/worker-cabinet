@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Azoft+Sans:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,6 +6,69 @@
 
 @layer base {
   :root {
+    --background: 213 30% 96%;
+    --foreground: 215 25% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 10%;
+    --primary: 213 100% 35%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 206 100% 59%;
+    --primary-dark: 212 100% 26%;
+    --secondary: 213 15% 94%;
+    --secondary-foreground: 215 25% 10%;
+    --muted: 213 15% 93%;
+    --muted-foreground: 215 10% 42%;
+    --accent: 172 100% 51%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 213 13% 88%;
+    --input: 213 13% 88%;
+    --ring: 213 100% 35%;
+    --radius: 0.75rem;
+    --success: 152 69% 35%;
+    --success-foreground: 0 0% 100%;
+    --warning: 36 89% 52%;
+    --warning-foreground: 0 0% 100%;
+    --sidebar-bg: 213 100% 35%;
+    --sidebar-border: 213 80% 40%;
+    --glow-color: 213 100% 35%;
+  }
+
+  .dark {
+    --background: 215 60% 8%;
+    --foreground: 215 40% 92%;
+    --card: 215 55% 11%;
+    --card-foreground: 215 40% 92%;
+    --popover: 215 55% 13%;
+    --popover-foreground: 215 40% 92%;
+    --primary: 213 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 206 100% 65%;
+    --primary-dark: 212 100% 35%;
+    --secondary: 215 30% 16%;
+    --secondary-foreground: 215 40% 92%;
+    --muted: 215 25% 16%;
+    --muted-foreground: 215 16% 52%;
+    --accent: 172 100% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 20% 20%;
+    --input: 215 22% 18%;
+    --ring: 213 100% 50%;
+    --success: 152 69% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 36 89% 56%;
+    --warning-foreground: 0 0% 100%;
+    --sidebar-bg: 215 70% 10%;
+    --sidebar-border: 215 40% 18%;
+    --glow-color: 213 100% 50%;
+  }
+
+  [data-theme='legacy'] {
     --background: 220 18% 97%;
     --foreground: 228 50% 6%;
     --card: 0 0% 100%;
@@ -27,7 +90,6 @@
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     --ring: 250 89% 65%;
-    --radius: 0.75rem;
     --success: 152 69% 35%;
     --success-foreground: 0 0% 100%;
     --warning: 36 89% 52%;
@@ -37,7 +99,7 @@
     --glow-color: 250 89% 65%;
   }
 
-  .dark {
+  [data-theme='legacy'].dark {
     --background: 230 30% 6%;
     --foreground: 215 40% 92%;
     --card: 230 25% 9%;
@@ -73,7 +135,7 @@
   * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Azoft Sans', 'Roboto', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     transition: background-color 0.3s, color 0.3s;
@@ -118,7 +180,7 @@
   .gradient-bg {
     background:
       radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--primary) / 0.04), transparent),
-      radial-gradient(ellipse 60% 40% at 80% 0%, hsl(280 80% 60% / 0.02), transparent),
+      radial-gradient(ellipse 60% 40% at 80% 0%, hsl(var(--primary-dark) / 0.02), transparent),
       hsl(var(--background));
   }
 
@@ -236,4 +298,34 @@
   .pdf-document { display: flex; justify-content: center; align-items: flex-start; width: 100%; }
   .pdf-document canvas { max-width: 100%; height: auto !important; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); }
   .dark .pdf-document canvas { filter: invert(1) hue-rotate(180deg); }
+
+  .sidebar-crct {
+    --sidebar-text: 0 0% 100%;
+    --sidebar-text-muted: 213 30% 70%;
+    --sidebar-hover: 206 100% 59% / 0.15;
+    --sidebar-active-bg: 0 0% 100%;
+    --sidebar-active-text: 213 100% 35%;
+  }
+  .dark .sidebar-crct {
+    --sidebar-text: 215 40% 85%;
+    --sidebar-text-muted: 215 20% 55%;
+    --sidebar-hover: 213 100% 50% / 0.1;
+    --sidebar-active-bg: 213 100% 50% / 0.15;
+    --sidebar-active-text: 213 100% 60%;
+  }
+
+  .sidebar-legacy {
+    --sidebar-text: 228 50% 6%;
+    --sidebar-text-muted: 220 7% 42%;
+    --sidebar-hover: 220 14% 95%;
+    --sidebar-active-bg: 250 89% 65% / 0.1;
+    --sidebar-active-text: 250 89% 65%;
+  }
+  .dark .sidebar-legacy {
+    --sidebar-text: 215 40% 85%;
+    --sidebar-text-muted: 215 16% 52%;
+    --sidebar-hover: 228 22% 14%;
+    --sidebar-active-bg: 250 95% 68% / 0.12;
+    --sidebar-active-text: 250 95% 68%;
+  }
 }

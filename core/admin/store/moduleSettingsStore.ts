@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import type { ModuleId, VacationSettings, CalendarSettings, NotificationsSettings, AuthSettings } from '@/core/admin/components/modules/types'
+import type { ModuleId, VacationSettings, CalendarSettings, NotificationsSettings, AuthSettings, AppearanceSettings } from '@/core/admin/components/modules/types'
 
 const DEFAULT_VACATION: VacationSettings = {
   active: true, allowRetroactive: false, allowFractional: false,
@@ -55,14 +55,19 @@ const DEFAULT_AUTH: AuthSettings = {
   ssoProviders: [],
 }
 
-const DEFAULTS: Record<ModuleId, VacationSettings | CalendarSettings | NotificationsSettings | AuthSettings> = {
+const DEFAULT_APPEARANCE: AppearanceSettings = {
+  activeTheme: 'crct',
+}
+
+const DEFAULTS: Record<ModuleId, VacationSettings | CalendarSettings | NotificationsSettings | AuthSettings | AppearanceSettings> = {
   vacation: DEFAULT_VACATION,
   calendar: DEFAULT_CALENDAR,
   notifications: DEFAULT_NOTIFICATIONS,
   auth: DEFAULT_AUTH,
+  appearance: DEFAULT_APPEARANCE,
 }
 
-type SettingsValue = VacationSettings | CalendarSettings | NotificationsSettings | AuthSettings
+type SettingsValue = VacationSettings | CalendarSettings | NotificationsSettings | AuthSettings | AppearanceSettings
 
 interface ModuleSettingsState {
   settings: Record<ModuleId, SettingsValue>
@@ -86,16 +91,18 @@ export const useModuleSettingsStore = create<ModuleSettingsState>((set, get) => 
     calendar: { ...DEFAULT_CALENDAR },
     notifications: { ...DEFAULT_NOTIFICATIONS },
     auth: { ...DEFAULT_AUTH },
+    appearance: { ...DEFAULT_APPEARANCE },
   },
   originalSettings: {
     vacation: { ...DEFAULT_VACATION },
     calendar: { ...DEFAULT_CALENDAR },
     notifications: { ...DEFAULT_NOTIFICATIONS },
     auth: { ...DEFAULT_AUTH },
+    appearance: { ...DEFAULT_APPEARANCE },
   },
-  loading: { vacation: false, calendar: false, notifications: false, auth: false },
-  saving: { vacation: false, calendar: false, notifications: false, auth: false },
-  loaded: { vacation: false, calendar: false, notifications: false, auth: false },
+  loading: { vacation: false, calendar: false, notifications: false, auth: false, appearance: false },
+  saving: { vacation: false, calendar: false, notifications: false, auth: false, appearance: false },
+  loaded: { vacation: false, calendar: false, notifications: false, auth: false, appearance: false },
 
   isDirty: (moduleId) => {
     const { settings, originalSettings } = get()

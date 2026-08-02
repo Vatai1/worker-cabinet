@@ -204,6 +204,7 @@ const options = {
       { name: 'Notifications', description: 'Уведомления' },
       { name: 'UserDocuments', description: 'Документы пользователя' },
       { name: 'Admin', description: 'Админ-панель: роли, доступы, пользователи, настройки, аудит' },
+      { name: 'Appearance', description: 'Тема оформления системы' },
     ],
   },
   apis: ['./src/routes/*.js'],

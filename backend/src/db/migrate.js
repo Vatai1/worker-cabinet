@@ -1480,6 +1480,7 @@ async function runMigrations() {
       { code: 'analytics', name: 'Аналитика', description: 'Графики, статистика и аналитика системы', icon: 'BarChart3', route: '/admin/analytics', sort: 120, category: 'admin' },
       { code: 'auth', name: 'Авторизация', description: 'Настройки аутентификации, авторизации и безопасности', icon: 'Lock', route: null, sort: 5, category: 'core' },
       { code: 'assistant', name: 'AI Ассистент', description: 'Кадровый AI-ассистент для ответов на вопросы сотрудников', icon: 'Bot', route: '/assistant', sort: 15, category: 'general' },
+      { code: 'appearance', name: 'Внешний вид', description: 'Тема оформления системы', icon: 'Palette', route: null, sort: 3, category: 'core' },
     ]
     for (const m of defaultModules) {
       await db.query(
@@ -1488,6 +1489,10 @@ async function runMigrations() {
       )
     }
     console.log('  ✓ modules seeded')
+    const appearanceResult = await db.query("SELECT settings FROM modules WHERE code = 'appearance'")
+    if (appearanceResult.rows.length > 0 && !appearanceResult.rows[0].settings) {
+      await db.query("UPDATE modules SET settings = '{\"activeTheme\":\"crct\"}'::jsonb WHERE code = 'appearance'")
+    }
     console.log('✅ Modules table created')
 
     console.log('Creating notification tables...')

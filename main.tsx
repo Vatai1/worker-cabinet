@@ -2,6 +2,9 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import '@xyflow/react/dist/style.css'
 import App from './App'
+import { initTheme } from '@/shared/theme/themeStore'
+
+initTheme()
 
 const root = createRoot(document.getElementById('root')!)
 root.render(<App />)

@@ -13,6 +13,7 @@ import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Switch } from '@/shared/components/ui/Switch'
 import { ModuleSettingsModal } from '@/core/admin/components/modules/ModuleSettingsModal'
+import { AppearanceSettings } from '@/core/admin/components/modules/AppearanceSettings'
 import { openModelsModal } from '@/core/admin/components/ModelsModal'
 import type { ModuleId } from '@/core/admin/components/modules/types'
 import {
@@ -26,10 +27,11 @@ import {
   TrendingUp, Clock3, FolderKanban, CalendarX, Settings,
   Calendar, Zap, Briefcase, Wrench, Plane,
   Pencil, Save, Bot, Package,
+  Palette,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
-type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'analytics' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries' | 'modules' | 'assistant'
+type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'analytics' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries' | 'modules' | 'assistant' | 'appearance'
 
 interface TabItem {
   id: TabId
@@ -77,6 +79,12 @@ const TAB_GROUPS: TabGroup[] = [
       { id: 'audit', name: 'Аудит', icon: Activity, description: 'Лог действий', color: 'from-indigo-500 to-blue-600' },
       { id: 'errors', name: 'Ошибки', icon: AlertCircle, description: 'Лог ошибок системы', color: 'from-orange-500 to-red-600' },
       { id: 'health', name: 'Система', icon: Server, description: 'БД, память, подключения', color: 'from-teal-500 to-emerald-600' },
+    ],
+  },
+  {
+    label: 'Оформление',
+    tabs: [
+      { id: 'appearance', name: 'Темы', icon: Palette, description: 'Тема оформления системы', color: 'from-blue-500 to-cyan-600' },
     ],
   },
 ]
@@ -366,6 +374,7 @@ export function AdminPanel() {
           {activeTab === 'dictionaries' && <DictionariesTab />}
           {activeTab === 'modules' && <ModulesTab />}
           {activeTab === 'assistant' && <AssistantSettingsTab />}
+          {activeTab === 'appearance' && <AppearanceTab />}
         </div>
       </div>
     </div>
@@ -3483,6 +3492,7 @@ interface ModuleItem {
   category: string
   sort_order: number
   is_enabled: boolean
+  locked?: boolean
   updated_at: string
 }
 
@@ -3554,6 +3564,8 @@ function ModulesTab() {
 
   const enabledCount = modules.filter(m => m.is_enabled).length
 
+  const visibleModules = modules.filter(m => m.code !== 'appearance')
+
   const SETTINGS_MAP: Record<string, ModuleId> = {
     vacation: 'vacation',
     calendar: 'calendar',
@@ -3568,16 +3580,14 @@ function ModulesTab() {
     auth: { emoji: '🔐', color: '#3B82F6' },
   }
 
-  const CORE_CODES = ['notifications', 'auth']
-
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
 
   const groupedModules = MODULE_CATEGORIES
     .map(cat => ({
       ...cat,
-      modules: modules
+      modules: visibleModules
         .filter(m => {
-  if (CORE_CODES.includes(m.code)) return cat.key === 'core'
+  if (m.locked) return cat.key === 'core'
   const catKey = (!m.category || m.category === 'general') ? 'core' : m.category
   return catKey === cat.key
 })
@@ -3648,7 +3658,12 @@ function ModulesTab() {
                               )}
                             </div>
 
-                            {!CORE_CODES.includes(mod.code) && (
+                            {mod.locked ? (
+                              <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
+                                <Lock className="h-3.5 w-3.5" />
+                                <span className="text-[10px] font-medium">Нельзя отключить</span>
+                              </div>
+                            ) : (
                               <button
                                 onClick={() => toggleModule(mod)}
                                 disabled={isLoading}
@@ -3677,7 +3692,7 @@ function ModulesTab() {
                               )}>
                                 {mod.name}
                               </h3>
-                              {!CORE_CODES.includes(mod.code) && (
+                              {!mod.locked && (
                                 <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={
                                   mod.is_enabled
                                     ? { backgroundColor: 'rgba(16,185,129,0.15)', color: '#10B981', borderColor: 'rgba(16,185,129,0.3)' }
@@ -3733,5 +3748,19 @@ function ModulesTab() {
         />
       )}
     </>
+  )
+}
+
+function AppearanceTab() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5" /> Темы</CardTitle>
+        <CardDescription>Выбор темы оформления системы</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <AppearanceSettings />
+      </CardContent>
+    </Card>
   )
 }

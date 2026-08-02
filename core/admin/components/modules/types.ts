@@ -1,4 +1,8 @@
-export type ModuleId = 'vacation' | 'calendar' | 'notifications' | 'auth'
+export type ModuleId = 'vacation' | 'calendar' | 'notifications' | 'auth' | 'appearance'
+
+export interface AppearanceSettings {
+  activeTheme: string
+}
 
 export interface ModuleInfo {
   id: ModuleId
@@ -136,4 +140,4 @@ export interface AuthSettings {
   ssoProviders: { name: string; clientId: string; clientSecret: string; authUrl: string; tokenUrl: string; scopes: string }[]
 }
 
-export type ModuleSettings = VacationSettings | CalendarSettings | NotificationsSettings | AuthSettings
+export type ModuleSettings = VacationSettings | CalendarSettings | NotificationsSettings | AuthSettings | AppearanceSettings

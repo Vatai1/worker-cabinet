@@ -1569,7 +1569,7 @@ router.delete('/dictionaries/skills/:id', asyncHandler(async (req, res) => {
  */
 router.get('/modules', asyncHandler(async (req, res) => {
   const result = await query('SELECT * FROM modules ORDER BY sort_order')
-  res.json(result.rows)
+  res.json(result.rows.map(r => ({ ...r, locked: r.category === 'core' || r.code === 'appearance' })))
 }))
 
 /**
@@ -1686,6 +1686,9 @@ router.delete('/modules/:id', asyncHandler(async (req, res) => {
   const { id } = req.params
   const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
+  if (existing.rows[0].category === 'core' || existing.rows[0].code === 'appearance') {
+    throw new ValidationError('Базовый модуль нельзя отключить')
+  }
 
   await query('DELETE FROM modules WHERE id = $1', [id])
 
@@ -1708,11 +1711,16 @@ router.delete('/modules/:id', asyncHandler(async (req, res) => {
  *     responses:
  *       200:
  *         description: Статус модуля обновлён
+ *       400:
+ *         description: Базовый модуль нельзя отключить
  */
 router.put('/modules/:id/toggle', asyncHandler(async (req, res) => {
   const { id } = req.params
   const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
+  if (existing.rows[0].category === 'core' || existing.rows[0].code === 'appearance') {
+    throw new ValidationError('Базовый модуль нельзя отключить')
+  }
 
   const newStatus = !existing.rows[0].is_enabled
   await query('UPDATE modules SET is_enabled = $1, updated_at = NOW() WHERE id = $2', [newStatus, id])

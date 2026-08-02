@@ -8,12 +8,14 @@ import { VacationSettings } from './VacationSettings'
 import { CalendarSettings } from './CalendarSettings'
 import { NotificationsSettings } from './NotificationsSettings'
 import { AuthSettings } from './AuthSettings'
+import { AppearanceSettings } from './AppearanceSettings'
 
 const MODULE_INFO: Record<ModuleId, { name: string; emoji: string; color: string }> = {
   vacation: { name: 'Отпуск', emoji: '🏖️', color: '#10B981' },
   calendar: { name: 'Календарь', emoji: '📅', color: '#8B5CF6' },
   notifications: { name: 'Уведомления', emoji: '🔔', color: '#F59E0B' },
   auth: { name: 'Авторизация', emoji: '🔐', color: '#3B82F6' },
+  appearance: { name: 'Внешний вид', emoji: '🎨', color: '#0050B2' },
 }
 
 const MODULE_TABS: Record<ModuleId, ModuleTab[]> = {
@@ -45,6 +47,9 @@ const MODULE_TABS: Record<ModuleId, ModuleTab[]> = {
     { id: 'ldap', name: 'LDAP / AD' },
     { id: 'sso', name: 'OAuth / SSO' },
     { id: 'security', name: 'Безопасность' },
+  ],
+  appearance: [
+    { id: 'theme', name: 'Тема' },
   ],
 }
 
@@ -143,6 +148,7 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
       case 'calendar': return <CalendarSettings activeTab={activeTab} />
       case 'notifications': return <NotificationsSettings activeTab={activeTab} />
       case 'auth': return <AuthSettings activeTab={activeTab} />
+      case 'appearance': return <AppearanceSettings />
     }
   }
 

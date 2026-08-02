@@ -12,7 +12,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Azoft Sans', 'Roboto', 'system-ui', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',
