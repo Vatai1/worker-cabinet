@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useUIStore } from '@/shared/store/uiStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
+import { useThemeStore } from '@/shared/theme/themeStore'
 import { cn } from '@/shared/lib/utils'
 import {
   LayoutDashboard, User, FileText, FolderOpen, FolderKanban,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
+import { Logo } from '@/shared/components/brand/Logo'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 
 interface NavItem {
@@ -116,6 +118,8 @@ export function Sidebar() {
   const { user, logout } = useAuthStore()
   const { sidebarOpen, toggleSidebar, darkMode, toggleTheme, openModals } = useUIStore()
   const { isModuleEnabled, modulesLoaded } = useModulesStore()
+  const activeTheme = useThemeStore((s) => s.activeTheme)
+  const isCrctSidebar = activeTheme === 'crct'
   const location = useLocation()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
 
@@ -189,29 +193,36 @@ export function Sidebar() {
       )}
 
       <aside className={cn(
-        'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-sidebar-border bg-sidebar-bg transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
-        openModals ? '-translate-x-full' : sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+        isCrctSidebar
+          ? 'border-sidebar-border bg-sidebar-bg'
+          : 'border-sidebar-border bg-sidebar-bg',
+        openModals ? '-translate-x-full' : sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        isCrctSidebar && 'sidebar-crct',
+        !isCrctSidebar && 'sidebar-legacy'
       )}>
         <div className="relative overflow-hidden px-5 pt-5 pb-4">
           <div className="absolute inset-0 gradient-primary opacity-[0.04]" />
           <div className="absolute -top-12 -right-12 w-40 h-40 bg-primary/8 rounded-full blur-3xl" />
           <div className="relative flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 gradient-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/25">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
+              <Logo size="md" showText={false} variant="dark" />
               <div>
-                <span className="text-[15px] font-bold tracking-tight text-gradient block leading-tight">Кабинет</span>
-                <span className="text-[10px] text-muted-foreground/60 font-medium tracking-wide uppercase">Сотрудника</span>
+                <span className={cn(
+                  'text-[15px] font-bold tracking-tight block leading-tight',
+                  isCrctSidebar ? 'text-white' : 'text-gradient'
+                )}>Кабинет</span>
+                <span className={cn(
+                  'text-[10px] font-medium tracking-wide uppercase',
+                  isCrctSidebar ? 'text-white/60' : 'text-muted-foreground/60'
+                )}>Сотрудника</span>
               </div>
             </div>
             <div className="flex items-center gap-0.5">
-              <Button variant="ghost" size="icon" className="h-8 w-8 interactive" onClick={toggleTheme}>
+              <Button variant="ghost" size="icon" className={cn('h-8 w-8 interactive', isCrctSidebar && 'text-white hover:bg-white/10')} onClick={toggleTheme}>
                 {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={toggleSidebar}>
+              <Button variant="ghost" size="icon" className={cn('h-8 w-8 lg:hidden', isCrctSidebar && 'text-white hover:bg-white/10')} onClick={toggleSidebar}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -222,7 +233,10 @@ export function Sidebar() {
           {Array.from(sections.entries()).map(([sectionName, items]) => (
             <div key={sectionName} className="mb-3">
               <div className="px-3 pt-3 pb-1.5">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/50">{sectionName}</span>
+                <span className={cn(
+                  'text-[10px] font-semibold uppercase tracking-[0.08em]',
+                  isCrctSidebar ? 'text-white/40' : 'text-muted-foreground/50'
+                )}>{sectionName}</span>
               </div>
               <div className="space-y-0.5">
                 {items.map((item) => {
@@ -239,8 +253,12 @@ export function Sidebar() {
                           className={cn(
                             'group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-200',
                             hasActiveChild
-                              ? 'bg-primary/8 text-primary'
-                              : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                              ? isCrctSidebar
+                                ? 'bg-white/15 text-white'
+                                : 'bg-primary/8 text-primary'
+                              : isCrctSidebar
+                                ? 'text-white/70 hover:bg-white/10 hover:text-white'
+                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                           )}
                         >
                           <div className="transition-transform duration-200 group-hover:scale-105">
@@ -264,8 +282,12 @@ export function Sidebar() {
                                   className={cn(
                                     'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] transition-all duration-200',
                                     isChildActive
-                                      ? 'text-primary font-semibold bg-primary/6'
-                                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+                                      ? isCrctSidebar
+                                        ? 'text-white font-semibold bg-white/10'
+                                        : 'text-primary font-semibold bg-primary/6'
+                                      : isCrctSidebar
+                                        ? 'text-white/60 hover:text-white hover:bg-white/5'
+                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
                                   )}
                                 >
                                   <FileStack className="h-3.5 w-3.5" />
@@ -290,8 +312,12 @@ export function Sidebar() {
                       className={cn(
                         'group flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-200',
                         isActive
-                          ? 'gradient-primary text-white shadow-md shadow-primary/20'
-                          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                          ? isCrctSidebar
+                            ? 'bg-white text-[#003D85] shadow-md shadow-black/20'
+                            : 'gradient-primary text-white shadow-md shadow-primary/20'
+                          : isCrctSidebar
+                            ? 'text-white/70 hover:bg-white/10 hover:text-white'
+                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                       )}
                     >
                       <div className="transition-transform duration-200 group-hover:scale-105">
@@ -310,26 +336,32 @@ export function Sidebar() {
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
           <NavLink to="/settings" className={cn(
             'flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-200 mb-1',
-            location.pathname === '/settings' ? 'gradient-primary text-white shadow-md shadow-primary/20' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+            location.pathname === '/settings'
+              ? isCrctSidebar
+                ? 'bg-white text-[#003D85] shadow-md shadow-black/20'
+                : 'gradient-primary text-white shadow-md shadow-primary/20'
+              : isCrctSidebar
+                ? 'text-white/70 hover:bg-white/10 hover:text-white'
+                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
           )}>
             <Settings className="h-[18px] w-[18px]" />
             Настройки
           </NavLink>
-          <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 mt-1 hover:bg-muted/40 transition-colors duration-200 group cursor-pointer">
-            <Avatar className="h-10 w-10 ring-2 ring-primary/10 shadow-sm transition-shadow duration-200 group-hover:ring-primary/25">
+          <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 mt-1 hover:bg-white/5 transition-colors duration-200 group cursor-pointer">
+            <Avatar className="h-10 w-10 ring-2 ring-white/10 shadow-sm transition-shadow duration-200 group-hover:ring-white/25">
               {user && (
                 <AvatarImage src={user.avatar || generateAvatarUrl(user.id, user.gender)} alt={`${user.firstName} ${user.lastName}`} />
               )}
               <AvatarFallback className="text-xs font-bold">{getUserInitials()}</AvatarFallback>
             </Avatar>
             <div className="flex-1 overflow-hidden min-w-0">
-              <p className="truncate text-sm font-semibold leading-tight">{user?.firstName} {user?.lastName}</p>
+              <p className={cn('truncate text-sm font-semibold leading-tight', isCrctSidebar ? 'text-white' : 'text-foreground')}>{user?.firstName} {user?.lastName}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <Crown className="h-3 w-3 text-primary/60" />
-                <p className="truncate text-[11px] text-muted-foreground/70">{roleLabels[user?.role ?? 'employee']}</p>
+                <Crown className={cn('h-3 w-3', isCrctSidebar ? 'text-white/40' : 'text-primary/60')} />
+                <p className={cn('truncate text-[11px]', isCrctSidebar ? 'text-white/40' : 'text-muted-foreground/70')}>{roleLabels[user?.role ?? 'employee']}</p>
               </div>
             </div>
-            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground/50 hover:text-destructive transition-colors duration-200" onClick={handleLogout}>
+            <Button variant="ghost" size="icon" className={cn('h-7 w-7 shrink-0 transition-colors duration-200', isCrctSidebar ? 'text-white/40 hover:text-red-300' : 'text-muted-foreground/50 hover:text-destructive')} onClick={handleLogout}>
               <LogOut className="h-3.5 w-3.5" />
             </Button>
           </div>

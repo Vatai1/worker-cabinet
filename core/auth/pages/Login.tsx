@@ -6,6 +6,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
+import { Logo } from '@/shared/components/brand/Logo'
 import { useSiteSettingsStore } from '@/shared/store/siteSettingsStore'
 import { API_BASE_URL } from '@/shared/lib/api'
 
@@ -257,11 +258,7 @@ export function Login() {
           <div className="absolute top-[20%] left-[10%] w-32 h-32 bg-card/10 rounded-full blur-2xl"></div>
           <div className="absolute bottom-[25%] right-[15%] w-40 h-40 bg-card/10 rounded-full blur-2xl"></div>
           <div className="relative z-10 text-white max-w-md">
-            <div className="w-14 h-14 rounded-2xl bg-card/15 backdrop-blur-sm flex items-center justify-center mb-6 ring-1 ring-white/20">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
+            <Logo size="lg" showText={false} variant="dark" className="mb-6" />
             <h1 className="text-4xl font-extrabold mb-3 leading-tight">{title}</h1>
             <p className="text-white/70 text-lg leading-relaxed">{subtitle}</p>
           </div>
@@ -306,11 +303,7 @@ export function Login() {
         <div className="absolute top-[20%] left-[10%] w-32 h-32 bg-card/10 rounded-full blur-2xl"></div>
         <div className="absolute bottom-[25%] right-[15%] w-40 h-40 bg-card/10 rounded-full blur-2xl"></div>
         <div className="relative z-10 text-white max-w-md">
-          <div className="w-14 h-14 rounded-2xl bg-card/15 backdrop-blur-sm flex items-center justify-center mb-6 ring-1 ring-white/20">
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
+          <Logo size="lg" showText={false} variant="dark" className="mb-6" />
           <h1 className="text-4xl font-extrabold mb-3 leading-tight">{title}</h1>
           <p className="text-white/70 text-lg leading-relaxed">{subtitle}</p>
         </div>

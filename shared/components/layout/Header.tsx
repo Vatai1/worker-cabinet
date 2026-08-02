@@ -4,6 +4,7 @@ import { Bell } from 'lucide-react'
 import { SidebarToggle } from './Sidebar'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
+import { Logo } from '@/shared/components/brand/Logo'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { apiGet } from '@/shared/lib/apiClient'
 import { useNotificationWs } from '@/shared/lib/useNotificationWs'
@@ -34,6 +35,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border/30 glass px-6">
       <SidebarToggle />
+      <Logo size="sm" />
       <div className="flex-1" />
       <div className="flex items-center gap-3">
         <button
