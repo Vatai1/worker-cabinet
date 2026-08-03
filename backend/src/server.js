@@ -35,6 +35,7 @@ import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 import bcrypt from 'bcryptjs'
 import { query } from './config/database.js'
+import { ensureBucket } from './config/s3.js'
 
 dotenv.config()
 
@@ -190,6 +191,7 @@ async function ensureAdmin() {
 }
 
 await ensureAdmin()
+await ensureBucket().catch(err => console.warn(`[S3] ensureBucket: ${err.message}`))
 
 const server = http.createServer(app)
 
