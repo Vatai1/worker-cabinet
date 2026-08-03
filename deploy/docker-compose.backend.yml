@@ -57,6 +57,8 @@ services:
     image: onlyoffice/documentserver:latest
     container_name: worker-cabinet-onlyoffice
     restart: unless-stopped
+    ports:
+      - "${ONLYOFFICE_PORT:-8080}:80"
     environment:
       JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET}
