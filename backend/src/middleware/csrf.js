@@ -11,7 +11,7 @@ export function csrfMiddleware(req, res, next) {
     return next()
   }
 
-  if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/callback' || req.path === '/onlyoffice/callback') {
+  if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/callback' || req.path === '/auth/refresh' || req.path === '/onlyoffice/callback') {
     return next()
   }
 

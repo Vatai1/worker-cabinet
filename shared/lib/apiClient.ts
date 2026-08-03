@@ -22,6 +22,7 @@ export async function tryRefresh(): Promise<boolean> {
       const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeadersWithContentType(),
       })
       return res.ok
     } catch {
