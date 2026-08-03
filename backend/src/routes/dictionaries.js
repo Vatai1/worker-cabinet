@@ -682,6 +682,48 @@ router.delete('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'adm
   res.json({ success: true })
 }))
 
+/**
+ * @swagger
+ * /dictionaries/doc-templates/{id}/file:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Скачать файл шаблона документа (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Файл шаблона (binary stream)
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       404:
+ *         description: Шаблон или файл не найден
+ */
+router.get('/doc-templates/:id/file', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const { id } = req.params
+
+  const result = await query('SELECT name, file_key, mime_type FROM document_templates WHERE id = $1', [id])
+  if (result.rows.length === 0) throw new NotFoundError('Шаблон не найден')
+
+  const { name, file_key, mime_type } = result.rows[0]
+  if (!file_key) return res.status(404).json({ error: 'Файл не прикреплён' })
+
+  const { Body, ContentType } = await getFromS3(file_key)
+  res.setHeader('Content-Type', ContentType || mime_type || 'application/octet-stream')
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`)
+
+  await query('UPDATE document_templates SET download_count = download_count + 1 WHERE id = $1', [id]).catch(() => {})
+
+  Body.pipe(res)
+}))
+
 function getPublicApiUrl() {
   return process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || 'http://host.docker.internal:5000/api'
 }

@@ -2,7 +2,7 @@ import { useState, useMemo, lazy, Suspense } from 'react'
 import { cn } from '@/shared/lib/utils'
 import {
   Users, ClipboardList, UserPlus, Plane, Network, BookOpen,
-  Calendar, Loader2, BarChart3, Sparkles,
+  Calendar, Loader2, BarChart3, Sparkles, FileText,
 } from 'lucide-react'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { HRSurveys } from '@/modules/surveys/pages/HRSurveys'
@@ -12,8 +12,9 @@ import { HRDictionaries } from '@/core/admin/pages/HRDictionaries'
 import { HRTimesheet } from '@/modules/timesheet/pages/HRTimesheet'
 import { AnalyticsTab } from '@/core/admin/pages/AdminAnalytics'
 const HRHierarchy = lazy(() => import('@/modules/hierarchy/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
+const HRDocTemplates = lazy(() => import('@/modules/documents/pages/HRDocTemplates').then(m => ({ default: m.HRDocTemplates })))
 
-type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'dictionaries' | 'timesheet' | 'analytics'
+type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'dictionaries' | 'timesheet' | 'analytics' | 'doc-templates'
 
 interface TabItem {
   id: TabId
@@ -38,6 +39,9 @@ const TAB_GROUPS: TabGroup[] = [
   { label: 'Отпуска и структура', tabs: [
     { id: 'vacation', name: 'Отпуск', icon: Plane, description: 'Календарь отпусков', module: 'vacation', color: 'from-orange-500 to-amber-600' },
     { id: 'hierarchy', name: 'Иерархия', icon: Network, description: 'Оргструктура', module: 'hierarchy', color: 'from-pink-500 to-rose-600' },
+  ]},
+  { label: 'Документы', tabs: [
+    { id: 'doc-templates', name: 'Шаблоны документов', icon: FileText, description: 'Шаблоны документов организации', module: 'documents', color: 'from-pink-500 to-rose-600' },
   ]},
   { label: 'Справочники и аналитика', tabs: [
     { id: 'dictionaries', name: 'Справочники', icon: BookOpen, description: 'Должности, типы, навыки', module: 'dictionaries', color: 'from-slate-500 to-gray-600' },
@@ -188,6 +192,16 @@ export function HRPanel() {
               )}>
                 <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
                   <HRHierarchy />
+                </Suspense>
+              </div>
+            )}
+            {safeActiveTab === 'doc-templates' && isModuleEnabled('documents') && (
+              <div className={cn(
+                'transition-opacity duration-200',
+                safeActiveTab === 'doc-templates' ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
+              )}>
+                <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                  <HRDocTemplates />
                 </Suspense>
               </div>
             )}

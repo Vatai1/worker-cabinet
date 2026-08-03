@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Building2, Wrench, Palmtree, Briefcase, FileText, Plus, Pencil, Trash2, X, Search, Users, FolderOpen, Sparkles, FileUp, Eye } from 'lucide-react'
+import { Building2, Wrench, Palmtree, Briefcase, Plus, Pencil, Trash2, X, Search, Users, FolderOpen, Sparkles } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { AddDictItemModal } from '@/core/admin/components/modals/AddDictItemModal'
-import { OnlyOfficePreviewModal } from '@/shared/components/OnlyOfficePreviewModal'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
-import { PLACEHOLDERS_BY_PURPOSE, getAllGroups } from '@/shared/lib/docPlaceholders'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useModulesStore } from '@/shared/store/modulesStore'
@@ -16,7 +14,6 @@ const TABS = [
   { value: 'skills', label: 'Навыки', icon: Wrench, gradient: 'from-emerald-500 to-teal-600', singular: 'навык' },
   { value: 'vacation-types', label: 'Типы отпусков', icon: Palmtree, gradient: 'from-amber-500 to-orange-600', singular: 'тип отпуска' },
   { value: 'positions', label: 'Должности', icon: Briefcase, gradient: 'from-violet-500 to-purple-600', singular: 'должность' },
-  { value: 'doc-templates', label: 'Шаблоны документов', icon: FileText, gradient: 'from-pink-500 to-rose-600', singular: 'шаблон' },
 ]
 
 interface DictItem {
@@ -54,7 +51,6 @@ export function HRDictionaries() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editItem, setEditItem] = useState<DictItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DictItem | null>(null)
-  const [onlyOfficeItem, setOnlyOfficeItem] = useState<DictItem | null>(null)
   const [hoveredId, setHoveredId] = useState<number | null>(null)
 
   const fetchItems = useCallback(async () => {
@@ -160,7 +156,6 @@ export function HRDictionaries() {
 
   const renderCard = (item: DictItem, currentTab: string) => {
     const tabConfig = TABS.find(t => t.value === currentTab)!
-    const Icon = tabConfig.icon
     const initial = item.name.charAt(0).toUpperCase()
 
     const infoLines: React.ReactNode[] = []
@@ -191,27 +186,12 @@ export function HRDictionaries() {
         </span>
       )
     }
-    if (currentTab === 'doc-templates') {
-      if (item.purpose) infoLines.push(<code key="purp" className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">{item.purpose}</code>)
-      else infoLines.push(<span key="purp" className="text-xs text-muted-foreground/50">Без назначения</span>)
-      if (item.file_key) infoLines.push(
-        <span key="file" className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-          <FileUp className="h-3 w-3" />Файл
-        </span>
-      )
-    }
 
     return (
       <div className="flex items-center gap-4 flex-1 min-w-0">
-        {currentTab === 'doc-templates' ? (
-          <div className={`flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br ${tabConfig.gradient} flex items-center justify-center text-white`}>
-            <Icon className="h-4 w-4" />
-          </div>
-        ) : (
-          <div className={`flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br ${tabConfig.gradient} flex items-center justify-center text-white font-bold text-sm`}>
-            {initial}
-          </div>
-        )}
+        <div className={`flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br ${tabConfig.gradient} flex items-center justify-center text-white font-bold text-sm`}>
+          {initial}
+        </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold truncate">{item.name}</p>
           {infoLines.length > 0 && (
@@ -395,15 +375,6 @@ export function HRDictionaries() {
 
                   {(canEdit || canDelete) && hoveredId === item.id && (
                     <div className="absolute top-2 right-2 flex items-center gap-1 animate-fade-in">
-                      {tab === 'doc-templates' && item.file_key && (
-                        <button
-                          onClick={() => setOnlyOfficeItem(item)}
-                          className="p-1.5 rounded-lg bg-card border border-border/60 text-muted-foreground hover:text-foreground hover:border-border transition-colors shadow-sm"
-                          title="Открыть в OnlyOffice"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
-                      )}
                       {canEdit && (
                         <button
                           onClick={() => setEditItem(item)}
@@ -442,42 +413,12 @@ export function HRDictionaries() {
         />
       )}
 
-      {onlyOfficeItem && (
-        <OnlyOfficePreviewModal
-          open={true}
-          onClose={() => setOnlyOfficeItem(null)}
-          document={{
-            id: onlyOfficeItem.id!,
-            name: onlyOfficeItem.name,
-            mimeType: onlyOfficeItem.mime_type || 'application/octet-stream',
-            size: onlyOfficeItem.size ?? undefined,
-            url: async () => {
-              const res = await fetch(`${API_BASE_URL}/dictionaries/doc-templates/${onlyOfficeItem.id}/preview-token`, { headers: getAuthHeaders() })
-              if (!res.ok) throw new Error('Не удалось получить токен')
-              const data = await res.json()
-              return data.publicUrl
-            },
-          }}
-          editable={true}
-          callbackUrl={`${import.meta.env.VITE_PUBLIC_API_URL || 'http://host.docker.internal:5000/api'}/dictionaries/doc-templates/${onlyOfficeItem.id}/callback`}
-          onSave={async (downloadUrl, fileType) => {
-            const res = await fetch(`${API_BASE_URL}/dictionaries/doc-templates/${onlyOfficeItem.id}/save-from-url`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-              body: JSON.stringify({ url: downloadUrl, fileType }),
-            })
-            if (!res.ok) throw new Error('Ошибка сохранения')
-          }}
-          placeholders={onlyOfficeItem.purpose ? (PLACEHOLDERS_BY_PURPOSE[onlyOfficeItem.purpose] ?? getAllGroups()) : getAllGroups()}
-        />
-      )}
-
       {(isAddModalOpen || editItem) && canAdd && (
         <AddDictItemModal
           open={true}
           onClose={() => { setIsAddModalOpen(false); setEditItem(null) }}
           onAdded={() => { setIsAddModalOpen(false); setEditItem(null); fetchItems() }}
-          tab={tab as 'departments' | 'skills' | 'vacation-types' | 'doc-templates'}
+          tab={tab as 'departments' | 'skills' | 'vacation-types'}
           editItem={editItem}
         />
       )}
