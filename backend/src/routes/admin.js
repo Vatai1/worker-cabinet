@@ -1,4 +1,5 @@
 import { updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword, unlockKcUser, syncKcSessionSettings } from '../config/keycloak.js'
+import keycloakConfig from '../config/keycloak.js'
 import express from 'express'
 import bcrypt from 'bcryptjs'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
@@ -1796,9 +1797,23 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
 
   const oldSettings = existing.rows[0].settings || {}
+  let settingsToSave = req.body
+
+  if (id === 'auth' && keycloakConfig.enabled) {
+    const KC_STRIPPED_KEYS = [
+      'minLength', 'requireUppercase', 'requireLowercase', 'requireDigit', 'requireSpecial',
+      'passwordExpiry', 'passwordHistory',
+      'mfaType', 'totpEnabled', 'smsEnabled', 'emailCodeEnabled', 'pushEnabled', 'mfaGracePeriod',
+      'ldapUrl', 'ldapBindDn', 'ldapBindPassword', 'ldapBaseDn', 'ldapUserFilter', 'ldapUsernameAttr',
+      'ssoProviders',
+    ]
+    settingsToSave = { ...req.body }
+    for (const key of KC_STRIPPED_KEYS) delete settingsToSave[key]
+  }
+
   const result = await query(
     'UPDATE modules SET settings = $1, updated_at = NOW() WHERE code = $2 RETURNING settings',
-    [JSON.stringify(req.body), id]
+    [JSON.stringify(settingsToSave), id]
   )
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
