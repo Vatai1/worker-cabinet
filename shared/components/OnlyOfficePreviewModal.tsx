@@ -178,6 +178,10 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           })
         }
 
+        if (fileUrl.startsWith('/')) {
+          fileUrl = window.location.origin + fileUrl
+        }
+
         const DocsAPI = (window as any).DocsAPI
         const fileType = getFileType(doc.mimeType, doc.name)
         const key = `${doc.id}-${Date.now()}`
