@@ -2,7 +2,7 @@
 import { createPortal } from 'react-dom'
 import { X, Edit, Loader2, CheckCircle2, Copy, Check as CheckIcon, ChevronDown, ChevronUp, Save } from 'lucide-react'
 import { formatFileSize } from '@/shared/lib/documentUtils'
-import { apiPost } from '@/shared/lib/apiClient'
+import { apiGet, apiPost } from '@/shared/lib/apiClient'
 import { useUIStore } from '@/shared/store/uiStore'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
@@ -35,8 +35,17 @@ interface OnlyOfficePreviewModalProps {
   placeholders?: PlaceholderGroup[]
 }
 
-const ONLYOFFICE_URL = import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'
-const ONLYOFFICE_API_URL = `${ONLYOFFICE_URL}/web-apps/apps/api/documents/api.js`
+let onlyofficeUrl = import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'
+
+async function resolveOnlyOfficeUrl() {
+  try {
+    const res = await apiGet<{ url: string }>('/onlyoffice/config')
+    if (res?.url) onlyofficeUrl = res.url.replace(/\/+$/, '')
+  } catch {
+    // fallback to build-time default
+  }
+  return onlyofficeUrl
+}
 
 let editorCounter = 0
 
@@ -139,9 +148,10 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
 
       try {
         if (!(window as any).DocsAPI) {
+          const ooUrl = await resolveOnlyOfficeUrl()
           await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script')
-            script.src = ONLYOFFICE_API_URL
+            script.src = `${ooUrl}/web-apps/apps/api/documents/api.js`
             script.async = true
             script.onload = () => {
               resolve()
@@ -312,7 +322,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
                 </div>
                 <p className="text-destructive mb-2">{error}</p>
                 <p className="text-sm text-muted-foreground">
-                  Убедитесь, что OnlyOffice запущен на {ONLYOFFICE_URL}
+                  Убедитесь, что OnlyOffice запущен на {onlyofficeUrl}
                 </p>
               </div>
             </div>

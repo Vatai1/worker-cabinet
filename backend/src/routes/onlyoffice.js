@@ -9,6 +9,30 @@ const OO_JWT_SECRET = process.env.ONLYOFFICE_JWT_SECRET || 'changeme'
 
 /**
  * @swagger
+ * /api/onlyoffice/config:
+ *   get:
+ *     summary: URL OnlyOffice Document Server для фронтенда
+ *     tags: [OnlyOffice]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Конфигурация OnlyOffice
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 url:
+ *                   type: string
+ */
+
+router.get('/config', authenticateToken, asyncHandler(async (req, res) => {
+  res.json({ url: process.env.ONLYOFFICE_URL || 'http://localhost:8080' })
+}))
+
+/**
+ * @swagger
  * /api/onlyoffice/sign:
  *   post:
  *     summary: Подпись конфигурации OnlyOffice JWT-токеном

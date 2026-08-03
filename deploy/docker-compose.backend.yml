@@ -197,6 +197,8 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
       NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
+      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://localhost:8080}
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-changeme}
       MINI_AGENT_URL: http://mini-agent:8642/v1/chat
       ASSISTANT_API_BASE_URL: http://backend:5000/api
       OLLAMA_URL: http://ollama:11434
