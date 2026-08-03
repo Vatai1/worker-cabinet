@@ -177,7 +177,7 @@ describe('Authentication System', () => {
       }
       const res = {
         status: (code) => {
-          assert.strictEqual(code, 403, 'Should return 403')
+          assert.strictEqual(code, 401, 'Should return 401')
           return { json: (data) => {
             assert.strictEqual(data.error, 'Invalid or expired token', 'Error message should match')
             done()
@@ -340,7 +340,7 @@ describe('Authentication System', () => {
       
       const data = await response.json()
       
-      assert.strictEqual(response.status, 403, 'Should return 403')
+      assert.strictEqual(response.status, 401, 'Should return 401')
       assert.strictEqual(data.error, 'Invalid or expired token', 'Error message should match')
     })
   })

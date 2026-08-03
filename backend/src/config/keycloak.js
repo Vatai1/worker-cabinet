@@ -289,4 +289,25 @@ async function deleteKcRole(roleName) {
   }
 }
 
-export { getKcAdminToken, getKcUserId, getKcUserIdByEmail, updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword, unlockKcUser }
+async function syncKcSessionSettings({ sessionLifetimeMinutes, refreshLifetimeDays }) {
+  if (!config.enabled) return
+  try {
+    const token = await getKcAdminToken()
+    const res = await fetch(`${config.url}/admin/realms/${config.realm}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accessTokenLifespan: sessionLifetimeMinutes * 60,
+        ssoSessionIdleTimeout: sessionLifetimeMinutes * 60,
+        ssoSessionMaxLifespan: refreshLifetimeDays * 86400,
+      }),
+    })
+    if (!res.ok) {
+      kcErr('syncKcSessionSettings: failed', res.status)
+    }
+  } catch (err) {
+    kcErr('syncKcSessionSettings error:', err.message)
+  }
+}
+
+export { getKcAdminToken, getKcUserId, getKcUserIdByEmail, updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword, unlockKcUser, syncKcSessionSettings }

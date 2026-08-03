@@ -28,6 +28,8 @@ async function verifyKeycloakToken(token) {
   return payload
 }
 
+export { verifyKeycloakToken }
+
 const SCOPE_CLAIMS = {
   openid: ['sub', 'auth_time', 'acr', 'sid', 'session_state'],
   profile: ['name', 'full_name', 'family_name', 'given_name', 'middle_name', 'middlename', 'nickname', 'preferred_username', 'profile', 'picture', 'website', 'gender', 'birth_date', 'zoneinfo', 'locale', 'updated_at'],
@@ -288,7 +290,7 @@ export const authenticateToken = async (req, res, next) => {
     next()
   } catch (err) {
     console.error('[KC] authenticateToken failed:', err.message)
-    return res.status(403).json({ error: 'Invalid or expired token' })
+    return res.status(401).json({ error: 'Invalid or expired token' })
   }
 }
 

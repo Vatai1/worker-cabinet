@@ -8,18 +8,21 @@ import { validateLogin, validateRegister, sanitizeInput } from '../middleware/va
 import { asyncHandler, ValidationError, UnauthorizedError } from '../middleware/errors.js'
 import { authenticateToken, logScopes } from '../middleware/auth.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
+import { getAuthSettings } from '../config/authSettings.js'
 
 const router = express.Router()
 
 router.use(sanitizeInput)
 
 router.get('/config', asyncHandler(async (req, res) => {
+  const { sessionLifetime } = await getAuthSettings()
   if (!keycloakConfig.enabled) {
-    return res.json({ keycloak: false })
+    return res.json({ keycloak: false, sessionLifetime })
   }
 
   res.json({
     keycloak: true,
+    sessionLifetime,
     authUrl: `${getPublicAuthUrl()}?client_id=${keycloakConfig.clientId}&response_type=code&scope=openid cabinet&prompt=login`,
     tokenUrl: `${keycloakConfig.publicUrl}/realms/${keycloakConfig.realm}/protocol/openid-connect/token`,
     logoutUrl: getPublicLogoutUrl(process.env.FRONTEND_URL || '/'),
@@ -66,16 +69,17 @@ router.post('/callback', asyncHandler(async (req, res) => {
   }
   const accessToken = tokenData.access_token
   const idToken = tokenData.id_token
+  const { refreshMs } = await getAuthSettings()
 
   res.cookie('auth_token', accessToken, {
     ...cookieOptions(req),
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: refreshMs,
   })
 
   if (idToken) {
     res.cookie('kc_id_token', idToken, {
       ...cookieOptions(req),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: refreshMs,
     })
   }
 
@@ -83,7 +87,7 @@ router.post('/callback', asyncHandler(async (req, res) => {
   if (refreshToken) {
     res.cookie('kc_refresh_token', refreshToken, {
       ...cookieOptions(req),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: refreshMs,
     })
   }
 
@@ -134,8 +138,9 @@ router.post('/refresh', asyncHandler(async (req, res) => {
   }
 
   const tokenData = await tokenRes.json()
+  const { refreshMs } = await getAuthSettings()
   const opts = cookieOptions(req)
-  const maxAge = 7 * 24 * 60 * 60 * 1000
+  const maxAge = refreshMs
 
   res.cookie('auth_token', tokenData.access_token, { ...opts, maxAge })
 
@@ -202,16 +207,17 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
 
   if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not configured')
 
+  const { sessionLifetime, sessionMs } = await getAuthSettings()
   const token = jwt.sign(
     { id: user.id, email: user.email, role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    { expiresIn: `${sessionLifetime}m` }
   )
 
   res.status(201)
     .cookie('auth_token', token, {
       ...cookieOptions(req),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: sessionMs,
     })
     .json({
       token,
@@ -269,10 +275,11 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
 
   if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not configured')
 
+  const { sessionLifetime, sessionMs } = await getAuthSettings()
   const token = jwt.sign(
     { id: user.id, email: user.email, role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    { expiresIn: `${sessionLifetime}m` }
   )
 
   await query(
@@ -289,7 +296,7 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
   res
     .cookie('auth_token', token, {
       ...cookieOptions(req),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: sessionMs,
     })
     .json({
       token,

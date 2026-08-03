@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import cookie from 'cookie'
 import { query } from './database.js'
 import keycloakConfig from './keycloak.js'
+import { verifyKeycloakToken } from '../middleware/auth.js'
 
 const clients = new Map()
 
@@ -25,7 +26,9 @@ async function authenticateUser(req) {
     }
 
     if (keycloakConfig.enabled) {
-      return null
+      const kcPayload = await verifyKeycloakToken(token)
+      const result = await query('SELECT id FROM users WHERE keycloak_guid = $1', [kcPayload.sub])
+      return result.rows[0] || null
     }
 
     decoded = jwt.verify(token, process.env.JWT_SECRET)

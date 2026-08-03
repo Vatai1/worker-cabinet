@@ -2,6 +2,7 @@
 import { useEffect, lazy, Suspense } from 'react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
+import { useSessionActivity } from '@/core/auth/hooks/useSessionActivity'
 import { Login } from '@/core/auth/pages/Login'
 import { Layout } from '@/shared/components/layout/Layout'
 import { Dashboard } from '@/shared/pages/Dashboard'
@@ -115,6 +116,8 @@ function ModuleGuard({ module, children }: { module: string; children: React.Rea
 function App() {
   const user = useAuthStore((state) => state.user)
   const checkAuth = useAuthStore((state) => state.checkAuth)
+
+  useSessionActivity()
 
   useEffect(() => {
     checkAuth()

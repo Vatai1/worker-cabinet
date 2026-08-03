@@ -1,4 +1,4 @@
-import { updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword, unlockKcUser } from '../config/keycloak.js'
+import { updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword, unlockKcUser, syncKcSessionSettings } from '../config/keycloak.js'
 import express from 'express'
 import bcrypt from 'bcryptjs'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
@@ -1792,9 +1792,10 @@ router.get('/modules/:id/settings', asyncHandler(async (req, res) => {
  */
 router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
   const { id } = req.params
-  const existing = await query('SELECT id FROM modules WHERE code = $1', [id])
+  const existing = await query('SELECT id, settings FROM modules WHERE code = $1', [id])
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
 
+  const oldSettings = existing.rows[0].settings || {}
   const result = await query(
     'UPDATE modules SET settings = $1, updated_at = NOW() WHERE code = $2 RETURNING settings',
     [JSON.stringify(req.body), id]
@@ -1802,6 +1803,19 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_settings_update', 'module', String(existing.rows[0].id), req.body, req.ip)
+
+  if (id === 'auth') {
+    const oldSL = Number(oldSettings.sessionLifetime)
+    const newSL = Number(req.body.sessionLifetime)
+    const oldRL = Number(oldSettings.refreshLifetime)
+    const newRL = Number(req.body.refreshLifetime)
+    if (oldSL !== newSL || oldRL !== newRL) {
+      syncKcSessionSettings({
+        sessionLifetimeMinutes: Number(req.body.sessionLifetime) || 480,
+        refreshLifetimeDays: Number(req.body.refreshLifetime) || 7,
+      }).catch((err) => console.error('[KC] syncKcSessionSettings:', err.message))
+    }
+  }
 
   res.json(result.rows[0].settings)
 }))
