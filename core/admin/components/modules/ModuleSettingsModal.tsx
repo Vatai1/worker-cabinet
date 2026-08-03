@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { X, Settings2 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
@@ -91,15 +91,12 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
     }
   }, [isOpen, moduleId])
 
-  const tabs = moduleId === 'auth' && kcEnabled
-    ? MODULE_TABS[moduleId].filter(t => !KC_HIDDEN_AUTH_TABS.includes(t.id))
-    : MODULE_TABS[moduleId]
-
-  useEffect(() => {
-    if (kcEnabled && moduleId === 'auth' && !tabs.find(t => t.id === activeTab)) {
-      setActiveTab('general')
-    }
-  }, [kcEnabled, moduleId, activeTab, tabs])
+  const tabs = useMemo(
+    () => moduleId === 'auth' && kcEnabled
+      ? MODULE_TABS[moduleId].filter(t => !KC_HIDDEN_AUTH_TABS.includes(t.id))
+      : MODULE_TABS[moduleId],
+    [moduleId, kcEnabled]
+  )
 
   useEffect(() => {
     if (isOpen && !useModuleSettingsStore.getState().loaded[moduleId]) {
@@ -108,9 +105,11 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
   }, [isOpen, moduleId, loadSettings])
 
   useEffect(() => {
-    setActiveTab(tabs[0].id)
+    if (!tabs.find(t => t.id === activeTab)) {
+      setActiveTab(tabs[0].id)
+    }
     setMobileTabOpen(false)
-  }, [moduleId, tabs])
+  }, [moduleId, tabs, activeTab])
 
   const handleClose = useCallback(() => {
     if (isDirty) {
