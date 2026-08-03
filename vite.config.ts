@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import fs from 'node:fs'
 import { execSync } from 'child_process'
 
 function killPortPlugin(port: number) {
@@ -50,6 +51,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
+      __APP_VERSION__: JSON.stringify(JSON.parse(fs.readFileSync('./package.json', 'utf-8')).version),
       'import.meta.env.VITE_ONLYOFFICE_URL': JSON.stringify(env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'),
       'import.meta.env.VITE_PUBLIC_API_URL': JSON.stringify(env.VITE_PUBLIC_API_URL || 'http://host.docker.internal:5000/api'),
     },

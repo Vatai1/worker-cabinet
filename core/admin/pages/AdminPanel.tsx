@@ -27,7 +27,7 @@ import {
   TrendingUp, Clock3, FolderKanban, CalendarX, Settings,
   Calendar, Zap, Briefcase, Wrench, Plane,
   Pencil, Save, Bot, Package,
-  Palette,
+  Palette, Tag,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
@@ -246,6 +246,14 @@ const STATUS_LABELS: Record<string, string> = {
 export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<TabId>('users')
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+  const [apiVersion, setApiVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchWithRetry(`${API_BASE_URL}/version`, { headers: getAuthHeaders() })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.api) setApiVersion(data.api) })
+      .catch(() => {})
+  }, [])
 
   const filteredGroups = TAB_GROUPS
     .map((group) => ({
@@ -283,12 +291,18 @@ export function AdminPanel() {
         <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/2 translate-x-1/3" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/2 -translate-x-1/4" />
         <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/5 rounded-full" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <Sparkles className="h-6 w-6 text-white/80" />
-            <h1 className="text-2xl font-bold text-white">Администрирование</h1>
+        <div className="relative z-10 flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <Sparkles className="h-6 w-6 text-white/80" />
+              <h1 className="text-2xl font-bold text-white">Администрирование</h1>
+            </div>
+            <p className="text-sm text-white/60">Управление ролями, доступами и настройками системы</p>
           </div>
-          <p className="text-sm text-white/60">Управление ролями, доступами и настройками системы</p>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 text-white/70 text-xs whitespace-nowrap">
+            <Tag className="h-3 w-3" />
+            Версия: {__APP_VERSION__}{apiVersion ? ` · API ${apiVersion}` : ''}
+          </span>
         </div>
       </div>
 
