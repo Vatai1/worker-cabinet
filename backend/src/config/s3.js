@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import dotenv from 'dotenv'
 
@@ -17,7 +17,24 @@ export const s3Client = new S3Client({
   forcePathStyle: true,
 })
 
+let bucketEnsured = false
+
+export async function ensureBucket() {
+  if (bucketEnsured) return
+  try {
+    await s3Client.send(new HeadBucketCommand({ Bucket: S3_BUCKET }))
+  } catch (e) {
+    if (e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404) {
+      await s3Client.send(new CreateBucketCommand({ Bucket: S3_BUCKET }))
+    } else {
+      throw e
+    }
+  }
+  bucketEnsured = true
+}
+
 export const uploadToS3 = async (file, key) => {
+  await ensureBucket()
   const params = {
     Bucket: S3_BUCKET,
     Key: key,
