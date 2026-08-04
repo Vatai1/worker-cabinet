@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { Send, Upload, X, Users, Building2, Briefcase, Mail, Globe, Loader2 } from 'lucide-react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { Send, Upload, X, Users, Building2, Briefcase, Mail, Globe, Loader2, Check, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
@@ -69,6 +69,78 @@ const CHANNEL_LABELS: Record<string, string> = {
   both: 'Email и сайт',
 }
 
+function RecipientCategory<T>({
+  icon,
+  title,
+  search,
+  onSearchChange,
+  items,
+  selected,
+  onToggle,
+  onToggleAll,
+  allSelected,
+}: {
+  icon: ReactNode
+  title: string
+  search: string
+  onSearchChange: (value: string) => void
+  items: { id: T; label: string }[]
+  selected: Set<T>
+  onToggle: (id: T) => void
+  onToggleAll: () => void
+  allSelected: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          {icon}
+          {title}
+        </div>
+        <button
+          type="button"
+          onClick={onToggleAll}
+          className="text-[11px] font-semibold text-primary hover:underline shrink-0"
+        >
+          {allSelected ? 'Сбросить' : 'Выбрать все'}
+        </button>
+      </div>
+      <Input
+        placeholder="Поиск..."
+        value={search}
+        onChange={e => onSearchChange(e.target.value)}
+      />
+      <div className="max-h-44 overflow-y-auto space-y-0.5 border rounded-lg p-1.5">
+        {items.map(item => (
+          <label key={String(item.id)} className="group flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-muted/60 cursor-pointer text-xs transition-colors">
+            <input
+              type="checkbox"
+              checked={selected.has(item.id)}
+              onChange={() => onToggle(item.id)}
+              className="sr-only"
+            />
+            <span className={cn(
+              'flex h-[18px] w-[18px] items-center justify-center rounded-md border transition-all duration-150 shrink-0',
+              selected.has(item.id)
+                ? 'bg-primary border-primary shadow-sm shadow-primary/30'
+                : 'border-input bg-background group-hover:border-primary/60',
+            )}>
+              <Check className={cn(
+                'h-3 w-3 text-primary-foreground transition-all duration-150',
+                selected.has(item.id) ? 'opacity-100 scale-100' : 'opacity-0 scale-50',
+              )} />
+            </span>
+            <span className="truncate">{item.label}</span>
+          </label>
+        ))}
+        {items.length === 0 && (
+          <p className="px-2 py-1.5 text-xs text-muted-foreground">Ничего не найдено</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function HRMailing() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -85,6 +157,8 @@ export function HRMailing() {
   const [positions, setPositions] = useState<Position[]>([])
 
   const [employeeSearch, setEmployeeSearch] = useState('')
+  const [positionSearch, setPositionSearch] = useState('')
+  const [departmentSearch, setDepartmentSearch] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmData, setConfirmData] = useState<{ open: boolean }>({ open: false })
@@ -118,6 +192,8 @@ export function HRMailing() {
   const filteredEmployees = employees.filter(e =>
     `${e.first_name} ${e.last_name} ${e.email}`.toLowerCase().includes(employeeSearch.toLowerCase())
   )
+  const filteredPositions = positions.filter(p => p.name.toLowerCase().includes(positionSearch.toLowerCase()))
+  const filteredDepartments = departments.filter(d => d.name.toLowerCase().includes(departmentSearch.toLowerCase()))
 
   const toggleUser = (id: number) => {
     setSelectedUserIds(prev => {
@@ -144,6 +220,20 @@ export function HRMailing() {
       else next.add(id)
       return next
     })
+  }
+
+  const allUsersSelected = employees.length > 0 && employees.every(e => selectedUserIds.has(e.id))
+  const allPositionsSelected = positions.length > 0 && positions.every(p => selectedPositions.has(p.name))
+  const allDeptsSelected = departments.length > 0 && departments.every(d => selectedDeptIds.has(d.id))
+
+  const toggleAllUsers = () => {
+    setSelectedUserIds(allUsersSelected ? new Set() : new Set(employees.map(e => e.id)))
+  }
+  const toggleAllPositions = () => {
+    setSelectedPositions(allPositionsSelected ? new Set() : new Set(positions.map(p => p.name)))
+  }
+  const toggleAllDepts = () => {
+    setSelectedDeptIds(allDeptsSelected ? new Set() : new Set(departments.map(d => d.id)))
   }
 
   const hasRecipients = selectedUserIds.size > 0 || selectedPositions.size > 0 || selectedDeptIds.size > 0
@@ -222,11 +312,27 @@ export function HRMailing() {
     }
   }
 
+  useEffect(() => {
+    const campaignId = detailCampaign?.id
+    if (!campaignId) return
+    const interval = setInterval(async () => {
+      try {
+        const detail = await apiGet<Campaign>(`/mailings/${campaignId}`)
+        setDetailCampaign(prev => (prev?.id === campaignId ? detail : prev))
+      } catch { /* пусто */ }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [detailCampaign?.id])
+
   const recipientSummary = [
     selectedUserIds.size > 0 && `${selectedUserIds.size} сотрудн.`,
     selectedPositions.size > 0 && `${selectedPositions.size} должн.`,
     selectedDeptIds.size > 0 && `${selectedDeptIds.size} отдел.`,
   ].filter(Boolean).join(', ')
+
+  const detailSent = detailCampaign?.recipients.filter(r => r.status === 'sent').length ?? 0
+  const detailFailed = detailCampaign?.recipients.filter(r => r.status === 'failed').length ?? 0
+  const detailPending = detailCampaign ? detailCampaign.recipients.length - detailSent - detailFailed : 0
 
   return (
     <div className="space-y-6">
@@ -285,70 +391,39 @@ export function HRMailing() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Users className="h-4 w-4" />
-                Сотрудники
-              </div>
-              <Input
-                placeholder="Поиск..."
-                value={employeeSearch}
-                onChange={e => setEmployeeSearch(e.target.value)}
-              />
-              <div className="max-h-40 overflow-y-auto space-y-0.5 border rounded-lg p-1.5">
-                {filteredEmployees.slice(0, 50).map(emp => (
-                  <label key={emp.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted/60 cursor-pointer text-xs">
-                    <input
-                      type="checkbox"
-                      checked={selectedUserIds.has(emp.id)}
-                      onChange={() => toggleUser(emp.id)}
-                      className="rounded"
-                    />
-                    <span className="truncate">{emp.last_name} {emp.first_name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Briefcase className="h-4 w-4" />
-                Должности
-              </div>
-              <div className="max-h-48 overflow-y-auto space-y-0.5 border rounded-lg p-1.5">
-                {positions.map(pos => (
-                  <label key={pos.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted/60 cursor-pointer text-xs">
-                    <input
-                      type="checkbox"
-                      checked={selectedPositions.has(pos.name)}
-                      onChange={() => togglePosition(pos.name)}
-                      className="rounded"
-                    />
-                    <span className="truncate">{pos.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Building2 className="h-4 w-4" />
-                Отделы
-              </div>
-              <div className="max-h-48 overflow-y-auto space-y-0.5 border rounded-lg p-1.5">
-                {departments.map(dept => (
-                  <label key={dept.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted/60 cursor-pointer text-xs">
-                    <input
-                      type="checkbox"
-                      checked={selectedDeptIds.has(dept.id)}
-                      onChange={() => toggleDept(dept.id)}
-                      className="rounded"
-                    />
-                    <span className="truncate">{dept.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            <RecipientCategory<number>
+              icon={<Users className="h-4 w-4" />}
+              title="Сотрудники"
+              search={employeeSearch}
+              onSearchChange={setEmployeeSearch}
+              items={filteredEmployees.slice(0, 50).map(e => ({ id: e.id, label: `${e.last_name} ${e.first_name}` }))}
+              selected={selectedUserIds}
+              onToggle={toggleUser}
+              onToggleAll={toggleAllUsers}
+              allSelected={allUsersSelected}
+            />
+            <RecipientCategory<string>
+              icon={<Briefcase className="h-4 w-4" />}
+              title="Должности"
+              search={positionSearch}
+              onSearchChange={setPositionSearch}
+              items={filteredPositions.map(p => ({ id: p.name, label: p.name }))}
+              selected={selectedPositions}
+              onToggle={togglePosition}
+              onToggleAll={toggleAllPositions}
+              allSelected={allPositionsSelected}
+            />
+            <RecipientCategory<number>
+              icon={<Building2 className="h-4 w-4" />}
+              title="Отделы"
+              search={departmentSearch}
+              onSearchChange={setDepartmentSearch}
+              items={filteredDepartments.map(d => ({ id: d.id, label: d.name }))}
+              selected={selectedDeptIds}
+              onToggle={toggleDept}
+              onToggleAll={toggleAllDepts}
+              allSelected={allDeptsSelected}
+            />
           </div>
 
           {hasRecipients && (
@@ -440,30 +515,85 @@ export function HRMailing() {
       </div>
 
       {detailCampaign && (
-        <ConfirmModal
-          isOpen={true}
-          onClose={() => setDetailCampaign(null)}
-          onConfirm={() => setDetailCampaign(null)}
-          title={`Получатели: ${detailCampaign.title}`}
-          message={
-            detailCampaign.recipients.length === 0
-              ? 'Нет данных о получателях'
-              : detailCampaign.recipients.map(r => {
-                  const statusIcon = r.status === 'sent'
-                    ? '✅'
-                    : r.status === 'failed'
-                      ? '❌'
-                      : '⏳'
-                  const statusText = r.status === 'sent'
-                    ? 'Отправлено'
-                    : r.status === 'failed'
-                      ? `Ошибка: ${r.error || 'неизвестно'}`
-                      : 'Ожидает'
-                  return `${statusIcon} ${r.last_name} ${r.first_name} (${r.position}) — ${statusText}`
-                }).join('\n')
-          }
-          confirmText="Закрыть"
-        />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setDetailCampaign(null)} />
+          <div className="relative z-10 flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-border/60 bg-card p-6 shadow-xl animate-scale-in">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold">Получатели</h3>
+                <p className="mt-0.5 truncate text-sm text-muted-foreground">{detailCampaign.title}</p>
+              </div>
+              <button
+                onClick={() => setDetailCampaign(null)}
+                className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/60"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {detailCampaign.recipients.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-1 font-medium text-green-600">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Отправлено: {detailSent}
+                </span>
+                {detailFailed > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 font-medium text-destructive">
+                    <XCircle className="h-3.5 w-3.5" />
+                    Ошибки: {detailFailed}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 font-medium text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  Ожидают: {detailPending}
+                </span>
+              </div>
+            )}
+
+            <div className="mt-4 flex-1 space-y-0.5 overflow-y-auto pr-1">
+              {detailCampaign.recipients.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">Нет данных о получателях</p>
+              ) : (
+                detailCampaign.recipients.map((r, i) => {
+                  const sent = r.status === 'sent'
+                  const failed = r.status === 'failed'
+                  return (
+                    <div key={i} className="flex items-start gap-2.5 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-muted/40">
+                      {sent ? (
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                      ) : failed ? (
+                        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                      ) : (
+                        <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate">
+                          <span className="font-medium">{r.last_name} {r.first_name}</span>
+                          <span className="text-muted-foreground"> — {r.position}</span>
+                        </p>
+                        {failed && r.error && (
+                          <p className="mt-0.5 truncate text-xs text-destructive">Ошибка: {r.error}</p>
+                        )}
+                      </div>
+                      <span className={cn(
+                        'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
+                        sent && 'bg-green-500/10 text-green-600',
+                        failed && 'bg-destructive/10 text-destructive',
+                        !sent && !failed && 'bg-muted text-muted-foreground',
+                      )}>
+                        {sent ? 'Отправлено' : failed ? 'Ошибка' : 'Ожидает'}
+                      </span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <Button variant="outline" onClick={() => setDetailCampaign(null)}>Закрыть</Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

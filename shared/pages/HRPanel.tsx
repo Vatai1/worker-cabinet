@@ -14,6 +14,9 @@ import { HRTimesheet } from '@/modules/timesheet/pages/HRTimesheet'
 const HRHierarchy = lazy(() => import('@/modules/hierarchy/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 const HRDocTemplates = lazy(() => import('@/modules/documents/pages/HRDocTemplates').then(m => ({ default: m.HRDocTemplates })))
 const HRMailing = lazy(() => import('@/modules/mailing/pages/HRMailing').then(m => ({ default: m.HRMailing })))
+const HRPositionsTab = () => <DictionariesTab variant="hr" initialTab="positions" />
+const HRVacationTypesTab = () => <DictionariesTab variant="hr" initialTab="vacationTypes" />
+const HRSkillsTab = () => <DictionariesTab variant="hr" initialTab="skills" />
 
 type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing'
 
@@ -206,7 +209,7 @@ export function HRPanel() {
                 ))}
               </nav>
 
-              <div className="min-w-0">
+              <div className="relative min-w-0">
                 {currentTabInfo && (
                   <div className="flex items-center gap-3 mb-4">
                     <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', currentTabInfo.color)}>
@@ -224,15 +227,15 @@ export function HRPanel() {
                   ['onboarding', HROnboarding],
                   ['vacation', HRVacationCalendar],
                   ['hr_departments', DepartmentsTab],
-                  ['hr_positions', () => <DictionariesTab variant="hr" initialTab="positions" />],
-                  ['hr_vacation_types', () => <DictionariesTab variant="hr" initialTab="vacationTypes" />],
-                  ['hr_skills', () => <DictionariesTab variant="hr" initialTab="skills" />],
+                  ['hr_positions', HRPositionsTab],
+                  ['hr_vacation_types', HRVacationTypesTab],
+                  ['hr_skills', HRSkillsTab],
                 ] as const).map(([id, Component]) => (
                   <div
                     key={id}
                     className={cn(
-                      'transition-opacity duration-200',
-                      safeActiveTab === id ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
+                      'animate-fade-in',
+                      safeActiveTab === id ? 'block' : 'hidden',
                     )}
                   >
                     <Component />

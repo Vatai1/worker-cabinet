@@ -139,6 +139,7 @@ const options = {
             description: { type: 'string', nullable: true },
             vacation_requests_blocked: { type: 'boolean' },
             manager_name: { type: 'string', nullable: true },
+            manager_position: { type: 'string', nullable: true },
             employee_count: { type: 'integer' },
           },
         },
