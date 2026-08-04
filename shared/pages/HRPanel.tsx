@@ -1,20 +1,20 @@
 import { useState, useMemo, lazy, Suspense } from 'react'
 import { cn } from '@/shared/lib/utils'
 import {
-  Users, ClipboardList, UserPlus, Plane, Network, BookOpen,
-  Calendar, Loader2, BarChart3, Sparkles, FileText,
+  Users, ClipboardList, UserPlus, Plane, Network,
+  Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Wrench,
 } from 'lucide-react'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { HRSurveys } from '@/modules/surveys/pages/HRSurveys'
 import { HROnboarding } from '@/modules/onboarding/pages/HROnboarding'
 import { HRVacationCalendar } from '@/modules/vacation/pages/HRVacationCalendar'
-import { HRDictionaries } from '@/core/admin/pages/HRDictionaries'
+import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
+import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { HRTimesheet } from '@/modules/timesheet/pages/HRTimesheet'
-import { AnalyticsTab } from '@/core/admin/pages/AdminAnalytics'
 const HRHierarchy = lazy(() => import('@/modules/hierarchy/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 const HRDocTemplates = lazy(() => import('@/modules/documents/pages/HRDocTemplates').then(m => ({ default: m.HRDocTemplates })))
 
-type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'dictionaries' | 'timesheet' | 'analytics' | 'doc-templates'
+type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates'
 
 interface TabItem {
   id: TabId
@@ -43,9 +43,11 @@ const TAB_GROUPS: TabGroup[] = [
   { label: 'Документы', tabs: [
     { id: 'doc-templates', name: 'Шаблоны документов', icon: FileText, description: 'Шаблоны документов организации', module: 'documents', color: 'from-pink-500 to-rose-600' },
   ]},
-  { label: 'Справочники и аналитика', tabs: [
-    { id: 'dictionaries', name: 'Справочники', icon: BookOpen, description: 'Должности, типы, навыки', module: 'dictionaries', color: 'from-slate-500 to-gray-600' },
-    { id: 'analytics', name: 'Аналитика', icon: BarChart3, description: 'Графики и статистика', module: 'analytics', color: 'from-indigo-500 to-blue-600' },
+  { label: 'Справочники', tabs: [
+    { id: 'hr_departments', name: 'Отделы', icon: Building2, description: 'Структура организации', module: 'dictionaries', color: 'from-blue-500 to-indigo-600' },
+    { id: 'hr_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', module: 'dictionaries', color: 'from-violet-500 to-purple-600' },
+    { id: 'hr_vacation_types', name: 'Типы отпусков', icon: Plane, description: 'Типы отпусков', module: 'vacation', color: 'from-amber-500 to-orange-600' },
+    { id: 'hr_skills', name: 'Навыки', icon: Wrench, description: 'Каталог навыков', module: 'skills', color: 'from-emerald-500 to-teal-600' },
   ]},
 ]
 
@@ -171,9 +173,11 @@ export function HRPanel() {
               ['surveys', HRSurveys],
               ['onboarding', HROnboarding],
               ['vacation', HRVacationCalendar],
-              ['dictionaries', HRDictionaries],
+              ['hr_departments', DepartmentsTab],
+              ['hr_positions', () => <DictionariesTab variant="hr" initialTab="positions" />],
+              ['hr_vacation_types', () => <DictionariesTab variant="hr" initialTab="vacationTypes" />],
+              ['hr_skills', () => <DictionariesTab variant="hr" initialTab="skills" />],
               ['timesheet', HRTimesheet],
-              ['analytics', AnalyticsTab],
             ] as const).map(([id, Component]) => (
               <div
                 key={id}
