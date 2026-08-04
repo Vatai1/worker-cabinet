@@ -1,4 +1,4 @@
-import { useState, useMemo, lazy, Suspense } from 'react'
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react'
 import { cn } from '@/shared/lib/utils'
 import {
   Users, ClipboardList, UserPlus, Plane, Network,
@@ -53,6 +53,8 @@ const TAB_GROUPS: TabGroup[] = [
   ]},
 ]
 
+const TOP_NAV_TABS = ['mailing', 'timesheet', 'hierarchy', 'doc-templates'] as const
+
 export function HRPanel() {
   const [activeTab, setActiveTab] = useState<TabId>('surveys')
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
@@ -70,6 +72,29 @@ export function HRPanel() {
     ? activeTab
     : (firstTab as TabId | undefined)
   const currentTabInfo = allTabs.find((t) => t.id === safeActiveTab)
+
+  const isTopLayout = TOP_NAV_TABS.includes(safeActiveTab as typeof TOP_NAV_TABS[number]) &&
+    (safeActiveTab ? isModuleEnabled(allTabs.find(t => t.id === safeActiveTab)?.module || '') : false)
+  const layoutMode: 'top' | 'left' = isTopLayout ? 'top' : 'left'
+
+  const [displayedMode, setDisplayedMode] = useState<'top' | 'left'>(layoutMode)
+  const [phase, setPhase] = useState<'idle' | 'out' | 'in'>('idle')
+
+  useEffect(() => {
+    if (layoutMode === displayedMode) return
+    setPhase('out')
+    const t = setTimeout(() => {
+      setDisplayedMode(layoutMode)
+      requestAnimationFrame(() => setPhase('in'))
+    }, 200)
+    return () => clearTimeout(t)
+  }, [layoutMode, displayedMode])
+
+  useEffect(() => {
+    if (phase !== 'in') return
+    const t = setTimeout(() => setPhase('idle'), 220)
+    return () => clearTimeout(t)
+  }, [phase])
 
   return (
     <div className="space-y-6">
@@ -92,121 +117,130 @@ export function HRPanel() {
           <p className="text-sm font-medium">Все HR-модули отключены</p>
           <p className="text-xs mt-1">Включите модули в «Администрирование → Модули»</p>
         </div>
-      ) : (['mailing', 'timesheet', 'hierarchy', 'doc-templates'].includes(safeActiveTab || '') && (safeActiveTab ? isModuleEnabled(allTabs.find(t => t.id === safeActiveTab)?.module || '') : false)) ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            {allTabs.map((tab) => {
-              const Icon = tab.icon
-              const isActive = safeActiveTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
-                    isActive
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-border/40',
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.name}
-                </button>
-              )
-            })}
-          </div>
-          {safeActiveTab === 'timesheet' && <HRTimesheet />}
-          {safeActiveTab === 'hierarchy' && isModuleEnabled('hierarchy') && (
-            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-              <HRHierarchy />
-            </Suspense>
-          )}
-          {safeActiveTab === 'doc-templates' && isModuleEnabled('documents') && (
-            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-              <HRDocTemplates />
-            </Suspense>
-          )}
-          {safeActiveTab === 'mailing' && isModuleEnabled('mailing') && (
-            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-              <HRMailing />
-            </Suspense>
-          )}
-        </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
-          <nav className="space-y-3">
-            {filteredGroups.map((group) => (
-              <div key={group.label}>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 px-3 mb-1.5">{group.label}</p>
-                <div className="space-y-0.5 bg-card rounded-xl border border-border/40 p-1.5">
-                  {group.tabs.map((tab) => {
-                    const Icon = tab.icon
-                    const isActive = safeActiveTab === tab.id
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={cn(
-                          'group flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200',
-                          isActive
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                        )}
-                      >
-                        <Icon className={cn(
-                          'h-4 w-4 shrink-0 transition-colors',
-                          isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
-                        )} />
-                        <div className="min-w-0 flex-1">
-                          <p className={cn(
-                            'text-sm font-medium truncate transition-colors',
-                            isActive ? 'text-primary-foreground' : '',
-                          )}>
-                            {tab.name}
-                          </p>
-                        </div>
-                        {isActive && <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground/60 shrink-0" />}
-                      </button>
-                    )
-                  })}
-                </div>
+        <div className={cn(
+          'transition-[opacity,transform] duration-200 ease-out',
+          phase === 'out'
+            ? 'opacity-0 -translate-y-2 scale-[0.985]'
+            : 'opacity-100 translate-y-0 scale-100',
+        )}>
+          {displayedMode === 'top' ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                {allTabs.map((tab) => {
+                  const Icon = tab.icon
+                  const isActive = safeActiveTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
+                        isActive
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-border/40',
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {tab.name}
+                    </button>
+                  )
+                })}
               </div>
-            ))}
-          </nav>
+              {safeActiveTab === 'timesheet' && <HRTimesheet />}
+              {safeActiveTab === 'hierarchy' && isModuleEnabled('hierarchy') && (
+                <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                  <HRHierarchy />
+                </Suspense>
+              )}
+              {safeActiveTab === 'doc-templates' && isModuleEnabled('documents') && (
+                <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                  <HRDocTemplates />
+                </Suspense>
+              )}
+              {safeActiveTab === 'mailing' && isModuleEnabled('mailing') && (
+                <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                  <HRMailing />
+                </Suspense>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+              <nav className="space-y-3">
+                {filteredGroups.map((group) => (
+                  <div key={group.label}>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 px-3 mb-1.5">{group.label}</p>
+                    <div className="space-y-0.5 bg-card rounded-xl border border-border/40 p-1.5">
+                      {group.tabs.map((tab) => {
+                        const Icon = tab.icon
+                        const isActive = safeActiveTab === tab.id
+                        return (
+                          <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={cn(
+                              'group flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200',
+                              isActive
+                                ? 'bg-primary text-primary-foreground shadow-sm'
+                                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                            )}
+                          >
+                            <Icon className={cn(
+                              'h-4 w-4 shrink-0 transition-colors',
+                              isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
+                            )} />
+                            <div className="min-w-0 flex-1">
+                              <p className={cn(
+                                'text-sm font-medium truncate transition-colors',
+                                isActive ? 'text-primary-foreground' : '',
+                              )}>
+                                {tab.name}
+                              </p>
+                            </div>
+                            {isActive && <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground/60 shrink-0" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </nav>
 
-          <div className="min-w-0">
-            {currentTabInfo && (
-              <div className="flex items-center gap-3 mb-4">
-                <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', currentTabInfo.color)}>
-                  <currentTabInfo.icon className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold">{currentTabInfo.name}</h2>
-                  <p className="text-xs text-muted-foreground">{currentTabInfo.description}</p>
-                </div>
-              </div>
-            )}
-            {([
-              ['surveys', HRSurveys],
-              ['mailing', HRMailing],
-              ['onboarding', HROnboarding],
-              ['vacation', HRVacationCalendar],
-              ['hr_departments', DepartmentsTab],
-              ['hr_positions', () => <DictionariesTab variant="hr" initialTab="positions" />],
-              ['hr_vacation_types', () => <DictionariesTab variant="hr" initialTab="vacationTypes" />],
-              ['hr_skills', () => <DictionariesTab variant="hr" initialTab="skills" />],
-            ] as const).map(([id, Component]) => (
-              <div
-                key={id}
-                className={cn(
-                  'transition-opacity duration-200',
-                  safeActiveTab === id ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
+              <div className="min-w-0">
+                {currentTabInfo && (
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', currentTabInfo.color)}>
+                      <currentTabInfo.icon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold">{currentTabInfo.name}</h2>
+                      <p className="text-xs text-muted-foreground">{currentTabInfo.description}</p>
+                    </div>
+                  </div>
                 )}
-              >
-                <Component />
+                {([
+                  ['surveys', HRSurveys],
+                  ['mailing', HRMailing],
+                  ['onboarding', HROnboarding],
+                  ['vacation', HRVacationCalendar],
+                  ['hr_departments', DepartmentsTab],
+                  ['hr_positions', () => <DictionariesTab variant="hr" initialTab="positions" />],
+                  ['hr_vacation_types', () => <DictionariesTab variant="hr" initialTab="vacationTypes" />],
+                  ['hr_skills', () => <DictionariesTab variant="hr" initialTab="skills" />],
+                ] as const).map(([id, Component]) => (
+                  <div
+                    key={id}
+                    className={cn(
+                      'transition-opacity duration-200',
+                      safeActiveTab === id ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
+                    )}
+                  >
+                    <Component />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>
