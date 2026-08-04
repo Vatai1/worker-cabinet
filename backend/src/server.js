@@ -26,6 +26,7 @@ import assistantRoutes from './routes/assistant.js'
 import onlyofficeRoutes from './routes/onlyoffice.js'
 import appearanceRoutes from './routes/appearance.js'
 import versionRoutes from './routes/version.js'
+import mailingsRoutes from './routes/mailings.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { runMigrations } from './db/migrate.js'
 import { errorHandler } from './middleware/errors.js'
@@ -123,6 +124,7 @@ app.use('/api/assistant', assistantRoutes)
 app.use('/api/onlyoffice', onlyofficeRoutes)
 app.use('/api/appearance', appearanceRoutes)
 app.use('/api/version', versionRoutes)
+app.use('/api/mailings', mailingsRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

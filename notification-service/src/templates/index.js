@@ -152,4 +152,22 @@ export const templates = {
   vacation_status_changed: vacationStatusChanged,
   survey_assigned: surveyAssigned,
   generic,
+  mailing,
+}
+
+export function mailing(data) {
+  const { title, message, imageUrls = [] } = data
+  const imagesHtml = imageUrls
+    .map(url => `<img src="${esc(url)}" style="max-width:100%;border-radius:8px;margin-top:12px" />`)
+    .join('')
+  const body = `
+    <p>Здравствуйте!</p>
+    <p>${esc(message)}</p>
+    ${imagesHtml}
+  `
+  return {
+    subject: title || 'Рассылка',
+    html: wrapHtml(title || 'Рассылка', body),
+    text: message,
+  }
 }

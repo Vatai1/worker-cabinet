@@ -23,6 +23,7 @@ const TYPE_LABELS: Record<string, string> = {
   document_assigned: 'Документ для ознакомления',
   survey_assigned: 'Новый опрос',
   onboarding_task: 'Задача онбординга',
+  mailing: 'Рассылка',
   generic: 'Уведомление',
 }
 
@@ -32,6 +33,7 @@ const TYPE_ICONS: Record<string, string> = {
   document_assigned: '📄',
   survey_assigned: '📊',
   onboarding_task: '🎓',
+  mailing: '📬',
   generic: '🔔',
 }
 
@@ -169,6 +171,8 @@ export function Notifications() {
               const data = n.data || {}
               const subject = (data.subject as string) || label
               const message = (data.message as string) || ''
+              const imageUrls = (data.imageUrls as string[]) || []
+              const title = n.type === 'mailing' ? (data.title as string) : subject
               const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
 
               return (
@@ -184,13 +188,23 @@ export function Notifications() {
                       <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="font-medium text-sm">{subject}</span>
+                          <span className="font-medium text-sm">{title}</span>
                           {isUnread && (
                             <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
                           )}
                         </div>
                         {message && (
                           <p className="text-sm text-muted-foreground truncate">{message}</p>
+                        )}
+                        {imageUrls.length > 0 && (
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            {imageUrls.slice(0, 3).map((url, idx) => (
+                              <img key={idx} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-border/40" />
+                            ))}
+                            {imageUrls.length > 3 && (
+                              <span className="text-xs text-muted-foreground self-center">+{imageUrls.length - 3}</span>
+                            )}
+                          </div>
                         )}
                         <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">

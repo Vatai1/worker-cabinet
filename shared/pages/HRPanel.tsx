@@ -2,7 +2,7 @@ import { useState, useMemo, lazy, Suspense } from 'react'
 import { cn } from '@/shared/lib/utils'
 import {
   Users, ClipboardList, UserPlus, Plane, Network,
-  Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Wrench,
+  Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Wrench, Send,
 } from 'lucide-react'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { HRSurveys } from '@/modules/surveys/pages/HRSurveys'
@@ -13,8 +13,9 @@ import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { HRTimesheet } from '@/modules/timesheet/pages/HRTimesheet'
 const HRHierarchy = lazy(() => import('@/modules/hierarchy/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 const HRDocTemplates = lazy(() => import('@/modules/documents/pages/HRDocTemplates').then(m => ({ default: m.HRDocTemplates })))
+const HRMailing = lazy(() => import('@/modules/mailing/pages/HRMailing').then(m => ({ default: m.HRMailing })))
 
-type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates'
+type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing'
 
 interface TabItem {
   id: TabId
@@ -33,6 +34,7 @@ interface TabGroup {
 const TAB_GROUPS: TabGroup[] = [
   { label: 'Управление персоналом', tabs: [
     { id: 'surveys', name: 'Опросы', icon: ClipboardList, description: 'Создание и управление опросами', module: 'surveys', color: 'from-violet-500 to-purple-600' },
+    { id: 'mailing', name: 'Рассылка', icon: Send, description: 'Массовая рассылка информации', module: 'mailing', color: 'from-fuchsia-500 to-pink-600' },
     { id: 'onboarding', name: 'Онбординг', icon: UserPlus, description: 'Шаблоны и адаптация', module: 'onboarding', color: 'from-emerald-500 to-teal-600' },
     { id: 'timesheet', name: 'Табель', icon: Calendar, description: 'Учёт рабочего времени', module: 'timesheet', color: 'from-cyan-500 to-blue-600' },
   ]},
@@ -90,7 +92,7 @@ export function HRPanel() {
           <p className="text-sm font-medium">Все HR-модули отключены</p>
           <p className="text-xs mt-1">Включите модули в «Администрирование → Модули»</p>
         </div>
-      ) : safeActiveTab === 'timesheet' ? (
+      ) : (['mailing', 'timesheet', 'hierarchy', 'doc-templates'].includes(safeActiveTab || '') && (safeActiveTab ? isModuleEnabled(allTabs.find(t => t.id === safeActiveTab)?.module || '') : false)) ? (
         <div className="space-y-4">
           <div className="flex items-center gap-2 flex-wrap">
             {allTabs.map((tab) => {
@@ -113,7 +115,22 @@ export function HRPanel() {
               )
             })}
           </div>
-          <HRTimesheet />
+          {safeActiveTab === 'timesheet' && <HRTimesheet />}
+          {safeActiveTab === 'hierarchy' && isModuleEnabled('hierarchy') && (
+            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+              <HRHierarchy />
+            </Suspense>
+          )}
+          {safeActiveTab === 'doc-templates' && isModuleEnabled('documents') && (
+            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+              <HRDocTemplates />
+            </Suspense>
+          )}
+          {safeActiveTab === 'mailing' && isModuleEnabled('mailing') && (
+            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+              <HRMailing />
+            </Suspense>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
@@ -171,13 +188,13 @@ export function HRPanel() {
             )}
             {([
               ['surveys', HRSurveys],
+              ['mailing', HRMailing],
               ['onboarding', HROnboarding],
               ['vacation', HRVacationCalendar],
               ['hr_departments', DepartmentsTab],
               ['hr_positions', () => <DictionariesTab variant="hr" initialTab="positions" />],
               ['hr_vacation_types', () => <DictionariesTab variant="hr" initialTab="vacationTypes" />],
               ['hr_skills', () => <DictionariesTab variant="hr" initialTab="skills" />],
-              ['timesheet', HRTimesheet],
             ] as const).map(([id, Component]) => (
               <div
                 key={id}
@@ -189,26 +206,6 @@ export function HRPanel() {
                 <Component />
               </div>
             ))}
-            {safeActiveTab === 'hierarchy' && isModuleEnabled('hierarchy') && (
-              <div className={cn(
-                'transition-opacity duration-200',
-                safeActiveTab === 'hierarchy' ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
-              )}>
-                <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-                  <HRHierarchy />
-                </Suspense>
-              </div>
-            )}
-            {safeActiveTab === 'doc-templates' && isModuleEnabled('documents') && (
-              <div className={cn(
-                'transition-opacity duration-200',
-                safeActiveTab === 'doc-templates' ? 'opacity-100 relative' : 'opacity-0 absolute inset-0 pointer-events-none invisible',
-              )}>
-                <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-                  <HRDocTemplates />
-                </Suspense>
-              </div>
-            )}
           </div>
         </div>
       )}

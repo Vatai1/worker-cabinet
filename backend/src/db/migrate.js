@@ -1481,6 +1481,7 @@ async function runMigrations() {
       { code: 'auth', name: 'Авторизация', description: 'Настройки аутентификации, авторизации и безопасности', icon: 'Lock', route: null, sort: 5, category: 'core' },
       { code: 'assistant', name: 'AI Ассистент', description: 'Кадровый AI-ассистент для ответов на вопросы сотрудников', icon: 'Bot', route: '/assistant', sort: 15, category: 'general' },
       { code: 'appearance', name: 'Внешний вид', description: 'Тема оформления системы', icon: 'Palette', route: null, sort: 3, category: 'core' },
+      { code: 'mailing', name: 'Рассылки', description: 'Рассылка информации сотрудникам', icon: 'Send', route: '/hr/mailing', sort: 25, category: 'hr' },
     ]
     for (const m of defaultModules) {
       await db.query(
@@ -1489,6 +1490,7 @@ async function runMigrations() {
       )
     }
     console.log('  ✓ modules seeded')
+    await db.query("UPDATE modules SET category = 'hr' WHERE code = 'mailing'").catch(() => {})
     await db.query("DELETE FROM modules WHERE code = 'analytics'").catch(() => {})
     await db.query("DELETE FROM permissions WHERE module = 'analytics'").catch(() => {})
     const appearanceResult = await db.query("SELECT settings FROM modules WHERE code = 'appearance'")
@@ -1554,6 +1556,7 @@ async function runMigrations() {
 
     await migrateTravelChildren(db)
     await migrateTravelBalance(db)
+    await migrateMailingTables(db)
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
@@ -1580,6 +1583,34 @@ if (isMainModule) {
 }
 
 export { runMigrations }
+
+async function migrateMailingTables(db) {
+  console.log('Creating mailing tables...')
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS mailing_campaigns (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      message TEXT NOT NULL,
+      images JSONB DEFAULT '[]',
+      channel VARCHAR(20) NOT NULL DEFAULT 'email',
+      created_by INTEGER REFERENCES users(id),
+      recipient_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.log('  - mailing_campaigns:', e.message))
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS mailing_campaign_recipients (
+      id SERIAL PRIMARY KEY,
+      campaign_id INTEGER NOT NULL REFERENCES mailing_campaigns(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      error TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(campaign_id, user_id)
+    )
+  `).catch(e => console.log('  - mailing_campaign_recipients:', e.message))
+  console.log('  ✓ mailing tables ready')
+}
 
 async function migrateTravelChildren(db) {
   console.log('Checking travel_children JSONB column...')
