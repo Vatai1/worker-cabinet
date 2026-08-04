@@ -26,7 +26,7 @@ import {
   TrendingUp, Clock3, FolderKanban, CalendarX, Settings,
   Zap, Briefcase, Wrench, Plane,
   Pencil, Save, Bot, Package,
-  Palette, Tag,
+  Palette, Tag, LogIn,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
@@ -586,7 +586,12 @@ function UsersTab() {
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
-  const exportUsers = () => { window.open(`${API_BASE_URL}/admin/users/export`, '_blank') }
+  const stats = {
+    total,
+    active: users.filter(u => u.status === 'active').length,
+    inactive: users.filter(u => u.status === 'inactive').length,
+    on_leave: users.filter(u => u.status === 'on_leave').length,
+  }
 
   return (
     <div className="space-y-4">
@@ -596,6 +601,25 @@ function UsersTab() {
           <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
         </div>
       )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3 rounded-xl bg-card border border-border/40 flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30"><Users className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
+          <div><p className="text-xl font-bold leading-none">{stats.total}</p><p className="text-[11px] text-muted-foreground mt-1">Всего</p></div>
+        </div>
+        <div className="p-3 rounded-xl bg-card border border-border/40 flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30"><Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
+          <div><p className="text-xl font-bold leading-none">{stats.active}</p><p className="text-[11px] text-muted-foreground mt-1">Активные</p></div>
+        </div>
+        <div className="p-3 rounded-xl bg-card border border-border/40 flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30"><Lock className="h-4 w-4 text-red-600 dark:text-red-400" /></div>
+          <div><p className="text-xl font-bold leading-none">{stats.inactive}</p><p className="text-[11px] text-muted-foreground mt-1">Неактивные</p></div>
+        </div>
+        <div className="p-3 rounded-xl bg-card border border-border/40 flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30"><Plane className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
+          <div><p className="text-xl font-bold leading-none">{stats.on_leave}</p><p className="text-[11px] text-muted-foreground mt-1">В отпуске</p></div>
+        </div>
+      </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -615,9 +639,6 @@ function UsersTab() {
             <option value="">Все должности</option>
             {positions.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
           </select>
-          <Button variant="outline" size="sm" onClick={exportUsers}>
-            <Download className="h-3.5 w-3.5 mr-1.5" /> Экспорт
-          </Button>
         </div>
       </div>
 
@@ -707,10 +728,20 @@ function UsersTab() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium truncate">{fullName}</span>
                       <Badge className={cn('text-[10px]', STATUS_COLORS[user.status])}>{STATUS_LABELS[user.status]}</Badge>
+                      <Badge className="text-[10px] bg-primary/10 text-primary">{ROLE_LABELS[user.role] || user.role}</Badge>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                      <span className="truncate">{user.position || user.email}</span>
-                      {user.department_name && <span>· {user.department_name}</span>}
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {user.position && (
+                        <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground">
+                          <Briefcase className="h-2.5 w-2.5" /> {user.position}
+                        </span>
+                      )}
+                      {user.department_name && (
+                        <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground">
+                          <Building2 className="h-2.5 w-2.5" /> {user.department_name}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-muted-foreground truncate">{user.email}</span>
                     </div>
                   </div>
                 </div>
@@ -1314,7 +1345,7 @@ const DEPT_GRADIENTS = [
 ]
 
 function DepartmentsTab() {
-  const [departments, setDepartments] = useState<{ id: number; name: string; manager_id: number | null; manager_name: string | null; employee_count: string; vacation_requests_blocked: boolean; description: string | null }[]>([])
+  const [departments, setDepartments] = useState<{ id: number; name: string; manager_id: number | null; manager_name: string | null; manager_position: string | null; employee_count: string; vacation_requests_blocked: boolean; description: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -1446,9 +1477,11 @@ function DepartmentsTab() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {departments.map((dept) => (
-          <Card key={dept.id} className="group relative">
+      <div className="space-y-3">
+        {departments.map((dept) => {
+          const gradient = DEPT_GRADIENTS[dept.id % DEPT_GRADIENTS.length]
+          return (
+          <Card key={dept.id} className="group relative overflow-hidden">
             <CardContent className="pt-5">
               {editingId === dept.id ? (
                 <div className="space-y-3">
@@ -1475,39 +1508,47 @@ function DepartmentsTab() {
                   </div>
                 </div>
               ) : (
-                <>
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className={cn(
-                      'p-2.5 rounded-xl bg-gradient-to-br text-white shrink-0 shadow-sm',
-                      DEPT_GRADIENTS[dept.id % DEPT_GRADIENTS.length],
-                    )}>
-                      <Building2 className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-foreground truncate">{dept.name}</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        {dept.manager_name || 'Без руководителя'}
+                <div className="flex items-center gap-4">
+                  <div className={cn('p-3 rounded-2xl bg-gradient-to-br text-white shrink-0 shadow-md', gradient)}>
+                    <Building2 className="h-6 w-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-foreground text-base">{dept.name}</h3>
+                    {dept.manager_name ? (
+                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                        <Users className="h-3.5 w-3.5 shrink-0" />
+                        <span className="font-medium text-foreground/80">{dept.manager_name}</span>
+                        {dept.manager_position && (
+                          <>
+                            <span className="text-muted-foreground/40">·</span>
+                            <span className="truncate">{dept.manager_position}</span>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" />
+                        Без руководителя
                       </p>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button onClick={() => startEdit(dept)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground">
-                        <Edit3 className="h-3.5 w-3.5" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Badge className="text-[11px] bg-primary/10 text-primary">{dept.employee_count} чел.</Badge>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => startEdit(dept)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground">
+                        <Edit3 className="h-4 w-4" />
                       </button>
-                      <button onClick={() => deleteDept(dept.id, dept.name)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-3.5 w-3.5" />
+                      <button onClick={() => deleteDept(dept.id, dept.name)} className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between pt-1 border-t border-border/30">
-                    <span className="text-[11px] text-muted-foreground">Сотрудников</span>
-                    <Badge className="text-[10px] bg-primary/10 text-primary">{dept.employee_count}</Badge>
-                  </div>
-                </>
+                </div>
               )}
             </CardContent>
           </Card>
-        ))}
+          )
+        })}
       </div>
 
       {departments.length === 0 && !showCreate && (
@@ -1776,7 +1817,8 @@ function SettingsTab() {
       const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
       if (res.ok) {
         const all = await res.json()
-        setSettings(all.filter((s: SystemSetting) => !s.key.startsWith('assistant_') && s.key !== 'timesheet_auto_create'))
+        const hidden = ['timesheet_auto_create', 'vacation_default_days', 'session_duration_days', 'password_min_length']
+        setSettings(all.filter((s: SystemSetting) => !s.key.startsWith('assistant_') && !hidden.includes(s.key)))
       }
     } catch {} finally { setLoading(false) }
   }
@@ -1798,63 +1840,80 @@ function SettingsTab() {
     setSettings((prev) => prev.map((s) => (s.key === key ? { ...s, value } : s)))
   }
 
+  const COMPANY_KEYS = ['company_name']
+  const LOGIN_KEYS = ['login_title', 'login_subtitle', 'login_stat_1_value', 'login_stat_1_label', 'login_stat_2_value', 'login_stat_2_label', 'login_stat_3_value', 'login_stat_3_label', 'login_demo_buttons', 'login_show_stats']
+  const GROUPED_KEYS = [...COMPANY_KEYS, ...LOGIN_KEYS]
+  const companySettings = settings.filter(s => COMPANY_KEYS.includes(s.key))
+  const loginSettings = settings.filter(s => LOGIN_KEYS.includes(s.key))
+  const otherSettings = settings.filter(s => !GROUPED_KEYS.includes(s.key))
+
+  const renderSetting = (setting: SystemSetting) => {
+    const isBoolean = setting.value === 'true' || setting.value === 'false'
+    return (
+      <div key={setting.key} className="flex flex-col sm:flex-row sm:items-center gap-2 p-4 rounded-xl border border-border/50">
+        <div className="flex-1">
+          <p className="font-medium text-sm">{setting.description || setting.key}</p>
+          <p className="text-xs text-muted-foreground font-mono">{setting.key}</p>
+        </div>
+        {isBoolean ? (
+          <Switch
+            checked={setting.value === 'true'}
+            onCheckedChange={(checked) => updateValue(setting.key, String(checked))}
+          />
+        ) : (
+          <Input
+            value={setting.value}
+            onChange={(e) => updateValue(setting.key, e.target.value)}
+            className="sm:w-64"
+          />
+        )}
+      </div>
+    )
+  }
+
+  const renderBlock = (title: string, icon: React.ComponentType<{ className?: string }>, desc: string, blockSettings: SystemSetting[]) => {
+    if (blockSettings.length === 0) return null
+    const Icon = icon
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base"><Icon className="h-5 w-5" /> {title}</CardTitle>
+          <CardDescription>{desc}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {blockSettings.map(renderSetting)}
+        </CardContent>
+      </Card>
+    )
+  }
+
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
   }
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Settings2 className="h-5 w-5" /> Системные настройки</CardTitle>
-          <CardDescription>Глобальные параметры приложения</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-              <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
-            </div>
-          )}
-          {success && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-sm">
-              <Check className="h-4 w-4 shrink-0" /> Настройки сохранены
-            </div>
-          )}
+      {error && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+        </div>
+      )}
+      {success && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-sm">
+          <Check className="h-4 w-4 shrink-0" /> Настройки сохранены
+        </div>
+      )}
 
-          <div className="grid gap-4">
-            {settings.map((setting) => {
-              const isBoolean = setting.value === 'true' || setting.value === 'false'
-              return (
-              <div key={setting.key} className="flex flex-col sm:flex-row sm:items-center gap-2 p-4 rounded-xl border border-border/50">
-                <div className="flex-1">
-                  <p className="font-medium text-sm">{setting.description || setting.key}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{setting.key}</p>
-                </div>
-                {isBoolean ? (
-                  <Switch
-                    checked={setting.value === 'true'}
-                    onCheckedChange={(checked) => updateValue(setting.key, String(checked))}
-                  />
-                ) : (
-                  <Input
-                    value={setting.value}
-                    onChange={(e) => updateValue(setting.key, e.target.value)}
-                    className="sm:w-64"
-                  />
-                )}
-              </div>
-              )
-            })}
-          </div>
+      {renderBlock('Компания', Building2, 'Название организации', companySettings)}
+      {renderBlock('Страница входа', LogIn, 'Текст и статистика на странице авторизации', loginSettings)}
+      {otherSettings.length > 0 && renderBlock('Прочие настройки', Settings2, 'Дополнительные системные параметры', otherSettings)}
 
-          <div className="flex justify-end">
-            <Button onClick={saveSettings} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
-              Сохранить
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex justify-end">
+        <Button onClick={saveSettings} disabled={saving}>
+          {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+          Сохранить
+        </Button>
+      </div>
     </div>
   )
 }
@@ -3247,8 +3306,7 @@ function ReportsTab() {
 // ===================== DICTIONARIES TAB =====================
 
 function DictionariesTab({ initialTab = 'positions' }: { initialTab?: string }) {
-  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
-  const [activeDict, setActiveDict] = useState<string>(initialTab)
+  const activeDict = initialTab
   const [data, setData] = useState<{
     positions: { name: string; count: string }[]
     vacationTypes: { id: number; code: string; name: string }[]
@@ -3368,18 +3426,12 @@ function DictionariesTab({ initialTab = 'positions' }: { initialTab?: string }) 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
   if (!data) return null
 
-  const dictTabs = [
-    { id: 'positions', name: 'Должности', icon: Briefcase, color: 'from-blue-500 to-indigo-600', count: data.positions.length },
-  ]
-  if (isModuleEnabled('vacation')) {
-    dictTabs.push({ id: 'vacationTypes', name: 'Отпуск', icon: Plane, color: 'from-emerald-500 to-teal-600', count: data.vacationTypes.length })
-  }
-  if (isModuleEnabled('skills')) {
-    dictTabs.push({ id: 'skills', name: 'Навыки', icon: Wrench, color: 'from-violet-500 to-purple-600', count: data.skills.length })
-  }
-
-  const activeTab = dictTabs.find(t => t.id === activeDict) ?? dictTabs[0]
-  const ActiveIcon = activeTab.icon
+  const tabInfo = activeDict === 'positions'
+    ? { name: 'Должности', icon: Briefcase, color: 'from-blue-500 to-indigo-600', desc: 'Должности сотрудников (из профиля)' }
+    : activeDict === 'vacationTypes'
+    ? { name: 'Отпуск', icon: Plane, color: 'from-emerald-500 to-teal-600', desc: 'Типы отпусков' }
+    : { name: 'Навыки', icon: Wrench, color: 'from-violet-500 to-purple-600', desc: 'Каталог навыков компании' }
+  const ActiveIcon = tabInfo.icon
 
   return (
     <div className="space-y-4">
@@ -3390,45 +3442,15 @@ function DictionariesTab({ initialTab = 'positions' }: { initialTab?: string }) 
         </div>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap">
-        {dictTabs.map(tab => {
-          const Icon = tab.icon
-          const isActive = activeDict === tab.id
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveDict(tab.id)}
-              className={cn(
-                'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200',
-                isActive
-                  ? `bg-gradient-to-br ${tab.color} text-white shadow-sm`
-                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground border border-border/40',
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.name}
-              <span className={cn(
-                'text-xs px-1.5 py-0.5 rounded-full',
-                isActive ? 'bg-card/20' : 'bg-muted',
-              )}>{tab.count}</span>
-            </button>
-          )
-        })}
-      </div>
-
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
-            <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', activeTab.color)}>
+            <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', tabInfo.color)}>
               <ActiveIcon className="h-4 w-4" />
             </div>
             <div>
-              <CardTitle className="text-base">{activeTab.name}</CardTitle>
-              <CardDescription>
-                {activeDict === 'positions' && 'Должности сотрудников (из профиля)'}
-                {activeDict === 'vacationTypes' && 'Типы отпусков'}
-                {activeDict === 'skills' && 'Каталог навыков компании'}
-              </CardDescription>
+              <CardTitle className="text-base">{tabInfo.name}</CardTitle>
+              <CardDescription>{tabInfo.desc}</CardDescription>
             </div>
           </div>
         </CardHeader>
