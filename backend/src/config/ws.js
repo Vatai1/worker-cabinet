@@ -73,6 +73,12 @@ export function initWsServer(server) {
   console.log('[WS] WebSocket server initialized on /ws')
 }
 
+export function getActiveWsCount() {
+  let count = 0
+  for (const set of clients.values()) count += set.size
+  return count
+}
+
 export async function sendToUser(userId, event, data) {
   const userClients = clients.get(userId)
   if (!userClients || userClients.size === 0) return false

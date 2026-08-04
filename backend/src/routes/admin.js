@@ -5,8 +5,13 @@ import bcrypt from 'bcryptjs'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '../middleware/errors.js'
 import { query, getClient } from '../config/database.js'
+import { getActiveWsCount } from '../config/ws.js'
+import { createRequire } from 'module'
 import path from 'path'
 import { fileURLToPath } from 'url'
+
+const require = createRequire(import.meta.url)
+const pkg = require('../../package.json')
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -259,6 +264,7 @@ router.get('/permissions', asyncHandler(async (req, res) => {
  *       - { name: role, in: query, schema: { type: string } }
  *       - { name: department, in: query, schema: { type: string } }
  *       - { name: status, in: query, schema: { type: string } }
+ *       - { name: position, in: query, schema: { type: string } }
  *       - { name: page, in: query, schema: { type: integer, default: 1 } }
  *       - { name: limit, in: query, schema: { type: integer, default: 50 } }
  *     responses:
@@ -266,7 +272,7 @@ router.get('/permissions', asyncHandler(async (req, res) => {
  *         description: Список пользователей
  */
 router.get('/users', asyncHandler(async (req, res) => {
-  const { search, role, department, status, page = '1', limit = '50' } = req.query
+  const { search, role, department, status, position, page = '1', limit = '50' } = req.query
   const offset = (parseInt(page) - 1) * parseInt(limit)
 
   const conditions = []
@@ -293,6 +299,11 @@ router.get('/users', asyncHandler(async (req, res) => {
   if (status) {
     conditions.push(`u.status = $${paramIdx}`)
     values.push(status)
+    paramIdx++
+  }
+  if (position) {
+    conditions.push(`u.position = $${paramIdx}`)
+    values.push(position)
     paramIdx++
   }
 
@@ -920,30 +931,31 @@ router.get('/analytics/activity', asyncHandler(async (req, res) => {
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: Метрики системы
+ *         description: 'Метрики системы: version, counters { users, enabledModules, activeWs, errorsLast24h }, database (без connections/tables), server'
  */
 router.get('/health', asyncHandler(async (req, res) => {
   const dbVersion = await query('SELECT version() as v')
   const dbSize = await query("SELECT pg_database_size(current_database()) as size")
-  const tableStats = await query(`
-    SELECT relname as table, n_live_tup as rows, pg_size_pretty(pg_total_relation_size(relid)) as size
-    FROM pg_stat_user_tables
-    ORDER BY pg_total_relation_size(relid) DESC
-    LIMIT 20
-  `)
-  const activeConns = await query(`
-    SELECT state, COUNT(*) as count FROM pg_stat_activity WHERE datname = current_database() GROUP BY state
-  `)
+
+  const usersCount = await query('SELECT COUNT(*) as c FROM users')
+  const modulesCount = await query("SELECT COUNT(*) as c FROM modules WHERE is_enabled = true")
+  const errorsCount = await query("SELECT COUNT(*) as c FROM error_log WHERE created_at >= NOW() - INTERVAL '24 hours'")
+
   const uptime = process.uptime()
   const memUsage = process.memoryUsage()
 
   res.json({
+    version: pkg.version,
+    counters: {
+      users: parseInt(usersCount.rows[0]?.c || 0),
+      enabledModules: parseInt(modulesCount.rows[0]?.c || 0),
+      activeWs: getActiveWsCount(),
+      errorsLast24h: parseInt(errorsCount.rows[0]?.c || 0),
+    },
     database: {
       version: dbVersion.rows[0]?.v?.split(' ').slice(0, 2).join(' ') || 'unknown',
       size: dbSize.rows[0]?.size || 0,
       sizeFormatted: formatBytes(dbSize.rows[0]?.size || 0),
-      connections: activeConns.rows,
-      tables: tableStats.rows,
     },
     server: {
       uptime: Math.floor(uptime),
@@ -996,7 +1008,7 @@ function formatUptime(seconds) {
  *       - { name: limit, in: query, schema: { type: integer, default: 50 } }
  *     responses:
  *       200:
- *         description: Лог ошибок
+ *         description: 'Лог ошибок (включает поле module — модуль из пути запроса)'
  */
 router.get('/error-log', asyncHandler(async (req, res) => {
   const { page = '1', limit = '50' } = req.query
@@ -1006,7 +1018,7 @@ router.get('/error-log', asyncHandler(async (req, res) => {
   const total = parseInt(countResult.rows[0].total)
 
   const result = await query(`
-    SELECT id, message, stack, path, method, status_code, user_id, user_email, ip, created_at
+    SELECT id, message, stack, path, method, status_code, user_id, user_email, ip, module, created_at
     FROM error_log
     ORDER BY created_at DESC
     LIMIT $1 OFFSET $2
@@ -1787,7 +1799,7 @@ router.get('/modules/:id/settings', asyncHandler(async (req, res) => {
  *             description: Произвольные настройки модуля (JSONB)
  *     responses:
  *       200:
- *         description: Настройки обновлены
+ *         description: Настройки обновлены. В аудит логируется { changed: { ключ: { old, new } } } только для изменённых ключей
  *       404:
  *         description: Модуль не найден
  */
@@ -1816,8 +1828,17 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
     [JSON.stringify(settingsToSave), id]
   )
 
+  const changed = {}
+  for (const key of Object.keys(settingsToSave)) {
+    const oldVal = oldSettings[key]
+    const newVal = settingsToSave[key]
+    if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+      changed[key] = { old: oldVal ?? null, new: newVal }
+    }
+  }
+
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
-    'module_settings_update', 'module', String(existing.rows[0].id), req.body, req.ip)
+    'module_settings_update', 'module', String(existing.rows[0].id), { changed }, req.ip)
 
   if (id === 'auth') {
     const oldSL = Number(oldSettings.sessionLifetime)

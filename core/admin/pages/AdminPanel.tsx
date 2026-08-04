@@ -6,7 +6,6 @@ import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
-import { AnalyticsTab } from '@/core/admin/pages/AdminAnalytics'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
@@ -25,13 +24,13 @@ import {
   BarChart3, Download, FileText, Database,
   HardDrive, Server, AlertCircle, Unlock, UserPlus, Boxes,
   TrendingUp, Clock3, FolderKanban, CalendarX, Settings,
-  Calendar, Zap, Briefcase, Wrench, Plane,
+  Zap, Briefcase, Wrench, Plane,
   Pencil, Save, Bot, Package,
   Palette, Tag,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
-type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'analytics' | 'health' | 'errors' | 'security' | 'reports' | 'dictionaries' | 'modules' | 'assistant' | 'appearance'
+type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'reports' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills'
 
 interface TabItem {
   id: TabId
@@ -57,19 +56,19 @@ const TAB_GROUPS: TabGroup[] = [
     ],
   },
   {
-    label: 'Отчёты',
-    tabs: [
-      { id: 'analytics', name: 'Аналитика', icon: BarChart3, description: 'Графики, статистика', color: 'from-amber-500 to-orange-600', module: 'analytics' },
-      { id: 'reports', name: 'Отчёты', icon: FileText, description: 'Отпуска, наймы, CSV', color: 'from-cyan-500 to-blue-600' },
-    ],
-  },
-  {
     label: 'Данные',
     tabs: [
       { id: 'modules', name: 'Модули', icon: Boxes, description: 'Включение/отключение разделов', color: 'from-orange-500 to-amber-600' },
-      { id: 'dictionaries', name: 'Справочники', icon: ScrollText, description: 'Должности, навыки, типы', color: 'from-pink-500 to-rose-600' },
+      { id: 'reports', name: 'Отчёты', icon: FileText, description: 'Отпуска, наймы, CSV', color: 'from-cyan-500 to-blue-600' },
       { id: 'settings', name: 'Настройки', icon: Settings2, description: 'Параметры системы', color: 'from-slate-500 to-gray-600' },
-      { id: 'assistant', name: 'Ассистент', icon: Bot, description: 'AI-ассистент, модель, промпт', color: 'from-violet-500 to-purple-600' },
+    ],
+  },
+  {
+    label: 'Справочники',
+    tabs: [
+      { id: 'dict_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', color: 'from-pink-500 to-rose-600' },
+      { id: 'dict_vacation', name: 'Отпуск', icon: Plane, description: 'Типы отпусков', color: 'from-sky-500 to-cyan-600', module: 'vacation' },
+      { id: 'dict_skills', name: 'Навыки', icon: Package, description: 'Справочник навыков', color: 'from-violet-500 to-purple-600', module: 'skills' },
     ],
   },
   {
@@ -115,6 +114,7 @@ const ACTION_LABELS: Record<string, string> = {
   module_create: 'Создание модуля',
   module_update: 'Обновление модуля',
   module_delete: 'Удаление модуля',
+  module_settings_update: 'Обновление настроек модуля',
 }
 
 const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string }> = {
@@ -134,6 +134,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: st
   module_create:      { icon: Boxes,         color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
   module_update:      { icon: Boxes,         color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-100 dark:bg-blue-900/30' },
   module_delete:      { icon: Trash2,        color: 'text-red-600 dark:text-red-400',         bg: 'bg-red-100 dark:bg-red-900/30' },
+  module_settings_update: { icon: Sliders, color: 'text-indigo-600 dark:text-indigo-400',  bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -221,6 +222,31 @@ function AuditDetails({ details }: { details: Record<string, unknown> }) {
       <span key="count" className="text-xs text-muted-foreground">
         Записей обновлено: <span className="font-medium text-foreground">{String(details.count)}</span>
       </span>
+    )
+  }
+
+  if (details.changed && typeof details.changed === 'object') {
+    const changed = details.changed as Record<string, { old: unknown; new: unknown }>
+    elements.push(
+      <div key="changed" className="w-full">
+        <div className="rounded-lg border border-border/50 overflow-hidden">
+          {Object.entries(changed).map(([key, val]) => {
+            const formatVal = (v: unknown) => {
+              if (v === null || v === undefined || v === '') return '—'
+              if (typeof v === 'boolean') return v ? 'Да' : 'Нет'
+              return String(v)
+            }
+            return (
+              <div key={key} className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30 last:border-0 text-xs">
+                <span className="font-medium min-w-0 truncate flex-1">{key}</span>
+                <span className="text-red-600 dark:text-red-400">{formatVal(val.old)}</span>
+                <ArrowRightLeft className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="text-emerald-600 dark:text-emerald-400">{formatVal(val.new)}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
     )
   }
 
@@ -380,14 +406,14 @@ export function AdminPanel() {
           {activeTab === 'departments' && <DepartmentsTab />}
           {activeTab === 'settings' && <SettingsTab />}
           {activeTab === 'audit' && <AuditTab />}
-          {activeTab === 'analytics' && <AnalyticsTab />}
           {activeTab === 'health' && <HealthTab />}
           {activeTab === 'errors' && <ErrorsTab />}
           {activeTab === 'security' && <SecurityTab />}
           {activeTab === 'reports' && <ReportsTab />}
-          {activeTab === 'dictionaries' && <DictionariesTab />}
+          {activeTab === 'dict_positions' && <DictionariesTab initialTab="positions" />}
+          {activeTab === 'dict_vacation' && <DictionariesTab initialTab="vacationTypes" />}
+          {activeTab === 'dict_skills' && <DictionariesTab initialTab="skills" />}
           {activeTab === 'modules' && <ModulesTab />}
-          {activeTab === 'assistant' && <AssistantSettingsTab />}
           {activeTab === 'appearance' && <AppearanceTab />}
         </div>
       </div>
@@ -405,16 +431,28 @@ function UsersTab() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filterRole, setFilterRole] = useState('')
+  const [filterDepartment, setFilterDepartment] = useState('')
+  const [filterPosition, setFilterPosition] = useState('')
   const [roles, setRoles] = useState<AdminRole[]>([])
+  const [positions, setPositions] = useState<{ name: string }[]>([])
+  const departments = useDepartmentsStore(s => s.departments) as { id: number; name: string }[]
+  const fetchDepartments = useDepartmentsStore(s => s.fetchDepartments)
   const [error, setError] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkAction, setBulkAction] = useState('')
   const [bulkRole, setBulkRole] = useState('')
   const [detailUser, setDetailUser] = useState<AdminUser | null>(null)
 
-  useEffect(() => { fetchRoles() }, [])
+  useEffect(() => {
+    fetchRoles()
+    fetchDepartments().catch(() => {})
+    fetchWithRetry(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(data => setPositions(Array.isArray(data) ? data : data.positions || []))
+      .catch(() => {})
+  }, [])
 
-  useEffect(() => { fetchUsers() }, [page, debouncedSearch, filterRole])
+  useEffect(() => { fetchUsers() }, [page, debouncedSearch, filterRole, filterDepartment, filterPosition])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
@@ -434,6 +472,8 @@ function UsersTab() {
       const params = new URLSearchParams({ page: String(page), limit: '25' })
       if (debouncedSearch) params.set('search', debouncedSearch)
       if (filterRole) params.set('role', filterRole)
+      if (filterDepartment) params.set('department', filterDepartment)
+      if (filterPosition) params.set('position', filterPosition)
       const res = await fetchWithRetry(`${API_BASE_URL}/admin/users?${params}`, { headers: getAuthHeaders() })
       if (res.ok) {
         const data = await res.json()
@@ -562,10 +602,18 @@ function UsersTab() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Поиск по имени, email, должности..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="pl-9" />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <select value={filterRole} onChange={e => { setFilterRole(e.target.value); setPage(1) }} className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
             <option value="">Все роли</option>
             {roles.map(r => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
+          </select>
+          <select value={filterDepartment} onChange={e => { setFilterDepartment(e.target.value); setPage(1) }} className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
+            <option value="">Все отделы</option>
+            {departments.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+          </select>
+          <select value={filterPosition} onChange={e => { setFilterPosition(e.target.value); setPage(1) }} className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
+            <option value="">Все должности</option>
+            {positions.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
           </select>
           <Button variant="outline" size="sm" onClick={exportUsers}>
             <Download className="h-3.5 w-3.5 mr-1.5" /> Экспорт
@@ -1027,23 +1075,40 @@ function RolesTab() {
   const [editingRole, setEditingRole] = useState<AdminRole | null>(null)
   const [editPerms, setEditPerms] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [adminModules, setAdminModules] = useState<{ code: string; name: string; locked?: boolean; category?: string; sort_order?: number }[]>([])
 
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [rolesRes, permsRes] = await Promise.all([
+      const [rolesRes, permsRes, modsRes] = await Promise.all([
         fetchWithRetry(`${API_BASE_URL}/admin/roles`, { headers: getAuthHeaders() }),
         fetchWithRetry(`${API_BASE_URL}/admin/permissions`, { headers: getAuthHeaders() }),
+        fetchWithRetry(`${API_BASE_URL}/admin/modules`, { headers: getAuthHeaders() }),
       ])
       if (rolesRes.ok) setRoles(await rolesRes.json())
       if (permsRes.ok) setPermissions(await permsRes.json())
+      if (modsRes.ok) setAdminModules(await modsRes.json())
     } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
   }
 
-  const modules = [...new Set(permissions.map((p) => p.module))].sort()
+  const modMap = new Map(adminModules.map(m => [m.code, m]))
+  const isCoreMod = (code: string) => {
+    const m = modMap.get(code)
+    return m?.locked === true || m?.category === 'core' || m?.category === 'general'
+  }
+  const moduleName = (code: string) => {
+    const m = modMap.get(code)
+    return m?.name ? `Модуль "${m.name}"` : code.charAt(0).toUpperCase() + code.slice(1)
+  }
+  const modules = [...new Set(permissions.map((p) => p.module))].sort((a, b) => {
+    const aCore = isCoreMod(a) ? 0 : 1
+    const bCore = isCoreMod(b) ? 0 : 1
+    if (aCore !== bCore) return aCore - bCore
+    return (modMap.get(a)?.sort_order ?? 999) - (modMap.get(b)?.sort_order ?? 999)
+  })
 
   const createRole = async () => {
     if (!newName.trim()) { setError('Название обязательно'); return }
@@ -1129,23 +1194,35 @@ function RolesTab() {
               <div key={mod} className="border border-border/50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <Switch checked={allSelected} onCheckedChange={() => toggleModule(mod)} />
-                  <span className="font-medium capitalize">{mod}</span>
+                  <span className="font-medium">{moduleName(mod)}</span>
                   <span className="text-xs text-muted-foreground">
                     ({modPerms.filter((p) => editPerms.includes(p.id)).length}/{modPerms.length})
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 ml-9">
-                  {modPerms.map((perm) => (
+                  {modPerms.map((perm) => {
+                    const checked = editPerms.includes(perm.id)
+                    return (
                     <label key={perm.id} className="flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-muted/30 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={editPerms.includes(perm.id)}
-                        onChange={() => togglePerm(perm.id)}
-                        className="rounded border-border"
-                      />
+                      <span
+                        role="checkbox"
+                        aria-checked={checked}
+                        tabIndex={0}
+                        onClick={(e) => { e.preventDefault(); togglePerm(perm.id) }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePerm(perm.id) } }}
+                        className={cn(
+                          'h-[18px] w-[18px] rounded-md flex items-center justify-center shrink-0 border-2 transition-colors',
+                          checked
+                            ? 'bg-primary border-primary'
+                            : 'border-muted-foreground/25 hover:border-muted-foreground/40',
+                        )}
+                      >
+                        {checked && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
+                      </span>
                       <span>{perm.name}</span>
                     </label>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -1225,6 +1302,17 @@ function RolesTab() {
 
 // ===================== DEPARTMENTS TAB =====================
 
+const DEPT_GRADIENTS = [
+  'from-blue-500 to-indigo-600',
+  'from-emerald-500 to-teal-600',
+  'from-amber-500 to-orange-600',
+  'from-pink-500 to-rose-600',
+  'from-violet-500 to-purple-600',
+  'from-cyan-500 to-blue-600',
+  'from-red-500 to-rose-600',
+  'from-sky-500 to-cyan-600',
+]
+
 function DepartmentsTab() {
   const [departments, setDepartments] = useState<{ id: number; name: string; manager_id: number | null; manager_name: string | null; employee_count: string; vacation_requests_blocked: boolean; description: string | null }[]>([])
   const [loading, setLoading] = useState(true)
@@ -1242,12 +1330,10 @@ function DepartmentsTab() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newDesc, setNewDesc] = useState('')
   const [newManagerId, setNewManagerId] = useState<number | null>(null)
   const [newManagerName, setNewManagerName] = useState('')
   const [showPicker, setShowPicker] = useState<'create' | number | null>(null)
   const [editName, setEditName] = useState('')
-  const [editDesc, setEditDesc] = useState('')
   const [editManagerId, setEditManagerId] = useState<number | null>(null)
   const [editManagerName, setEditManagerName] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -1259,9 +1345,9 @@ function DepartmentsTab() {
     try {
       const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ name: newName.trim(), description: newDesc.trim(), manager_id: newManagerId }),
+        body: JSON.stringify({ name: newName.trim(), manager_id: newManagerId }),
       })
-      if (res.ok) { setShowCreate(false); setNewName(''); setNewDesc(''); setNewManagerId(null); setNewManagerName(''); fetchDepartments() }
+      if (res.ok) { setShowCreate(false); setNewName(''); setNewManagerId(null); setNewManagerName(''); fetchDepartments() }
       else { const data = await res.json(); setError(data.error || 'Ошибка') }
     } catch (err) { setError(getErrorMessage(err)) }
   }
@@ -1270,7 +1356,7 @@ function DepartmentsTab() {
     const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Сохранить изменения для отдела «${editName.trim()}»?`, confirmText: 'Сохранить' })
     if (!confirmed) return
     try {
-      const body: Record<string, unknown> = { name: editName.trim(), description: editDesc.trim() }
+      const body: Record<string, unknown> = { name: editName.trim() }
       if (editManagerId) body.manager_id = editManagerId
       else body.manager_id = null
       const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${id}`, {
@@ -1296,7 +1382,6 @@ function DepartmentsTab() {
   const startEdit = (dept: typeof departments[0]) => {
     setEditingId(dept.id)
     setEditName(dept.name)
-    setEditDesc(dept.description || '')
     setEditManagerId(dept.manager_id)
     setEditManagerName(dept.manager_name || '')
   }
@@ -1337,7 +1422,6 @@ function DepartmentsTab() {
         <Card className="border-dashed border-primary/40">
           <CardContent className="pt-5 space-y-3">
             <Input placeholder="Название отдела" value={newName} onChange={e => setNewName(e.target.value)} />
-            <Input placeholder="Описание (необязательно)" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground shrink-0">Руководитель:</span>
               <button
@@ -1356,7 +1440,7 @@ function DepartmentsTab() {
             </div>
             <div className="flex gap-2">
               <Button onClick={createDept} disabled={!newName.trim()}>Создать</Button>
-              <Button variant="outline" onClick={() => { setShowCreate(false); setNewName(''); setNewDesc(''); setNewManagerId(null); setNewManagerName('') }}>Отмена</Button>
+              <Button variant="outline" onClick={() => { setShowCreate(false); setNewName(''); setNewManagerId(null); setNewManagerName('') }}>Отмена</Button>
             </div>
           </CardContent>
         </Card>
@@ -1369,7 +1453,6 @@ function DepartmentsTab() {
               {editingId === dept.id ? (
                 <div className="space-y-3">
                   <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Название" />
-                  <Input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Описание" />
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground shrink-0">Рук.:</span>
                     <button
@@ -1393,33 +1476,32 @@ function DepartmentsTab() {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-foreground">{dept.name}</h3>
-                      {dept.description && <p className="text-xs text-muted-foreground mt-0.5">{dept.description}</p>}
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className={cn(
+                      'p-2.5 rounded-xl bg-gradient-to-br text-white shrink-0 shadow-sm',
+                      DEPT_GRADIENTS[dept.id % DEPT_GRADIENTS.length],
+                    )}>
+                      <Building2 className="h-5 w-5" />
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => startEdit(dept)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-foreground truncate">{dept.name}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {dept.manager_name || 'Без руководителя'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button onClick={() => startEdit(dept)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground">
                         <Edit3 className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => deleteDept(dept.id, dept.name)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                      <button onClick={() => deleteDept(dept.id, dept.name)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className={cn(
-                      'p-1.5 rounded-lg',
-                      dept.manager_name ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground',
-                    )}>
-                      <Users className="h-3.5 w-3.5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{dept.manager_name || 'Без руководителя'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Badge className="text-[10px]">{dept.employee_count} чел.</Badge>
+                  <div className="flex items-center justify-between pt-1 border-t border-border/30">
+                    <span className="text-[11px] text-muted-foreground">Сотрудников</span>
+                    <Badge className="text-[10px] bg-primary/10 text-primary">{dept.employee_count}</Badge>
                   </div>
                 </>
               )}
@@ -1685,8 +1767,6 @@ function SettingsTab() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [tsCreating, setTsCreating] = useState(false)
-  const [tsResult, setTsResult] = useState<string | null>(null)
 
   useEffect(() => { fetchSettings() }, [])
 
@@ -1694,7 +1774,10 @@ function SettingsTab() {
     setLoading(true)
     try {
       const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
-      if (res.ok) setSettings(await res.json())
+      if (res.ok) {
+        const all = await res.json()
+        setSettings(all.filter((s: SystemSetting) => !s.key.startsWith('assistant_') && s.key !== 'timesheet_auto_create'))
+      }
     } catch {} finally { setLoading(false) }
   }
 
@@ -1714,33 +1797,6 @@ function SettingsTab() {
   const updateValue = (key: string, value: string) => {
     setSettings((prev) => prev.map((s) => (s.key === key ? { ...s, value } : s)))
   }
-
-  const handleAutoCreateTimesheets = async () => {
-    setTsCreating(true)
-    setTsResult(null)
-    setError(null)
-    try {
-      const now = new Date()
-      const res = await fetchWithRetry(`${API_BASE_URL}/timesheet/auto-create`, {
-        method: 'POST',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ year: now.getFullYear(), month: now.getMonth() + 1 }),
-      })
-      const data = await res.json()
-      if (res.ok || res.status === 201) {
-        setTsResult(data.message || `Создано: ${data.created}`)
-      } else {
-        setError(data.error || 'Ошибка')
-      }
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setTsCreating(false)
-    }
-  }
-
-  const tsAutoEnabled = settings.find(s => s.key === 'timesheet_auto_create')
-  const tsAutoOn = tsAutoEnabled?.value === 'true'
 
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
@@ -1796,46 +1852,6 @@ function SettingsTab() {
               {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
               Сохранить
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" /> Табели
-          </CardTitle>
-          <CardDescription>Автоматическое создание табелей рабочего времени</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
-            <div>
-              <p className="font-medium text-sm">Автосоздание табелей</p>
-              <p className="text-xs text-muted-foreground">Автоматически создавать табели для всех отделов за текущий месяц при первом обращении</p>
-            </div>
-            <Switch
-              checked={tsAutoOn}
-              onCheckedChange={(checked) => {
-                if (tsAutoEnabled) {
-                  updateValue('timesheet_auto_create', String(checked))
-                } else {
-                  setSettings(prev => [...prev, { key: 'timesheet_auto_create', value: String(checked), description: 'Автосоздание табелей', updated_at: '' }])
-                }
-              }}
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button onClick={handleAutoCreateTimesheets} disabled={tsCreating} variant={tsAutoOn ? 'default' : 'outline'}>
-              {tsCreating ? (
-                <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Создание...</>
-              ) : (
-                <><Zap className="h-4 w-4 mr-1.5" /> Создать табели за текущий месяц</>
-              )}
-            </Button>
-            {tsResult && (
-              <span className="text-sm text-emerald-600 dark:text-emerald-400">{tsResult}</span>
-            )}
           </div>
         </CardContent>
       </Card>
@@ -2429,7 +2445,9 @@ function AuditTab() {
 
 function HealthTab() {
   const [health, setHealth] = useState<{
-    database: { version: string; sizeFormatted: string; connections: { state: string; count: string }[]; tables: { table: string; rows: string; size: string }[] }
+    version: string
+    counters: { users: number; enabledModules: number; activeWs: number; errorsLast24h: number }
+    database: { version: string; sizeFormatted: string }
     server: { uptimeFormatted: string; memory: { rss: string; heapUsed: string; heapTotal: string }; nodeVersion: string; platform: string }
     environment: string
   } | null>(null)
@@ -2450,6 +2468,59 @@ function HealthTab() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Состояние системы</h3>
+        <Button variant="outline" size="sm" onClick={fetchHealth}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Обновить</Button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <Card>
+          <CardContent className="p-4 flex flex-col items-center text-center">
+            <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/30 mb-2">
+              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <p className="text-2xl font-bold">{health.counters.users}</p>
+            <p className="text-xs text-muted-foreground">Пользователи</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex flex-col items-center text-center">
+            <div className="p-2.5 rounded-xl bg-orange-100 dark:bg-orange-900/30 mb-2">
+              <Boxes className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <p className="text-2xl font-bold">{health.counters.enabledModules}</p>
+            <p className="text-xs text-muted-foreground">Активные модули</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex flex-col items-center text-center">
+            <div className="p-2.5 rounded-xl bg-violet-100 dark:bg-violet-900/30 mb-2">
+              <Activity className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+            </div>
+            <p className="text-2xl font-bold">{health.counters.activeWs}</p>
+            <p className="text-xs text-muted-foreground">WS-подключения</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex flex-col items-center text-center">
+            <div className="p-2.5 rounded-xl bg-red-100 dark:bg-red-900/30 mb-2">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            </div>
+            <p className="text-2xl font-bold">{health.counters.errorsLast24h}</p>
+            <p className="text-xs text-muted-foreground">Ошибки за 24 часа</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex flex-col items-center text-center">
+            <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 mb-2">
+              <Tag className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <p className="text-2xl font-bold">{health.version}</p>
+            <p className="text-xs text-muted-foreground">Версия приложения</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4 flex items-center gap-4">
@@ -2488,52 +2559,6 @@ function HealthTab() {
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Подключения к БД</CardTitle>
-            <Button variant="outline" size="sm" onClick={fetchHealth}><RefreshCw className="h-3.5 w-3.5 mr-1" /> Обновить</Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-3">
-            {health.database.connections.map((c) => (
-              <div key={c.state} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30">
-                <div className={cn('w-2 h-2 rounded-full', c.state === 'active' ? 'bg-emerald-500' : 'bg-amber-500')} />
-                <span className="text-sm capitalize">{c.state}</span>
-                <Badge className="text-[10px]">{c.count}</Badge>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">Таблицы базы данных</CardTitle></CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="pb-2 pr-4 font-medium">Таблица</th>
-                  <th className="pb-2 pr-4 font-medium text-right">Строк</th>
-                  <th className="pb-2 font-medium text-right">Размер</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/30">
-                {health.database.tables.map((t) => (
-                  <tr key={t.table} className="hover:bg-muted/20">
-                    <td className="py-2 pr-4 font-mono text-xs">{t.table}</td>
-                    <td className="py-2 pr-4 text-right text-muted-foreground">{parseInt(t.rows).toLocaleString('ru-RU')}</td>
-                    <td className="py-2 text-right text-muted-foreground">{t.size}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
@@ -2541,11 +2566,12 @@ function HealthTab() {
 // ===================== ERRORS TAB =====================
 
 function ErrorsTab() {
-  const [errors, setErrors] = useState<{ id: number; message: string; stack: string | null; path: string | null; method: string | null; status_code: number; user_email: string | null; ip: string | null; created_at: string }[]>([])
+  const [errors, setErrors] = useState<{ id: number; message: string; stack: string | null; path: string | null; method: string | null; status_code: number; user_email: string | null; ip: string | null; module: string | null; created_at: string }[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [filterModule, setFilterModule] = useState('')
 
   useEffect(() => { fetchErrors() }, [page])
 
@@ -2568,6 +2594,14 @@ function ErrorsTab() {
     return 'text-muted-foreground bg-muted/50'
   }
 
+  const moduleCounts = errors.reduce((acc, e) => {
+    const mod = e.module || 'general'
+    acc[mod] = (acc[mod] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+  const sortedModules = Object.entries(moduleCounts).sort((a, b) => b[1] - a[1])
+  const filteredErrors = filterModule ? errors.filter(e => (e.module || 'general') === filterModule) : errors
+
   return (
     <Card>
       <CardHeader>
@@ -2588,32 +2622,69 @@ function ErrorsTab() {
             <p className="text-sm font-medium">Ошибок не обнаружено</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {errors.map((err) => (
-              <div key={err.id} className={cn('p-4 rounded-xl border transition-colors cursor-pointer', expandedId === err.id ? 'border-border bg-muted/10' : 'border-border/30 hover:border-border/60')} onClick={() => setExpandedId(expandedId === err.id ? null : err.id)}>
-                <div className="flex items-start gap-3">
-                  <Badge className={cn('text-[10px] shrink-0', statusColor(err.status_code || 500))}>
-                    {err.status_code || 500}
-                  </Badge>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{err.message}</p>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                      {err.method && <span className="font-mono">{err.method}</span>}
-                      {err.path && <span className="font-mono truncate">{err.path}</span>}
-                      <span>·</span>
-                      <span>{new Date(err.created_at).toLocaleString('ru-RU')}</span>
-                      {err.user_email && <><span>·</span><span>{err.user_email}</span></>}
-                    </div>
-                    {expandedId === err.id && err.stack && (
-                      <pre className="mt-3 p-3 rounded-lg bg-muted/30 text-xs font-mono overflow-x-auto whitespace-pre-wrap text-muted-foreground max-h-64 overflow-y-auto">
-                        {err.stack}
-                      </pre>
+          <>
+            {sortedModules.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setFilterModule('')}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                    !filterModule ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  Все
+                  <span className={cn('px-1.5 py-0.5 rounded-full text-[10px]', !filterModule ? 'bg-primary-foreground/20' : 'bg-muted')}>{errors.length}</span>
+                </button>
+                {sortedModules.map(([mod, count]) => (
+                  <button
+                    key={mod}
+                    onClick={() => setFilterModule(filterModule === mod ? '' : mod)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                      filterModule === mod ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:bg-muted',
                     )}
-                  </div>
-                </div>
+                  >
+                    {mod}
+                    <span className={cn('px-1.5 py-0.5 rounded-full text-[10px]', filterModule === mod ? 'bg-primary-foreground/20' : 'bg-muted')}>{count}</span>
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+            {filteredErrors.length === 0 ? (
+              <div className="flex flex-col items-center py-12 text-muted-foreground">
+                <Check className="h-12 w-12 mb-3 opacity-20" />
+                <p className="text-sm font-medium">Нет ошибок в этом модуле</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredErrors.map((err) => (
+                  <div key={err.id} className={cn('p-4 rounded-xl border transition-colors cursor-pointer', expandedId === err.id ? 'border-border bg-muted/10' : 'border-border/30 hover:border-border/60')} onClick={() => setExpandedId(expandedId === err.id ? null : err.id)}>
+                    <div className="flex items-start gap-3">
+                      <Badge className={cn('text-[10px] shrink-0', statusColor(err.status_code || 500))}>
+                        {err.status_code || 500}
+                      </Badge>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{err.message}</p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          {err.module && <span className="font-mono px-1.5 py-0.5 rounded bg-muted/50">{err.module}</span>}
+                          {err.method && <span className="font-mono">{err.method}</span>}
+                          {err.path && <span className="font-mono truncate">{err.path}</span>}
+                          <span>·</span>
+                          <span>{new Date(err.created_at).toLocaleString('ru-RU')}</span>
+                          {err.user_email && <><span>·</span><span>{err.user_email}</span></>}
+                        </div>
+                        {expandedId === err.id && err.stack && (
+                          <pre className="mt-3 p-3 rounded-lg bg-muted/30 text-xs font-mono overflow-x-auto whitespace-pre-wrap text-muted-foreground max-h-64 overflow-y-auto">
+                            {err.stack}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-4">
@@ -3175,9 +3246,9 @@ function ReportsTab() {
 
 // ===================== DICTIONARIES TAB =====================
 
-function DictionariesTab() {
+function DictionariesTab({ initialTab = 'positions' }: { initialTab?: string }) {
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
-  const [activeDict, setActiveDict] = useState<string>('positions')
+  const [activeDict, setActiveDict] = useState<string>(initialTab)
   const [data, setData] = useState<{
     positions: { name: string; count: string }[]
     vacationTypes: { id: number; code: string; name: string }[]
@@ -3195,6 +3266,7 @@ function DictionariesTab() {
   const [editVacationName, setEditVacationName] = useState('')
   const [editVacationCode, setEditVacationCode] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [showPositionUsers, setShowPositionUsers] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -3298,8 +3370,10 @@ function DictionariesTab() {
 
   const dictTabs = [
     { id: 'positions', name: 'Должности', icon: Briefcase, color: 'from-blue-500 to-indigo-600', count: data.positions.length },
-    { id: 'vacationTypes', name: 'Типы отпусков', icon: Plane, color: 'from-emerald-500 to-teal-600', count: data.vacationTypes.length },
   ]
+  if (isModuleEnabled('vacation')) {
+    dictTabs.push({ id: 'vacationTypes', name: 'Отпуск', icon: Plane, color: 'from-emerald-500 to-teal-600', count: data.vacationTypes.length })
+  }
   if (isModuleEnabled('skills')) {
     dictTabs.push({ id: 'skills', name: 'Навыки', icon: Wrench, color: 'from-violet-500 to-purple-600', count: data.skills.length })
   }
@@ -3352,7 +3426,7 @@ function DictionariesTab() {
               <CardTitle className="text-base">{activeTab.name}</CardTitle>
               <CardDescription>
                 {activeDict === 'positions' && 'Должности сотрудников (из профиля)'}
-                {activeDict === 'vacationTypes' && 'Типы отпусков для системы'}
+                {activeDict === 'vacationTypes' && 'Типы отпусков'}
                 {activeDict === 'skills' && 'Каталог навыков компании'}
               </CardDescription>
             </div>
@@ -3384,6 +3458,9 @@ function DictionariesTab() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className="text-[10px]">{p.count} чел.</Badge>
+                        <button onClick={() => setShowPositionUsers(p.name)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Сотрудники">
+                          <Users className="h-3.5 w-3.5" />
+                        </button>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setEditPositionName(p.name); setEditPositionNewName(p.name) }} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                             <Edit3 className="h-3.5 w-3.5" />
@@ -3490,11 +3567,74 @@ function DictionariesTab() {
           )}
         </CardContent>
       </Card>
+
+      {showPositionUsers && (
+        <PositionUsersModal position={showPositionUsers} onClose={() => setShowPositionUsers(null)} />
+      )}
     </div>
   )
 }
 
-// ===================== MODULES TAB =====================
+function PositionUsersModal({ position, onClose }: { position: string; onClose: () => void }) {
+  const [users, setUsers] = useState<{ id: number; first_name: string; last_name: string; middle_name: string | null; email: string; department_name: string | null; role: string; status: string }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchWithRetry(`${API_BASE_URL}/admin/users?position=${encodeURIComponent(position)}&limit=100`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(data => setUsers(data.users || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [position])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-border">
+          <div>
+            <h3 className="font-semibold text-lg flex items-center gap-2"><Briefcase className="h-5 w-5 text-muted-foreground" /> {position}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Сотрудники на этой должности</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : users.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+              <Users className="h-10 w-10 opacity-20" />
+              <p className="text-sm">Нет сотрудников на этой должности</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {users.map(u => {
+                const fullName = `${u.last_name} ${u.first_name}${u.middle_name ? ' ' + u.middle_name : ''}`
+                return (
+                  <div key={u.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/30 transition-colors">
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+                      {u.first_name?.[0]}{u.last_name?.[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">{fullName}</span>
+                        <Badge className={cn('text-[10px]', STATUS_COLORS[u.status])}>{STATUS_LABELS[u.status]}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                        <span className="truncate">{u.email}</span>
+                        {u.department_name && <span>· {u.department_name}</span>}
+                        <span>· {ROLE_LABELS[u.role] || u.role}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface ModuleItem {
   id: number
@@ -3517,6 +3657,145 @@ interface ModuleCategory {
   name: string
   icon: React.ComponentType<{ className?: string }>
   color: string
+}
+
+function CustomSettingsModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-border">
+          <h3 className="font-semibold text-lg">{title}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function TimesheetSettingsModal({ onClose }: { onClose: () => void }) {
+  const [settings, setSettings] = useState<SystemSetting[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [tsCreating, setTsCreating] = useState(false)
+  const [tsResult, setTsResult] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  useEffect(() => { fetchSettings() }, [])
+
+  const fetchSettings = async () => {
+    setLoading(true)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
+      if (res.ok) {
+        const all = await res.json()
+        setSettings(all.filter((s: SystemSetting) => s.key === 'timesheet_auto_create'))
+      }
+    } catch {} finally { setLoading(false) }
+  }
+
+  const saveSettings = async () => {
+    setSaving(true); setError(null); setSuccess(false)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ settings: settings.map((s) => ({ key: s.key, value: s.value })) }),
+      })
+      if (res.ok) setSuccess(true)
+      else { const data = await res.json(); setError(data.error || 'Ошибка') }
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setSaving(false) }
+  }
+
+  const updateValue = (key: string, value: string) => {
+    setSettings((prev) => prev.map((s) => (s.key === key ? { ...s, value } : s)))
+  }
+
+  const handleAutoCreateTimesheets = async () => {
+    setTsCreating(true)
+    setTsResult(null)
+    setError(null)
+    try {
+      const now = new Date()
+      const res = await fetchWithRetry(`${API_BASE_URL}/timesheet/auto-create`, {
+        method: 'POST',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ year: now.getFullYear(), month: now.getMonth() + 1 }),
+      })
+      const data = await res.json()
+      if (res.ok || res.status === 201) {
+        setTsResult(data.message || `Создано: ${data.created}`)
+      } else {
+        setError(data.error || 'Ошибка')
+      }
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setTsCreating(false)
+    }
+  }
+
+  const tsAutoEnabled = settings.find(s => s.key === 'timesheet_auto_create')
+  const tsAutoOn = tsAutoEnabled?.value === 'true'
+
+  return (
+    <CustomSettingsModal title="📋 Табели" onClose={onClose}>
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+      ) : (
+        <div className="space-y-4">
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+            </div>
+          )}
+          {success && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-sm">
+              <Check className="h-4 w-4 shrink-0" /> Настройки сохранены
+            </div>
+          )}
+
+          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
+            <div>
+              <p className="font-medium text-sm">Автосоздание табелей</p>
+              <p className="text-xs text-muted-foreground">Автоматически создавать табели для всех отделов за текущий месяц при первом обращении</p>
+            </div>
+            <Switch
+              checked={tsAutoOn}
+              onCheckedChange={(checked) => {
+                if (tsAutoEnabled) {
+                  updateValue('timesheet_auto_create', String(checked))
+                } else {
+                  setSettings(prev => [...prev, { key: 'timesheet_auto_create', value: String(checked), description: 'Автосоздание табелей', updated_at: '' }])
+                }
+              }}
+            />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button onClick={handleAutoCreateTimesheets} disabled={tsCreating} variant={tsAutoOn ? 'default' : 'outline'}>
+              {tsCreating ? (
+                <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Создание...</>
+              ) : (
+                <><Zap className="h-4 w-4 mr-1.5" /> Создать табели за текущий месяц</>
+              )}
+            </Button>
+            {tsResult && (
+              <span className="text-sm text-emerald-600 dark:text-emerald-400">{tsResult}</span>
+            )}
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={saveSettings} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+              Сохранить
+            </Button>
+          </div>
+        </div>
+      )}
+    </CustomSettingsModal>
+  )
 }
 
 const MODULE_CATEGORIES: ModuleCategory[] = [
@@ -3546,6 +3825,7 @@ function ModulesTab() {
   const [togglingId, setTogglingId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [settingsModule, setSettingsModule] = useState<ModuleId | null>(null)
+  const [customSettings, setCustomSettings] = useState<'timesheet' | 'assistant' | null>(null)
 
   useEffect(() => { fetchModules() }, [])
 
@@ -3587,11 +3867,15 @@ function ModulesTab() {
     auth: 'auth',
   }
 
+  const CUSTOM_SETTINGS = new Set(['timesheet', 'assistant'])
+
   const SETTINGS_INFO: Record<string, { emoji: string; color: string }> = {
     vacation: { emoji: '🏖️', color: '#10B981' },
     calendar: { emoji: '📅', color: '#8B5CF6' },
     notifications: { emoji: '🔔', color: '#F59E0B' },
     auth: { emoji: '🔐', color: '#3B82F6' },
+    timesheet: { emoji: '📋', color: '#6366F1' },
+    assistant: { emoji: '🤖', color: '#EC4899' },
   }
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
@@ -3645,7 +3929,7 @@ function ModulesTab() {
                     {group.modules.map((mod) => {
                       const colors = MODULE_COLORS[mod.code] || MODULE_COLORS.documents
                       const isLoading = togglingId === mod.id
-                      const hasSettings = mod.code in SETTINGS_MAP
+                      const hasSettings = mod.code in SETTINGS_MAP || CUSTOM_SETTINGS.has(mod.code)
                       const settingsInfo = SETTINGS_INFO[mod.code]
 
                       return (
@@ -3726,7 +4010,7 @@ function ModulesTab() {
 
                           {hasSettings && (
                             <button
-                              onClick={() => setSettingsModule(SETTINGS_MAP[mod.code])}
+                              onClick={() => mod.code in SETTINGS_MAP ? setSettingsModule(SETTINGS_MAP[mod.code]) : setCustomSettings(mod.code as 'timesheet' | 'assistant')}
                               disabled={!mod.is_enabled}
                               className={cn(
                                 'flex items-center gap-2 w-full px-4 py-2.5 rounded-lg text-sm mt-4 transition-colors duration-200 border',
@@ -3760,6 +4044,15 @@ function ModulesTab() {
           isOpen={true}
           onClose={() => setSettingsModule(null)}
         />
+      )}
+
+      {customSettings === 'timesheet' && (
+        <TimesheetSettingsModal onClose={() => setCustomSettings(null)} />
+      )}
+      {customSettings === 'assistant' && (
+        <CustomSettingsModal title="🤖 Ассистент" onClose={() => setCustomSettings(null)}>
+          <AssistantSettingsTab />
+        </CustomSettingsModal>
       )}
     </>
   )

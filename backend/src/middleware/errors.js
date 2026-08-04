@@ -56,8 +56,10 @@ export const errorHandler = (err, req, res, next) => {
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
 
   if (!err.isOperational && err.statusCode !== 401 && err.statusCode !== 403) {
+    const segments = req.path?.split('/').filter(Boolean) || []
+    const errorModule = segments[0] === 'api' && segments[1] ? segments[1].substring(0, 50) : 'general'
     query(
-      `INSERT INTO error_log (message, stack, path, method, status_code, user_id, user_email, ip) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO error_log (message, stack, path, method, status_code, user_id, user_email, ip, module) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         err.message?.substring(0, 2000),
         process.env.NODE_ENV === 'development' ? err.stack?.substring(0, 5000) : null,
@@ -67,6 +69,7 @@ export const errorHandler = (err, req, res, next) => {
         req.user?.id || null,
         req.user?.email || null,
         ip,
+        errorModule,
       ]
     ).catch(() => {})
   }

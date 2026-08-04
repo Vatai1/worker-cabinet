@@ -1393,6 +1393,7 @@ async function runMigrations() {
     `)
     await db.query('CREATE INDEX IF NOT EXISTS idx_error_log_created ON error_log(created_at)').catch(() => {})
     await db.query('CREATE INDEX IF NOT EXISTS idx_error_log_status ON error_log(status_code)').catch(() => {})
+    await db.query(`ALTER TABLE error_log ADD COLUMN IF NOT EXISTS module VARCHAR(50)`).catch(() => {})
     console.log('  ✓ error_log')
 
     await db.query(`
