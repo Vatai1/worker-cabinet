@@ -6,12 +6,26 @@ import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../
 import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
 import multer from 'multer'
 
-function validateOnlyOfficeUrl(url) {
+function isPrivateHost(hostname) {
+  const h = hostname.toLowerCase()
+  if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '0.0.0.0') return true
+  if (h.startsWith('10.') || h.startsWith('192.168.')) return true
+  if (h.startsWith('169.254.')) return true
+  if (h.startsWith('172.')) {
+    const parts = h.split('.')
+    const second = parseInt(parts[1])
+    if (second >= 16 && second <= 31) return true
+  }
+  return false
+}
+
+async function validateOnlyOfficeUrl(url) {
   try {
     const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    if (isPrivateHost(parsed.hostname)) return false
     const allowedHost = process.env.ONLYOFFICE_URL ? new URL(process.env.ONLYOFFICE_URL).hostname : null
     if (allowedHost && parsed.hostname !== allowedHost) return false
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
     return true
   } catch { return false }
 }
@@ -853,7 +867,7 @@ router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRole
 
   const tmpl = tmplResult.rows[0]
 
-  if (!validateOnlyOfficeUrl(url)) return res.status(400).json({ error: 'URL not allowed' })
+  if (!await validateOnlyOfficeUrl(url)) return res.status(400).json({ error: 'URL not allowed' })
 
   const response = await fetch(url)
   if (!response.ok) return res.status(502).json({ error: 'Не удалось скачать файл из OnlyOffice' })
@@ -917,7 +931,7 @@ router.post('/doc-templates/:id/callback', authenticateToken, asyncHandler(async
 
   const tmpl = result.rows[0]
 
-  if (!validateOnlyOfficeUrl(url)) return res.status(502).json({ error: 1 })
+  if (!await validateOnlyOfficeUrl(url)) return res.status(502).json({ error: 1 })
 
   const response = await fetch(url)
   if (!response.ok) return res.status(502).json({ error: 1 })

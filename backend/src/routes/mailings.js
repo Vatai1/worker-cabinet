@@ -155,14 +155,13 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(
 
   const recipientUserIds = recipientResult.rows.map(r => r.id)
 
-  const token = jwt.sign(
-    { type: 'mailing_image', exp: Math.floor(Date.now() / 1000) + 7 * 24 * 3600 },
-    process.env.JWT_SECRET
-  )
-
   const imageUrls = images.map(img => {
     const encodedKey = encodeURIComponent(img.file_key).replace(/%2F/g, '/')
-    return `${getPublicApiUrl()}/mailings/images/${encodedKey}/${token}`
+    const fileToken = jwt.sign(
+      { type: 'mailing_image', file_key: img.file_key, exp: Math.floor(Date.now() / 1000) + 24 * 3600 },
+      process.env.JWT_SECRET
+    )
+    return `${getPublicApiUrl()}/mailings/images/${encodedKey}/${fileToken}`
   })
 
   const client = await getClient()
@@ -317,10 +316,14 @@ router.get('/images/:fileKey/:token', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Неверный путь к файлу' })
   }
 
+  if (decoded.file_key && decoded.file_key !== fileKey) {
+    return res.status(403).json({ error: 'Токен не соответствует файлу' })
+  }
+
   try {
     const { Body, ContentType } = await getFromS3(fileKey)
     res.setHeader('Content-Type', ContentType || 'image/png')
-    res.setHeader('Cache-Control', 'public, max-age=604800')
+    res.setHeader('Cache-Control', 'private, max-age=3600')
     Body.pipe(res)
   } catch {
     res.status(404).json({ error: 'Файл не найден' })

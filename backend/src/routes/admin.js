@@ -1712,7 +1712,7 @@ router.get('/modules/:id/settings', asyncHandler(async (req, res) => {
  *             description: Произвольные настройки модуля (JSONB)
  *     responses:
  *       200:
- *         description: Настройки обновлены. В аудит логируется { changed: { ключ: { old, new } } } только для изменённых ключей
+ *         description: 'Настройки обновлены. В аудит логируются только измененные ключи'
  *       404:
  *         description: Модуль не найден
  */
@@ -1791,13 +1791,17 @@ router.post('/assistant/agent-toggle', asyncHandler(async (req, res) => {
   )
   const port = settings[0]?.value || '8642'
 
-  const { execSync } = await import('child_process')
+  const { execFileSync } = await import('child_process')
 
   try {
     if (enabled) {
-      execSync(`docker rm -f worker-cabinet-mini-agent 2>/dev/null; MINI_AGENT_PORT=${port} docker compose -f docker/mini-agent/docker-compose.yml up -d`, { cwd: COMPOSE_ROOT, timeout: 30000 })
+      execFileSync('docker', ['rm', '-f', 'worker-cabinet-mini-agent'], { cwd: COMPOSE_ROOT, timeout: 10000, stdio: 'ignore' })
+      execFileSync('docker', ['compose', '-f', 'docker/mini-agent/docker-compose.yml', 'up', '-d'], {
+        cwd: COMPOSE_ROOT, timeout: 30000, stdio: 'ignore',
+        env: { ...process.env, MINI_AGENT_PORT: port },
+      })
     } else {
-      execSync(`docker compose -f docker/mini-agent/docker-compose.yml down`, { cwd: COMPOSE_ROOT, timeout: 15000 })
+      execFileSync('docker', ['compose', '-f', 'docker/mini-agent/docker-compose.yml', 'down'], { cwd: COMPOSE_ROOT, timeout: 15000, stdio: 'ignore' })
     }
   } catch (e) {
     return res.json({ success: false, message: `Контейнер: ${e.message}` })
@@ -1815,17 +1819,28 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
   const model = map.assistant_agent_model || 'qwen2.5:3b'
   const baseUrl = map.assistant_agent_base_url || 'http://host.docker.internal:11434/v1'
 
-  const { execSync } = await import('child_process')
+  const { execFileSync } = await import('child_process')
 
   try {
-    const net = execSync(
-      `docker inspect $HOSTNAME --format '{{range \$k,\$v := .NetworkSettings.Networks}}{{\$k}}{{end}}'`,
+    const net = execFileSync(
+      'docker',
+      ['inspect', process.env.HOSTNAME || '', '--format', '{{range $k,$v := .NetworkSettings.Networks}}{{end}}'],
       { timeout: 5000, encoding: 'utf-8' }
     ).trim()
-    execSync(
-      `docker rm -f worker-cabinet-mini-agent 2>/dev/null; docker run -d --name worker-cabinet-mini-agent --restart unless-stopped --network ${net} --network-alias mini-agent -e MODEL=${model} -e BASE_URL=${baseUrl} -p 127.0.0.1:8642:8642 vatai12/worker-cabinet-mini-agent:latest`,
-      { timeout: 30000 }
-    )
+    execFileSync('docker', [
+      'rm', '-f', 'worker-cabinet-mini-agent',
+    ], { timeout: 10000, stdio: 'ignore' })
+    execFileSync('docker', [
+      'run', '-d',
+      '--name', 'worker-cabinet-mini-agent',
+      '--restart', 'unless-stopped',
+      '--network', net,
+      '--network-alias', 'mini-agent',
+      '-e', `MODEL=${model}`,
+      '-e', `BASE_URL=${baseUrl}`,
+      '-p', '127.0.0.1:8642:8642',
+      'vatai12/worker-cabinet-mini-agent:latest',
+    ], { timeout: 30000, stdio: 'ignore' })
   } catch (e) {
     return res.json({ success: false, message: e.message })
   }

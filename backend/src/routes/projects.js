@@ -1,7 +1,7 @@
 import express from 'express'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
-import { upload } from '../middleware/upload.js'
+import { upload, uploadWithMagicBytes } from '../middleware/upload.js'
 import { uploadToS3, deleteFromS3, getFromS3, getPresignedUrl } from '../config/s3.js'
 import jwt from 'jsonwebtoken'
 
@@ -849,7 +849,7 @@ router.delete('/:id/folders', authenticateToken, async (req, res) => {
  *         description: Документ загружен
  */
 // POST /api/projects/:id/documents — upload document
-router.post('/:id/documents', authenticateToken, upload.single('file'), async (req, res) => {
+router.post('/:id/documents', authenticateToken, upload.single('file'), uploadWithMagicBytes(), async (req, res) => {
   try {
     const { id } = req.params
     const userId = req.user.id

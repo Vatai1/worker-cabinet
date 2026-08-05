@@ -1,6 +1,7 @@
 import express from 'express'
 import http from 'http'
 import cors from 'cors'
+import helmet from 'helmet'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -51,6 +52,8 @@ const app = express()
 const PORT = process.env.PORT || 5000
 
 app.set('trust proxy', 1)
+app.disable('x-powered-by')
+app.use(helmet({ crossOriginEmbedderPolicy: false }))
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -67,8 +70,9 @@ app.use(cors({
       'http://127.0.0.1:8080',
       'http://host.docker.internal:5000',
       process.env.FRONTEND_URL,
+      process.env.CORS_ORIGINS,
     ].filter(Boolean)
-    if (!origin || allowed.includes(origin) || /^https?:\/\/[\d.]+(:\d+)?$/.test(origin) || /^https?:\/\/[a-zA-Z0-9.-]+(:\d+)?$/.test(origin)) {
+    if (!origin || allowed.includes(origin)) {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'))
@@ -185,7 +189,7 @@ async function ensureAdmin() {
          VALUES ($1, $2, 'Администратор', 'Системы', '', 'System Administrator', $3, NOW(), 'admin')`,
         [email, passwordHash, deptId]
       )
-      console.log(`✅ Admin account created: ${email} / ${password}`)
+      console.log(`✅ Admin account created: ${email}`)
     }
   } catch (err) {
     console.warn(`[ADMIN] Could not ensure admin account: ${err.message}`)

@@ -317,7 +317,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const currentUser = req.user
 
     // Проверка прав
-    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -460,7 +460,7 @@ router.post('/:id/skills', authenticateToken, async (req, res) => {
     const currentUser = req.user
 
     // Проверка прав: только владелец профиля или admin
-    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -547,7 +547,7 @@ router.delete('/:id/skills', authenticateToken, async (req, res) => {
     const currentUser = req.user
 
     // Проверка прав: только владелец профиля или admin
-    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -614,7 +614,7 @@ router.post('/:id/projects', authenticateToken, async (req, res) => {
     const currentUser = req.user
 
     // Проверка прав: только владелец профиля или admin
-    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -695,7 +695,7 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
     const currentUser = req.user
 
     // Проверка прав: только владелец профиля или admin
-    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -760,7 +760,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const currentUser = req.user
 
     // Проверка прав: только владелец профиля или admin
-    if (currentUser.role === 'employee' && currentUser.id !== parseInt(id)) {
+    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden' })
     }
 

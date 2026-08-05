@@ -183,7 +183,7 @@ router.post('/logout', asyncHandler(async (req, res) => {
 
 router.post('/register', authLimiter, validateRegister, asyncHandler(async (req, res) => {
   if (keycloakConfig.enabled) throw new UnauthorizedError('Используйте авторизацию через Keycloak')
-  const { email, password, firstName, lastName, middleName, position, departmentId, phone, birthDate, hireDate, role } = req.body
+  const { email, password, firstName, lastName, middleName, position, departmentId, phone, birthDate, hireDate } = req.body
 
   const existingUser = await query('SELECT id FROM users WHERE email = $1', [email])
   if (existingUser.rows.length > 0) throw new ValidationError('Email уже зарегистрирован')
@@ -193,9 +193,9 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
   const result = await query(
     `INSERT INTO users
      (email, password_hash, first_name, last_name, middle_name, position, department_id, phone, birth_date, hire_date, role)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'employee')
      RETURNING id, email, first_name, last_name, middle_name, position, department_id, role, created_at`,
-    [email, passwordHash, firstName, lastName, middleName, position, departmentId, phone, birthDate, hireDate, role || 'employee']
+    [email, passwordHash, firstName, lastName, middleName, position, departmentId, phone, birthDate, hireDate]
   )
 
   const user = result.rows[0]

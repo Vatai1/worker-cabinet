@@ -1,12 +1,11 @@
 import express from 'express'
-import multer from 'multer'
 import path from 'node:path'
 import { query } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
+import { upload, uploadWithMagicBytes } from '../middleware/upload.js'
 import { uploadToS3, getFromS3, deleteFromS3 } from '../config/s3.js'
 
 const router = express.Router()
-const upload = multer({ storage: multer.memoryStorage() })
 
 /**
  * @swagger
@@ -93,7 +92,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *       201:
  *         description: Документ загружен
  */
-router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
+router.post('/', authenticateToken, upload.single('file'), uploadWithMagicBytes(), async (req, res) => {
   try {
     const userId = req.user.id
     const { category, description } = req.body

@@ -2,6 +2,7 @@ import express from 'express'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { authenticateToken } from '../middleware/auth.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -30,7 +31,7 @@ const router = express.Router()
  *                   description: 'Версия бэкенда (semver)'
  *                   example: '1.0.5'
  */
-router.get('/', (req, res) => {
+router.get('/', authenticateToken, (req, res) => {
   res.json({ api: pkg.version })
 })
 

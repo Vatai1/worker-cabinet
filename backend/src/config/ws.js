@@ -40,7 +40,25 @@ async function authenticateUser(req) {
 }
 
 export function initWsServer(server) {
-  wss = new WebSocketServer({ server, path: '/ws' })
+  const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
+    'http://host.docker.internal:5000',
+  ].filter(Boolean)
+
+  wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    verifyClient: (info) => {
+      const origin = info.req.headers.origin
+      if (!origin || allowedOrigins.includes(origin)) return true
+      return false
+    },
+  })
 
   wss.on('connection', async (ws, req) => {
     const user = await authenticateUser(req)

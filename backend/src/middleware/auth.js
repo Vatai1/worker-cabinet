@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { query } from '../config/database.js'
-import keycloakConfig, { getJwksUrl } from '../config/keycloak.js'
+import keycloakConfig, { getJwksUrl, getIssuer } from '../config/keycloak.js'
 
 let jwksCache = null
 
@@ -17,13 +17,11 @@ async function getJwks() {
 
 async function verifyKeycloakToken(token) {
   const jwks = await getJwks()
-  const { payload } = await jwtVerify(token, jwks, { clockTolerance: 30 })
-
-  const expectedPath = `/realms/${keycloakConfig.realm}`
-  if (!payload.iss || !payload.iss.endsWith(expectedPath)) {
-    console.error('[KC] invalid token issuer:', payload.iss, 'expected to end with', expectedPath)
-    throw new Error('Invalid token issuer')
-  }
+  const { payload } = await jwtVerify(token, jwks, {
+    clockTolerance: 30,
+    audience: keycloakConfig.clientId,
+    issuer: getIssuer(),
+  })
 
   return payload
 }

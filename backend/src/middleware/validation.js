@@ -53,10 +53,6 @@ export const validateRegister = [
     .trim()
     .matches(/^[\d\s\-+()]*$/)
     .withMessage('Некорректный формат телефона'),
-  body('role')
-    .optional()
-    .isIn(['employee', 'manager', 'hr', 'admin'])
-    .withMessage('Недопустимая роль'),
   handleValidationErrors,
 ]
 

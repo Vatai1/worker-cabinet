@@ -11,7 +11,7 @@ export function csrfMiddleware(req, res, next) {
     return next()
   }
 
-  if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/callback' || req.path === '/auth/refresh' || req.path === '/onlyoffice/callback') {
+  if (req.path === '/auth/login' || req.path === '/auth/register' || req.path === '/auth/callback' || req.path === '/onlyoffice/callback') {
     return next()
   }
 
@@ -20,15 +20,27 @@ export function csrfMiddleware(req, res, next) {
     try {
       const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET)
       if (decoded.scope === 'assistant') {
+        if (req.method === 'DELETE') {
+          return res.status(403).json({ error: 'Assistant scope cannot perform DELETE' })
+        }
         return next()
       }
+      return next()
     } catch {}
   }
 
   const cookieToken = req.cookies?.csrf_token
   const headerToken = req.headers['x-csrf-token']
 
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+  if (!cookieToken || !headerToken || cookieToken.length !== headerToken.length) {
+    return res.status(403).json({ error: 'CSRF validation failed' })
+  }
+
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken))) {
+      return res.status(403).json({ error: 'CSRF validation failed' })
+    }
+  } catch {
     return res.status(403).json({ error: 'CSRF validation failed' })
   }
   next()

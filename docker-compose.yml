@@ -5,7 +5,7 @@ services:
     container_name: wc-keycloak-db
     environment:
       POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD required}
       POSTGRES_DB: keycloak
     volumes:
       - keycloak_db_data:/var/lib/postgresql/data
@@ -26,9 +26,9 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak123}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD required}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required}
       KC_HEALTH_ENABLED: true
     ports:
       - "${KEYCLOAK_PORT:-8081}:8080"
@@ -52,10 +52,10 @@ services:
     container_name: worker-cabinet-db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
       POSTGRES_DB: worker_cabinet
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/init-db:/docker-entrypoint-initdb.d
@@ -73,14 +73,14 @@ services:
     container_name: worker-cabinet-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin123}
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?S3_ACCESS_KEY required}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?S3_SECRET_KEY required}
       MINIO_BROWSER: "on"
       MINIO_SERVER_URL: "http://localhost:9000"
       MINIO_REGION_NAME: "us-east-1"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -99,7 +99,7 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 ${S3_ACCESS_KEY:-minioadmin} ${S3_SECRET_KEY:-minioadmin123} &&
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY:?S3_ACCESS_KEY required} ${S3_SECRET_KEY:?S3_SECRET_KEY required} &&
       mc mb --ignore-existing local/${S3_BUCKET:-worker-cabinet} &&
       echo 'Bucket ${S3_BUCKET:-worker-cabinet} ready'
       "
@@ -117,18 +117,18 @@ services:
     environment:
       - JWT_ENABLED=${ONLYOFFICE_JWT_ENABLED:-true}
       - JWT_HEADER=Authorization
-      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-changeme}
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:?ONLYOFFICE_JWT_SECRET required}
       - JWT_BODY=false
       - WOPI_ENABLED=true
-      - ALLOW_PRIVATE_IP_ADDRESS=true
-      - ALLOW_META_IP_ADDRESS=true
+      - ALLOW_PRIVATE_IP_ADDRESS=false
+      - ALLOW_META_IP_ADDRESS=false
       - USE_UNAUTHORIZED_STORAGE=${ONLYOFFICE_UNAUTH_STORAGE:-false}
       - DB_TYPE=postgres
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=onlyoffice
       - DB_USER=postgres
-      - DB_PWD=${DB_PASSWORD:-postgres}
+      - DB_PWD=${DB_PASSWORD:?DB_PASSWORD required}
     volumes:
       - onlyoffice_data:/var/www/onlyoffice/Data
       - onlyoffice_logs:/var/log/onlyoffice
@@ -164,10 +164,10 @@ services:
     container_name: worker-cabinet-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: worker_cabinet
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD required}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -192,17 +192,17 @@ services:
       DB_PORT: 5432
       DB_NAME: worker_cabinet
       DB_USER: postgres
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      RABBITMQ_URL: amqp://worker_cabinet:rabbitmq_secret@rabbitmq:5672
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      RABBITMQ_URL: amqp://worker_cabinet:***@rabbitmq:5672
       MAIL_HOST: ${MAIL_HOST:-smtp.example.com}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_SECURE: ${MAIL_SECURE:-false}
       MAIL_USER: ${MAIL_USER:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
-      NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
+      NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:?NOTIFICATION_SECRET required}
     ports:
-      - "5001:5001"
+      - "127.0.0.1:5001:5001"
     depends_on:
       postgres:
         condition: service_healthy
