@@ -56,6 +56,12 @@ export function initWsServer(server) {
     verifyClient: (info) => {
       const origin = info.req.headers.origin
       if (!origin || allowedOrigins.includes(origin)) return true
+      const host = info.req.headers.host
+      if (host) {
+        try {
+          if (new URL(origin).hostname === host.split(':')[0]) return true
+        } catch {}
+      }
       return false
     },
   })
