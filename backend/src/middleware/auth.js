@@ -19,9 +19,12 @@ async function verifyKeycloakToken(token) {
   const jwks = await getJwks()
   const { payload } = await jwtVerify(token, jwks, {
     clockTolerance: 30,
-    audience: keycloakConfig.clientId,
     issuer: getIssuer(),
   })
+
+  if (payload.azp !== keycloakConfig.clientId && (!payload.aud || !payload.aud.includes(keycloakConfig.clientId))) {
+    throw new Error(`Token not intended for client "${keycloakConfig.clientId}"`)
+  }
 
   return payload
 }
