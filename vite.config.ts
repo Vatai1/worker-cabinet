@@ -73,6 +73,9 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       strictPort: true,
       open: true,
+      headers: {
+        'Permissions-Policy': "camera=(), microphone=(), geolocation=(), unload=*",
+      },
       proxy: {
         '/api': {
           target: 'http://localhost:5000',
