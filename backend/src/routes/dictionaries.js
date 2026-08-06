@@ -737,6 +737,28 @@ function getPublicApiUrl() {
   return process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || 'http://host.docker.internal:5000/api'
 }
 
+const EXT_TO_MIME = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  doc: 'application/msword',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xls: 'application/vnd.ms-excel',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ppt: 'application/vnd.ms-powerpoint',
+  odt: 'application/vnd.oasis.opendocument.text',
+  ods: 'application/vnd.oasis.opendocument.spreadsheet',
+  odp: 'application/vnd.oasis.opendocument.presentation',
+  pdf: 'application/pdf',
+  rtf: 'application/rtf',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  html: 'text/html',
+}
+
+function getMimeTypeFromExtension(fileName) {
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  return EXT_TO_MIME[ext] || null
+}
+
 /**
  * @swagger
  * /dictionaries/doc-templates/{id}/preview-token:
@@ -813,7 +835,8 @@ router.get('/doc-templates/:id/public/:token', asyncHandler(async (req, res) => 
   if (!file_key) return res.status(404).json({ error: 'Файл не прикреплён' })
 
   const { Body, ContentType } = await getFromS3(file_key)
-  res.setHeader('Content-Type', ContentType || mime_type || 'application/octet-stream')
+  const mimeTypeFromExt = getMimeTypeFromExtension(name)
+  res.setHeader('Content-Type', mimeTypeFromExt || ContentType || mime_type || 'application/octet-stream')
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(name)}"`)
   res.setHeader('Cache-Control', 'public, max-age=300')
   Body.pipe(res)
@@ -873,7 +896,7 @@ router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRole
   if (!validateDocumentBuffer(buffer)) return res.status(502).json({ error: 'Скачанный файл не является документом' })
 
   const ext = fileType || tmpl.file_key?.split('.').pop() || 'docx'
-  const mimeType = tmpl.mime_type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  const mimeType = EXT_TO_MIME[ext] || tmpl.mime_type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   const newFileKey = `doc-templates/${id}/${Date.now()}.${ext}`
 
   await uploadToS3({ buffer, mimetype: mimeType }, newFileKey)

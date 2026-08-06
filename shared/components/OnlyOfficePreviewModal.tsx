@@ -284,7 +284,8 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
       ppt: 'ppt', pptx: 'pptx', odp: 'odp', pdf: 'pdf',
     }
 
-    return extMap[ext] || 'docx'
+    if (ext && extMap[ext]) return extMap[ext]
+    throw new Error('Не удалось определить тип файла')
   }
 
   if (!open) return null
