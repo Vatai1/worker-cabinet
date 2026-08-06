@@ -103,7 +103,7 @@ services:
       - worker-cabinet-network
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine
+    image: rabbitmq:3.11-management
     container_name: worker-cabinet-rabbitmq
     restart: unless-stopped
     environment:
@@ -121,6 +121,37 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    networks:
+      - worker-cabinet-network
+
+  notification-service:
+    build:
+      context: ../notification-service
+      dockerfile: Dockerfile.dev
+    container_name: worker-cabinet-notifications
+    restart: unless-stopped
+    environment:
+      PORT: "5001"
+      NODE_ENV: development
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-worker_cabinet}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      RABBITMQ_URL: "amqp://worker_cabinet:***@rabbitmq:5672/worker_cabinet"
+      MAIL_HOST: ${MAIL_HOST:-smtp.example.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_SECURE: ${MAIL_SECURE:-false}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
+    volumes:
+      - ../notification-service/src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - worker-cabinet-network
 
