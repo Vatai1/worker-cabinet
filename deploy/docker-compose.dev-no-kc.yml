@@ -59,6 +59,7 @@ services:
     restart: unless-stopped
     environment:
       JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-changeme}
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_NAME: ${ONLYOFFICE_DB_NAME:-onlyoffice}

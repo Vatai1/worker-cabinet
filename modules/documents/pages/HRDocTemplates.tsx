@@ -314,7 +314,15 @@ export function HRDocTemplates() {
               headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
               body: JSON.stringify({ url: downloadUrl, fileType }),
             })
-            if (!res.ok) throw new Error('Ошибка сохранения')
+            if (!res.ok) {
+              try {
+                const data = await res.json()
+                throw new Error(data.error || 'Ошибка сохранения')
+              } catch (e: unknown) {
+                if (e instanceof Error) throw e
+                throw new Error('Ошибка сохранения')
+              }
+            }
           }}
           placeholders={previewItem.purpose ? (PLACEHOLDERS_BY_PURPOSE[previewItem.purpose] ?? getAllGroups()) : getAllGroups()}
         />

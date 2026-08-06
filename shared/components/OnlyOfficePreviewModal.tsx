@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Edit, Loader2, CheckCircle2, Copy, Check as CheckIcon, ChevronDown, ChevronUp, Save } from 'lucide-react'
+import { X, Edit, Loader2, CheckCircle2, Copy, Check as CheckIcon, ChevronDown, ChevronUp, Save, AlertCircle } from 'lucide-react'
 import { formatFileSize } from '@/shared/lib/documentUtils'
 import { apiGet, apiPost } from '@/shared/lib/apiClient'
 import { useUIStore } from '@/shared/store/uiStore'
@@ -71,9 +71,11 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showSaveConfirm, setShowSaveConfirm] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const handleForceSave = async () => {
     setShowSaveConfirm(false)
+    setSaveError(null)
     if (!onSave || !editorRef.current) return
     setSaving(true)
     try {
@@ -89,8 +91,8 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
       })
       await onSave(downloadUrl, fileTypeRef.current)
       onClose()
-    } catch {
-      // ignore
+    } catch (err) {
+      setSaveError(err instanceof Error && err.message ? err.message : 'Не удалось сохранить документ')
     } finally {
       setSaving(false)
     }
@@ -419,7 +421,15 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
         )}
 
         <div className="flex items-center justify-between p-4 border-t border-border/60 shrink-0 relative z-[200]">
-          <p className="text-sm text-muted-foreground">Powered by OnlyOffice</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted-foreground">Powered by OnlyOffice</p>
+            {saveError && (
+              <span className="flex items-center gap-1.5 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                {saveError}
+              </span>
+            )}
+          </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={onClose}>Закрыть</Button>
             {editable && onSave && (

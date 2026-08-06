@@ -6,28 +6,23 @@ import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../
 import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
 import multer from 'multer'
 
-function isPrivateHost(hostname) {
-  const h = hostname.toLowerCase()
-  if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '0.0.0.0') return true
-  if (h.startsWith('10.') || h.startsWith('192.168.')) return true
-  if (h.startsWith('169.254.')) return true
-  if (h.startsWith('172.')) {
-    const parts = h.split('.')
-    const second = parseInt(parts[1])
-    if (second >= 16 && second <= 31) return true
-  }
-  return false
-}
-
 async function validateOnlyOfficeUrl(url) {
   try {
     const parsed = new URL(url)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
-    if (isPrivateHost(parsed.hostname)) return false
     const allowedHost = process.env.ONLYOFFICE_URL ? new URL(process.env.ONLYOFFICE_URL).hostname : null
     if (allowedHost && parsed.hostname !== allowedHost) return false
     return true
   } catch { return false }
+}
+
+function validateDocumentBuffer(buffer) {
+  if (buffer.length < 4) return false
+  const isZip = buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04
+  const isOle = buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0
+  const isPdf = buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46
+  const isRtf = buffer.slice(0, 5).toString('ascii').startsWith('{\\rtf')
+  return isZip || isOle || isPdf || isRtf
 }
 
 const uploadDocTemplate = multer({
@@ -875,6 +870,8 @@ router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRole
   const arrayBuffer = await response.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
 
+  if (!validateDocumentBuffer(buffer)) return res.status(502).json({ error: 'Скачанный файл не является документом' })
+
   const ext = fileType || tmpl.file_key?.split('.').pop() || 'docx'
   const mimeType = tmpl.mime_type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   const newFileKey = `doc-templates/${id}/${Date.now()}.${ext}`
@@ -938,6 +935,8 @@ router.post('/doc-templates/:id/callback', authenticateToken, asyncHandler(async
 
   const arrayBuffer = await response.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
+
+  if (!validateDocumentBuffer(buffer)) return res.json({ error: 1 })
 
   const ext = tmpl.file_key?.split('.').pop() || 'docx'
   const newFileKey = `doc-templates/${id}/${Date.now()}.${ext}`

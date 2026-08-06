@@ -201,6 +201,7 @@ services:
       NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
       ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://localhost:8080}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-changeme}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-}
       MINI_AGENT_URL: http://mini-agent:8642/v1/chat
       ASSISTANT_API_BASE_URL: http://backend:5000/api
       OLLAMA_URL: http://ollama:11434
