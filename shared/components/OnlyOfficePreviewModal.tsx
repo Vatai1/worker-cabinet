@@ -398,9 +398,9 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</p>
                     </div>
                     <div className="flex flex-wrap gap-1.5 px-4 py-2">
-                      {group.items.map(p => (
+                      {group.items.map((p, ii) => (
                         <button
-                          key={p.tag}
+                          key={`${group.label}-${ii}`}
                           onClick={() => handleCopy(p.tag)}
                           title={p.desc}
                           className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/60 bg-muted/30 hover:bg-muted/60 transition-colors text-xs"
