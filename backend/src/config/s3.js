@@ -40,6 +40,7 @@ export const uploadToS3 = async (file, key) => {
     Key: key,
     Body: file.buffer,
     ContentType: file.mimetype,
+    ContentDisposition: 'inline',
   }
 
   await s3Client.send(new PutObjectCommand(params))

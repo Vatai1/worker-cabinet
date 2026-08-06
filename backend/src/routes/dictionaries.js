@@ -588,7 +588,8 @@ router.post('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), 
   let mimeType = null
   let fileSize = null
   if (req.file) {
-    fileKey = `doc-templates/${Date.now()}-${req.file.originalname}`
+    const ext = req.file.originalname.split('.').pop()?.toLowerCase() || 'docx'
+    fileKey = `doc-templates/${Date.now()}.${ext}`
     await uploadToS3(req.file, fileKey)
     mimeType = req.file.mimetype
     fileSize = req.file.size
@@ -647,7 +648,8 @@ router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'
   let fileSize = existing.rows[0].size
   if (req.file) {
     if (fileKey) await deleteFromS3(fileKey).catch(() => {})
-    fileKey = `doc-templates/${Date.now()}-${req.file.originalname}`
+    const ext = req.file.originalname.split('.').pop()?.toLowerCase() || 'docx'
+    fileKey = `doc-templates/${Date.now()}.${ext}`
     await uploadToS3(req.file, fileKey)
     mimeType = req.file.mimetype
     fileSize = req.file.size
@@ -725,7 +727,8 @@ router.get('/doc-templates/:id/file', authenticateToken, authorizeRoles('hr', 'a
   if (!file_key) return res.status(404).json({ error: 'Файл не прикреплён' })
 
   const { Body, ContentType } = await getFromS3(file_key)
-  res.setHeader('Content-Type', ContentType || mime_type || 'application/octet-stream')
+  const mimeTypeFromExt = getMimeTypeFromExtension(name)
+  res.setHeader('Content-Type', mimeTypeFromExt || ContentType || mime_type || 'application/octet-stream')
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`)
 
   await query('UPDATE document_templates SET download_count = download_count + 1 WHERE id = $1', [id]).catch(() => {})
