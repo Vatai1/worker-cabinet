@@ -1,0 +1,26 @@
+{
+  "services": {
+    "CoAuthoring": {
+      "token": {
+        "enable": {
+          "request": { "inbox": true, "outbox": true },
+          "browser": true
+        },
+        "inbox": { "header": "Authorization", "inBody": true },
+        "outbox": { "header": "Authorization", "inBody": true }
+      },
+      "secret": {
+        "inbox": { "string": "${ONLYOFFICE_JWT_SECRET}" },
+        "outbox": { "string": "${ONLYOFFICE_JWT_SECRET}" },
+        "session": { "string": "${ONLYOFFICE_JWT_SECRET}" }
+      },
+      "server": {
+        "siteUrl": "https://${APP_DOMAIN}/onlyoffice",
+        "allowPrivateIPAddress": true,
+        "rejectUnauthorized": false
+      }
+    }
+  },
+  "queue": { "type": "rabbitmq" },
+  "storage": { "fs": { "secretString": "${ONLYOFFICE_JWT_SECRET}" } }
+}
