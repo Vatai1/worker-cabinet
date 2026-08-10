@@ -120,6 +120,15 @@ async function runMigrations() {
     }
 
     try {
+      await db.query(`ALTER TYPE user_role_enum ADD VALUE IF NOT EXISTS 'superadmin'`)
+      console.log('  ✓ superadmin value added to user_role_enum')
+    } catch (e) {
+      if (!e.message.includes('already exists')) {
+        console.log('  - superadmin enum:', e.message)
+      }
+    }
+
+    try {
       await db.query(`CREATE TYPE user_status_enum AS ENUM (
         'active',
         'inactive',
@@ -135,6 +144,34 @@ async function runMigrations() {
     }
 
     console.log('✅ Enum types created')
+
+    console.log('Creating organizations table...')
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(100) UNIQUE NOT NULL,
+        inn VARCHAR(20),
+        address TEXT,
+        logo_s3_key VARCHAR(500),
+        settings JSONB DEFAULT '{}',
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(e => console.log('  - organizations:', e.message))
+    console.log('  ✓ organizations')
+
+    try {
+      await db.query(`CREATE TYPE org_role_enum AS ENUM ('employee', 'manager', 'hr', 'admin')`)
+      console.log('  ✓ org_role_enum')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ org_role_enum (already exists)')
+      } else {
+        throw e
+      }
+    }
+    console.log('✅ Organizations table + org_role_enum created')
 
     // Step 2: Create tables
     console.log('Creating tables...')
@@ -170,6 +207,20 @@ async function runMigrations() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `).catch(e => console.log('  - users:', e.message))
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS user_organizations (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        org_role org_role_enum DEFAULT 'employee',
+        department_id INTEGER REFERENCES departments(id),
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, org_id)
+      )
+    `).catch(e => console.log('  - user_organizations:', e.message))
+    console.log('  ✓ user_organizations')
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS vacation_balances (
@@ -1207,6 +1258,7 @@ async function runMigrations() {
       { name: 'admin', description: 'Администратор', color: '#ef4444' },
       { name: 'director', description: 'Директор', color: '#8b5cf6' },
       { name: 'onboarding', description: 'Онбординг', color: '#06b6d4' },
+      { name: 'superadmin', description: 'Глобальный супер-администратор', color: '#dc2626' },
     ]
     for (const r of systemRoles) {
       await db.query(
@@ -1286,6 +1338,7 @@ async function runMigrations() {
     console.log('  ✓ role_permissions')
 
     const rolePermMap = {
+      superadmin: perms.map(p => p.code),
       admin: perms.map(p => p.code),
       hr: perms.map(p => p.code).filter(c => !c.startsWith('admin:') && !c.startsWith('users:delete')),
       director: ['users:view', 'vacation:view', 'vacation:create', 'vacation:approve', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'timesheet:manage', 'calendar:view', 'documents:view'],
@@ -1557,6 +1610,71 @@ async function runMigrations() {
     await migrateTravelChildren(db)
     await migrateTravelBalance(db)
     await migrateMailingTables(db)
+
+    console.log('Adding multi-tenancy organization_id columns...')
+    const orgScopedTables = [
+      'departments', 'vacation_balances', 'vacation_requests',
+      'vacation_request_status_history', 'vacation_restrictions', 'vacation_types',
+      'document_templates', 'surveys', 'survey_questions', 'survey_responses',
+      'survey_answers', 'onboarding_templates', 'employee_onboarding',
+      'employee_onboarding_documents', 'skills_dictionary', 'company_projects',
+      'projects', 'user_documents', 'project_documents', 'project_folders',
+      'timesheets', 'timesheet_entries', 'hr_hierarchy', 'department_hierarchy',
+      'mailing_campaigns', 'mailing_campaign_recipients', 'modules', 'system_settings',
+    ]
+    for (const table of orgScopedTables) {
+      await db.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS organization_id INTEGER`)
+        .catch(e => console.log(`  - ${table}.organization_id:`, e.message))
+    }
+    console.log(`  ✓ organization_id added to ${orgScopedTables.length} tables`)
+
+    await db.query(`
+      INSERT INTO organizations (name, slug, inn, is_active)
+      VALUES ('Основная организация', 'default', NULL, true)
+      ON CONFLICT (slug) DO NOTHING
+    `)
+    console.log('  ✓ default organization ensured')
+
+    for (const table of orgScopedTables) {
+      await db.query(`UPDATE ${table} SET organization_id = 1 WHERE organization_id IS NULL`)
+        .catch(() => {})
+    }
+    console.log('  ✓ organization_id backfilled to org 1')
+
+    await db.query(`
+      INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
+      SELECT u.id, 1,
+        CASE u.role
+          WHEN 'employee' THEN 'employee'::org_role_enum
+          WHEN 'manager' THEN 'manager'::org_role_enum
+          WHEN 'hr' THEN 'hr'::org_role_enum
+          WHEN 'admin' THEN 'admin'::org_role_enum
+          WHEN 'director' THEN 'admin'::org_role_enum
+          WHEN 'superadmin' THEN 'admin'::org_role_enum
+          ELSE 'employee'::org_role_enum
+        END,
+        true
+      FROM users u
+      WHERE NOT EXISTS (
+        SELECT 1 FROM user_organizations uo WHERE uo.user_id = u.id AND uo.org_id = 1
+      )
+    `).catch(e => console.log('  - user_organizations backfill:', e.message))
+    console.log('  ✓ user_organizations populated')
+
+    for (const table of orgScopedTables) {
+      await db.query(`ALTER TABLE ${table} ALTER COLUMN organization_id SET DEFAULT 1`).catch(() => {})
+      await db.query(`ALTER TABLE ${table} ALTER COLUMN organization_id SET NOT NULL`)
+        .catch(e => console.log(`  - ${table} NOT NULL:`, e.message))
+    }
+    console.log('  ✓ organization_id NOT NULL + DEFAULT 1')
+
+    await db.query('CREATE INDEX IF NOT EXISTS idx_user_organizations_user ON user_organizations(user_id)').catch(() => {})
+    await db.query('CREATE INDEX IF NOT EXISTS idx_user_organizations_org ON user_organizations(org_id)').catch(() => {})
+    for (const table of orgScopedTables) {
+      await db.query(`CREATE INDEX IF NOT EXISTS idx_${table}_org ON ${table}(organization_id)`).catch(() => {})
+    }
+    console.log('  ✓ multi-tenancy indexes created')
+    console.log('✅ Multi-tenancy migration completed')
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
