@@ -116,6 +116,7 @@ async function seed() {
       { email: 'ivanov@example.com', firstName: 'Иван', lastName: 'Иванов', middleName: 'Иванович', position: 'Senior Backend Developer', role: 'employee', deptId: devDept },
       { email: 'petrov@example.com', firstName: 'Пётр', lastName: 'Петров', middleName: 'Петрович', position: 'Middle Frontend Developer', role: 'manager', deptId: devDept },
       { email: 'elena@example.com', firstName: 'Елена', lastName: 'Смирнова', middleName: 'Александровна', position: 'HR Manager', role: 'hr', deptId: hrDept },
+      { email: 'superadmin@example.com', firstName: 'Супер', lastName: 'Админ', middleName: 'Глобальный', position: 'Super Administrator', role: 'superadmin', deptId: devDept },
     ]
 
     for (const u of FIXED_USERS) {
@@ -172,6 +173,27 @@ async function seed() {
       created++
     }
     console.log(`  ✓ ${FIXED_USERS.length} fixed users + ${created} generated users (${FIXED_USERS.length + created} total, password: password123)`)
+
+    const uoResult = await query(`
+      INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
+      SELECT u.id, 1,
+        CASE u.role
+          WHEN 'employee' THEN 'employee'::org_role_enum
+          WHEN 'manager' THEN 'manager'::org_role_enum
+          WHEN 'hr' THEN 'hr'::org_role_enum
+          WHEN 'admin' THEN 'admin'::org_role_enum
+          WHEN 'director' THEN 'admin'::org_role_enum
+          WHEN 'superadmin' THEN 'admin'::org_role_enum
+          ELSE 'employee'::org_role_enum
+        END,
+        true
+      FROM users u
+      WHERE NOT EXISTS (
+        SELECT 1 FROM user_organizations uo WHERE uo.user_id = u.id AND uo.org_id = 1
+      )
+      RETURNING user_id
+    `)
+    console.log(`  ✓ ${uoResult.rows.length} user_organizations entries`)
 
     console.log('Creating vacation balances...')
     const allUsers = await query('SELECT id, hire_date FROM users ORDER BY id')
