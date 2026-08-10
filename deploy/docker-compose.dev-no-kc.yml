@@ -59,6 +59,7 @@ services:
     restart: unless-stopped
     environment:
       JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-changeme}
+      SECURE_LINK_SECRET: ${ONLYOFFICE_JWT_SECRET:-changeme}
       ALLOW_PRIVATE_IP_ADDRESS: "true"
       USE_UNAUTHORIZED_STORAGE: "true"
       JWT_ENABLED: "true"
