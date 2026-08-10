@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { query } from '../config/database.js'
 import keycloakConfig, { getJwksUrl, getIssuer } from '../config/keycloak.js'
+import { attachOrgContext } from './orgContext.js'
 
 let jwksCache = null
 
@@ -95,6 +96,66 @@ export function logScopes(payload, label) {
   }
 }
 
+function mapRealmRoleToOrgRole(realmRoles) {
+  if (realmRoles.includes('admin') || realmRoles.includes('administrator')) return 'admin'
+  if (realmRoles.includes('hr') || realmRoles.includes('hr-manager')) return 'hr'
+  if (realmRoles.includes('manager')) return 'manager'
+  return 'employee'
+}
+
+async function syncUserOrganizations(userId, kcPayload) {
+  const groups = kcPayload.groups || []
+  const realmRoles = kcPayload.realm_access?.roles || []
+  const orgSlugs = groups
+    .map(g => g.replace(/^\//, '').replace(/^org-/, '').toLowerCase())
+    .filter(g => g && !g.startsWith('default-roles'))
+
+  let firstOrgId = 1
+
+  if (orgSlugs.length === 0) {
+    await query(
+      `INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
+       VALUES ($1, 1, $2, true)
+       ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true, org_role = EXCLUDED.org_role`,
+      [userId, mapRealmRoleToOrgRole(realmRoles)]
+    )
+  } else {
+    for (const slug of orgSlugs) {
+      let orgResult = await query('SELECT id FROM organizations WHERE slug = $1', [slug])
+      if (orgResult.rows.length === 0) {
+        orgResult = await query(
+          'INSERT INTO organizations (name, slug, is_active) VALUES ($1, $2, true) RETURNING id',
+          [slug.charAt(0).toUpperCase() + slug.slice(1), slug]
+        )
+        console.log('[KC] auto-created organization:', slug)
+      }
+      const orgId = orgResult.rows[0].id
+      if (slug === orgSlugs[0]) firstOrgId = orgId
+      const orgRole = mapRealmRoleToOrgRole(realmRoles)
+      await query(
+        `INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
+         VALUES ($1, $2, $3, true)
+         ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true, org_role = EXCLUDED.org_role`,
+        [userId, orgId, orgRole]
+      )
+    }
+
+    const orgIds = (await query(
+      'SELECT id FROM organizations WHERE slug = ANY($1)', [orgSlugs]
+    )).rows.map(r => r.id)
+
+    if (orgIds.length > 0) {
+      await query(
+        `UPDATE user_organizations SET is_active = false
+         WHERE user_id = $1 AND org_id NOT IN (SELECT unnest($2::int[]))`,
+        [userId, orgIds]
+      )
+    }
+  }
+
+  return firstOrgId
+}
+
 async function findOrCreateUser(kcPayload) {
   const sub = kcPayload.sub
   if (!sub) throw new Error('sub (GUID) not found in Keycloak token')
@@ -117,12 +178,13 @@ async function findOrCreateUser(kcPayload) {
   const responsibilityArea = kcPayload.responsibility_area || ''
   const department = kcPayload.department || ''
 
-  async function resolveDepartmentId(deptName) {
+  async function resolveDepartmentId(deptName, orgId) {
     if (!deptName || !deptName.trim()) return null
     const trimmed = deptName.trim()
-    let res = await query('SELECT id FROM departments WHERE name ILIKE $1', [trimmed])
+    const oid = orgId || 1
+    let res = await query('SELECT id FROM departments WHERE name ILIKE $1 AND organization_id = $2', [trimmed, oid])
     if (res.rows.length > 0) return res.rows[0].id
-    res = await query('INSERT INTO departments (name) VALUES ($1) RETURNING id', [trimmed])
+    res = await query('INSERT INTO departments (name, organization_id) VALUES ($1, $2) RETURNING id', [trimmed, oid])
     console.log('[KC] auto-created department:', trimmed, '→ id=', res.rows[0].id)
     return res.rows[0].id
   }
@@ -150,6 +212,7 @@ async function findOrCreateUser(kcPayload) {
 
   if (result.rows.length > 0) {
     const user = result.rows[0]
+    const firstOrgId = await syncUserOrganizations(user.id, kcPayload)
     const updates = []
     const values = []
     let paramIndex = 1
@@ -184,7 +247,7 @@ async function findOrCreateUser(kcPayload) {
     }
 
     if (department) {
-      const deptId = await resolveDepartmentId(department)
+      const deptId = await resolveDepartmentId(department, firstOrgId)
       if (deptId && user.department_id !== deptId) {
         updates.push(`department_id = $${paramIndex++}`)
         values.push(deptId)
@@ -206,17 +269,17 @@ async function findOrCreateUser(kcPayload) {
   if (result.rows.length > 0) {
     const user = result.rows[0]
     await query('UPDATE users SET keycloak_guid = $1 WHERE id = $2', [sub, user.id])
+    await syncUserOrganizations(user.id, kcPayload)
     return user
   }
 
   const hireDateVal = hireDate.trim() || new Date().toISOString().slice(0, 10)
   const birthDateVal = birthDate.trim() || null
-  const deptId = await resolveDepartmentId(department)
 
   const insertValues = [
     email, firstName, lastName, middleName, gender, sub,
     phone, position, hireDateVal, birthDateVal,
-    picture, office, cabinet, responsibilityArea, deptId,
+    picture, office, cabinet, responsibilityArea, null,
   ]
   const insertCols = [
     'email', 'first_name', 'last_name', 'middle_name', 'gender', 'keycloak_guid',
@@ -235,7 +298,20 @@ async function findOrCreateUser(kcPayload) {
   )
 
   const user = result.rows[0]
-  await query('INSERT INTO vacation_balances (user_id, total_days) VALUES ($1, 28)', [user.id]).catch(() => {})
+  const firstOrgId = await syncUserOrganizations(user.id, kcPayload)
+
+  if (department) {
+    const deptId = await resolveDepartmentId(department, firstOrgId)
+    if (deptId) {
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptId, user.id])
+      await query(
+        'UPDATE user_organizations SET department_id = $1 WHERE user_id = $2 AND org_id = $3',
+        [deptId, user.id, firstOrgId]
+      ).catch(() => {})
+    }
+  }
+
+  await query('INSERT INTO vacation_balances (user_id, total_days, organization_id) VALUES ($1, 28, $2)', [user.id, firstOrgId]).catch(() => {})
   await query(
     `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'
      FROM users WHERE users.id = vacation_balances.user_id AND travel_next_available_date IS NULL`
@@ -262,14 +338,17 @@ export const authenticateToken = async (req, res, next) => {
 
     if (decoded?.scope === 'assistant') {
       const result = await query(
-        'SELECT id, email, role, first_name, last_name FROM users WHERE id = $1',
+        `SELECT id, email, role, first_name, last_name, middle_name, gender, phone,
+                position, hire_date, birth_date, avatar, office, cabinet,
+                responsibility_area, department_id, status, manager_id
+         FROM users WHERE id = $1`,
         [decoded.id]
       )
       if (result.rows.length === 0) {
         return res.status(403).json({ error: 'User not found' })
       }
       req.user = result.rows[0]
-      return next()
+      return attachOrgContext(req, res, next)
     }
 
     if (keycloakConfig.enabled) {
@@ -278,7 +357,10 @@ export const authenticateToken = async (req, res, next) => {
     } else {
       const decoded = jwt.verify(token, process.env.JWT_SECRET)
       const result = await query(
-        'SELECT id, email, role, first_name, last_name FROM users WHERE id = $1',
+        `SELECT id, email, role, first_name, last_name, middle_name, gender, phone,
+                position, hire_date, birth_date, avatar, office, cabinet,
+                responsibility_area, department_id, status, manager_id
+         FROM users WHERE id = $1`,
         [decoded.id]
       )
       if (result.rows.length === 0) {
@@ -288,7 +370,7 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     req.user = user
-    next()
+    return attachOrgContext(req, res, next)
   } catch (err) {
     console.error('[KC] authenticateToken failed:', err.message)
     return res.status(401).json({ error: 'Invalid or expired token' })
@@ -301,11 +383,37 @@ export const authorizeRoles = (...roles) => {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
+    if (req.user.role === 'superadmin') return next()
+    if (roles.includes(req.user.role)) return next()
+    if (req.org?.org_role && roles.includes(req.org.org_role)) return next()
+
+    return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
+  }
+}
+
+export const authorizeGlobalRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    next()
+    if (req.user.role === 'superadmin') return next()
+    if (roles.includes(req.user.role)) return next()
+
+    return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
+  }
+}
+
+export const authorizeOrgRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+
+    if (req.user.role === 'superadmin') return next()
+    if (req.org?.org_role && roles.includes(req.org.org_role)) return next()
+
+    return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
   }
 }
 
@@ -315,15 +423,17 @@ export const requirePermission = (permissionCode) => {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
+    if (req.user.role === 'superadmin') return next()
     if (req.user.role === 'admin') return next()
 
     try {
+      const effectiveRole = req.org?.org_role || req.user.role
       const result = await query(
         `SELECT 1 FROM role_permissions rp
          JOIN roles r ON rp.role_id = r.id
          JOIN permissions p ON rp.permission_id = p.id
          WHERE r.name = $1 AND p.code = $2`,
-        [req.user.role, permissionCode]
+        [effectiveRole, permissionCode]
       )
 
       if (result.rows.length === 0) {
