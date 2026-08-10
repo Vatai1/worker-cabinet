@@ -7,6 +7,7 @@ import { TimesheetGrid, TimesheetEntry } from '@/shared/components/timesheet/Tim
 import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
+import { hasAnyRoleSync } from '@/shared/lib/permissions'
 
 interface Department { id: number; name: string }
 interface Timesheet {
@@ -50,7 +51,7 @@ export function HRTimesheet() {
       const list: Timesheet[] = await res.json()
       let found = list.find(t => t.department_id === selectedDept && t.year === year && t.month === month) ?? null
 
-      if (!found && user?.role === 'admin') {
+      if (!found && hasAnyRoleSync('admin')) {
         try {
           const createRes = await fetch(`${API_BASE_URL}/timesheet/auto-create`, {
             method: 'POST',

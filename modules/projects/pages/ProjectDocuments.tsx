@@ -10,6 +10,7 @@ import { getFileTypeLabel } from '@/shared/lib/documentUtils'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { hasAnyRole } from '@/shared/lib/permissions'
 import {
   ArrowLeft, Loader2, Upload, FolderPlus, Folder, FolderOpen,
   File, FileText, FileImage, FileCode, FileArchive, Download,
@@ -567,7 +568,7 @@ export function ProjectDocuments() {
 
   // Access
   const isLead = project?.leads?.some((m) => String(m.id) === String(user?.id))
-  const isAdmin = user?.role === 'admin' || user?.role === 'hr'
+  const isAdmin = hasAnyRole('admin', 'hr')
   const isMember = project?.members?.some((m) => String(m.id) === String(user?.id))
   const canManage = isLead || isAdmin
 

@@ -2,7 +2,9 @@
 import { useEffect, lazy, Suspense } from 'react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
+import { useOrgStore } from '@/shared/store/orgStore'
 import { useSessionActivity } from '@/core/auth/hooks/useSessionActivity'
+import { hasAnyRole, hasAnyRoleSync, isSuperAdmin } from '@/shared/lib/permissions'
 import { Login } from '@/core/auth/pages/Login'
 import { Layout } from '@/shared/components/layout/Layout'
 import { Dashboard } from '@/shared/pages/Dashboard'
@@ -46,6 +48,8 @@ function PageLoader() {
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const loading = useAuthStore((state) => state.loading)
+  const role = useAuthStore((state) => state.user?.role)
+  const { organizations, currentOrgId } = useOrgStore()
 
   if (loading) {
     return (
@@ -59,23 +63,26 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
+  if (role !== 'superadmin' && organizations.length > 0 && !currentOrgId) {
+    return <PageLoader />
+  }
+
   return <>{children}</>
 }
 
 function HRRoute({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((state) => state.user)
   const loading = useAuthStore((state) => state.loading)
   if (loading) return <PageLoader />
-  if (!['hr', 'admin'].includes(user?.role ?? ''))
+  if (!hasAnyRole('hr', 'admin'))
     return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
 function ManagerRoute({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((state) => state.user)
   const loading = useAuthStore((state) => state.loading)
   if (loading) return <PageLoader />
-  if (user?.role !== 'manager') return <Navigate to="/dashboard" replace />
+  if (!hasAnyRole('manager'))
+    return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -96,10 +103,16 @@ function BlockOnboardingRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((state) => state.user)
   const loading = useAuthStore((state) => state.loading)
   if (loading) return <PageLoader />
-  if (user?.role !== 'admin') return <Navigate to="/dashboard" replace />
+  if (!hasAnyRole('admin')) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
+export function SuperAdminRoute({ children }: { children: React.ReactNode }) {
+  const loading = useAuthStore((state) => state.loading)
+  if (loading) return <PageLoader />
+  if (!isSuperAdmin()) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -143,8 +156,10 @@ function App() {
                   element={
                     <Navigate
                       to={
-                        user?.role === 'manager' ? '/leader' :
                         user?.role === 'onboarding' ? '/onboarding' :
+                        user?.role === 'manager' ? '/leader' :
+                        user?.role === 'superadmin' ? '/admin' :
+                        hasAnyRoleSync('hr', 'admin') ? '/hr' :
                         '/dashboard'
                       }
                       replace

@@ -6,8 +6,8 @@ import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Input } from '@/shared/components/ui/Input'
 import { FileText, Download, Search, Upload, Eye, X, Trash2, FolderOpen, FileX } from 'lucide-react'
-import { useAuthStore } from '@/core/auth/store/authStore'
 import { formatFileSize } from '@/shared/lib/documentUtils'
+import { hasAnyRole } from '@/shared/lib/permissions'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -26,7 +26,6 @@ interface UserDocument {
 type DocumentType = 'all' | 'contract' | 'certificate' | 'policy' | 'other'
 
 export function Documents() {
-  const { user } = useAuthStore()
   const [filterType, setFilterType] = useState<DocumentType>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [documents, setDocuments] = useState<UserDocument[]>([])
@@ -193,7 +192,7 @@ export function Documents() {
             <FolderOpen className="h-3.5 w-3.5" />
             {new Set(documents.map(d => d.category)).size} категорий
           </div>
-          {user?.role === 'manager' && (
+          {hasAnyRole('manager') && (
             <button
               onClick={() => setUploadModalOpen(true)}
               className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-card/10 text-white hover:bg-card/20 px-3 py-1.5 text-xs font-medium transition-colors"
@@ -340,7 +339,7 @@ export function Documents() {
                         Скачать
                       </Button>
                     </div>
-                    {user?.role === 'manager' && (
+                    {hasAnyRole('manager') && (
                       <Button
                         className="w-full"
                         variant="ghost"

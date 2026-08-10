@@ -4,6 +4,7 @@ import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/auth
 import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { Button } from '@/shared/components/ui/Button'
+import { hasAnyRole } from '@/shared/lib/permissions'
 
 export interface TimesheetEntry {
   id: number
@@ -46,7 +47,7 @@ function isWeekend(year: number, month: number, day: number) {
   return dow === 0 || dow === 6
 }
 
-export function TimesheetGrid({ timesheetId, entries, employees, year, month, role, onSave }: Props) {
+export function TimesheetGrid({ timesheetId, entries, employees, year, month, onSave }: Props) {
   const totalDays = daysInMonth(year, month)
 
   const [changes, setChanges] = useState<Record<string, { code: string | null }>>({})
@@ -205,7 +206,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, ro
       {error && <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">{error}</div>}
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {role !== 'hr' && role !== 'admin' && (
+        {!hasAnyRole('hr', 'admin') && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-muted-foreground font-medium">Массовые действия:</span>
             <Button variant="outline" size="sm" onClick={fillAllAttendance}>
@@ -267,7 +268,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, ro
               <th className="border-b border-border px-2 py-2 text-center bg-muted font-semibold min-w-[52px] text-xs">
                 ОТ
               </th>
-              {role !== 'hr' && role !== 'admin' && (
+              {!hasAnyRole('hr', 'admin') && (
                 <th className="sticky right-0 z-20 border-b border-l border-border px-2 py-2 text-center bg-muted font-semibold min-w-[64px] text-xs">
                   Действия
                 </th>
@@ -321,7 +322,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, ro
                             className="w-full h-full bg-transparent text-center text-xs focus:outline-none cursor-pointer py-2 px-0 font-medium"
                           >
                             <option value=""></option>
-                            {TIMESHEET_CODES.filter(c => role === 'hr' || role === 'admin' || !['ОТ','ОС','ДО'].includes(c.code)).map(c => (
+                            {TIMESHEET_CODES.filter(c => hasAnyRole('hr', 'admin') || !['ОТ','ОС','ДО'].includes(c.code)).map(c => (
                               <option key={c.code} value={c.code}>{c.code}</option>
                             ))}
                           </select>
@@ -339,7 +340,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, ro
                 <td className="border-b border-border px-2 py-2 text-center font-bold text-blue-400 dark:text-blue-300">
                   {countCode(emp.id, 'ОТ') || ''}
                 </td>
-                {role !== 'hr' && role !== 'admin' && (
+                {!hasAnyRole('hr', 'admin') && (
                   <td className="sticky right-0 z-10 border-l border-b border-border px-2 py-1.5 text-center bg-inherit">
                     <button
                       onClick={() => fillEmployeeAttendance(emp.id)}

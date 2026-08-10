@@ -17,6 +17,7 @@ import { AddMemberModal } from '@/modules/projects/components/modals/AddMemberMo
 import { MemberProjectInfoModal } from '@/modules/projects/components/modals/MemberProjectInfoModal'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { hasAnyRole } from '@/shared/lib/permissions'
 import { getAvatarColor } from '@/shared/lib/constants'
 import { getErrorMessage } from '@/shared/lib/utils'
 import type { ProjectMember } from '@/shared/types'
@@ -142,7 +143,7 @@ export function ProjectDetail() {
   useEffect(() => { if (id) fetchProject() }, [id])
 
   const isLead = project?.leads.some((m) => String(m.id) === String(user?.id))
-  const isAdmin = user?.role === 'admin' || user?.role === 'hr'
+  const isAdmin = hasAnyRole('admin', 'hr')
   const canManage = isLead || isAdmin
 
   const handleRemoveMember = async (memberId: string) => {

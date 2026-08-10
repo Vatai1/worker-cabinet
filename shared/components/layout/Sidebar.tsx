@@ -15,6 +15,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { Logo } from '@/shared/components/brand/Logo'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
+import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
 
 interface NavItem {
   name: string
@@ -112,6 +113,7 @@ const roleLabels: Record<string, string> = {
   hr: 'HR',
   admin: 'Администратор',
   onboarding: 'Онбординг',
+  superadmin: 'Супер-админ',
 }
 
 export function Sidebar() {
@@ -125,9 +127,10 @@ export function Sidebar() {
 
   const rawNavigation =
     user?.role === 'onboarding' ? getOnboardingNavigation() :
-    user?.role === 'manager' ? getManagerNavigation(user?.id) :
-    user?.role === 'admin' ? getAdminNavigation(user?.id) :
-    ['hr'].includes(user?.role ?? '') ? getHRNavigation(user?.id) :
+    isSuperAdmin() ? getAdminNavigation(user?.id) :
+    hasAnyRole('admin') ? getAdminNavigation(user?.id) :
+    hasAnyRole('hr') ? getHRNavigation(user?.id) :
+    user?.role === 'manager' || hasAnyRole('manager') ? getManagerNavigation(user?.id) :
     getEmployeeNavigation(user?.id)
 
   const navigation = !modulesLoaded ? [] : rawNavigation

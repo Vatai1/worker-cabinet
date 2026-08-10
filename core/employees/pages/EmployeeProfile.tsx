@@ -9,6 +9,7 @@ import { AddProjectModal, type Project } from '@/core/admin/components/modals/Ad
 import { SkillsCard } from '@/modules/skills/components/SkillsCard'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
+import { hasAnyRole } from '@/shared/lib/permissions'
 
 import {
   Mail, Phone, Building2, Briefcase,
@@ -395,7 +396,7 @@ export function EmployeeProfile() {
               Проекты
               <span className="text-xs text-muted-foreground font-normal ml-1">({projects.length})</span>
             </CardTitle>
-            {(isOwnProfile || currentUser?.role === 'hr' || currentUser?.role === 'admin') && (
+            {(isOwnProfile || hasAnyRole('hr', 'admin')) && (
               <Button variant="outline" size="sm" onClick={() => setIsAddProjectModalOpen(true)} className="h-7 gap-1.5 text-xs interactive">
                 <Plus className="h-3.5 w-3.5" />
                 Добавить

@@ -20,6 +20,7 @@ import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
+import { hasAnyRole, hasAnyRoleSync } from '@/shared/lib/permissions'
 import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon } from 'lucide-react'
 import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
 import { VacationTransferApplicationModal } from '@/modules/vacation/components/modals/VacationTransferApplicationModal'
@@ -73,7 +74,7 @@ export function Vacation() {
 
       if (isManager) {
         fetchRestrictions(user.departmentId || '1')
-        if (user.role === 'manager') {
+        if (hasAnyRoleSync('manager')) {
           fetchDepartmentRequests(user.departmentId || '1')
         } else {
           fetchAllRequests()
@@ -358,8 +359,8 @@ export function Vacation() {
   const handlePrevYear = () => setYear((y) => y - 1)
   const handleNextYear = () => setYear((y) => y + 1)
 
-  const isManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin'
-  const isDepartmentManager = user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin' || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
+  const isManager = hasAnyRole('manager', 'hr', 'admin')
+  const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
 
   return (
     <div className="space-y-6 animate-fade-in">
