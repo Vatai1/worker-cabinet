@@ -3,22 +3,27 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { upload, uploadWithMagicBytes } from '../middleware/upload.js'
 import { uploadToS3, deleteFromS3, getFromS3, getPresignedUrl } from '../config/s3.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import jwt from 'jsonwebtoken'
 
 const router = express.Router()
 
 // Helper: get project with members
-async function getProjectWithMembers(projectId) {
-  const projectResult = await query(
-    `SELECT
+async function getProjectWithMembers(projectId, req) {
+  let projectSql = `
+    SELECT
        p.*,
        u.first_name AS creator_first_name,
        u.last_name  AS creator_last_name
      FROM company_projects p
      LEFT JOIN users u ON p.created_by = u.id
-     WHERE p.id = $1`,
-    [projectId]
-  )
+     WHERE p.id = $1`
+  const projectParams = [projectId]
+  if (req.org) {
+    projectParams.push(currentOrgId(req))
+    projectSql += ` AND p.organization_id = $${projectParams.length}`
+  }
+  const projectResult = await query(projectSql, projectParams)
   if (projectResult.rows.length === 0) return null
 
   const project = projectResult.rows[0]
@@ -127,6 +132,12 @@ router.get('/', authenticateToken, async (req, res) => {
 
     sql += ' GROUP BY p.id ORDER BY p.created_at DESC'
 
+    if (req.org) {
+      params.push(currentOrgId(req))
+      const groupPos = sql.search(/\bGROUP BY\b/i)
+      sql = sql.slice(0, groupPos) + ` AND p.organization_id = $${params.length} ` + sql.slice(groupPos)
+    }
+
     const result = await query(sql, params)
     res.json(result.rows)
   } catch (error) {
@@ -163,7 +174,7 @@ router.get('/', authenticateToken, async (req, res) => {
 // GET /api/projects/:id — full detail
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const project = await getProjectWithMembers(req.params.id)
+    const project = await getProjectWithMembers(req.params.id, req)
     if (!project) return res.status(404).json({ error: 'Project not found' })
     res.json(project)
   } catch (error) {
@@ -214,8 +225,8 @@ router.post('/', authenticateToken, async (req, res) => {
     await client.query('BEGIN')
 
     const projectResult = await client.query(
-      `INSERT INTO company_projects (name, full_name, description, status, start_date, end_date, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO company_projects (name, full_name, description, status, start_date, end_date, created_by, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         name.trim(),
@@ -225,6 +236,7 @@ router.post('/', authenticateToken, async (req, res) => {
         startDate || null,
         endDate   || null,
         userId,
+        currentOrgId(req),
       ]
     )
     const project = projectResult.rows[0]
@@ -249,7 +261,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
 
-    const full = await getProjectWithMembers(project.id)
+    const full = await getProjectWithMembers(project.id, req)
     res.status(201).json(full)
   } catch (error) {
     await client.query('ROLLBACK')
@@ -312,24 +324,27 @@ router.put('/:id', authenticateToken, async (req, res) => {
     await client.query('BEGIN')
 
     const result = await client.query(
-      `UPDATE company_projects
-       SET name = COALESCE($1, name),
-           full_name = COALESCE($2, full_name),
-           description = $3,
-           status = COALESCE($4, status),
-           start_date = $5,
-           end_date = $6
-       WHERE id = $7
-       RETURNING *`,
-      [
-        name?.trim() || null,
-        fullName?.trim() || null,
-        description?.trim() || null,
-        status || null,
-        startDate || null,
-        endDate   || null,
-        id,
-      ]
+      ...orgScopedQuery(
+        `UPDATE company_projects
+         SET name = COALESCE($1, name),
+             full_name = COALESCE($2, full_name),
+             description = $3,
+             status = COALESCE($4, status),
+             start_date = $5,
+             end_date = $6
+         WHERE id = $7
+         RETURNING *`,
+        [
+          name?.trim() || null,
+          fullName?.trim() || null,
+          description?.trim() || null,
+          status || null,
+          startDate || null,
+          endDate   || null,
+          id,
+        ],
+        req
+      )
     )
 
     if (result.rows.length === 0) {
@@ -339,7 +354,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
 
-    const full = await getProjectWithMembers(id)
+    const full = await getProjectWithMembers(id, req)
     res.json(full)
   } catch (error) {
     await client.query('ROLLBACK')
@@ -401,7 +416,7 @@ router.post('/:id/members', authenticateToken, async (req, res) => {
       [id, targetUserId, role || 'member']
     )
 
-    const full = await getProjectWithMembers(id)
+    const full = await getProjectWithMembers(id, req)
     res.json(full)
   } catch (error) {
     console.error('Error adding member:', error)
@@ -461,7 +476,7 @@ router.put('/:id/members/:userId', authenticateToken, async (req, res) => {
       [description || null, id, targetUserId]
     )
 
-    const full = await getProjectWithMembers(id)
+    const full = await getProjectWithMembers(id, req)
     res.json(full)
   } catch (error) {
     console.error('Error updating member:', error)
@@ -511,7 +526,7 @@ router.delete('/:id/members/:userId', authenticateToken, async (req, res) => {
       [id, targetUserId]
     )
 
-    const full = await getProjectWithMembers(id)
+    const full = await getProjectWithMembers(id, req)
     res.json(full)
   } catch (error) {
     console.error('Error removing member:', error)
@@ -560,6 +575,11 @@ router.get('/:id/documents', authenticateToken, async (req, res) => {
       sql += ` AND d.folder_path = $${params.length}`
     }
 
+    if (req.org) {
+      params.push(currentOrgId(req))
+      sql += ` AND d.organization_id = $${params.length}`
+    }
+
     const page = Math.max(1, parseInt(req.query.page) || 1)
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 200))
     sql += ` ORDER BY d.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
@@ -606,10 +626,13 @@ router.get('/:id/folders', authenticateToken, async (req, res) => {
     const parentPath = req.query.parent || '/'
 
     const result = await query(
-      `SELECT * FROM project_folders
-       WHERE project_id = $1 AND parent_path = $2
-       ORDER BY name`,
-      [id, parentPath]
+      ...orgScopedQuery(
+        `SELECT * FROM project_folders
+         WHERE project_id = $1 AND parent_path = $2
+         ORDER BY name`,
+        [id, parentPath],
+        req
+      )
     )
     res.json(result.rows)
   } catch (error) {
@@ -666,11 +689,11 @@ router.post('/:id/folders', authenticateToken, async (req, res) => {
     const path = `${normalizedParent}${safeName}/`
 
     const result = await query(
-      `INSERT INTO project_folders (project_id, name, path, parent_path, created_by)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO project_folders (project_id, name, path, parent_path, created_by, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (project_id, path) DO NOTHING
        RETURNING *`,
-      [id, safeName, path, parentPath, userId]
+      [id, safeName, path, parentPath, userId, currentOrgId(req)]
     )
     if (result.rows.length === 0) return res.status(409).json({ error: 'Папка уже существует' })
     res.status(201).json(result.rows[0])
@@ -727,8 +750,11 @@ router.put('/:id/folders/:folderId', authenticateToken, async (req, res) => {
     if (accessCheck.rows.length === 0) return res.status(403).json({ error: 'Forbidden' })
 
     const folderResult = await query(
-      `SELECT * FROM project_folders WHERE id = $1 AND project_id = $2`,
-      [folderId, id]
+      ...orgScopedQuery(
+        `SELECT * FROM project_folders WHERE id = $1 AND project_id = $2`,
+        [folderId, id],
+        req
+      )
     )
     if (folderResult.rows.length === 0) return res.status(404).json({ error: 'Folder not found' })
 
@@ -737,11 +763,14 @@ router.put('/:id/folders/:folderId', authenticateToken, async (req, res) => {
     const newPath = `${folder.parent_path}${safeName}/`
 
     const result = await query(
-      `UPDATE project_folders
-       SET name = $1, path = $2
-       WHERE id = $3 AND project_id = $4
-       RETURNING *`,
-      [safeName, newPath, folderId, id]
+      ...orgScopedQuery(
+        `UPDATE project_folders
+         SET name = $1, path = $2
+         WHERE id = $3 AND project_id = $4
+         RETURNING *`,
+        [safeName, newPath, folderId, id],
+        req
+      )
     )
 
     res.json(result.rows[0])
@@ -797,12 +826,18 @@ router.delete('/:id/folders', authenticateToken, async (req, res) => {
     try {
       await client.query('BEGIN')
       await client.query(
-        `DELETE FROM project_documents WHERE project_id = $1 AND folder_path LIKE $2`,
-        [id, `${path}%`]
+        ...orgScopedQuery(
+          `DELETE FROM project_documents WHERE project_id = $1 AND folder_path LIKE $2`,
+          [id, `${path}%`],
+          req
+        )
       )
       await client.query(
-        `DELETE FROM project_folders WHERE project_id = $1 AND path LIKE $2`,
-        [id, `${path}%`]
+        ...orgScopedQuery(
+          `DELETE FROM project_folders WHERE project_id = $1 AND path LIKE $2`,
+          [id, `${path}%`],
+          req
+        )
       )
       await client.query('COMMIT')
     } catch (error) {
@@ -878,8 +913,8 @@ router.post('/:id/documents', authenticateToken, upload.single('file'), uploadWi
     await uploadToS3(req.file, fileKey)
 
     const result = await query(
-      `INSERT INTO project_documents (project_id, name, file_path, file_size, mime_type, uploaded_by, folder_path, tags, description)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO project_documents (project_id, name, file_path, file_size, mime_type, uploaded_by, folder_path, tags, description, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         id,
@@ -891,6 +926,7 @@ router.post('/:id/documents', authenticateToken, upload.single('file'), uploadWi
         folderPath,
         tags ? JSON.parse(tags) : [],
         description || null,
+        currentOrgId(req),
       ]
     )
     
@@ -934,19 +970,22 @@ router.get('/:id/documents/:documentId/download', authenticateToken, async (req,
     const userId = req.user.id
     
     const docResult = await query(
-      `SELECT file_path, name, mime_type FROM project_documents WHERE id = $1 AND project_id = $2`,
-      [documentId, id]
+      ...orgScopedQuery(
+        `SELECT file_path, name, mime_type FROM project_documents WHERE id = $1 AND project_id = $2`,
+        [documentId, id],
+        req
+      )
     )
     if (docResult.rows.length === 0) {
       return res.status(404).json({ error: 'Document not found' })
     }
-    
+
     const doc = docResult.rows[0]
     const { Body, ContentType } = await getFromS3(doc.file_path)
-    
+
     res.setHeader('Content-Type', ContentType || doc.mime_type)
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.name)}"`)
-    
+
     Body.pipe(res)
   } catch (error) {
     console.error('Error downloading document:', error)
@@ -982,8 +1021,11 @@ router.get('/:id/documents/:documentId/preview', authenticateToken, async (req, 
     const userId = req.user.id
     
     const docResult = await query(
-      `SELECT file_path, name, mime_type, file_size FROM project_documents WHERE id = $1 AND project_id = $2`,
-      [documentId, id]
+      ...orgScopedQuery(
+        `SELECT file_path, name, mime_type, file_size FROM project_documents WHERE id = $1 AND project_id = $2`,
+        [documentId, id],
+        req
+      )
     )
     if (docResult.rows.length === 0) {
       return res.status(404).json({ error: 'Document not found' })
@@ -1067,8 +1109,11 @@ router.put('/:id/documents/:documentId', authenticateToken, async (req, res) => 
 
     // Check access
     const accessCheck = await query(
-      `SELECT uploaded_by FROM project_documents WHERE id = $1 AND project_id = $2`,
-      [documentId, id]
+      ...orgScopedQuery(
+        `SELECT uploaded_by FROM project_documents WHERE id = $1 AND project_id = $2`,
+        [documentId, id],
+        req
+      )
     )
     if (accessCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Document not found' })
@@ -1111,8 +1156,11 @@ router.put('/:id/documents/:documentId', authenticateToken, async (req, res) => 
     values.push(documentId)
 
     const result = await query(
-      `UPDATE project_documents SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-      values
+      ...orgScopedQuery(
+        `UPDATE project_documents SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+        values,
+        req
+      )
     )
 
     res.json(result.rows[0])
@@ -1161,8 +1209,11 @@ router.put('/:id/documents/:documentId/move', authenticateToken, async (req, res
 
     // Check access
     const accessCheck = await query(
-      `SELECT uploaded_by FROM project_documents WHERE id = $1 AND project_id = $2`,
-      [documentId, id]
+      ...orgScopedQuery(
+        `SELECT uploaded_by FROM project_documents WHERE id = $1 AND project_id = $2`,
+        [documentId, id],
+        req
+      )
     )
     if (accessCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Document not found' })
@@ -1185,8 +1236,11 @@ router.put('/:id/documents/:documentId/move', authenticateToken, async (req, res
     const targetPath = folderPath || '/'
     
     const result = await query(
-      `UPDATE project_documents SET folder_path = $1 WHERE id = $2 AND project_id = $3 RETURNING *`,
-      [targetPath, documentId, id]
+      ...orgScopedQuery(
+        `UPDATE project_documents SET folder_path = $1 WHERE id = $2 AND project_id = $3 RETURNING *`,
+        [targetPath, documentId, id],
+        req
+      )
     )
 
     res.json(result.rows[0])
@@ -1241,8 +1295,11 @@ router.put('/:id/folders/:folderId/move', authenticateToken, async (req, res) =>
     if (accessCheck.rows.length === 0) return res.status(403).json({ error: 'Forbidden' })
 
     const folderResult = await query(
-      `SELECT * FROM project_folders WHERE id = $1 AND project_id = $2`,
-      [folderId, id]
+      ...orgScopedQuery(
+        `SELECT * FROM project_folders WHERE id = $1 AND project_id = $2`,
+        [folderId, id],
+        req
+      )
     )
     if (folderResult.rows.length === 0) return res.status(404).json({ error: 'Folder not found' })
 
@@ -1252,8 +1309,11 @@ router.put('/:id/folders/:folderId/move', authenticateToken, async (req, res) =>
 
     // Check if folder with same name exists in target
     const existingCheck = await query(
-      `SELECT 1 FROM project_folders WHERE project_id = $1 AND path = $2 AND id != $3`,
-      [id, newPath, folderId]
+      ...orgScopedQuery(
+        `SELECT 1 FROM project_folders WHERE project_id = $1 AND path = $2 AND id != $3`,
+        [id, newPath, folderId],
+        req
+      )
     )
     if (existingCheck.rows.length > 0) {
       return res.status(400).json({ error: 'Папка с таким именем уже существует в целевой директории' })
@@ -1265,19 +1325,28 @@ router.put('/:id/folders/:folderId/move', authenticateToken, async (req, res) =>
     }
 
     const result = await query(
-      `UPDATE project_folders SET parent_path = $1, path = $2 WHERE id = $3 AND project_id = $4 RETURNING *`,
-      [newParentPath, newPath, folderId, id]
+      ...orgScopedQuery(
+        `UPDATE project_folders SET parent_path = $1, path = $2 WHERE id = $3 AND project_id = $4 RETURNING *`,
+        [newParentPath, newPath, folderId, id],
+        req
+      )
     )
 
     // Update paths of all subfolders and documents
     const oldPath = folder.path
     await query(
-      `UPDATE project_folders SET path = $1 || substring(path FROM $2) WHERE project_id = $3 AND path LIKE $4 AND id != $5`,
-      [newPath, oldPath.length + 1, id, `${oldPath}%`, folderId]
+      ...orgScopedQuery(
+        `UPDATE project_folders SET path = $1 || substring(path FROM $2) WHERE project_id = $3 AND path LIKE $4 AND id != $5`,
+        [newPath, oldPath.length + 1, id, `${oldPath}%`, folderId],
+        req
+      )
     )
     await query(
-      `UPDATE project_documents SET folder_path = $1 || substring(folder_path FROM $2) WHERE project_id = $3 AND folder_path LIKE $4`,
-      [newPath.slice(0, -1), oldPath.length, id, `${oldPath.slice(0, -1)}%`]
+      ...orgScopedQuery(
+        `UPDATE project_documents SET folder_path = $1 || substring(folder_path FROM $2) WHERE project_id = $3 AND folder_path LIKE $4`,
+        [newPath.slice(0, -1), oldPath.length, id, `${oldPath.slice(0, -1)}%`],
+        req
+      )
     )
 
     res.json(result.rows[0])
@@ -1342,8 +1411,11 @@ router.delete('/:id/documents/:documentId', authenticateToken, async (req, res) 
 
     // Check access
     const accessCheck = await query(
-      `SELECT uploaded_by, file_path FROM project_documents WHERE id = $1 AND project_id = $2`,
-      [documentId, id]
+      ...orgScopedQuery(
+        `SELECT uploaded_by, file_path FROM project_documents WHERE id = $1 AND project_id = $2`,
+        [documentId, id],
+        req
+      )
     )
     if (accessCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Document not found' })
@@ -1364,7 +1436,7 @@ router.delete('/:id/documents/:documentId', authenticateToken, async (req, res) 
     }
     
     await deleteFromS3(doc.file_path)
-    await query('DELETE FROM project_documents WHERE id = $1', [documentId])
+    await query(...orgScopedQuery('DELETE FROM project_documents WHERE id = $1', [documentId], req))
     res.json({ success: true })
   } catch (error) {
     console.error('Error deleting document:', error)
@@ -1395,17 +1467,19 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params
     const userId = req.user.id
 
-    const accessCheck = await query(
-      `SELECT 1 FROM company_projects WHERE id = $1 AND created_by = $2
-       UNION
-       SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`,
-      [id, userId]
-    )
+    let accessSql = `SELECT 1 FROM company_projects WHERE id = $1 AND created_by = $2`
+    const accessParams = [id, userId]
+    if (req.org) {
+      accessParams.push(currentOrgId(req))
+      accessSql += ` AND organization_id = $${accessParams.length}`
+    }
+    accessSql += ` UNION SELECT 1 FROM users WHERE id = $2 AND role IN ('admin', 'hr')`
+    const accessCheck = await query(accessSql, accessParams)
     if (accessCheck.rows.length === 0) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
-    await query('DELETE FROM company_projects WHERE id = $1', [id])
+    await query(...orgScopedQuery('DELETE FROM company_projects WHERE id = $1', [id], req))
     res.json({ success: true })
   } catch (error) {
     console.error('Error deleting project:', error)
@@ -1474,8 +1548,11 @@ router.get('/:id/documents/:documentId/preview-token', authenticateToken, async 
 
     // Check if document exists and user has access
     const docCheck = await query(
-      `SELECT 1 FROM project_documents WHERE id = $1 AND project_id = $2`,
-      [documentId, id]
+      ...orgScopedQuery(
+        `SELECT 1 FROM project_documents WHERE id = $1 AND project_id = $2`,
+        [documentId, id],
+        req
+      )
     )
 
     if (docCheck.rows.length === 0) {

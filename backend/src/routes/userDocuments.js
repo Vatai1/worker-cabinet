@@ -2,6 +2,7 @@ import express from 'express'
 import path from 'node:path'
 import { query } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { upload, uploadWithMagicBytes } from '../middleware/upload.js'
 import { uploadToS3, getFromS3, deleteFromS3 } from '../config/s3.js'
 
@@ -45,9 +46,9 @@ router.get('/', authenticateToken, async (req, res) => {
         u.last_name AS uploader_last_name
        FROM user_documents ud
        LEFT JOIN users u ON ud.uploaded_by = u.id
-       WHERE ud.user_id = $1
+       WHERE ud.user_id = $1${req.org ? ' AND ud.organization_id = $2' : ''}
        ORDER BY ud.created_at DESC`,
-      [userId]
+      req.org ? [userId, req.org.org_id] : [userId]
     )
 
     const documents = result.rows.map(doc => ({
@@ -107,10 +108,10 @@ router.post('/', authenticateToken, upload.single('file'), uploadWithMagicBytes(
     await uploadToS3(file, s3Key)
 
     const result = await query(
-      `INSERT INTO user_documents (user_id, name, file_path, file_size, mime_type, category, description, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO user_documents (user_id, name, file_path, file_size, mime_type, category, description, uploaded_by, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [userId, safeName, s3Key, file.size, file.mimetype, category || 'other', description, userId]
+      [userId, safeName, s3Key, file.size, file.mimetype, category || 'other', description, userId, currentOrgId(req)]
     )
 
     const doc = result.rows[0]
@@ -157,10 +158,12 @@ router.get('/:id/download', authenticateToken, async (req, res) => {
     const { id } = req.params
     const userId = req.user.id
 
-    const result = await query(
+    const { text, values } = orgScopedQuery(
       'SELECT * FROM user_documents WHERE id = $1 AND user_id = $2',
-      [id, userId]
+      [id, userId],
+      req
     )
+    const result = await query(text, values)
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Документ не найден' })
@@ -210,10 +213,12 @@ router.get('/:id/preview', authenticateToken, async (req, res) => {
     const { id } = req.params
     const userId = req.user.id
 
-    const result = await query(
+    const { text, values } = orgScopedQuery(
       'SELECT * FROM user_documents WHERE id = $1 AND user_id = $2',
-      [id, userId]
+      [id, userId],
+      req
     )
+    const result = await query(text, values)
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Документ не найден' })
@@ -257,10 +262,12 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params
     const userId = req.user.id
 
-    const result = await query(
+    const { text, values } = orgScopedQuery(
       'SELECT * FROM user_documents WHERE id = $1 AND user_id = $2',
-      [id, userId]
+      [id, userId],
+      req
     )
+    const result = await query(text, values)
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Документ не найден' })
@@ -269,7 +276,8 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     const doc = result.rows[0]
 
     await deleteFromS3(doc.file_path)
-    await query('DELETE FROM user_documents WHERE id = $1', [id])
+    const del = orgScopedQuery('DELETE FROM user_documents WHERE id = $1', [id], req)
+    await query(del.text, del.values)
 
     res.json({ success: true })
   } catch (error) {

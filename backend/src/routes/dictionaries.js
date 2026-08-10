@@ -4,6 +4,7 @@ import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../middleware/errors.js'
 import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import multer from 'multer'
 
 async function validateOnlyOfficeUrl(url) {
@@ -67,14 +68,19 @@ const router = express.Router()
  *               items: { $ref: '#/components/schemas/Department' }
  */
 router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
-  const result = await query(
-    `SELECT d.id, d.name, d.manager_id, d.description, d.vacation_requests_blocked,
+  let sql = `
+    SELECT d.id, d.name, d.manager_id, d.description, d.vacation_requests_blocked,
             m.first_name || ' ' || m.last_name as manager_name,
             (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
      FROM departments d
-     LEFT JOIN users m ON d.manager_id = m.id
-     ORDER BY d.name`
-  )
+     LEFT JOIN users m ON d.manager_id = m.id`
+  const params = []
+  if (req.org) {
+    params.push(currentOrgId(req))
+    sql += ` WHERE d.organization_id = $${params.length}`
+  }
+  sql += ` ORDER BY d.name`
+  const result = await query(sql, params)
   res.json(result.rows)
 }))
 
@@ -110,11 +116,15 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
   const { name, manager_id, description } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
 
-  const existing = await query('SELECT id FROM departments WHERE name = $1', [name.trim()])
+  const existing = await query(
+    ...orgScopedQuery('SELECT id FROM departments WHERE name = $1', [name.trim()], req)
+  )
   if (existing.rows.length > 0) throw new ConflictError('Отдел с таким названием уже существует')
 
   if (manager_id) {
-    const alreadyManager = await query('SELECT d.id, d.name FROM departments d WHERE d.manager_id = $1', [manager_id])
+    const alreadyManager = await query(
+      ...orgScopedQuery('SELECT d.id, d.name FROM departments d WHERE d.manager_id = $1', [manager_id], req)
+    )
     if (alreadyManager.rows.length > 0) {
       const dept = alreadyManager.rows[0]
       throw new ConflictError(`Этот сотрудник уже является руководителем отдела «${dept.name}»`)
@@ -122,8 +132,8 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
   }
 
   const result = await query(
-    'INSERT INTO departments (name, manager_id, description) VALUES ($1, $2, $3) RETURNING id, name, manager_id, description',
-    [name.trim(), manager_id || null, description?.trim() || null]
+    'INSERT INTO departments (name, manager_id, description, organization_id) VALUES ($1, $2, $3, $4) RETURNING id, name, manager_id, description',
+    [name.trim(), manager_id || null, description?.trim() || null, currentOrgId(req)]
   )
   res.status(201).json(result.rows[0])
 }))
@@ -161,14 +171,14 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
   const { name, manager_id, description } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
 
-  const existing = await query('SELECT id FROM departments WHERE id = $1', [id])
+  const existing = await query(...orgScopedQuery('SELECT id FROM departments WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Отдел не найден')
 
-  const duplicate = await query('SELECT id FROM departments WHERE name = $1 AND id != $2', [name.trim(), id])
+  const duplicate = await query(...orgScopedQuery('SELECT id FROM departments WHERE name = $1 AND id != $2', [name.trim(), id], req))
   if (duplicate.rows.length > 0) throw new ConflictError('Отдел с таким названием уже существует')
 
   if (manager_id) {
-    const alreadyManager = await query('SELECT d.id, d.name FROM departments d WHERE d.manager_id = $1 AND d.id != $2', [manager_id, id])
+    const alreadyManager = await query(...orgScopedQuery('SELECT d.id, d.name FROM departments d WHERE d.manager_id = $1 AND d.id != $2', [manager_id, id], req))
     if (alreadyManager.rows.length > 0) {
       const dept = alreadyManager.rows[0]
       throw new ConflictError(`Этот сотрудник уже является руководителем отдела «${dept.name}»`)
@@ -176,8 +186,11 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
   }
 
   const result = await query(
-    'UPDATE departments SET name = $1, manager_id = $2, description = $3 WHERE id = $4 RETURNING id, name, manager_id, description',
-    [name.trim(), manager_id || null, description?.trim() || null, id]
+    ...orgScopedQuery(
+      'UPDATE departments SET name = $1, manager_id = $2, description = $3 WHERE id = $4 RETURNING id, name, manager_id, description',
+      [name.trim(), manager_id || null, description?.trim() || null, id],
+      req
+    )
   )
   res.json(result.rows[0])
 }))
@@ -202,7 +215,7 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
 router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
-  const existing = await query('SELECT id FROM departments WHERE id = $1', [id])
+  const existing = await query(...orgScopedQuery('SELECT id FROM departments WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Отдел не найден')
 
   const usersInDept = await query('SELECT COUNT(*) as cnt FROM users WHERE department_id = $1', [id])
@@ -210,7 +223,7 @@ router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin
     throw new ConflictError('Нельзя удалить отдел, в котором есть сотрудники')
   }
 
-  await query('DELETE FROM departments WHERE id = $1', [id])
+  await query(...orgScopedQuery('DELETE FROM departments WHERE id = $1', [id], req))
   res.json({ success: true })
 }))
 
@@ -228,10 +241,14 @@ router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin
  */
 router.get('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
-    `SELECT sd.id, sd.name, sd.created_at,
-            (SELECT COUNT(*) FROM user_skills WHERE skill_id = sd.id) as user_count
-     FROM skills_dictionary sd
-     ORDER BY sd.name`
+    ...orgScopedQuery(
+      `SELECT sd.id, sd.name, sd.created_at,
+              (SELECT COUNT(*) FROM user_skills WHERE skill_id = sd.id) as user_count
+       FROM skills_dictionary sd
+       ORDER BY sd.name`,
+      [],
+      req
+    )
   )
   res.json(result.rows)
 }))
@@ -261,12 +278,12 @@ router.post('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHa
   const { name } = req.body
   if (!name?.trim()) throw new ValidationError('Название навыка обязательно')
 
-  const existing = await query('SELECT id FROM skills_dictionary WHERE name = $1', [name.trim()])
+  const existing = await query(...orgScopedQuery('SELECT id FROM skills_dictionary WHERE name = $1', [name.trim()], req))
   if (existing.rows.length > 0) throw new ConflictError('Навык с таким названием уже существует')
 
   const result = await query(
-    'INSERT INTO skills_dictionary (name) VALUES ($1) RETURNING id, name',
-    [name.trim()]
+    'INSERT INTO skills_dictionary (name, organization_id) VALUES ($1, $2) RETURNING id, name',
+    [name.trim(), currentOrgId(req)]
   )
   res.status(201).json(result.rows[0])
 }))
@@ -302,15 +319,14 @@ router.put('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyn
   const { name } = req.body
   if (!name?.trim()) throw new ValidationError('Название навыка обязательно')
 
-  const existing = await query('SELECT id FROM skills_dictionary WHERE id = $1', [id])
+  const existing = await query(...orgScopedQuery('SELECT id FROM skills_dictionary WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Навык не найден')
 
-  const duplicate = await query('SELECT id FROM skills_dictionary WHERE name = $1 AND id != $2', [name.trim(), id])
+  const duplicate = await query(...orgScopedQuery('SELECT id FROM skills_dictionary WHERE name = $1 AND id != $2', [name.trim(), id], req))
   if (duplicate.rows.length > 0) throw new ConflictError('Навык с таким названием уже существует')
 
   const result = await query(
-    'UPDATE skills_dictionary SET name = $1 WHERE id = $2 RETURNING id, name',
-    [name.trim(), id]
+    ...orgScopedQuery('UPDATE skills_dictionary SET name = $1 WHERE id = $2 RETURNING id, name', [name.trim(), id], req)
   )
   res.json(result.rows[0])
 }))
@@ -335,7 +351,7 @@ router.put('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyn
 router.delete('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
-  const existing = await query('SELECT id FROM skills_dictionary WHERE id = $1', [id])
+  const existing = await query(...orgScopedQuery('SELECT id FROM skills_dictionary WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Навык не найден')
 
   const usersWithSkill = await query('SELECT COUNT(*) as cnt FROM user_skills WHERE skill_id = $1', [id])
@@ -343,7 +359,7 @@ router.delete('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), a
     throw new ConflictError('Нельзя удалить навык, который привязан к сотрудникам')
   }
 
-  await query('DELETE FROM skills_dictionary WHERE id = $1', [id])
+  await query(...orgScopedQuery('DELETE FROM skills_dictionary WHERE id = $1', [id], req))
   res.json({ success: true })
 }))
 
@@ -361,10 +377,14 @@ router.delete('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), a
  */
 router.get('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
-    `SELECT vt.id, vt.code, vt.name,
-            (SELECT COUNT(*) FROM vacation_requests WHERE vacation_type_id = vt.id) as request_count
-     FROM vacation_types vt
-     ORDER BY vt.name`
+    ...orgScopedQuery(
+      `SELECT vt.id, vt.code, vt.name,
+              (SELECT COUNT(*) FROM vacation_requests WHERE vacation_type_id = vt.id) as request_count
+       FROM vacation_types vt
+       ORDER BY vt.name`,
+      [],
+      req
+    )
   )
   res.json(result.rows)
 }))
@@ -396,15 +416,15 @@ router.post('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'),
   if (!code?.trim()) throw new ValidationError('Код типа отпуска обязателен')
   if (!name?.trim()) throw new ValidationError('Название типа отпуска обязательно')
 
-  const existingCode = await query('SELECT id FROM vacation_types WHERE code = $1', [code.trim()])
+  const existingCode = await query(...orgScopedQuery('SELECT id FROM vacation_types WHERE code = $1', [code.trim()], req))
   if (existingCode.rows.length > 0) throw new ConflictError('Тип отпуска с таким кодом уже существует')
 
-  const existingName = await query('SELECT id FROM vacation_types WHERE name = $1', [name.trim()])
+  const existingName = await query(...orgScopedQuery('SELECT id FROM vacation_types WHERE name = $1', [name.trim()], req))
   if (existingName.rows.length > 0) throw new ConflictError('Тип отпуска с таким названием уже существует')
 
   const result = await query(
-    'INSERT INTO vacation_types (code, name) VALUES ($1, $2) RETURNING id, code, name',
-    [code.trim(), name.trim()]
+    'INSERT INTO vacation_types (code, name, organization_id) VALUES ($1, $2, $3) RETURNING id, code, name',
+    [code.trim(), name.trim(), currentOrgId(req)]
   )
   res.status(201).json(result.rows[0])
 }))
@@ -442,18 +462,17 @@ router.put('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'admin
   if (!code?.trim()) throw new ValidationError('Код типа отпуска обязателен')
   if (!name?.trim()) throw new ValidationError('Название типа отпуска обязательно')
 
-  const existing = await query('SELECT id FROM vacation_types WHERE id = $1', [id])
+  const existing = await query(...orgScopedQuery('SELECT id FROM vacation_types WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Тип отпуска не найден')
 
-  const dupCode = await query('SELECT id FROM vacation_types WHERE code = $1 AND id != $2', [code.trim(), id])
+  const dupCode = await query(...orgScopedQuery('SELECT id FROM vacation_types WHERE code = $1 AND id != $2', [code.trim(), id], req))
   if (dupCode.rows.length > 0) throw new ConflictError('Тип отпуска с таким кодом уже существует')
 
-  const dupName = await query('SELECT id FROM vacation_types WHERE name = $1 AND id != $2', [name.trim(), id])
+  const dupName = await query(...orgScopedQuery('SELECT id FROM vacation_types WHERE name = $1 AND id != $2', [name.trim(), id], req))
   if (dupName.rows.length > 0) throw new ConflictError('Тип отпуска с таким названием уже существует')
 
   const result = await query(
-    'UPDATE vacation_types SET code = $1, name = $2 WHERE id = $3 RETURNING id, code, name',
-    [code.trim(), name.trim(), id]
+    ...orgScopedQuery('UPDATE vacation_types SET code = $1, name = $2 WHERE id = $3 RETURNING id, code, name', [code.trim(), name.trim(), id], req)
   )
   res.json(result.rows[0])
 }))
@@ -478,15 +497,15 @@ router.put('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'admin
 router.delete('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
-  const existing = await query('SELECT id FROM vacation_types WHERE id = $1', [id])
+  const existing = await query(...orgScopedQuery('SELECT id FROM vacation_types WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Тип отпуска не найден')
 
-  const requestsWithType = await query('SELECT COUNT(*) as cnt FROM vacation_requests WHERE vacation_type_id = $1', [id])
+  const requestsWithType = await query(...orgScopedQuery('SELECT COUNT(*) as cnt FROM vacation_requests WHERE vacation_type_id = $1', [id], req))
   if (parseInt(requestsWithType.rows[0].cnt) > 0) {
     throw new ConflictError('Нельзя удалить тип отпуска, который используется в заявках')
   }
 
-  await query('DELETE FROM vacation_types WHERE id = $1', [id])
+  await query(...orgScopedQuery('DELETE FROM vacation_types WHERE id = $1', [id], req))
   res.json({ success: true })
 }))
 
@@ -543,11 +562,12 @@ router.delete('/positions/:name', authenticateToken, authorizeRoles('admin'), as
  *         description: Список шаблонов
  */
 router.get('/doc-templates', authenticateToken, asyncHandler(async (req, res) => {
-  const result = await query(
+  const { text, values } = orgScopedQuery(
     `SELECT id, name, description, category, purpose, file_key, mime_type, size, created_at, download_count
      FROM document_templates
-     ORDER BY name`
+     ORDER BY name`, [], req
   )
+  const result = await query(text, values)
   res.json(result.rows)
 }))
 
@@ -580,7 +600,8 @@ router.post('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), 
   if (!name?.trim()) throw new ValidationError('Название шаблона обязательно')
 
   if (purpose?.trim()) {
-    const existing = await query('SELECT id FROM document_templates WHERE purpose = $1', [purpose.trim()])
+    const { text, values } = orgScopedQuery('SELECT id FROM document_templates WHERE purpose = $1', [purpose.trim()], req)
+    const existing = await query(text, values)
     if (existing.rows.length > 0) throw new ConflictError('Шаблон с таким назначением уже существует')
   }
 
@@ -596,8 +617,8 @@ router.post('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), 
   }
 
   const result = await query(
-    `INSERT INTO document_templates (name, description, category, purpose, file_key, mime_type, size) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, description, category, purpose, file_key, mime_type, size, created_at, download_count`,
-    [name.trim(), description?.trim() || null, 'general', purpose?.trim() || null, fileKey, mimeType, fileSize]
+    `INSERT INTO document_templates (name, description, category, purpose, file_key, mime_type, size, organization_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, description, category, purpose, file_key, mime_type, size, created_at, download_count`,
+    [name.trim(), description?.trim() || null, 'general', purpose?.trim() || null, fileKey, mimeType, fileSize, currentOrgId(req)]
   )
   res.status(201).json(result.rows[0])
 }))
@@ -635,11 +656,13 @@ router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'
   const { name, description, purpose } = req.body
   if (!name?.trim()) throw new ValidationError('Название шаблона обязательно')
 
-  const existing = await query('SELECT id, file_key, mime_type, size FROM document_templates WHERE id = $1', [id])
+  const { text: eText, values: eVals } = orgScopedQuery('SELECT id, file_key, mime_type, size FROM document_templates WHERE id = $1', [id], req)
+  const existing = await query(eText, eVals)
   if (existing.rows.length === 0) throw new NotFoundError('Шаблон не найден')
 
   if (purpose?.trim()) {
-    const duplicate = await query('SELECT id FROM document_templates WHERE purpose = $1 AND id != $2', [purpose.trim(), id])
+    const { text: dText, values: dVals } = orgScopedQuery('SELECT id FROM document_templates WHERE purpose = $1 AND id != $2', [purpose.trim(), id], req)
+    const duplicate = await query(dText, dVals)
     if (duplicate.rows.length > 0) throw new ConflictError('Шаблон с таким назначением уже существует')
   }
 
@@ -655,10 +678,11 @@ router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'
     fileSize = req.file.size
   }
 
-  const result = await query(
+  const { text: uText, values: uVals } = orgScopedQuery(
     `UPDATE document_templates SET name = $1, description = $2, category = $3, purpose = $4, file_key = $5, mime_type = $6, size = $7 WHERE id = $8 RETURNING id, name, description, category, purpose, file_key, mime_type, size, created_at, download_count`,
-    [name.trim(), description?.trim() || null, 'general', purpose?.trim() || null, fileKey, mimeType, fileSize, id]
+    [name.trim(), description?.trim() || null, 'general', purpose?.trim() || null, fileKey, mimeType, fileSize, id], req
   )
+  const result = await query(uText, uVals)
   res.json(result.rows[0])
 }))
 
@@ -682,14 +706,16 @@ router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'
 router.delete('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
-  const existing = await query('SELECT id, file_key FROM document_templates WHERE id = $1', [id])
+  const { text: dText, values: dVals } = orgScopedQuery('SELECT id, file_key FROM document_templates WHERE id = $1', [id], req)
+  const existing = await query(dText, dVals)
   if (existing.rows.length === 0) throw new NotFoundError('Шаблон не найден')
 
   if (existing.rows[0].file_key) {
     await deleteFromS3(existing.rows[0].file_key).catch(() => {})
   }
 
-  await query('DELETE FROM document_templates WHERE id = $1', [id])
+  const { text: delText, values: delVals } = orgScopedQuery('DELETE FROM document_templates WHERE id = $1', [id], req)
+  await query(delText, delVals)
   res.json({ success: true })
 }))
 
@@ -720,7 +746,8 @@ router.delete('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'adm
 router.get('/doc-templates/:id/file', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
-  const result = await query('SELECT name, file_key, mime_type FROM document_templates WHERE id = $1', [id])
+  const { text: fText, values: fVals } = orgScopedQuery('SELECT name, file_key, mime_type FROM document_templates WHERE id = $1', [id], req)
+  const result = await query(fText, fVals)
   if (result.rows.length === 0) throw new NotFoundError('Шаблон не найден')
 
   const { name, file_key, mime_type } = result.rows[0]
@@ -731,7 +758,8 @@ router.get('/doc-templates/:id/file', authenticateToken, authorizeRoles('hr', 'a
   res.setHeader('Content-Type', mimeTypeFromExt || ContentType || mime_type || 'application/octet-stream')
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`)
 
-  await query('UPDATE document_templates SET download_count = download_count + 1 WHERE id = $1', [id]).catch(() => {})
+  const { text: dlText, values: dlVals } = orgScopedQuery('UPDATE document_templates SET download_count = download_count + 1 WHERE id = $1', [id], req)
+  await query(dlText, dlVals).catch(() => {})
 
   Body.pipe(res)
 }))
@@ -781,7 +809,8 @@ function getMimeTypeFromExtension(fileName) {
  */
 router.get('/doc-templates/:id/preview-token', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
-  const tmpl = await query('SELECT id FROM document_templates WHERE id = $1', [id])
+  const { text: ptText, values: ptVals } = orgScopedQuery('SELECT id FROM document_templates WHERE id = $1', [id], req)
+  const tmpl = await query(ptText, ptVals)
   if (tmpl.rows.length === 0) throw new NotFoundError('Шаблон не найден')
 
   const token = jwt.sign(
@@ -883,7 +912,8 @@ router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRole
 
   if (!url) return res.status(400).json({ error: 'URL файла обязателен' })
 
-  const tmplResult = await query('SELECT file_key, mime_type FROM document_templates WHERE id = $1', [id])
+  const { text: sfText, values: sfVals } = orgScopedQuery('SELECT file_key, mime_type FROM document_templates WHERE id = $1', [id], req)
+  const tmplResult = await query(sfText, sfVals)
   if (tmplResult.rows.length === 0) throw new NotFoundError('Шаблон не найден')
 
   const tmpl = tmplResult.rows[0]
@@ -908,7 +938,8 @@ router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRole
     await deleteFromS3(tmpl.file_key).catch(() => {})
   }
 
-  await query('UPDATE document_templates SET file_key = $1 WHERE id = $2', [newFileKey, id])
+  const { text: sfUpdText, values: sfUpdVals } = orgScopedQuery('UPDATE document_templates SET file_key = $1 WHERE id = $2', [newFileKey, id], req)
+  await query(sfUpdText, sfUpdVals)
 
   res.json({ ok: true })
 }))
@@ -946,10 +977,11 @@ router.post('/doc-templates/:id/callback', authenticateToken, asyncHandler(async
     return res.json({ error: 0 })
   }
 
-  const result = await query(
+  const { text: cbText, values: cbVals } = orgScopedQuery(
     'SELECT file_key, mime_type, name FROM document_templates WHERE id = $1',
-    [id]
+    [id], req
   )
+  const result = await query(cbText, cbVals)
   if (result.rows.length === 0) return res.status(404).json({ error: 1 })
 
   const tmpl = result.rows[0]
@@ -973,10 +1005,11 @@ router.post('/doc-templates/:id/callback', authenticateToken, asyncHandler(async
     await deleteFromS3(tmpl.file_key).catch(() => {})
   }
 
-  await query(
+  const { text: cbUpdText, values: cbUpdVals } = orgScopedQuery(
     'UPDATE document_templates SET file_key = $1 WHERE id = $2',
-    [newFileKey, id]
+    [newFileKey, id], req
   )
+  await query(cbUpdText, cbUpdVals)
 
   res.json({ error: 0 })
 }))

@@ -6,6 +6,7 @@ import {
   publishSurvey,
   getSurveyAnalytics,
 } from '../services/surveyService.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 
 const router = express.Router()
 
@@ -33,10 +34,11 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 100))
     const offset = (page - 1) * limit
 
-    const countRes = await query('SELECT COUNT(*) FROM surveys')
+    const countQuery = orgScopedQuery('SELECT COUNT(*) FROM surveys', [], req)
+    const countRes = await query(countQuery.text, countQuery.values)
     const total = parseInt(countRes.rows[0].count)
 
-    const result = await query(
+    const listQuery = orgScopedQuery(
       `SELECT s.*,
         (SELECT COUNT(*) FROM survey_questions WHERE survey_id = s.id) as question_count,
         (SELECT COUNT(*) FROM survey_responses WHERE survey_id = s.id) as response_count,
@@ -51,8 +53,10 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
           ELSE 0
         END as total_targeted
        FROM surveys s ORDER BY s.created_at DESC LIMIT $1 OFFSET $2`,
-      [limit, offset]
+      [limit, offset],
+      req
     )
+    const result = await query(listQuery.text, listQuery.values)
     res.json({ data: result.rows, total, page, limit })
   } catch (error) {
     console.error('GET /surveys error:', error)
@@ -79,17 +83,14 @@ router.get('/my', authenticateToken, async (req, res) => {
     const userRes = await query('SELECT department_id FROM users WHERE id = $1', [userId])
     const departmentId = userRes.rows[0]?.department_id
 
-    const surveysRes = await query(
-      "SELECT * FROM surveys WHERE status = 'active' ORDER BY created_at DESC"
-    )
+    const surveysQuery = orgScopedQuery("SELECT * FROM surveys WHERE status = 'active' ORDER BY created_at DESC", [], req)
+    const surveysRes = await query(surveysQuery.text, surveysQuery.values)
 
     const surveyIds = surveysRes.rows.map(s => s.id)
     let respondedSet = new Set()
     if (surveyIds.length > 0) {
-      const respondedRes = await query(
-        'SELECT survey_id FROM survey_responses WHERE survey_id = ANY($1) AND user_id = $2',
-        [surveyIds, userId]
-      )
+      const respondedQuery = orgScopedQuery('SELECT survey_id FROM survey_responses WHERE survey_id = ANY($1) AND user_id = $2', [surveyIds, userId], req)
+      const respondedRes = await query(respondedQuery.text, respondedQuery.values)
       respondedSet = new Set(respondedRes.rows.map(r => r.survey_id))
     }
 
@@ -126,12 +127,11 @@ router.get('/my', authenticateToken, async (req, res) => {
 // GET /api/surveys/:id — get survey with questions (HR/admin)
 router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
-    const survey = await query('SELECT * FROM surveys WHERE id = $1', [req.params.id])
+    const surveyQuery = orgScopedQuery('SELECT * FROM surveys WHERE id = $1', [req.params.id], req)
+    const survey = await query(surveyQuery.text, surveyQuery.values)
     if (!survey.rows.length) return res.status(404).json({ error: 'Опрос не найден' })
-    const questions = await query(
-      'SELECT * FROM survey_questions WHERE survey_id = $1 ORDER BY order_index',
-      [req.params.id]
-    )
+    const questionsQuery = orgScopedQuery('SELECT * FROM survey_questions WHERE survey_id = $1 ORDER BY order_index', [req.params.id], req)
+    const questions = await query(questionsQuery.text, questionsQuery.values)
     res.json({ ...survey.rows[0], questions: questions.rows })
   } catch (error) {
     console.error('GET /surveys/:id error:', error)
@@ -186,24 +186,26 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
     await client.query('BEGIN')
 
     const surveyRes = await client.query(
-      `INSERT INTO surveys (title, description, created_by, target_type, target_ids, deadline, anonymous)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO surveys (title, description, created_by, target_type, target_ids, deadline, anonymous, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [title, description || null, req.user.id, targetType || 'all', JSON.stringify(targetIds || []),
-       deadline || null, anonymous || false]
+       deadline || null, anonymous || false, currentOrgId(req)]
     )
     const survey = surveyRes.rows[0]
 
     if (questions?.length) {
       const values = []
       const params = []
+      const orgParamIdx = questions.length * 8 + 1
       questions.forEach((q, i) => {
         const base = i * 8
-        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`)
+        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${orgParamIdx})`)
         params.push(survey.id, i, q.type, q.text, JSON.stringify(q.options || []),
                     q.scaleMin || 1, q.scaleMax || 5, q.required || false)
       })
+      params.push(currentOrgId(req))
       await client.query(
-        `INSERT INTO survey_questions (survey_id, order_index, type, text, options, scale_min, scale_max, required)
+        `INSERT INTO survey_questions (survey_id, order_index, type, text, options, scale_min, scale_max, required, organization_id)
          VALUES ${values.join(', ')}`,
         params
       )
@@ -261,29 +263,32 @@ router.put('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
 
     await client.query('BEGIN')
 
-    const surveyRes = await client.query(
-      `UPDATE surveys SET title=$1, description=$2, target_type=$3, target_ids=$4,
-         deadline=$5, anonymous=$6 WHERE id=$7 AND status='draft' RETURNING *`,
-      [title, description || null, targetType || 'all', JSON.stringify(targetIds || []),
+    const updSql = `UPDATE surveys SET title=$1, description=$2, target_type=$3, target_ids=$4,
+         deadline=$5, anonymous=$6 WHERE id=$7 AND status='draft' RETURNING *`
+    const updValues = [title, description || null, targetType || 'all', JSON.stringify(targetIds || []),
        deadline || null, anonymous || false, req.params.id]
-    )
+    const updQuery = orgScopedQuery(updSql, updValues, req)
+    const surveyRes = await client.query(updQuery.text, updQuery.values)
     if (!surveyRes.rows.length) {
       await client.query('ROLLBACK')
       return res.status(404).json({ error: 'Черновик не найден' })
     }
 
-    await client.query('DELETE FROM survey_questions WHERE survey_id = $1', [req.params.id])
+    const delQQuery = orgScopedQuery('DELETE FROM survey_questions WHERE survey_id = $1', [req.params.id], req)
+    await client.query(delQQuery.text, delQQuery.values)
     if (questions?.length) {
       const values = []
       const params = []
+      const orgParamIdx = questions.length * 8 + 1
       questions.forEach((q, i) => {
         const base = i * 8
-        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`)
+        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${orgParamIdx})`)
         params.push(req.params.id, i, q.type, q.text, JSON.stringify(q.options || []),
                     q.scaleMin || 1, q.scaleMax || 5, q.required || false)
       })
+      params.push(currentOrgId(req))
       await client.query(
-        `INSERT INTO survey_questions (survey_id, order_index, type, text, options, scale_min, scale_max, required)
+        `INSERT INTO survey_questions (survey_id, order_index, type, text, options, scale_min, scale_max, required, organization_id)
          VALUES ${values.join(', ')}`,
         params
       )
@@ -320,7 +325,8 @@ router.put('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
 // DELETE /api/surveys/:id (HR/admin)
 router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
-    await query('DELETE FROM surveys WHERE id = $1', [req.params.id])
+    const delQuery = orgScopedQuery('DELETE FROM surveys WHERE id = $1', [req.params.id], req)
+    await query(delQuery.text, delQuery.values)
     res.json({ success: true })
   } catch (error) {
     console.error('DELETE /surveys/:id error:', error)
@@ -376,10 +382,8 @@ router.post('/:id/publish', authenticateToken, authorizeRoles('hr', 'admin'), as
 // POST /api/surveys/:id/close (HR/admin)
 router.post('/:id/close', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
-    const result = await query(
-      "UPDATE surveys SET status = 'closed' WHERE id = $1 RETURNING *",
-      [req.params.id]
-    )
+    const closeQuery = orgScopedQuery("UPDATE surveys SET status = 'closed' WHERE id = $1 RETURNING *", [req.params.id], req)
+    const result = await query(closeQuery.text, closeQuery.values)
     if (!result.rows.length) return res.status(404).json({ error: 'Опрос не найден' })
     res.json(result.rows[0])
   } catch (error) {
@@ -414,10 +418,12 @@ router.post('/:id/close', authenticateToken, authorizeRoles('hr', 'admin'), asyn
 router.get('/:id/view', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
-    const surveyRes = await query(
+    const surveyQuery = orgScopedQuery(
       'SELECT s.*, (SELECT COUNT(*) FROM survey_questions WHERE survey_id=s.id) as question_count FROM surveys s WHERE s.id=$1',
-      [req.params.id]
+      [req.params.id],
+      req
     )
+    const surveyRes = await query(surveyQuery.text, surveyQuery.values)
     if (!surveyRes.rows.length) return res.status(404).json({ error: 'Опрос не найден' })
     const survey = surveyRes.rows[0]
 
@@ -430,18 +436,14 @@ router.get('/:id/view', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'У вас нет доступа к данному опросу' })
     }
 
-    const alreadyResponded = await query(
-      'SELECT 1 FROM survey_responses WHERE survey_id=$1 AND user_id=$2',
-      [req.params.id, userId]
-    )
+    const arQuery = orgScopedQuery('SELECT 1 FROM survey_responses WHERE survey_id=$1 AND user_id=$2', [req.params.id, userId], req)
+    const alreadyResponded = await query(arQuery.text, arQuery.values)
     if (alreadyResponded.rows.length) {
       return res.status(409).json({ error: 'Вы уже прошли этот опрос' })
     }
 
-    const questions = await query(
-      'SELECT * FROM survey_questions WHERE survey_id=$1 ORDER BY order_index',
-      [req.params.id]
-    )
+    const questionsQuery = orgScopedQuery('SELECT * FROM survey_questions WHERE survey_id=$1 ORDER BY order_index', [req.params.id], req)
+    const questions = await query(questionsQuery.text, questionsQuery.values)
     res.json({ ...survey, questions: questions.rows })
   } catch (error) {
     console.error('GET /surveys/:id/view error:', error)
@@ -489,7 +491,8 @@ router.post('/:id/respond', authenticateToken, async (req, res) => {
     const userId = req.user.id
     const { answers } = req.body
 
-    const surveyRes = await query('SELECT * FROM surveys WHERE id=$1', [req.params.id])
+    const surveyQuery = orgScopedQuery('SELECT * FROM surveys WHERE id=$1', [req.params.id], req)
+    const surveyRes = await query(surveyQuery.text, surveyQuery.values)
     if (!surveyRes.rows.length) return res.status(404).json({ error: 'Опрос не найден' })
     const survey = surveyRes.rows[0]
 
@@ -504,21 +507,23 @@ router.post('/:id/respond', authenticateToken, async (req, res) => {
 
     await client.query('BEGIN')
     const responseRes = await client.query(
-      'INSERT INTO survey_responses (survey_id, user_id) VALUES ($1, $2) RETURNING id',
-      [req.params.id, storedUserId]
+      'INSERT INTO survey_responses (survey_id, user_id, organization_id) VALUES ($1, $2, $3) RETURNING id',
+      [req.params.id, storedUserId, currentOrgId(req)]
     )
     const responseId = responseRes.rows[0].id
 
     if (answers?.length) {
       const values = []
       const params = []
+      const ansOrgParamIdx = answers.length * 4 + 1
       answers.forEach((a, i) => {
         const base = i * 4
-        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`)
+        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${ansOrgParamIdx})`)
         params.push(responseId, a.questionId, a.value ?? null, a.values ? JSON.stringify(a.values) : null)
       })
+      params.push(currentOrgId(req))
       await client.query(
-        `INSERT INTO survey_answers (response_id, question_id, value, values) VALUES ${values.join(', ')}`,
+        `INSERT INTO survey_answers (response_id, question_id, value, values, organization_id) VALUES ${values.join(', ')}`,
         params
       )
     }

@@ -1,6 +1,7 @@
 import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 
 const router = express.Router()
 
@@ -36,8 +37,9 @@ router.get('/', authenticateToken, async (req, res) => {
         (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
       FROM departments d
       LEFT JOIN users m ON d.manager_id = m.id
+      ${req.org ? 'WHERE d.organization_id = $1' : ''}
       ORDER BY d.name
-    `)
+    `, req.org ? [req.org.org_id] : [])
 
     const employeesResult = await query(`
       SELECT 
@@ -108,8 +110,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
         m.first_name || ' ' || m.last_name as manager_name
       FROM departments d
       LEFT JOIN users m ON d.manager_id = m.id
-      WHERE d.id = $1
-    `, [id])
+      WHERE d.id = $1${req.org ? ' AND d.organization_id = $2' : ''}
+    `, req.org ? [id, req.org.org_id] : [id])
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Department not found' })
@@ -172,10 +174,12 @@ router.patch('/vacation-block-all', authenticateToken, authorizeRoles('hr', 'adm
       return res.status(400).json({ error: 'Поле blocked обязательно (boolean)' })
     }
 
-    await query(
+    const { text, values } = orgScopedQuery(
       `UPDATE departments SET vacation_requests_blocked = $1`,
-      [blocked]
+      [blocked],
+      req
     )
+    await query(text, values)
 
     res.json({ success: true, blocked })
   } catch (error) {
@@ -220,10 +224,12 @@ router.patch('/:id/vacation-block', authenticateToken, authorizeRoles('hr', 'adm
       return res.status(400).json({ error: 'Поле blocked обязательно (boolean)' })
     }
 
-    const result = await query(
+    const scoped = orgScopedQuery(
       `UPDATE departments SET vacation_requests_blocked = $1 WHERE id = $2 RETURNING *`,
-      [blocked, id]
+      [blocked, id],
+      req
     )
+    const result = await query(scoped.text, scoped.values)
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Отдел не найден' })

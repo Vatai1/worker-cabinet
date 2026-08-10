@@ -5,6 +5,7 @@ import { getFromS3 } from '../config/s3.js'
 import { notify } from '../config/notifications.js'
 import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 
 const router = express.Router()
 
@@ -22,11 +23,12 @@ async function getEmpName(userId) {
   return row ? `${row.last_name} ${row.first_name}` : ''
 }
 
-async function getDeptManagerId(userId) {
-  const r = await query(
+async function getDeptManagerId(userId, req) {
+  const { text, values } = orgScopedQuery(
     'SELECT d.manager_id FROM users u JOIN departments d ON u.department_id = d.id WHERE u.id = $1',
-    [userId]
+    [userId], req
   )
+  const r = await query(text, values)
   return r.rows[0]?.manager_id || null
 }
 
@@ -130,6 +132,10 @@ router.get('/requests', authenticateToken, async (req, res) => {
 
     let whereClause = 'WHERE 1=1'
     const params = []
+    if (req.org) {
+      whereClause += ' AND vr.organization_id = $' + (params.length + 1)
+      params.push(req.org.org_id)
+    }
 
     if (userId) {
       if (parseInt(userId) !== user.id) {
@@ -159,8 +165,10 @@ router.get('/requests', authenticateToken, async (req, res) => {
         whereClause += ' AND vr.user_id = $' + (params.length + 1)
         params.push(user.id)
       } else if (user.role === 'manager') {
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR u.manager_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE manager_id = $${params.length + 1}))`
+        const mgrOrgCond = req.org ? ` AND organization_id = $${params.length + 2}` : ''
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR u.manager_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE manager_id = $${params.length + 1}${mgrOrgCond}))`
         params.push(user.id)
+        if (req.org) params.push(req.org.org_id)
       }
     }
 
@@ -267,7 +275,7 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
-    const result = await query(
+    const { text, values } = orgScopedQuery(
       `SELECT vb.*,
               u.hire_date,
               CASE WHEN vb.travel_next_available_date IS NULL THEN u.hire_date + INTERVAL '2 years'
@@ -276,34 +284,37 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
        FROM vacation_balances vb
        LEFT JOIN users u ON u.id = vb.user_id
        WHERE vb.user_id = $1 AND vb.year = $2`,
-      [userId, targetYear]
+      [userId, targetYear], req
     )
+    const result = await query(text, values)
 
     if (result.rows.length === 0) {
       const newBalance = await query(
-        `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days, year)
-         VALUES ($1, 47, 0, 0, $2)
+        `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days, year, organization_id)
+         VALUES ($1, 47, 0, 0, $2, $3)
          RETURNING *`,
-        [userId, targetYear]
+        [userId, targetYear, currentOrgId(req)]
       )
-      await query(
+      const { text: updtSql, values: updtVals } = orgScopedQuery(
         `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'
          FROM users WHERE users.id = vacation_balances.user_id AND vacation_balances.user_id = $1`,
-        [userId]
-      ).catch(() => {})
+        [userId], req
+      )
+      await query(updtSql, updtVals).catch(() => {})
       return res.json(newBalance.rows[0])
     }
 
     const row = result.rows[0]
     const dateOk = row.effective_travel_next && new Date() >= new Date(row.effective_travel_next)
 
-    const pendingTravel = await query(
+    const { text: ptText, values: ptValues } = orgScopedQuery(
       `SELECT 1 FROM vacation_requests vr
        JOIN request_statuses rs ON rs.id = vr.status_id
        WHERE vr.user_id = $1 AND vr.has_travel = true AND rs.code IN ('on_approval')
        LIMIT 1`,
-      [userId]
+      [userId], req
     )
+    const pendingTravel = await query(ptText, ptValues)
     const travelAvailable = dateOk && pendingTravel.rows.length === 0
     const travelAvailableUntil = travelAvailable
       ? new Date(new Date(row.effective_travel_next).getTime() + 2 * 365 * 24 * 60 * 60 * 1000)
@@ -362,10 +373,11 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, travelChildren, referenceDocument } = req.body
     const userId = req.user.id
 
-    const blockCheck = await query(
+    const { text: blockText, values: blockValues } = orgScopedQuery(
       `SELECT d.vacation_requests_blocked FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
-      [userId]
+      [userId], req
     )
+    const blockCheck = await query(blockText, blockValues)
     if (blockCheck.rows.length > 0 && blockCheck.rows[0].vacation_requests_blocked) {
       return res.status(403).json({ error: 'Подача заявок на отпуск для вашего отдела временно заблокирована HR' })
     }
@@ -414,10 +426,11 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const finalDuration = duration
     const requestYear = start.getFullYear()
 
-    const balanceResult = await client.query(
+    const { text: balText, values: balValues } = orgScopedQuery(
       'SELECT * FROM vacation_balances WHERE user_id = $1 AND year = $2',
-      [userId, requestYear]
+      [userId, requestYear], req
     )
+    const balanceResult = await client.query(balText, balValues)
 
     const balance = balanceResult.rows[0]
     if (!balance || balance.available_days < finalDuration) {
@@ -430,13 +443,14 @@ router.post('/requests', authenticateToken, async (req, res) => {
     }
 
     if (hasTravel) {
-      const pendingTravel = await client.query(
+      const { text: ptText2, values: ptValues2 } = orgScopedQuery(
         `SELECT 1 FROM vacation_requests vr
          JOIN request_statuses rs ON rs.id = vr.status_id
          WHERE vr.user_id = $1 AND vr.has_travel = true AND rs.code IN ('on_approval')
          LIMIT 1`,
-        [userId]
+        [userId], req
       )
+      const pendingTravel = await client.query(ptText2, ptValues2)
       if (pendingTravel.rows.length > 0) {
         await client.query('ROLLBACK')
         return res.status(409).json({ error: 'Уже есть заявка с проездом на согласовании' })
@@ -459,7 +473,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
       }
     }
 
-    const overlapResult = await client.query(
+    const { text: ovText, values: ovValues } = orgScopedQuery(
       `SELECT vr.id FROM vacation_requests vr
         JOIN request_statuses rs ON vr.status_id = rs.id
         WHERE vr.user_id = $1
@@ -469,8 +483,9 @@ router.post('/requests', authenticateToken, async (req, res) => {
           OR (vr.start_date <= $3 AND vr.end_date >= $3)
           OR (vr.start_date >= $2 AND vr.end_date <= $3)
         )`,
-      [userId, formatDate(start), formatDate(end)]
+      [userId, formatDate(start), formatDate(end)], req
     )
+    const overlapResult = await client.query(ovText, ovValues)
 
     if (overlapResult.rows.length > 0) {
       await client.query('ROLLBACK')
@@ -482,9 +497,9 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const travelChildrenCount = travelChildrenParsed.length
 
     const result = await client.query(
-      `INSERT INTO vacation_requests 
-        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, travel_children, travel_children_count, reference_document, status_id)
-        VALUES ($1, $2, $3, $4, (SELECT id FROM vacation_types WHERE code = $5), $6, $7, $8, $9, $10, $11, (SELECT id FROM request_statuses WHERE code = 'on_approval'))
+      `INSERT INTO vacation_requests
+        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, travel_children, travel_children_count, reference_document, status_id, organization_id)
+        VALUES ($1, $2, $3, $4, (SELECT id FROM vacation_types WHERE code = $5 AND organization_id = $12), $6, $7, $8, $9, $10, $11, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $12)
         RETURNING *`,
       [
         userId,
@@ -497,31 +512,33 @@ router.post('/requests', authenticateToken, async (req, res) => {
         travelDestination || null,
         travelChildrenJson,
         travelChildrenCount,
-        referenceDocument || null
+        referenceDocument || null,
+        currentOrgId(req)
       ]
     )
 
     const request = result.rows[0]
 
-    await client.query(
-      `UPDATE vacation_balances 
+    const { text: rbText, values: rbValues } = orgScopedQuery(
+      `UPDATE vacation_balances
        SET reserved_days = reserved_days + $1
        WHERE user_id = $2 AND year = $3`,
-      [finalDuration, userId, requestYear]
+      [finalDuration, userId, requestYear], req
     )
+    await client.query(rbText, rbValues)
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status_id, changed_by)
-        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $2)`,
-      [request.id, userId]
+        (request_id, status_id, changed_by, organization_id)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $2, $3)`,
+      [request.id, userId, currentOrgId(req)]
     )
 
     await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date)
 
     await client.query('COMMIT')
 
-    const managerId = await getDeptManagerId(userId)
+    const managerId = await getDeptManagerId(userId, req)
     if (managerId) {
       notify({
         userId: managerId,
@@ -593,13 +610,14 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 
     await client.query('BEGIN')
 
-    const requestResult = await client.query(
+    const { text: rrText, values: rrValues } = orgScopedQuery(
       `SELECT vr.*, rs.code as status
        FROM vacation_requests vr
        JOIN request_statuses rs ON vr.status_id = rs.id
        WHERE vr.id = $1`,
-      [id]
+      [id], req
     )
+    const requestResult = await client.query(rrText, rrValues)
 
     if (requestResult.rows.length === 0) {
       await client.query('ROLLBACK')
@@ -624,31 +642,36 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 
     if (request.status === 'on_approval') {
       const origYear = extractYear(request.start_date)
-      await client.query('SELECT 1 FROM vacation_balances WHERE user_id = $1 AND year = $2 FOR UPDATE', [request.user_id, origYear])
-      await client.query(
+      await client.query(`SELECT 1 FROM vacation_balances WHERE user_id = $1 AND year = $2${req.org ? ' AND organization_id = $3' : ''} FOR UPDATE`, req.org ? [request.user_id, origYear, req.org.org_id] : [request.user_id, origYear])
+      const { text: ubResText, values: ubResValues } = orgScopedQuery(
         `UPDATE vacation_balances
          SET reserved_days = reserved_days - $1 + $2
          WHERE user_id = $3 AND year = $4`,
-        [request.duration, newDuration, request.user_id, origYear]
+        [request.duration, newDuration, request.user_id, origYear], req
       )
+      await client.query(ubResText, ubResValues)
     } else if (request.status === 'approved') {
       const origYear = extractYear(request.start_date)
-      await client.query('SELECT 1 FROM vacation_balances WHERE user_id = $1 AND year = $2 FOR UPDATE', [request.user_id, origYear])
-      await client.query(
+      await client.query(`SELECT 1 FROM vacation_balances WHERE user_id = $1 AND year = $2${req.org ? ' AND organization_id = $3' : ''} FOR UPDATE`, req.org ? [request.user_id, origYear, req.org.org_id] : [request.user_id, origYear])
+      const { text: ubUseText, values: ubUseValues } = orgScopedQuery(
         `UPDATE vacation_balances
          SET used_days = used_days - $1 + $2
          WHERE user_id = $3 AND year = $4`,
-        [request.duration, newDuration, request.user_id, origYear]
+        [request.duration, newDuration, request.user_id, origYear], req
       )
+      await client.query(ubUseText, ubUseValues)
     }
 
-    const result = await client.query(
-      `UPDATE vacation_requests
+    const { text: vrUpdtText, values: vrUpdtValues } = req.org
+      ? { text: `UPDATE vacation_requests
+       SET start_date = $1, end_date = $2, duration = $3, vacation_type_id = (SELECT id FROM vacation_types WHERE code = $4 AND organization_id = $9), comment = $5, has_travel = $6, reference_document = $7
+       WHERE id = $8 AND organization_id = $9
+       RETURNING *`, values: [startDate, endDate, newDuration, vacationType, comment, hasTravel || false, referenceDocument || null, id, req.org.org_id] }
+      : { text: `UPDATE vacation_requests
        SET start_date = $1, end_date = $2, duration = $3, vacation_type_id = (SELECT id FROM vacation_types WHERE code = $4), comment = $5, has_travel = $6, reference_document = $7
        WHERE id = $8
-       RETURNING *`,
-      [startDate, endDate, newDuration, vacationType, comment, hasTravel || false, referenceDocument || null, id]
-    )
+       RETURNING *`, values: [startDate, endDate, newDuration, vacationType, comment, hasTravel || false, referenceDocument || null, id] }
+    const result = await client.query(vrUpdtText, vrUpdtValues)
 
     await client.query('COMMIT')
 
@@ -657,8 +680,8 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
        FROM vacation_requests vr
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1`,
-      [id]
+       WHERE vr.id = $1${req.org ? ' AND vr.organization_id = $2' : ''}`,
+      req.org ? [id, req.org.org_id] : [id]
     )
 
     res.json(fullResult.rows[0])
@@ -676,15 +699,15 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
   const client = await getClient()
   try {
     await client.query('BEGIN')
-    const request = await client.query(
-      `SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id]
-    )
+    const { text: reqText, values: reqValues } = orgScopedQuery(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id], req)
+    const request = await client.query(reqText, reqValues)
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
     if (req.user.role === 'manager') {
       const mgrDept = await client.query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
-      const empDept = await client.query('SELECT u.department_id FROM users u JOIN vacation_requests vr ON vr.user_id = u.id WHERE vr.id = $1', [id])
+      const { text: empText, values: empValues } = orgScopedQuery('SELECT u.department_id FROM users u JOIN vacation_requests vr ON vr.user_id = u.id WHERE vr.id = $1', [id], req)
+      const empDept = await client.query(empText, empValues)
       if (mgrDept.rows[0]?.department_id !== empDept.rows[0]?.department_id) {
         await client.query('ROLLBACK')
         return res.status(403).json({ error: 'Нет прав на этот отдел' })
@@ -692,27 +715,30 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
     }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
-    await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1), used_days = used_days + $1 WHERE user_id = $2 AND year = $3',
-      [request.rows[0].duration, request.rows[0].user_id, origYear])
+    const { text: appBalText, values: appBalValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1), used_days = used_days + $1 WHERE user_id = $2 AND year = $3',
+      [request.rows[0].duration, request.rows[0].user_id, origYear], req)
+    await client.query(appBalText, appBalValues)
 
     if (request.rows[0].has_travel) {
-      await client.query(
+      const { text: appTrvText, values: appTrvValues } = orgScopedQuery(
         `UPDATE vacation_balances
          SET travel_last_used_date = CURRENT_DATE,
              travel_next_available_date = CURRENT_DATE + INTERVAL '2 years',
              travel_available = false
          WHERE user_id = $1`,
-        [request.rows[0].user_id]
+        [request.rows[0].user_id], req
       )
+      await client.query(appTrvText, appTrvValues)
     }
 
     await client.query(
-      `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2)`,
-      [id, req.user.id])
+      `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, organization_id) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, $3)`,
+      [id, req.user.id, currentOrgId(req)])
 
-    const result = await client.query(
+    const { text: appUpdText, values: appUpdValues } = orgScopedQuery(
       `UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'), reviewed_at = NOW(), reviewed_by = $1 WHERE id = $2 RETURNING *`,
-      [req.user.id, id])
+      [req.user.id, id], req)
+    const result = await client.query(appUpdText, appUpdValues)
 
     await client.query('COMMIT')
 
@@ -746,15 +772,15 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
   const client = await getClient()
   try {
     await client.query('BEGIN')
-    const request = await client.query(
-      `SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id]
-    )
+    const { text: reqText, values: reqValues } = orgScopedQuery(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id], req)
+    const request = await client.query(reqText, reqValues)
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
     if (req.user.role === 'manager') {
       const mgrDept = await client.query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
-      const empDept = await client.query('SELECT u.department_id FROM users u JOIN vacation_requests vr ON vr.user_id = u.id WHERE vr.id = $1', [id])
+      const { text: empText, values: empValues } = orgScopedQuery('SELECT u.department_id FROM users u JOIN vacation_requests vr ON vr.user_id = u.id WHERE vr.id = $1', [id], req)
+      const empDept = await client.query(empText, empValues)
       if (mgrDept.rows[0]?.department_id !== empDept.rows[0]?.department_id) {
         await client.query('ROLLBACK')
         return res.status(403).json({ error: 'Нет прав на этот отдел' })
@@ -762,11 +788,12 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
-    await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
-      [request.rows[0].duration, request.rows[0].user_id, origYear])
+    const { text: rejBalText, values: rejBalValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
+      [request.rows[0].duration, request.rows[0].user_id, origYear], req)
+    await client.query(rejBalText, rejBalValues)
 
     if (request.rows[0].has_travel) {
-      await client.query(
+      const { text: rejTrvText, values: rejTrvValues } = orgScopedQuery(
         `UPDATE vacation_balances
          SET travel_available = true,
              travel_last_used_date = NULL,
@@ -774,17 +801,19 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
                SELECT hire_date + INTERVAL '2 years' FROM users WHERE id = $1
              )
          WHERE user_id = $1`,
-        [request.rows[0].user_id]
+        [request.rows[0].user_id], req
       )
+      await client.query(rejTrvText, rejTrvValues)
     }
 
     await client.query(
-      `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, comment) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
-      [id, req.user.id, reason])
+      `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, comment, organization_id) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3, $4)`,
+      [id, req.user.id, reason, currentOrgId(req)])
 
-    const result = await client.query(
+    const { text: rejUpdText, values: rejUpdValues } = orgScopedQuery(
       `UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'rejected'), rejection_reason = $1, reviewed_at = NOW(), reviewed_by = $2 WHERE id = $3 RETURNING *`,
-      [reason, req.user.id, id])
+      [reason, req.user.id, id], req)
+    const result = await client.query(rejUpdText, rejUpdValues)
 
     await client.query('COMMIT')
 
@@ -815,24 +844,25 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
   const client = await getClient()
   try {
     await client.query('BEGIN')
-    const request = await client.query(
-      `SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id]
-    )
+    const { text: reqText, values: reqValues } = orgScopedQuery(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id], req)
+    const request = await client.query(reqText, reqValues)
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].user_id !== req.user.id && req.user.role === 'employee') { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Forbidden' }) }
     if (!['on_approval', 'approved'].includes(request.rows[0].status)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Нельзя отменить эту заявку' }) }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
     if (request.rows[0].status === 'approved') {
-      await client.query('UPDATE vacation_balances SET used_days = GREATEST(0, used_days - $1) WHERE user_id = $2 AND year = $3',
-        [request.rows[0].duration, request.rows[0].user_id, origYear])
+      const { text: cnlUseText, values: cnlUseValues } = orgScopedQuery('UPDATE vacation_balances SET used_days = GREATEST(0, used_days - $1) WHERE user_id = $2 AND year = $3',
+        [request.rows[0].duration, request.rows[0].user_id, origYear], req)
+      await client.query(cnlUseText, cnlUseValues)
     } else {
-      await client.query('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
-        [request.rows[0].duration, request.rows[0].user_id, origYear])
+      const { text: cnlResText, values: cnlResValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
+        [request.rows[0].duration, request.rows[0].user_id, origYear], req)
+      await client.query(cnlResText, cnlResValues)
     }
 
     if (request.rows[0].has_travel) {
-      await client.query(
+      const { text: cnlTrvText, values: cnlTrvValues } = orgScopedQuery(
         `UPDATE vacation_balances
          SET travel_available = true,
              travel_last_used_date = NULL,
@@ -840,17 +870,19 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
                SELECT hire_date + INTERVAL '2 years' FROM users WHERE id = $1
              )
          WHERE user_id = $1`,
-        [request.rows[0].user_id]
+        [request.rows[0].user_id], req
       )
+      await client.query(cnlTrvText, cnlTrvValues)
     }
 
     await client.query(
-      `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2)`,
-      [id, req.user.id])
+      `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, organization_id) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2, $3)`,
+      [id, req.user.id, currentOrgId(req)])
 
-    const result = await client.query(
+    const { text: cnlUpdText, values: cnlUpdValues } = orgScopedQuery(
       `UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), reviewed_at = NOW(), reviewed_by = $1 WHERE id = $2 RETURNING *`,
-      [req.user.id, id])
+      [req.user.id, id], req)
+    const result = await client.query(cnlUpdText, cnlUpdValues)
 
     await client.query('COMMIT')
     res.json({ ...result.rows[0], status: 'cancelled_by_employee' })
@@ -920,13 +952,14 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
 
     await client.query('BEGIN')
 
-    const originalResult = await client.query(
+    const { text: trOrigText, values: trOrigValues } = orgScopedQuery(
       `SELECT vr.*, rs.code as status
        FROM vacation_requests vr
        JOIN request_statuses rs ON vr.status_id = rs.id
        WHERE vr.id = $1 AND vr.user_id = $2`,
-      [id, userId]
+      [id, userId], req
     )
+    const originalResult = await client.query(trOrigText, trOrigValues)
 
     if (originalResult.rows.length === 0) {
       await client.query('ROLLBACK')
@@ -951,19 +984,19 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     const insertResult = await client.query(
       `INSERT INTO vacation_requests
         (user_id, vacation_type_id, start_date, end_date, duration, status_id, transfer_reason, transferred_from_id, transfer_requested_at,
-         has_travel, travel_destination, travel_children, travel_children_count)
+         has_travel, travel_destination, travel_children, travel_children_count, organization_id)
        VALUES ($1, $2, $3::date, $4::date, $5, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $6, $7, CURRENT_TIMESTAMP,
-         $8, $9, $10, $11)
+         $8, $9, $10, $11, $12)
        RETURNING *`,
       [original.user_id, original.vacation_type_id, newStartDate, newEndDate, newDuration, reason, id,
-       hasTravel || false, hasTravel ? (travelDestination || null) : null, travelChildrenJson, travelChildrenCount]
+       hasTravel || false, hasTravel ? (travelDestination || null) : null, travelChildrenJson, travelChildrenCount, currentOrgId(req)]
     )
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status_id, changed_by, comment)
-       VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $2, $3)`,
-      [insertResult.rows[0].id, userId, `Запрос на перенос от заявки #${id}`]
+        (request_id, status_id, changed_by, comment, organization_id)
+       VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $2, $3, $4)`,
+      [insertResult.rows[0].id, userId, `Запрос на перенос от заявки #${id}`, currentOrgId(req)]
     )
 
     await client.query('COMMIT')
@@ -974,12 +1007,12 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
        JOIN request_statuses rs ON vr.status_id = rs.id
-       WHERE vr.id = $1`,
-      [insertResult.rows[0].id]
+       WHERE vr.id = $1${req.org ? ' AND vr.organization_id = $2' : ''}`,
+      req.org ? [insertResult.rows[0].id, req.org.org_id] : [insertResult.rows[0].id]
     )
 
     const newReq = fullResult.rows[0]
-    const managerId = await getDeptManagerId(userId)
+    const managerId = await getDeptManagerId(userId, req)
     if (managerId) {
       notify({
         userId: managerId,
@@ -1036,8 +1069,8 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
        JOIN request_statuses rs ON vr.status_id = rs.id
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
-      [id]
+       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL${req.org ? ' AND vr.organization_id = $2' : ''}`,
+      req.org ? [id, req.org.org_id] : [id]
     )
 
     if (newRequestResult.rows.length === 0) {
@@ -1057,10 +1090,11 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
       return res.status(403).json({ error: 'Только руководитель отдела может согласовывать заявки' })
     }
 
-    const originalRequestResult = await client.query(
+    const { text: tAppOrigText, values: tAppOrigValues } = orgScopedQuery(
       `SELECT * FROM vacation_requests WHERE id = $1`,
-      [newRequest.transferred_from_id]
+      [newRequest.transferred_from_id], req
     )
+    const originalRequestResult = await client.query(tAppOrigText, tAppOrigValues)
 
     if (originalRequestResult.rows.length === 0) {
       await client.query('ROLLBACK')
@@ -1069,43 +1103,46 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
 
     const originalRequest = originalRequestResult.rows[0]
 
-    await client.query(
+    const { text: tAppCancelText, values: tAppCancelValues } = orgScopedQuery(
       `UPDATE vacation_requests
        SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'),
            cancellation_reason = 'Перенесён на другие даты (заявка #' + $1 + ')'
        WHERE id = $2`,
-      [id, originalRequest.id]
+      [id, originalRequest.id], req
     )
+    await client.query(tAppCancelText, tAppCancelValues)
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status_id, changed_by, comment)
-        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2, $3)`,
-      [originalRequest.id, managerId, `Перенесён на другие даты (заявка #${id})`]
+        (request_id, status_id, changed_by, comment, organization_id)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2, $3, $4)`,
+      [originalRequest.id, managerId, `Перенесён на другие даты (заявка #${id})`, currentOrgId(req)]
     )
 
-    await client.query(
+    const { text: tAppApprText, values: tAppApprValues } = orgScopedQuery(
       `UPDATE vacation_requests vr
        SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'),
            reviewed_at = CURRENT_TIMESTAMP,
            reviewed_by = $1
        WHERE vr.id = $2`,
-      [managerId, id]
+      [managerId, id], req
     )
+    await client.query(tAppApprText, tAppApprValues)
 
-    await client.query(
+    const { text: tAppBalText, values: tAppBalValues } = orgScopedQuery(
       `UPDATE vacation_balances
        SET reserved_days = reserved_days - $1,
            used_days = used_days + $1
        WHERE user_id = $2 AND year = EXTRACT(YEAR FROM $3::date)`,
-      [newRequest.duration, newRequest.user_id, newRequest.start_date]
+      [newRequest.duration, newRequest.user_id, newRequest.start_date], req
     )
+    await client.query(tAppBalText, tAppBalValues)
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status_id, changed_by, comment)
-        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, 'Перенос одобрен')`,
-      [id, managerId]
+        (request_id, status_id, changed_by, comment, organization_id)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, 'Перенос одобрен', $3)`,
+      [id, managerId, currentOrgId(req)]
     )
 
     await clearVacationTimesheetEntries(client, originalRequest.user_id, originalRequest.start_date, originalRequest.end_date)
@@ -1131,8 +1168,8 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
        FROM vacation_requests vr
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1`,
-      [id]
+       WHERE vr.id = $1${req.org ? ' AND vr.organization_id = $2' : ''}`,
+      req.org ? [id, req.org.org_id] : [id]
     )
 
     res.json(fullResult.rows[0])
@@ -1190,8 +1227,8 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
        JOIN request_statuses rs ON vr.status_id = rs.id
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
-      [id]
+       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL${req.org ? ' AND vr.organization_id = $2' : ''}`,
+      req.org ? [id, req.org.org_id] : [id]
     )
 
     if (newRequestResult.rows.length === 0) {
@@ -1211,43 +1248,47 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
       return res.status(403).json({ error: 'Только руководитель отдела может отклонять заявки' })
     }
 
-    const originalRequestResult = await client.query(
+    const { text: tRejOrigText, values: tRejOrigValues } = orgScopedQuery(
       `SELECT * FROM vacation_requests WHERE id = $1`,
-      [newRequest.transferred_from_id]
+      [newRequest.transferred_from_id], req
     )
+    const originalRequestResult = await client.query(tRejOrigText, tRejOrigValues)
     const originalRequest = originalRequestResult.rows[0]
 
-    await client.query(
+    const { text: tRejUpdText, values: tRejUpdValues } = orgScopedQuery(
       `UPDATE vacation_requests vr
        SET status_id = (SELECT id FROM request_statuses WHERE code = 'rejected'),
            rejection_reason = $1,
            reviewed_at = CURRENT_TIMESTAMP,
            reviewed_by = $2
        WHERE vr.id = $3`,
-      [reason, managerId, id]
+      [reason, managerId, id], req
     )
+    await client.query(tRejUpdText, tRejUpdValues)
 
-    await client.query(
+    const { text: tRejBalText, values: tRejBalValues } = orgScopedQuery(
       `UPDATE vacation_balances
         SET reserved_days = reserved_days - $1,
             used_days = used_days + $2
         WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
-      [newRequest.duration, originalRequest.duration, newRequest.user_id, newRequest.start_date]
+      [newRequest.duration, originalRequest.duration, newRequest.user_id, newRequest.start_date], req
     )
+    await client.query(tRejBalText, tRejBalValues)
 
-    await client.query(
+    const { text: tRejClrText, values: tRejClrValues } = orgScopedQuery(
       `UPDATE vacation_requests
         SET transfer_requested_at = NULL,
             transfer_reason = NULL
         WHERE id = $1`,
-      [originalRequest.id]
+      [originalRequest.id], req
     )
+    await client.query(tRejClrText, tRejClrValues)
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status_id, changed_by, comment)
-        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
-      [id, managerId, reason]
+        (request_id, status_id, changed_by, comment, organization_id)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3, $4)`,
+      [id, managerId, reason, currentOrgId(req)]
     )
 
     await client.query('COMMIT')
@@ -1270,8 +1311,8 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
        FROM vacation_requests vr
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1`,
-      [id]
+       WHERE vr.id = $1${req.org ? ' AND vr.organization_id = $2' : ''}`,
+      req.org ? [id, req.org.org_id] : [id]
     )
 
     res.json(fullResult.rows[0])
@@ -1309,13 +1350,14 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
 
     await client.query('BEGIN')
 
-    const newRequestResult = await client.query(
+    const { text: tCnlNewText, values: tCnlNewValues } = orgScopedQuery(
       `SELECT vr.*, rs.code as status
        FROM vacation_requests vr
        JOIN request_statuses rs ON vr.status_id = rs.id
        WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
-      [id]
+      [id], req
     )
+    const newRequestResult = await client.query(tCnlNewText, tCnlNewValues)
 
     if (newRequestResult.rows.length === 0) {
       await client.query('ROLLBACK')
@@ -1334,40 +1376,44 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
       return res.status(400).json({ error: 'Можно отменить только заявку на согласовании' })
     }
 
-    const originalRequestResult = await client.query(
+    const { text: tCnlOrigText, values: tCnlOrigValues } = orgScopedQuery(
       `SELECT * FROM vacation_requests WHERE id = $1`,
-      [newRequest.transferred_from_id]
+      [newRequest.transferred_from_id], req
     )
+    const originalRequestResult = await client.query(tCnlOrigText, tCnlOrigValues)
     const originalRequest = originalRequestResult.rows[0]
 
-    await client.query(
+    const { text: tCnlUpdText, values: tCnlUpdValues } = orgScopedQuery(
       `UPDATE vacation_requests
        SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee')
        WHERE id = $1`,
-      [id]
+      [id], req
     )
+    await client.query(tCnlUpdText, tCnlUpdValues)
 
-    await client.query(
+    const { text: tCnlBalText, values: tCnlBalValues } = orgScopedQuery(
       `UPDATE vacation_balances
         SET reserved_days = reserved_days - $1,
             used_days = used_days + $2
         WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
-      [newRequest.duration, originalRequest.duration, userId, newRequest.start_date]
+      [newRequest.duration, originalRequest.duration, userId, newRequest.start_date], req
     )
+    await client.query(tCnlBalText, tCnlBalValues)
 
-    await client.query(
+    const { text: tCnlClrText, values: tCnlClrValues } = orgScopedQuery(
       `UPDATE vacation_requests
        SET transfer_requested_at = NULL,
            transfer_reason = NULL
        WHERE id = $1`,
-      [originalRequest.id]
+      [originalRequest.id], req
     )
+    await client.query(tCnlClrText, tCnlClrValues)
 
     await client.query(
       `INSERT INTO vacation_request_status_history
-        (request_id, status_id, changed_by, comment)
-        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3)`,
-      [id, userId, 'Отменено сотрудником']
+        (request_id, status_id, changed_by, comment, organization_id)
+        VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3, $4)`,
+      [id, userId, 'Отменено сотрудником', currentOrgId(req)]
     )
 
     await clearVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date)
@@ -1379,8 +1425,8 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
        FROM vacation_requests vr
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1`,
-      [id]
+       WHERE vr.id = $1${req.org ? ' AND vr.organization_id = $2' : ''}`,
+      req.org ? [id, req.org.org_id] : [id]
     )
 
     res.json(fullResult.rows[0])
@@ -1425,17 +1471,17 @@ router.get('/my-transferable', authenticateToken, async (req, res) => {
        FROM vacation_requests vr
        JOIN vacation_types vt ON vr.vacation_type_id = vt.id
        JOIN request_statuses rs ON vr.status_id = rs.id
-       WHERE vr.user_id = $1
+       WHERE vr.user_id = $1${req.org ? ' AND vr.organization_id = $2' : ''}
          AND rs.code = 'approved'
          AND vr.start_date >= CURRENT_DATE
          AND NOT EXISTS (
            SELECT 1 FROM vacation_requests tr
            JOIN request_statuses trs ON tr.status_id = trs.id
            WHERE tr.transferred_from_id = vr.id
-             AND trs.code NOT IN ('rejected', 'cancelled_by_employee', 'cancelled_by_manager')
+             AND trs.code NOT IN ('rejected', 'cancelled_by_employee', 'cancelled_by_manager')${req.org ? ' AND tr.organization_id = $2' : ''}
          )
        ORDER BY vr.start_date`,
-      [userId]
+      req.org ? [userId, req.org.org_id] : [userId]
     )
     res.json(result.rows)
   } catch (error) {
@@ -1480,9 +1526,9 @@ router.get('/my-transfer-requests', authenticateToken, async (req, res) => {
        FROM vacation_requests nr
        JOIN vacation_requests orig ON nr.transferred_from_id = orig.id
        JOIN request_statuses rs ON nr.status_id = rs.id
-       WHERE nr.user_id = $1
+       WHERE nr.user_id = $1${req.org ? ' AND nr.organization_id = $2' : ''}
        ORDER BY nr.created_at DESC`,
-      [userId]
+      req.org ? [userId, req.org.org_id] : [userId]
     )
     res.json(result.rows)
   } catch (error) {
@@ -1528,26 +1574,35 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Необходимо указать год и шаблон' })
     }
 
-    const [userResult, tmplResult, vacResult] = await Promise.all([
-      query(
-        `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
-         FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
-        [userId]
-      ),
-      query(
-        `SELECT name, file_key, mime_type FROM document_templates WHERE id = $1 AND purpose = 'vacation_template'`,
-        [templateId]
-      ),
-      query(
-        `SELECT vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name, rs.code as status,
+    const { text: gaUserText, values: gaUserValues } = req.org
+      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
+         FROM users u LEFT JOIN departments d ON u.department_id = d.id AND d.organization_id = $2 WHERE u.id = $1`, values: [userId, req.org.org_id] }
+      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
+         FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`, values: [userId] }
+    const { text: gaTmplText, values: gaTmplValues } = orgScopedQuery(
+      `SELECT name, file_key, mime_type FROM document_templates WHERE id = $1 AND purpose = 'vacation_template'`,
+      [templateId], req
+    )
+    const { text: gaVacText, values: gaVacValues } = req.org
+      ? { text: `SELECT vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name, rs.code as status,
+                vr.has_travel, vr.travel_destination, vr.travel_children_count, vr.travel_children
+         FROM vacation_requests vr
+         JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+         JOIN request_statuses rs ON vr.status_id = rs.id
+         WHERE vr.user_id = $1 AND vr.organization_id = $3 AND EXTRACT(YEAR FROM vr.start_date) = $2 AND rs.code = 'approved'
+         ORDER BY vr.start_date`, values: [userId, year, req.org.org_id] }
+      : { text: `SELECT vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name, rs.code as status,
                 vr.has_travel, vr.travel_destination, vr.travel_children_count, vr.travel_children
          FROM vacation_requests vr
          JOIN vacation_types vt ON vr.vacation_type_id = vt.id
          JOIN request_statuses rs ON vr.status_id = rs.id
          WHERE vr.user_id = $1 AND EXTRACT(YEAR FROM vr.start_date) = $2 AND rs.code = 'approved'
-         ORDER BY vr.start_date`,
-        [userId, year]
-      ),
+         ORDER BY vr.start_date`, values: [userId, year] }
+
+    const [userResult, tmplResult, vacResult] = await Promise.all([
+      query(gaUserText, gaUserValues),
+      query(gaTmplText, gaTmplValues),
+      query(gaVacText, gaVacValues),
     ])
 
     if (userResult.rows.length === 0) return res.status(404).json({ error: 'Пользователь не найден' })
@@ -1688,18 +1743,26 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       return res.status(400).json({ error: 'Необходимо указать шаблон и переносы' })
     }
 
-    const [userResult, tmplResult, transfersResult] = await Promise.all([
-      query(
-        `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
-         FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
-        [userId]
-      ),
-      query(
-        `SELECT name, file_key FROM document_templates WHERE id = $1 AND purpose = 'vacation_transfer_template'`,
-        [templateId]
-      ),
-      query(
-        `SELECT nr.id, nr.start_date as new_start, nr.duration as new_days, nr.transfer_note as note,
+    const { text: gtUserText, values: gtUserValues } = req.org
+      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
+         FROM users u LEFT JOIN departments d ON u.department_id = d.id AND d.organization_id = $2 WHERE u.id = $1`, values: [userId, req.org.org_id] }
+      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
+         FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`, values: [userId] }
+    const { text: gtTmplText, values: gtTmplValues } = orgScopedQuery(
+      `SELECT name, file_key FROM document_templates WHERE id = $1 AND purpose = 'vacation_transfer_template'`,
+      [templateId], req
+    )
+    const { text: gtTrText, values: gtTrValues } = req.org
+      ? { text: `SELECT nr.id, nr.start_date as new_start, nr.duration as new_days, nr.transfer_note as note,
+                nr.has_travel, nr.travel_destination, nr.travel_children, nr.travel_children_count,
+                orig.start_date as original_start, orig.duration as original_days,
+                rs.code as status
+         FROM vacation_requests nr
+         JOIN vacation_requests orig ON nr.transferred_from_id = orig.id
+         JOIN request_statuses rs ON nr.status_id = rs.id
+         WHERE nr.id = ANY($1) AND nr.user_id = $2 AND nr.organization_id = $3 AND rs.code = 'approved'
+         ORDER BY orig.start_date`, values: [transferIds, userId, req.org.org_id] }
+      : { text: `SELECT nr.id, nr.start_date as new_start, nr.duration as new_days, nr.transfer_note as note,
                 nr.has_travel, nr.travel_destination, nr.travel_children, nr.travel_children_count,
                 orig.start_date as original_start, orig.duration as original_days,
                 rs.code as status
@@ -1707,9 +1770,12 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
          JOIN vacation_requests orig ON nr.transferred_from_id = orig.id
          JOIN request_statuses rs ON nr.status_id = rs.id
          WHERE nr.id = ANY($1) AND nr.user_id = $2 AND rs.code = 'approved'
-         ORDER BY orig.start_date`,
-        [transferIds, userId]
-      ),
+         ORDER BY orig.start_date`, values: [transferIds, userId] }
+
+    const [userResult, tmplResult, transfersResult] = await Promise.all([
+      query(gtUserText, gtUserValues),
+      query(gtTmplText, gtTmplValues),
+      query(gtTrText, gtTrValues),
     ])
 
     if (userResult.rows.length === 0) return res.status(404).json({ error: 'Пользователь не найден' })
@@ -1881,9 +1947,9 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
        FROM vacation_restrictions vr
        JOIN departments d ON vr.department_id = d.id
        JOIN users u ON vr.created_by = u.id
-       WHERE vr.department_id = $1
+       WHERE vr.department_id = $1${req.org ? ' AND vr.organization_id = $2' : ''}
        ORDER BY vr.created_at DESC`,
-      [departmentId]
+      req.org ? [departmentId, req.org.org_id] : [departmentId]
     )
 
     const restrictions = result.rows.map(r => ({
@@ -1958,10 +2024,10 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
     }
 
     const result = await query(
-      `INSERT INTO vacation_restrictions (department_id, restriction_type, employee_ids, max_concurrent, description, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO vacation_restrictions (department_id, restriction_type, employee_ids, max_concurrent, description, created_by, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [departmentId, type, employeeIds, maxConc, description || null, createdBy]
+      [departmentId, type, employeeIds, maxConc, description || null, createdBy, currentOrgId(req)]
     )
 
     const r = result.rows[0]
@@ -2003,7 +2069,8 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
 router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const result = await query('DELETE FROM vacation_restrictions WHERE id = $1 RETURNING *', [id])
+    const { text: delText, values: delValues } = orgScopedQuery('DELETE FROM vacation_restrictions WHERE id = $1 RETURNING *', [id], req)
+    const result = await query(delText, delValues)
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Ограничение не найдено' })
     }
@@ -2050,10 +2117,11 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
     }
     const departmentId = userResult.rows[0].department_id
 
-    const restrictions = await query(
+    const { text: chkRestText, values: chkRestValues } = orgScopedQuery(
       'SELECT * FROM vacation_restrictions WHERE department_id = $1',
-      [departmentId]
+      [departmentId], req
     )
+    const restrictions = await query(chkRestText, chkRestValues)
 
     const allOtherUserIds = new Set()
     for (const restriction of restrictions.rows) {
@@ -2065,15 +2133,16 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
     let nameMap = new Map()
     if (allOtherUserIds.size > 0) {
       const allIds = [...allOtherUserIds]
-      const [overlapResult, namesResult] = await Promise.all([
-        query(
-          `SELECT DISTINCT vr.user_id FROM vacation_requests vr
+      const { text: ovText2, values: ovValues2 } = orgScopedQuery(
+        `SELECT DISTINCT vr.user_id FROM vacation_requests vr
            JOIN request_statuses rs ON vr.status_id = rs.id
            WHERE vr.user_id = ANY($1)
            AND rs.code IN ('on_approval', 'approved')
            AND vr.start_date <= $3 AND vr.end_date >= $2`,
-          [allIds, startDate, endDate]
-        ),
+        [allIds, startDate, endDate], req
+      )
+      const [overlapResult, namesResult] = await Promise.all([
+        query(ovText2, ovValues2),
         query('SELECT id, first_name, last_name FROM users WHERE id = ANY($1)', [allIds])
       ])
       overlapSet = new Set(overlapResult.rows.map(r => r.user_id))

@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs'
 import PDFDocument from 'pdfkit'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
 import { getTimesheetExportData } from '../lib/timesheetExport.js'
 
@@ -26,11 +27,13 @@ router.post('/auto-create', authorizeRoles('admin', 'hr'), async (req, res) => {
   const m = month || (now.getMonth() + 1)
 
   try {
-    const depts = await query('SELECT id FROM departments')
-    const existing = await query(
+    const { text: dText, values: dVals } = orgScopedQuery('SELECT id FROM departments', [], req)
+    const depts = await query(dText, dVals)
+    const { text: eText, values: eVals } = orgScopedQuery(
       'SELECT department_id FROM timesheets WHERE year = $1 AND month = $2',
-      [y, m]
+      [y, m], req
     )
+    const existing = await query(eText, eVals)
     const existingSet = new Set(existing.rows.map(r => r.department_id))
     const toCreate = depts.rows.filter(d => !existingSet.has(d.id))
 
@@ -44,8 +47,8 @@ router.post('/auto-create', authorizeRoles('admin', 'hr'), async (req, res) => {
       await client.query('BEGIN')
       for (const dept of toCreate) {
         await client.query(
-          'INSERT INTO timesheets (department_id, year, month, created_by) VALUES ($1, $2, $3, $4)',
-          [dept.id, y, m, req.user.id]
+          'INSERT INTO timesheets (department_id, year, month, created_by, organization_id) VALUES ($1, $2, $3, $4, $5)',
+          [dept.id, y, m, req.user.id, currentOrgId(req)]
         )
         created++
       }
@@ -69,11 +72,12 @@ router.post('/auto-create', authorizeRoles('admin', 'hr'), async (req, res) => {
   }
 })
 
-async function getManagerDepartmentId(userId) {
-  const byManagerId = await query(
+async function getManagerDepartmentId(userId, req) {
+  const { text, values } = orgScopedQuery(
     `SELECT id FROM departments WHERE manager_id = $1 LIMIT 1`,
-    [userId]
+    [userId], req
   )
+  const byManagerId = await query(text, values)
   if (byManagerId.rows.length > 0) return byManagerId.rows[0].id
 
   const byDeptId = await query(
@@ -85,16 +89,17 @@ async function getManagerDepartmentId(userId) {
   return null
 }
 
-async function canAccessDepartment(user, departmentId) {
+async function canAccessDepartment(user, departmentId, req) {
   if (['hr', 'admin'].includes(user.role)) return true
-  const managedDeptId = await getManagerDepartmentId(user.id)
+  const managedDeptId = await getManagerDepartmentId(user.id, req)
   return managedDeptId !== null && managedDeptId === departmentId
 }
 
-async function canAccessTimesheet(user, timesheetId) {
-  const result = await query(`SELECT department_id FROM timesheets WHERE id = $1`, [timesheetId])
+async function canAccessTimesheet(user, timesheetId, req) {
+  const { text, values } = orgScopedQuery(`SELECT department_id FROM timesheets WHERE id = $1`, [timesheetId], req)
+  const result = await query(text, values)
   if (result.rows.length === 0) return false
-  return canAccessDepartment(user, result.rows[0].department_id)
+  return canAccessDepartment(user, result.rows[0].department_id, req)
 }
 
 /**
@@ -123,27 +128,30 @@ router.get('/', async (req, res) => {
 
     let rows
     if (['hr', 'admin'].includes(req.user.role)) {
-      const result = await query(`
-        SELECT t.*, d.name as department_name
-        FROM timesheets t
-        JOIN departments d ON t.department_id = d.id
-        ORDER BY t.year DESC, t.month DESC, d.name
-        LIMIT $1 OFFSET $2
-      `, [limit, offset])
+      let sql = `SELECT t.*, d.name as department_name FROM timesheets t JOIN departments d ON t.department_id = d.id `
+      const params = []
+      if (req.org) {
+        sql += `WHERE t.organization_id = $${params.length + 1} `
+        params.push(req.org.org_id)
+      }
+      sql += `ORDER BY t.year DESC, t.month DESC, d.name LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
+      params.push(limit, offset)
+      const result = await query(sql, params)
       rows = result.rows
     } else {
-      const deptId = await getManagerDepartmentId(req.user.id)
+      const deptId = await getManagerDepartmentId(req.user.id, req)
       if (!deptId) {
         rows = []
       } else {
-        const result = await query(`
-          SELECT t.*, d.name as department_name
-          FROM timesheets t
-          JOIN departments d ON t.department_id = d.id
-          WHERE t.department_id = $1
-          ORDER BY t.year DESC, t.month DESC
-          LIMIT $2 OFFSET $3
-        `, [deptId, limit, offset])
+        let sql = `SELECT t.*, d.name as department_name FROM timesheets t JOIN departments d ON t.department_id = d.id WHERE t.department_id = $1 `
+        const params = [deptId]
+        if (req.org) {
+          sql += `AND t.organization_id = $${params.length + 1} `
+          params.push(req.org.org_id)
+        }
+        sql += `ORDER BY t.year DESC, t.month DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
+        params.push(limit, offset)
+        const result = await query(sql, params)
         rows = result.rows
       }
     }
@@ -185,7 +193,7 @@ router.post('/', async (req, res) => {
   let { department_id, year, month } = req.body
 
   if (!department_id && req.user.role === 'manager') {
-    const deptId = await getManagerDepartmentId(req.user.id)
+    const deptId = await getManagerDepartmentId(req.user.id, req)
     if (!deptId) {
       return res.status(400).json({ error: 'Вы не являетесь руководителем ни одного отдела' })
     }
@@ -202,7 +210,7 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Некорректный год или месяц' })
   }
 
-  if (!(await canAccessDepartment(req.user, department_id))) {
+  if (!(await canAccessDepartment(req.user, department_id, req))) {
     return res.status(403).json({ error: 'Нет доступа к данному отделу' })
   }
 
@@ -211,10 +219,10 @@ router.post('/', async (req, res) => {
     await client.query('BEGIN')
 
     const tsResult = await client.query(
-      `INSERT INTO timesheets (department_id, year, month, created_by)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO timesheets (department_id, year, month, created_by, organization_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [department_id, yearNum, monthNum, req.user.id]
+      [department_id, yearNum, monthNum, req.user.id, currentOrgId(req)]
     )
     const timesheet = tsResult.rows[0]
 
@@ -261,15 +269,15 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
-    if (!(await canAccessTimesheet(req.user, id))) {
+    if (!(await canAccessTimesheet(req.user, id, req))) {
       return res.status(403).json({ error: 'Нет доступа к этому табелю' })
     }
 
     const tsResult = await query(
       `SELECT t.*, d.name as department_name
        FROM timesheets t JOIN departments d ON t.department_id = d.id
-       WHERE t.id = $1`,
-      [id]
+       WHERE t.id = $1${req.org ? ' AND t.organization_id = $2' : ''}`,
+      req.org ? [id, req.org.org_id] : [id]
     )
     if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
 
@@ -277,9 +285,9 @@ router.get('/:id', async (req, res) => {
       `SELECT te.*, u.first_name, u.last_name
        FROM timesheet_entries te
        JOIN users u ON te.employee_id = u.id
-       WHERE te.timesheet_id = $1
+       WHERE te.timesheet_id = $1${req.org ? ' AND te.organization_id = $2' : ''}
        ORDER BY u.last_name, u.first_name, te.date`,
-      [id]
+      req.org ? [id, req.org.org_id] : [id]
     )
 
     const empResult = await query(
@@ -303,8 +311,8 @@ router.get('/:id', async (req, res) => {
        WHERE rs.code = 'approved'
          AND vr.start_date <= $1
          AND vr.end_date >= $2
-         AND vr.user_id = ANY($3)`,
-      [rangeEnd, rangeStart, empResult.rows.map(e => e.id)]
+         AND vr.user_id = ANY($3)${req.org ? ' AND vr.organization_id = $4' : ''}`,
+      req.org ? [rangeEnd, rangeStart, empResult.rows.map(e => e.id), req.org.org_id] : [rangeEnd, rangeStart, empResult.rows.map(e => e.id)]
     )
 
     if (vacations.rows.length > 0) {
@@ -325,7 +333,7 @@ router.get('/:id', async (req, res) => {
           const dateStr = toLocalDateStr(d)
           const key = `${v.user_id}:${dateStr}`
           if (!entrySet.has(key)) {
-            vacationEntries.push([id, v.user_id, dateStr, tsCode, true])
+            vacationEntries.push([id, v.user_id, dateStr, tsCode, true, currentOrgId(req)])
             entrySet.add(key)
           }
         }
@@ -336,11 +344,11 @@ router.get('/:id', async (req, res) => {
         try {
           await client.query('BEGIN')
           const placeholders = vacationEntries.map((_, i) => {
-            const b = i * 5
-            return `($${b+1}, $${b+2}, $${b+3}, $${b+4}, $${b+5})`
+            const b = i * 6
+            return `($${b+1}, $${b+2}, $${b+3}, $${b+4}, $${b+5}, $${b+6})`
           }).join(', ')
           await client.query(
-            `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted)
+            `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted, organization_id)
              VALUES ${placeholders}
              ON CONFLICT (timesheet_id, employee_id, date) DO NOTHING`,
             vacationEntries.flat()
@@ -351,9 +359,9 @@ router.get('/:id', async (req, res) => {
             `SELECT te.*, u.first_name, u.last_name
              FROM timesheet_entries te
              JOIN users u ON te.employee_id = u.id
-             WHERE te.timesheet_id = $1
+             WHERE te.timesheet_id = $1${req.org ? ' AND te.organization_id = $2' : ''}
              ORDER BY u.last_name, u.first_name, te.date`,
-            [id]
+            req.org ? [id, req.org.org_id] : [id]
           )
           entriesResult.rows = refreshed.rows
         } catch (err) {
@@ -409,11 +417,12 @@ router.put('/:id/entries', async (req, res) => {
   }
 
   try {
-    const tsResult = await query(`SELECT * FROM timesheets WHERE id = $1`, [id])
+    const { text: tsText, values: tsVals } = orgScopedQuery(`SELECT * FROM timesheets WHERE id = $1`, [id], req)
+    const tsResult = await query(tsText, tsVals)
     if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
     const timesheet = tsResult.rows[0]
 
-    if (!(await canAccessDepartment(req.user, timesheet.department_id))) {
+    if (!(await canAccessDepartment(req.user, timesheet.department_id, req))) {
       return res.status(403).json({ error: 'Нет доступа к этому табелю' })
     }
 
@@ -428,8 +437,8 @@ router.put('/:id/entries', async (req, res) => {
     const dates = [...new Set(entries.map(e => e.date))]
     const existingResult = await query(
       `SELECT employee_id, date, code FROM timesheet_entries
-       WHERE timesheet_id = $1 AND employee_id = ANY($2) AND date = ANY($3)`,
-      [id, employeeIds, dates]
+       WHERE timesheet_id = $1 AND employee_id = ANY($2) AND date = ANY($3)${req.org ? ' AND organization_id = $4' : ''}`,
+      req.org ? [id, employeeIds, dates, req.org.org_id] : [id, employeeIds, dates]
     )
     const existingMap = new Map()
     for (const row of existingResult.rows) {
@@ -459,19 +468,19 @@ router.put('/:id/entries', async (req, res) => {
     try {
       await client.query('BEGIN')
       const placeholders = normalizedEntries.map((_, i) => {
-        const base = i * 5
-        return `($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5})`
+        const base = i * 6
+        return `($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6})`
       }).join(', ')
       await client.query(
-        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted)
+        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted, organization_id)
          VALUES ${placeholders}
          ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
            SET code = EXCLUDED.code, is_submitted = false`,
-        normalizedEntries.flatMap(e => [id, e.employee_id, e.date, e.code, false])
+        normalizedEntries.flatMap(e => [id, e.employee_id, e.date, e.code, false, currentOrgId(req)])
       )
       await client.query(
-        `UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2`,
-        [req.user.id, id]
+        `UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2${req.org ? ' AND organization_id = $3' : ''}`,
+        req.org ? [req.user.id, id, req.org.org_id] : [req.user.id, id]
       )
       await client.query('COMMIT')
       res.json({ success: true })
@@ -523,11 +532,12 @@ router.put('/:id/status', async (req, res) => {
   }
 
   try {
-    const tsResult = await query(`SELECT * FROM timesheets WHERE id = $1`, [id])
+    const { text: tsText, values: tsVals } = orgScopedQuery(`SELECT * FROM timesheets WHERE id = $1`, [id], req)
+    const tsResult = await query(tsText, tsVals)
     if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
     const timesheet = tsResult.rows[0]
 
-    if (!(await canAccessDepartment(req.user, timesheet.department_id))) {
+    if (!(await canAccessDepartment(req.user, timesheet.department_id, req))) {
       return res.status(403).json({ error: 'Нет доступа к этому табелю' })
     }
 
@@ -549,13 +559,13 @@ router.put('/:id/status', async (req, res) => {
       await client.query('BEGIN')
       result = await client.query(
         `UPDATE timesheets SET status = $1, updated_by = $2, updated_at = NOW()
-         WHERE id = $3 RETURNING *`,
-        [status, req.user.id, id]
+         WHERE id = $3${req.org ? ' AND organization_id = $4' : ''} RETURNING *`,
+        req.org ? [status, req.user.id, id, req.org.org_id] : [status, req.user.id, id]
       )
       if (status === 'submitted' && current === 'draft') {
         await client.query(
-          `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1`,
-          [id]
+          `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1${req.org ? ' AND organization_id = $2' : ''}`,
+          req.org ? [id, req.org.org_id] : [id]
         )
       }
       await client.query('COMMIT')
@@ -593,16 +603,17 @@ router.put('/:id/status', async (req, res) => {
 router.post('/:id/submit-today', async (req, res) => {
   const { id } = req.params
   try {
-    if (!(await canAccessTimesheet(req.user, id))) {
+    if (!(await canAccessTimesheet(req.user, id, req))) {
       return res.status(403).json({ error: 'Нет доступа к этому табелю' })
     }
-    const tsResult = await query(`SELECT * FROM timesheets WHERE id = $1`, [id])
+    const { text: tsText, values: tsVals } = orgScopedQuery(`SELECT * FROM timesheets WHERE id = $1`, [id], req)
+    const tsResult = await query(tsText, tsVals)
     if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
 
     const today = toLocalDateStr(new Date())
     const result = await query(
-      `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1 AND date = $2`,
-      [id, today]
+      `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1 AND date = $2${req.org ? ' AND organization_id = $3' : ''}`,
+      req.org ? [id, today, req.org.org_id] : [id, today]
     )
     res.json({ success: true, updated: result.rowCount })
   } catch (error) {
@@ -636,7 +647,7 @@ router.post('/:id/submit-today', async (req, res) => {
 router.get('/:id/export/excel', async (req, res) => {
   const { id } = req.params
   try {
-    if (!(await canAccessTimesheet(req.user, id))) {
+    if (!(await canAccessTimesheet(req.user, id, req))) {
       return res.status(403).json({ error: 'Нет доступа' })
     }
     const data = await getTimesheetExportData(id)
@@ -694,7 +705,7 @@ router.get('/:id/export/excel', async (req, res) => {
 router.get('/:id/export/pdf', async (req, res) => {
   const { id } = req.params
   try {
-    if (!(await canAccessTimesheet(req.user, id))) {
+    if (!(await canAccessTimesheet(req.user, id, req))) {
       return res.status(403).json({ error: 'Нет доступа' })
     }
     const data = await getTimesheetExportData(id)

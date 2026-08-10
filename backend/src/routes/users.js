@@ -3,6 +3,7 @@ import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { uploadAvatar } from '../middleware/upload.js'
 import { uploadToS3, getS3FileUrl } from '../config/s3.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 
 const router = express.Router()
 
@@ -30,9 +31,8 @@ const router = express.Router()
  */
 router.get('/skills/all', authenticateToken, async (req, res) => {
   try {
-    const result = await query(
-      'SELECT id, name FROM skills_dictionary ORDER BY name'
-    )
+    const skillsQuery = orgScopedQuery('SELECT id, name FROM skills_dictionary ORDER BY name', [], req)
+    const result = await query(skillsQuery.text, skillsQuery.values)
     res.json(result.rows)
   } catch (error) {
     console.error('Error fetching all skills:', error)
@@ -60,9 +60,17 @@ router.get('/skills/all', authenticateToken, async (req, res) => {
  */
 router.get('/positions/all', authenticateToken, async (req, res) => {
   try {
-    const result = await query(
-      'SELECT DISTINCT position FROM users WHERE position IS NOT NULL ORDER BY position'
-    )
+    let sql = 'SELECT DISTINCT position FROM users'
+    const params = []
+    let joinClause = ''
+    let whereClause = ' WHERE position IS NOT NULL'
+    if (req.org) {
+      joinClause = ' JOIN user_organizations uo ON users.id = uo.user_id'
+      whereClause = ` WHERE position IS NOT NULL AND uo.org_id = $${params.length + 1}`
+      params.push(currentOrgId(req))
+    }
+    sql += joinClause + whereClause + ' ORDER BY position'
+    const result = await query(sql, params)
     res.json(result.rows.map(r => r.position))
   } catch (error) {
     console.error('Error fetching all positions:', error)
@@ -101,6 +109,14 @@ router.get('/search', authenticateToken, async (req, res) => {
   try {
     const { departmentId, q } = req.query
     
+    const params = []
+    const orgJoin = req.org ? 'JOIN user_organizations uo ON u.id = uo.user_id' : ''
+    let orgWhere = ''
+    if (req.org) {
+      orgWhere = ` AND uo.org_id = $${params.length + 1}`
+      params.push(currentOrgId(req))
+    }
+
     let sql = `
       SELECT 
         u.id,
@@ -121,13 +137,11 @@ router.get('/search', authenticateToken, async (req, res) => {
         u.cabinet,
         m.first_name || ' ' || m.last_name as manager_name
       FROM users u
+      ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN users m ON u.manager_id = m.id
-      WHERE 1=1
+      WHERE 1=1${orgWhere}
     `
-    
-
-    const params = []
     
     if (departmentId) {
       sql += ' AND u.department_id = $' + (params.length + 1)
@@ -182,6 +196,14 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
   try {
     const { departmentId } = req.query
     
+    const params = []
+    const orgJoin = req.org ? 'JOIN user_organizations uo ON u.id = uo.user_id' : ''
+    let orgWhere = ''
+    if (req.org) {
+      orgWhere = ` AND uo.org_id = $${params.length + 1}`
+      params.push(currentOrgId(req))
+    }
+
     let sql = `
       SELECT 
         u.id,
@@ -200,12 +222,11 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
         u.avatar,
         m.first_name || ' ' || m.last_name as manager_name
       FROM users u
+      ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN users m ON u.manager_id = m.id
-      WHERE 1=1
+      WHERE 1=1${orgWhere}
     `
-    
-    const params = []
 
     if (departmentId) {
       sql += ' AND u.department_id = $' + (params.length + 1)
@@ -471,16 +492,14 @@ router.post('/:id/skills', authenticateToken, async (req, res) => {
     const skillName = skill.trim()
 
     // Check if skill exists in dictionary, if not create it
-    const skillResult = await query(
-      'SELECT id FROM skills_dictionary WHERE name = $1',
-      [skillName]
-    )
+    const skillLookupQuery = orgScopedQuery('SELECT id FROM skills_dictionary WHERE name = $1', [skillName], req)
+    const skillResult = await query(skillLookupQuery.text, skillLookupQuery.values)
 
     let skillId
     if (skillResult.rows.length === 0) {
       const insertResult = await query(
-        'INSERT INTO skills_dictionary (name) VALUES ($1) RETURNING id',
-        [skillName]
+        'INSERT INTO skills_dictionary (name, organization_id) VALUES ($1, $2) RETURNING id',
+        [skillName, currentOrgId(req)]
       )
       skillId = insertResult.rows[0].id
     } else {
@@ -630,8 +649,8 @@ router.post('/:id/projects', authenticateToken, async (req, res) => {
     const projectStatus = status && validStatuses.includes(status) ? status : 'active'
 
     const result = await query(
-      `INSERT INTO projects (user_id, name, role, status, start_date, end_date, description)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO projects (user_id, name, role, status, start_date, end_date, description, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, name, role, status, start_date, end_date, description`,
       [
         id,
@@ -641,6 +660,7 @@ router.post('/:id/projects', authenticateToken, async (req, res) => {
         startDate || null,
         endDate || null,
         description ? description.trim() : null,
+        currentOrgId(req),
       ]
     )
 
@@ -699,10 +719,8 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
       return res.status(403).json({ error: 'Forbidden' })
     }
 
-    await query(
-      'DELETE FROM projects WHERE id = $1 AND user_id = $2',
-      [projectId, id]
-    )
+    const deleteQuery = orgScopedQuery('DELETE FROM projects WHERE id = $1 AND user_id = $2', [projectId, id], req)
+    await query(deleteQuery.text, deleteQuery.values)
 
     res.json({ success: true })
   } catch (error) {

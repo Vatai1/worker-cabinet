@@ -5,6 +5,7 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { uploadTemplate as uploadTemplateMiddleware } from '../middleware/upload.js'
 import { uploadToS3, getS3FileUrl, deleteFromS3, getPresignedUrl, getFromS3 } from '../config/s3.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 
 const router = express.Router()
 
@@ -39,6 +40,10 @@ router.get('/templates', authenticateToken, authorizeRoles('hr', 'admin'), async
       WHERE 1=1
     `
     const params = []
+    if (req.org) {
+      sql += ` AND t.organization_id = $${params.length + 1}`
+      params.push(currentOrgId(req))
+    }
     if (department_id) {
       sql += ` AND t.department_id = $${params.length + 1}`
       params.push(department_id)
@@ -94,10 +99,10 @@ router.post('/templates', authenticateToken, authorizeRoles('hr', 'admin'), uplo
     }
 
     const insertResult = await query(
-      `INSERT INTO onboarding_templates (title, content_text, department_id, position, created_by)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO onboarding_templates (title, content_text, department_id, position, created_by, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [title.trim(), content_text || null, department_id || null, position || null, req.user.id]
+      [title.trim(), content_text || null, department_id || null, position || null, req.user.id, currentOrgId(req)]
     )
     const id = insertResult.rows[0].id
 
@@ -107,18 +112,23 @@ router.post('/templates', authenticateToken, authorizeRoles('hr', 'admin'), uplo
       file_key = `onboarding-templates/${id}/${Date.now()}.${ext}`
       await uploadToS3(req.file, file_key)
       try {
-        await query('UPDATE onboarding_templates SET file_key = $1 WHERE id = $2', [file_key, id])
+        const updKeyQuery = orgScopedQuery('UPDATE onboarding_templates SET file_key = $1 WHERE id = $2', [file_key, id], req)
+        await query(updKeyQuery.text, updKeyQuery.values)
       } catch (updateErr) {
         await deleteFromS3(file_key).catch(() => {})
-        await query('DELETE FROM onboarding_templates WHERE id = $1', [id]).catch(() => {})
+        const delTemplateQuery = orgScopedQuery('DELETE FROM onboarding_templates WHERE id = $1', [id], req)
+        await query(delTemplateQuery.text, delTemplateQuery.values).catch(() => {})
         throw updateErr
       }
     }
 
-    const result = await query(
-      'SELECT t.*, d.name as department_name FROM onboarding_templates t LEFT JOIN departments d ON t.department_id = d.id WHERE t.id = $1',
-      [id]
-    )
+    let selSql = 'SELECT t.*, d.name as department_name FROM onboarding_templates t LEFT JOIN departments d ON t.department_id = d.id WHERE t.id = $1'
+    const selParams = [id]
+    if (req.org) {
+      selSql += ` AND t.organization_id = $${selParams.length + 1}`
+      selParams.push(currentOrgId(req))
+    }
+    const result = await query(selSql, selParams)
     res.status(201).json(result.rows[0])
   } catch (error) {
     res.status(500).json({ error: 'Ошибка создания шаблона' })
@@ -158,7 +168,8 @@ router.put('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), u
     const { id } = req.params
     const { title, content_text, department_id, position } = req.body
 
-    const existing = await query('SELECT * FROM onboarding_templates WHERE id = $1', [id])
+    const existingQuery = orgScopedQuery('SELECT * FROM onboarding_templates WHERE id = $1', [id], req)
+    const existing = await query(existingQuery.text, existingQuery.values)
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Шаблон не найден' })
     }
@@ -175,22 +186,25 @@ router.put('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), u
       file_key = new_file_key
     }
 
-    await query(
-      `UPDATE onboarding_templates SET title = $1, content_text = $2, department_id = $3, position = $4, file_key = $5 WHERE id = $6`,
-      [
-        title?.trim() || template.title,
-        content_text !== undefined ? (content_text || null) : template.content_text,
-        department_id !== undefined ? (department_id || null) : template.department_id,
-        position !== undefined ? (position || null) : template.position,
-        file_key,
-        id,
-      ]
-    )
+    const updateSql = `UPDATE onboarding_templates SET title = $1, content_text = $2, department_id = $3, position = $4, file_key = $5 WHERE id = $6`
+    const updateValues = [
+      title?.trim() || template.title,
+      content_text !== undefined ? (content_text || null) : template.content_text,
+      department_id !== undefined ? (department_id || null) : template.department_id,
+      position !== undefined ? (position || null) : template.position,
+      file_key,
+      id,
+    ]
+    const updateQuery = orgScopedQuery(updateSql, updateValues, req)
+    await query(updateQuery.text, updateQuery.values)
 
-    const result = await query(
-      'SELECT t.*, d.name as department_name FROM onboarding_templates t LEFT JOIN departments d ON t.department_id = d.id WHERE t.id = $1',
-      [id]
-    )
+    let selSql = 'SELECT t.*, d.name as department_name FROM onboarding_templates t LEFT JOIN departments d ON t.department_id = d.id WHERE t.id = $1'
+    const selParams = [id]
+    if (req.org) {
+      selSql += ` AND t.organization_id = $${selParams.length + 1}`
+      selParams.push(currentOrgId(req))
+    }
+    const result = await query(selSql, selParams)
     res.json(result.rows[0])
   } catch (error) {
     res.status(500).json({ error: 'Ошибка обновления шаблона' })
@@ -218,15 +232,14 @@ router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin')
   try {
     const { id } = req.params
 
-    const inUse = await query(
-      'SELECT 1 FROM employee_onboarding_documents WHERE template_id = $1 LIMIT 1',
-      [id]
-    )
+    const inUseQuery = orgScopedQuery('SELECT 1 FROM employee_onboarding_documents WHERE template_id = $1 LIMIT 1', [id], req)
+    const inUse = await query(inUseQuery.text, inUseQuery.values)
     if (inUse.rows.length > 0) {
       return res.status(400).json({ error: 'Шаблон используется в онбординге' })
     }
 
-    const existing = await query('SELECT file_key FROM onboarding_templates WHERE id = $1', [id])
+    const existingQuery = orgScopedQuery('SELECT file_key FROM onboarding_templates WHERE id = $1', [id], req)
+    const existing = await query(existingQuery.text, existingQuery.values)
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Шаблон не найден' })
     }
@@ -234,7 +247,8 @@ router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin')
       await deleteFromS3(existing.rows[0].file_key)
     }
 
-    await query('DELETE FROM onboarding_templates WHERE id = $1', [id])
+    const delQuery = orgScopedQuery('DELETE FROM onboarding_templates WHERE id = $1', [id], req)
+    await query(delQuery.text, delQuery.values)
     res.json({ success: true })
   } catch (error) {
     if (error.code === '23503') {
@@ -262,27 +276,32 @@ router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin')
 // GET /me — MUST precede /:id
 router.get('/me', authenticateToken, authorizeRoles('onboarding'), async (req, res) => {
   try {
-    const onboarding = await query(
+    const onbQuery = orgScopedQuery(
       `SELECT eo.*, u.first_name, u.last_name, u.position
        FROM employee_onboarding eo
        JOIN users u ON eo.user_id = u.id
        WHERE eo.user_id = $1 AND eo.completed_at IS NULL`,
-      [req.user.id]
+      [req.user.id],
+      req
     )
+    const onboarding = await query(onbQuery.text, onbQuery.values)
     if (onboarding.rows.length === 0) {
       return res.status(404).json({ error: 'Онбординг не найден' })
     }
     const ob = onboarding.rows[0]
 
-    const docs = await query(
-      `SELECT eod.id, eod.template_id, eod.acknowledged_at,
+    let docsSql = `SELECT eod.id, eod.template_id, eod.acknowledged_at,
               ot.title, ot.content_text, ot.file_key
        FROM employee_onboarding_documents eod
        JOIN onboarding_templates ot ON eod.template_id = ot.id
-       WHERE eod.onboarding_id = $1
-       ORDER BY eod.id`,
-      [ob.id]
-    )
+       WHERE eod.onboarding_id = $1`
+    const docsParams = [ob.id]
+    if (req.org) {
+      docsSql += ` AND eod.organization_id = $${docsParams.length + 1}`
+      docsParams.push(currentOrgId(req))
+    }
+    docsSql += ` ORDER BY eod.id`
+    const docs = await query(docsSql, docsParams)
 
     const documentsWithUrls = await Promise.all(
       docs.rows.map(async d => {
@@ -345,13 +364,16 @@ router.post('/documents/:id/access-token', authenticateToken, async (req, res) =
     const userId = req.user.id
 
 
-    const docResult = await query(
-      `SELECT eod.*, eo.user_id
+    let docSelSql = `SELECT eod.*, eo.user_id
        FROM employee_onboarding_documents eod
        JOIN employee_onboarding eo ON eod.onboarding_id = eo.id
-       WHERE eod.id = $1`,
-      [id]
-    )
+       WHERE eod.id = $1`
+    const docSelParams = [id]
+    if (req.org) {
+      docSelSql += ` AND eod.organization_id = $${docSelParams.length + 1}`
+      docSelParams.push(currentOrgId(req))
+    }
+    const docResult = await query(docSelSql, docSelParams)
 
     if (docResult.rows.length === 0) {
       return res.status(404).json({ error: 'Документ не найден' })
@@ -494,14 +516,17 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('
     try {
       await client.query('BEGIN')
 
-      const docResult = await client.query(
-        `SELECT eod.*, eo.user_id, eo.id as onboarding_id
+      let docSelSql = `SELECT eod.*, eo.user_id, eo.id as onboarding_id
          FROM employee_onboarding_documents eod
          JOIN employee_onboarding eo ON eod.onboarding_id = eo.id
-         WHERE eod.id = $1
-         FOR UPDATE`,
-        [id]
-      )
+         WHERE eod.id = $1`
+      const docSelParams = [id]
+      if (req.org) {
+        docSelSql += ` AND eod.organization_id = $${docSelParams.length + 1}`
+        docSelParams.push(currentOrgId(req))
+      }
+      docSelSql += ` FOR UPDATE`
+      const docResult = await client.query(docSelSql, docSelParams)
       if (docResult.rows.length === 0) {
         await client.query('ROLLBACK')
         return res.status(404).json({ error: 'Документ не найден' })
@@ -517,23 +542,17 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('
         return res.status(400).json({ error: 'Уже подтверждено' })
       }
 
-      await client.query(
-        'UPDATE employee_onboarding_documents SET acknowledged_at = NOW() WHERE id = $1',
-        [id]
-      )
+      const ackUpd = orgScopedQuery('UPDATE employee_onboarding_documents SET acknowledged_at = NOW() WHERE id = $1', [id], req)
+      await client.query(ackUpd.text, ackUpd.values)
 
-      const allDocs = await client.query(
-        'SELECT acknowledged_at FROM employee_onboarding_documents WHERE onboarding_id = $1',
-        [doc.onboarding_id]
-      )
+      const allDocsQuery = orgScopedQuery('SELECT acknowledged_at FROM employee_onboarding_documents WHERE onboarding_id = $1', [doc.onboarding_id], req)
+      const allDocs = await client.query(allDocsQuery.text, allDocsQuery.values)
       const allAcknowledged = allDocs.rows.every(d => d.acknowledged_at !== null)
 
       if (allAcknowledged) {
         await client.query(`UPDATE users SET role = 'employee' WHERE id = $1`, [doc.user_id])
-        await client.query(
-          'UPDATE employee_onboarding SET completed_at = NOW() WHERE id = $1',
-          [doc.onboarding_id]
-        )
+        const completeQuery = orgScopedQuery('UPDATE employee_onboarding SET completed_at = NOW() WHERE id = $1', [doc.onboarding_id], req)
+        await client.query(completeQuery.text, completeQuery.values)
 
       }
 
@@ -566,8 +585,7 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('
  */
 router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
-    const result = await query(
-      `SELECT
+    let listSql = `SELECT
         eo.id,
         eo.user_id,
         eo.started_at,
@@ -580,9 +598,14 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
         (SELECT COUNT(*) FROM employee_onboarding_documents WHERE onboarding_id = eo.id AND acknowledged_at IS NOT NULL) as acknowledged_docs
        FROM employee_onboarding eo
        JOIN users u ON eo.user_id = u.id
-       LEFT JOIN departments d ON u.department_id = d.id
-       ORDER BY eo.started_at DESC`
-    )
+       LEFT JOIN departments d ON u.department_id = d.id`
+    const listParams = []
+    if (req.org) {
+      listSql += ` WHERE eo.organization_id = $${listParams.length + 1}`
+      listParams.push(currentOrgId(req))
+    }
+    listSql += ` ORDER BY eo.started_at DESC`
+    const result = await query(listSql, listParams)
     res.json(result.rows)
   } catch (error) {
     res.status(500).json({ error: 'Ошибка загрузки онбордингов' })
@@ -647,26 +670,29 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
       const userId = userResult.rows[0].id
 
       await client.query(
-        'INSERT INTO vacation_balances (user_id, total_days) VALUES ($1, 28)',
-        [userId]
+        'INSERT INTO vacation_balances (user_id, total_days, organization_id) VALUES ($1, 28, $2)',
+        [userId, currentOrgId(req)]
       )
-      await client.query(
+      const vbUpd = orgScopedQuery(
         `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'
          FROM users WHERE users.id = vacation_balances.user_id AND travel_next_available_date IS NULL AND users.id = $1`,
-        [userId]
+        [userId],
+        req
       )
+      await client.query(vbUpd.text, vbUpd.values)
 
       const onboardingResult = await client.query(
-        `INSERT INTO employee_onboarding (user_id, started_by) VALUES ($1, $2) RETURNING id`,
-        [userId, req.user.id]
+        `INSERT INTO employee_onboarding (user_id, started_by, organization_id) VALUES ($1, $2, $3) RETURNING id`,
+        [userId, req.user.id, currentOrgId(req)]
       )
       const onboardingId = onboardingResult.rows[0].id
 
       if (template_ids?.length) {
-        const values = template_ids.map((_, i) => `($1, $${i + 2})`).join(', ')
+        const orgParamIdx = template_ids.length + 2
+        const values = template_ids.map((_, i) => `($1, $${i + 2}, $${orgParamIdx})`).join(', ')
         await client.query(
-          `INSERT INTO employee_onboarding_documents (onboarding_id, template_id) VALUES ${values}`,
-          [onboardingId, ...template_ids]
+          `INSERT INTO employee_onboarding_documents (onboarding_id, template_id, organization_id) VALUES ${values}`,
+          [onboardingId, ...template_ids, currentOrgId(req)]
         )
       }
 
@@ -706,30 +732,36 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
 router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const result = await query(
-      `SELECT
+    let selSql = `SELECT
         eo.id, eo.user_id, eo.started_at, eo.completed_at,
         u.first_name, u.last_name, u.email, u.position,
         d.name as department
        FROM employee_onboarding eo
        JOIN users u ON eo.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE eo.id = $1`,
-      [id]
-    )
+       WHERE eo.id = $1`
+    const selParams = [id]
+    if (req.org) {
+      selSql += ` AND eo.organization_id = $${selParams.length + 1}`
+      selParams.push(currentOrgId(req))
+    }
+    const result = await query(selSql, selParams)
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Онбординг не найден' })
     }
 
-    const docs = await query(
-      `SELECT eod.id, eod.template_id, eod.acknowledged_at,
+    let docsSql = `SELECT eod.id, eod.template_id, eod.acknowledged_at,
               ot.title, ot.content_text, ot.file_key
        FROM employee_onboarding_documents eod
        JOIN onboarding_templates ot ON eod.template_id = ot.id
-       WHERE eod.onboarding_id = $1
-       ORDER BY eod.id`,
-      [id]
-    )
+       WHERE eod.onboarding_id = $1`
+    const docsParams = [id]
+    if (req.org) {
+      docsSql += ` AND eod.organization_id = $${docsParams.length + 1}`
+      docsParams.push(currentOrgId(req))
+    }
+    docsSql += ` ORDER BY eod.id`
+    const docs = await query(docsSql, docsParams)
 
     const documentsWithUrls = await Promise.all(
       docs.rows.map(async d => {
@@ -793,10 +825,8 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
 router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const result = await query(
-      'SELECT user_id FROM employee_onboarding WHERE id = $1',
-      [id]
-    )
+    const selQuery = orgScopedQuery('SELECT user_id FROM employee_onboarding WHERE id = $1', [id], req)
+    const result = await query(selQuery.text, selQuery.values)
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Онбординг не найден' })
     }
@@ -806,7 +836,8 @@ router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (r
     try {
       await client.query('BEGIN')
       await client.query(`UPDATE users SET role = 'employee' WHERE id = $1`, [userId])
-      await client.query('DELETE FROM employee_onboarding WHERE id = $1', [id])
+      const delOnbQuery = orgScopedQuery('DELETE FROM employee_onboarding WHERE id = $1', [id], req)
+      await client.query(delOnbQuery.text, delOnbQuery.values)
       await client.query('COMMIT')
       res.json({ success: true })
     } catch (err) {

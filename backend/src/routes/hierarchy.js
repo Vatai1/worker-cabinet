@@ -1,6 +1,7 @@
 import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 
 const router = express.Router()
 
@@ -33,7 +34,8 @@ const DEFAULT_DATA = { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }
  */
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT data, updated_at, updated_by FROM hr_hierarchy WHERE id = 1')
+    const { text, values } = orgScopedQuery('SELECT data, updated_at, updated_by FROM hr_hierarchy WHERE id = 1', [], req)
+    const result = await query(text, values)
     if (result.rows.length === 0) {
       return res.json({ data: DEFAULT_DATA, updated_at: null, updated_by: null })
     }
@@ -75,14 +77,14 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
   try {
     const data = JSON.stringify({ nodes, edges, viewport: viewport ?? DEFAULT_DATA.viewport })
     const result = await query(
-      `INSERT INTO hr_hierarchy (id, data, updated_at, updated_by)
-       VALUES (1, $1, NOW(), $2)
+      `INSERT INTO hr_hierarchy (id, data, updated_at, updated_by, organization_id)
+       VALUES (1, $1, NOW(), $2, $3)
        ON CONFLICT (id) DO UPDATE
          SET data = EXCLUDED.data,
              updated_at = EXCLUDED.updated_at,
              updated_by = EXCLUDED.updated_by
        RETURNING updated_at`,
-      [data, req.user.id]
+      [data, req.user.id, currentOrgId(req)]
     )
     res.json({ updated_at: result.rows[0].updated_at })
   } catch (error) {
@@ -111,10 +113,12 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
 router.get('/department/:id', authenticateToken, async (req, res) => {
   const { id } = req.params
   try {
-    const result = await query(
+    const { text, values } = orgScopedQuery(
       'SELECT data, updated_at, updated_by FROM department_hierarchy WHERE department_id = $1',
-      [id]
+      [id],
+      req
     )
+    const result = await query(text, values)
     if (result.rows.length === 0) {
       return res.json({ data: DEFAULT_DATA, updated_at: null, updated_by: null })
     }
@@ -162,14 +166,14 @@ router.put('/department/:id', authenticateToken, authorizeRoles('hr', 'admin'), 
   try {
     const data = JSON.stringify({ nodes, edges, viewport: viewport ?? DEFAULT_DATA.viewport })
     const result = await query(
-      `INSERT INTO department_hierarchy (department_id, data, updated_at, updated_by)
-       VALUES ($1, $2, NOW(), $3)
+      `INSERT INTO department_hierarchy (department_id, data, updated_at, updated_by, organization_id)
+       VALUES ($1, $2, NOW(), $3, $4)
        ON CONFLICT (department_id) DO UPDATE
          SET data = EXCLUDED.data,
              updated_at = EXCLUDED.updated_at,
              updated_by = EXCLUDED.updated_by
        RETURNING updated_at`,
-      [id, data, req.user.id]
+      [id, data, req.user.id, currentOrgId(req)]
     )
     res.json({ updated_at: result.rows[0].updated_at })
   } catch (error) {

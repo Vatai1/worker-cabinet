@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
 import { uploadToS3, getFromS3, getPresignedUrl } from '../config/s3.js'
 import { notifyBatch } from '../config/notifications.js'
@@ -169,16 +170,16 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(
     await client.query('BEGIN')
 
     const campaignResult = await client.query(
-      `INSERT INTO mailing_campaigns (title, message, images, channel, created_by, recipient_count)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [title, message, JSON.stringify(images), channel, req.user.id, recipientUserIds.length]
+      `INSERT INTO mailing_campaigns (title, message, images, channel, created_by, recipient_count, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [title, message, JSON.stringify(images), channel, req.user.id, recipientUserIds.length, currentOrgId(req)]
     )
     const campaign = campaignResult.rows[0]
 
     for (const userId of recipientUserIds) {
       await client.query(
-        `INSERT INTO mailing_campaign_recipients (campaign_id, user_id) VALUES ($1, $2)`,
-        [campaign.id, userId]
+        `INSERT INTO mailing_campaign_recipients (campaign_id, user_id, organization_id) VALUES ($1, $2, $3)`,
+        [campaign.id, userId, currentOrgId(req)]
       )
     }
 
@@ -217,8 +218,10 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(a
             u.first_name, u.last_name
      FROM mailing_campaigns mc
      LEFT JOIN users u ON mc.created_by = u.id
+     ${req.org ? 'WHERE mc.organization_id = $1' : ''}
      ORDER BY mc.created_at DESC
-     LIMIT 50`
+     LIMIT 50`,
+    req.org ? [req.org.org_id] : []
   )
   res.json(result.rows)
 }))
@@ -249,8 +252,8 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandle
             u.first_name as creator_first_name, u.last_name as creator_last_name
      FROM mailing_campaigns mc
      LEFT JOIN users u ON mc.created_by = u.id
-     WHERE mc.id = $1`,
-    [req.params.id]
+     WHERE mc.id = $1${req.org ? ' AND mc.organization_id = $2' : ''}`,
+    req.org ? [req.params.id, req.org.org_id] : [req.params.id]
   )
   if (campaignResult.rows.length === 0) throw new NotFoundError('Рассылка не найдена')
 
@@ -259,9 +262,9 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandle
             u.first_name, u.last_name, u.email, u.position
      FROM mailing_campaign_recipients mcr
      JOIN users u ON mcr.user_id = u.id
-     WHERE mcr.campaign_id = $1
+     WHERE mcr.campaign_id = $1${req.org ? ' AND mcr.organization_id = $2' : ''}
      ORDER BY u.last_name, u.first_name`,
-    [req.params.id]
+    req.org ? [req.params.id, req.org.org_id] : [req.params.id]
   )
 
   const sentCount = recipientsResult.rows.filter(r => r.status === 'sent').length

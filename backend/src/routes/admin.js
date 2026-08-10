@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '../middleware/errors.js'
 import { query, getClient } from '../config/database.js'
+import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { getActiveWsCount } from '../config/ws.js'
 import { createRequire } from 'module'
 import path from 'path'
@@ -549,7 +550,8 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
  *         description: Системные настройки
  */
 router.get('/settings', asyncHandler(async (req, res) => {
-  const result = await query('SELECT key, value, description, updated_at FROM system_settings ORDER BY key')
+  const { text, values } = orgScopedQuery('SELECT key, value, description, updated_at FROM system_settings ORDER BY key', [], req)
+  const result = await query(text, values)
   res.json(result.rows)
 }))
 
@@ -584,16 +586,17 @@ router.put('/settings', asyncHandler(async (req, res) => {
 
     const valid = settings.filter(s => s.key && s.value !== undefined)
     if (valid.length > 0) {
+      const orgId = currentOrgId(req)
       const values = []
       const params = []
       valid.forEach((s, i) => {
-        const base = i * 2
-        values.push(`($${base + 1}, $${base + 2}, NOW())`)
-        params.push(s.key, String(s.value))
+        const base = i * 3
+        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, NOW())`)
+        params.push(s.key, String(s.value), orgId)
       })
       await query(
-        `INSERT INTO system_settings (key, value, updated_at) VALUES ${values.join(', ')}
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        `INSERT INTO system_settings (key, value, organization_id, updated_at) VALUES ${values.join(', ')}
+         ON CONFLICT (key, organization_id) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
         params
       )
     }
@@ -688,10 +691,11 @@ router.get('/audit-log', asyncHandler(async (req, res) => {
  *         description: Статистика
  */
 router.get('/stats', asyncHandler(async (req, res) => {
+  const deptCount = orgScopedQuery('SELECT COUNT(*) as count FROM departments', [], req)
   const [users, roles, departments, auditToday, activeUsers] = await Promise.all([
     query('SELECT COUNT(*) as count FROM users'),
     query('SELECT COUNT(*) as count FROM roles'),
-    query('SELECT COUNT(*) as count FROM departments'),
+    query(deptCount.text, deptCount.values),
     query(`SELECT COUNT(*) as count FROM audit_log WHERE created_at >= CURRENT_DATE`),
     query(`SELECT COUNT(*) as count FROM users WHERE status = 'active'`),
   ])
@@ -851,7 +855,8 @@ router.get('/health', asyncHandler(async (req, res) => {
   const dbSize = await query("SELECT pg_database_size(current_database()) as size")
 
   const usersCount = await query('SELECT COUNT(*) as c FROM users')
-  const modulesCount = await query("SELECT COUNT(*) as c FROM modules WHERE is_enabled = true")
+  const modulesCountQuery = orgScopedQuery("SELECT COUNT(*) as c FROM modules WHERE is_enabled = true", [], req)
+  const modulesCount = await query(modulesCountQuery.text, modulesCountQuery.values)
   const errorsCount = await query("SELECT COUNT(*) as c FROM error_log WHERE created_at >= NOW() - INTERVAL '24 hours'")
 
   const uptime = process.uptime()
@@ -1249,6 +1254,9 @@ router.get('/reports/unused-vacations', asyncHandler(async (req, res) => {
  */
 router.get('/reports/project-load', asyncHandler(async (req, res) => {
   const { format } = req.query
+  const orgId = currentOrgId(req)
+  const orgClause = orgId ? 'WHERE cp.organization_id = $1' : ''
+  const orgParams = orgId ? [orgId] : []
 
   const projects = await query(`
     SELECT cp.id, cp.name, cp.status,
@@ -1258,9 +1266,10 @@ router.get('/reports/project-load', asyncHandler(async (req, res) => {
     FROM company_projects cp
     LEFT JOIN company_project_members cpm ON cpm.project_id = cp.id
     LEFT JOIN users u ON cpm.user_id = u.id AND u.status = 'active'
+    ${orgClause}
     GROUP BY cp.id
     ORDER BY member_count DESC, cp.name
-  `)
+  `, orgParams)
 
   const summary = await query(`
     SELECT COUNT(DISTINCT cp.id) as total_projects,
@@ -1270,7 +1279,8 @@ router.get('/reports/project-load', asyncHandler(async (req, res) => {
     FROM company_projects cp
     LEFT JOIN company_project_members cpm ON cpm.project_id = cp.id
     LEFT JOIN users u ON cpm.user_id = u.id AND u.status = 'active'
-  `)
+    ${orgClause}
+  `, orgParams)
 
   const result = {
     summary: {
@@ -1422,10 +1432,12 @@ router.get('/reports/hires', asyncHandler(async (req, res) => {
  *         description: Справочники
  */
 router.get('/dictionaries', asyncHandler(async (req, res) => {
+  const vacationTypesQuery = orgScopedQuery('SELECT id, code, name FROM vacation_types ORDER BY name', [], req)
+  const skillsQuery = orgScopedQuery('SELECT id, name FROM skills_dictionary ORDER BY name', [], req)
   const [positions, vacationTypes, skills] = await Promise.all([
     query('SELECT DISTINCT position as name, COUNT(*) as count FROM users GROUP BY position ORDER BY position'),
-    query('SELECT id, code, name FROM vacation_types ORDER BY name'),
-    query('SELECT id, name FROM skills_dictionary ORDER BY name'),
+    query(vacationTypesQuery.text, vacationTypesQuery.values),
+    query(skillsQuery.text, skillsQuery.values),
   ])
 
   res.json({ positions: positions.rows, vacationTypes: vacationTypes.rows, skills: skills.rows })
@@ -1454,9 +1466,10 @@ router.get('/dictionaries', asyncHandler(async (req, res) => {
 router.post('/dictionaries/skills', asyncHandler(async (req, res) => {
   const { name } = req.body
   if (!name?.trim()) throw new ValidationError('Название обязательно')
+  const orgId = currentOrgId(req)
   const result = await query(
-    `INSERT INTO skills_dictionary (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING *`,
-    [name.trim()]
+    `INSERT INTO skills_dictionary (name, organization_id) VALUES ($1, $2) ON CONFLICT (name, organization_id) DO NOTHING RETURNING *`,
+    [name.trim(), orgId]
   )
   if (result.rows.length === 0) throw new ValidationError('Такой навык уже существует')
   res.status(201).json(result.rows[0])
@@ -1476,7 +1489,8 @@ router.post('/dictionaries/skills', asyncHandler(async (req, res) => {
  *         description: Навык удалён
  */
 router.delete('/dictionaries/skills/:id', asyncHandler(async (req, res) => {
-  await query('DELETE FROM skills_dictionary WHERE id = $1', [req.params.id])
+  const { text, values } = orgScopedQuery('DELETE FROM skills_dictionary WHERE id = $1', [req.params.id], req)
+  await query(text, values)
   res.json({ success: true })
 }))
 
@@ -1494,7 +1508,8 @@ router.delete('/dictionaries/skills/:id', asyncHandler(async (req, res) => {
  *         description: Список модулей
  */
 router.get('/modules', asyncHandler(async (req, res) => {
-  const result = await query('SELECT * FROM modules ORDER BY sort_order')
+  const { text, values } = orgScopedQuery('SELECT * FROM modules ORDER BY sort_order', [], req)
+  const result = await query(text, values)
   res.json(result.rows.map(r => ({ ...r, locked: r.category === 'core' || r.code === 'appearance' })))
 }))
 
@@ -1531,9 +1546,10 @@ router.post('/modules', asyncHandler(async (req, res) => {
   if (!code?.trim()) throw new ValidationError('Код модуля обязателен')
   if (!name?.trim()) throw new ValidationError('Название модуля обязательно')
 
+  const orgId = currentOrgId(req)
   const result = await query(
-    `INSERT INTO modules (code, name, description, icon, route, category, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [code.trim(), name.trim(), description || null, icon || null, route || null, category || 'general', sort_order || 0]
+    `INSERT INTO modules (code, name, description, icon, route, category, sort_order, organization_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [code.trim(), name.trim(), description || null, icon || null, route || null, category || 'general', sort_order || 0, orgId]
   )
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
@@ -1575,16 +1591,19 @@ router.put('/modules/:id', asyncHandler(async (req, res) => {
   const { id } = req.params
   const { name, description, icon, route, category, sort_order } = req.body
 
-  const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
+  const existingQ = orgScopedQuery('SELECT * FROM modules WHERE id = $1', [id], req)
+  const existing = await query(existingQ.text, existingQ.values)
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
 
-  const result = await query(
+  const updateQ = orgScopedQuery(
     `UPDATE modules SET name = COALESCE($1, name), description = COALESCE($2, description),
       icon = COALESCE($3, icon), route = COALESCE($4, route), category = COALESCE($5, category),
       sort_order = COALESCE($6, sort_order),
       updated_at = NOW() WHERE id = $7 RETURNING *`,
-    [name || null, description !== undefined ? description : null, icon || null, route || null, category || null, sort_order !== undefined ? sort_order : null, id]
+    [name || null, description !== undefined ? description : null, icon || null, route || null, category || null, sort_order !== undefined ? sort_order : null, id],
+    req
   )
+  const result = await query(updateQ.text, updateQ.values)
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_update', 'module', id,
@@ -1610,13 +1629,15 @@ router.put('/modules/:id', asyncHandler(async (req, res) => {
  */
 router.delete('/modules/:id', asyncHandler(async (req, res) => {
   const { id } = req.params
-  const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
+  const existingQ = orgScopedQuery('SELECT * FROM modules WHERE id = $1', [id], req)
+  const existing = await query(existingQ.text, existingQ.values)
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
   if (existing.rows[0].category === 'core' || existing.rows[0].code === 'appearance') {
     throw new ValidationError('Базовый модуль нельзя отключить')
   }
 
-  await query('DELETE FROM modules WHERE id = $1', [id])
+  const delQ = orgScopedQuery('DELETE FROM modules WHERE id = $1', [id], req)
+  await query(delQ.text, delQ.values)
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_delete', 'module', id,
@@ -1642,14 +1663,16 @@ router.delete('/modules/:id', asyncHandler(async (req, res) => {
  */
 router.put('/modules/:id/toggle', asyncHandler(async (req, res) => {
   const { id } = req.params
-  const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
+  const existingQ = orgScopedQuery('SELECT * FROM modules WHERE id = $1', [id], req)
+  const existing = await query(existingQ.text, existingQ.values)
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
   if (existing.rows[0].category === 'core' || existing.rows[0].code === 'appearance') {
     throw new ValidationError('Базовый модуль нельзя отключить')
   }
 
   const newStatus = !existing.rows[0].is_enabled
-  await query('UPDATE modules SET is_enabled = $1, updated_at = NOW() WHERE id = $2', [newStatus, id])
+  const toggleQ = orgScopedQuery('UPDATE modules SET is_enabled = $1, updated_at = NOW() WHERE id = $2', [newStatus, id], req)
+  await query(toggleQ.text, toggleQ.values)
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_toggle', 'module', id,
@@ -1669,7 +1692,8 @@ router.put('/modules/:id/toggle', asyncHandler(async (req, res) => {
  *         description: Включённые модули
  */
 router.get('/modules/enabled', asyncHandler(async (req, res) => {
-  const result = await query('SELECT code FROM modules WHERE is_enabled = true')
+  const { text, values } = orgScopedQuery('SELECT code FROM modules WHERE is_enabled = true', [], req)
+  const result = await query(text, values)
   res.json(result.rows.map(r => r.code))
 }))
 
@@ -1689,7 +1713,8 @@ router.get('/modules/enabled', asyncHandler(async (req, res) => {
  *         description: Модуль не найден
  */
 router.get('/modules/:id/settings', asyncHandler(async (req, res) => {
-  const result = await query('SELECT settings FROM modules WHERE code = $1', [req.params.id])
+  const { text, values } = orgScopedQuery('SELECT settings FROM modules WHERE code = $1', [req.params.id], req)
+  const result = await query(text, values)
   if (result.rows.length === 0) throw new NotFoundError('Модуль не найден')
   res.json(result.rows[0].settings || {})
 }))
@@ -1718,7 +1743,8 @@ router.get('/modules/:id/settings', asyncHandler(async (req, res) => {
  */
 router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
   const { id } = req.params
-  const existing = await query('SELECT id, settings FROM modules WHERE code = $1', [id])
+  const existingQ = orgScopedQuery('SELECT id, settings FROM modules WHERE code = $1', [id], req)
+  const existing = await query(existingQ.text, existingQ.values)
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
 
   const oldSettings = existing.rows[0].settings || {}
@@ -1736,10 +1762,12 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
     for (const key of KC_STRIPPED_KEYS) delete settingsToSave[key]
   }
 
-  const result = await query(
+  const updateQ = orgScopedQuery(
     'UPDATE modules SET settings = $1, updated_at = NOW() WHERE code = $2 RETURNING settings',
-    [JSON.stringify(settingsToSave), id]
+    [JSON.stringify(settingsToSave), id],
+    req
   )
+  const result = await query(updateQ.text, updateQ.values)
 
   const changed = {}
   for (const key of Object.keys(settingsToSave)) {
@@ -1772,9 +1800,12 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
 // ===================== MINI-AGENT =====================
 
 router.get('/assistant/agent-status', asyncHandler(async (req, res) => {
-  const { rows } = await query(
-    `SELECT key, value FROM system_settings WHERE key IN ('assistant_agent_port')`
+  const statusQ = orgScopedQuery(
+    `SELECT key, value FROM system_settings WHERE key IN ('assistant_agent_port')`,
+    [],
+    req
   )
+  const { rows } = await query(statusQ.text, statusQ.values)
   const port = rows.find(r => r.key === 'assistant_agent_port')?.value || '8642'
   try {
     const healthRes = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(3000) })
@@ -1786,9 +1817,12 @@ router.get('/assistant/agent-status', asyncHandler(async (req, res) => {
 
 router.post('/assistant/agent-toggle', asyncHandler(async (req, res) => {
   const { enabled } = req.body
-  const { rows: settings } = await query(
-    `SELECT value FROM system_settings WHERE key = 'assistant_agent_port'`
+  const toggleQ = orgScopedQuery(
+    `SELECT value FROM system_settings WHERE key = 'assistant_agent_port'`,
+    [],
+    req
   )
+  const { rows: settings } = await query(toggleQ.text, toggleQ.values)
   const port = settings[0]?.value || '8642'
 
   const { execFileSync } = await import('child_process')
@@ -1811,9 +1845,12 @@ router.post('/assistant/agent-toggle', asyncHandler(async (req, res) => {
 }))
 
 router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
-  const { rows } = await query(
-    `SELECT key, value FROM system_settings WHERE key IN ('assistant_agent_model', 'assistant_agent_base_url')`
+  const configQ = orgScopedQuery(
+    `SELECT key, value FROM system_settings WHERE key IN ('assistant_agent_model', 'assistant_agent_base_url')`,
+    [],
+    req
   )
+  const { rows } = await query(configQ.text, configQ.values)
   const map = Object.fromEntries(rows.map(r => [r.key, r.value]))
 
   const model = map.assistant_agent_model || 'qwen2.5:3b'
