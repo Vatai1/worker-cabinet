@@ -4,6 +4,7 @@ import { deleteCookie } from '@/shared/lib/cookies'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { useModulesStore } from '@/shared/store/modulesStore'
+import { useOrgStore } from '@/shared/store/orgStore'
 
 interface AuthStore extends AuthState {
   loading: boolean
@@ -54,6 +55,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         loading: false,
       })
       useModulesStore.getState().fetchModules()
+      useOrgStore.getState().fetchOrgs()
     } catch (error) {
       deleteCookie('auth_token')
       set({ isAuthenticated: false, user: null, loading: false })
@@ -99,6 +101,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         isAuthenticated: true,
       })
       useModulesStore.getState().fetchModules()
+      useOrgStore.getState().fetchOrgs()
     } catch (error) {
       throw error
     }

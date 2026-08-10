@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell } from 'lucide-react'
 import { SidebarToggle } from './Sidebar'
+import { OrgSwitcher } from './OrgSwitcher'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { Logo } from '@/shared/components/brand/Logo'
@@ -38,6 +39,7 @@ export function Header() {
       <Logo size="sm" />
       <div className="flex-1" />
       <div className="flex items-center gap-3">
+        <OrgSwitcher />
         <button
           onClick={() => navigate('/notifications')}
           className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"

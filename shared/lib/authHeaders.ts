@@ -1,10 +1,13 @@
 import { getCookie } from './cookies'
 
+function getOrgHeaders(): Record<string, string> {
+  const orgId = typeof document !== 'undefined' ? getCookie('active_org_id') : ''
+  return orgId ? { 'X-Organization-Id': orgId } : {}
+}
+
 export const getAuthHeaders = (): Record<string, string> => {
   const csrfToken = typeof document !== 'undefined' ? getCookie('csrf_token') : ''
   const headers: Record<string, string> = {}
-  // Authorization Bearer header still supported for API/non-browser clients.
-  // The backend also reads the HttpOnly auth_token cookie as fallback.
   const token = typeof document !== 'undefined' ? getCookie('auth_token') : ''
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
@@ -12,6 +15,7 @@ export const getAuthHeaders = (): Record<string, string> => {
   if (csrfToken) {
     headers['X-CSRF-Token'] = csrfToken
   }
+  Object.assign(headers, getOrgHeaders())
   return headers
 }
 
@@ -25,5 +29,6 @@ export const getAuthHeadersWithContentType = (): Record<string, string> => {
   if (csrfToken) {
     headers['X-CSRF-Token'] = csrfToken
   }
+  Object.assign(headers, getOrgHeaders())
   return headers
 }
