@@ -27,6 +27,7 @@ import onlyofficeRoutes from './routes/onlyoffice.js'
 import appearanceRoutes from './routes/appearance.js'
 import versionRoutes from './routes/version.js'
 import mailingsRoutes from './routes/mailings.js'
+import organizationsRoutes from './routes/organizations.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { runMigrations } from './db/migrate.js'
 import { errorHandler } from './middleware/errors.js'
@@ -34,6 +35,7 @@ import * as rabbitmq from './config/rabbitmq.js'
 import { initWsServer } from './config/ws.js'
 import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
+import { attachOrgContext } from './middleware/orgContext.js'
 import bcrypt from 'bcryptjs'
 import { query } from './config/database.js'
 import { ensureBucket } from './config/s3.js'
@@ -95,7 +97,7 @@ app.use((req, res, next) => {
   }
   res.setHeader('Access-Control-Allow-Credentials', 'true')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-Organization-Id')
   if (req.method === 'OPTIONS') return res.sendStatus(204)
   next()
 })
@@ -108,6 +110,7 @@ app.use(generateCsrfToken)
 // CSRF protection for mutating API requests (safe methods exempt)
 app.use('/api', csrfMiddleware)
 app.use('/api', apiLimiter)
+app.use('/api', attachOrgContext)
 
 if (process.env.NODE_ENV !== 'production') {
   app.get('/api-docs.json', (req, res) => res.json(swaggerSpec))
@@ -146,6 +149,7 @@ app.use('/api/onlyoffice', onlyofficeRoutes)
 app.use('/api/appearance', appearanceRoutes)
 app.use('/api/version', versionRoutes)
 app.use('/api/mailings', mailingsRoutes)
+app.use('/api/organizations', organizationsRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
