@@ -1676,6 +1676,71 @@ async function runMigrations() {
     console.log('  ✓ multi-tenancy indexes created')
     console.log('✅ Multi-tenancy migration completed')
 
+    console.log('Creating module_overrides table...')
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS module_overrides (
+        id SERIAL PRIMARY KEY,
+        org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        module_code VARCHAR(50) NOT NULL,
+        name VARCHAR(255),
+        settings JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(org_id, module_code)
+      )
+    `).catch(e => console.log('  - module_overrides:', e.message))
+    await db.query('CREATE INDEX IF NOT EXISTS idx_module_overrides_org ON module_overrides(org_id)').catch(() => {})
+    console.log('  ✓ module_overrides')
+
+    await db.query(`ALTER TABLE modules ALTER COLUMN organization_id DROP NOT NULL`).catch(() => {})
+    await db.query(`ALTER TABLE modules ALTER COLUMN organization_id SET DEFAULT NULL`).catch(() => {})
+    await db.query(`ALTER TABLE system_settings ALTER COLUMN organization_id DROP NOT NULL`).catch(() => {})
+    await db.query(`ALTER TABLE system_settings ALTER COLUMN organization_id SET DEFAULT NULL`).catch(() => {})
+    console.log('  ✓ modules + system_settings organization_id nullable')
+
+    const moduleCols = await db.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'modules' AND column_name = 'organization_id'
+    `)
+    if (moduleCols.rows.length > 0) {
+      const dupModules = await db.query(`
+        SELECT code, COUNT(*) as cnt FROM modules GROUP BY code HAVING COUNT(*) > 1
+      `)
+      for (const dup of dupModules.rows) {
+        const perOrg = await db.query(
+          `SELECT id, organization_id, name, settings FROM modules WHERE code = $1 AND organization_id IS NOT NULL ORDER BY id`,
+          [dup.code]
+        )
+        for (const row of perOrg.rows) {
+          if (row.name || (row.settings && Object.keys(row.settings).length > 0)) {
+            await db.query(`
+              INSERT INTO module_overrides (org_id, module_code, name, settings)
+              VALUES ($1, $2, $3, $4)
+              ON CONFLICT (org_id, module_code) DO UPDATE SET name = EXCLUDED.name, settings = EXCLUDED.settings
+            `, [row.organization_id, dup.code, row.name, JSON.stringify(row.settings || {})]).catch(() => {})
+          }
+        }
+        await db.query(`DELETE FROM modules WHERE code = $1 AND organization_id IS NOT NULL`, [dup.code])
+      }
+      await db.query(`UPDATE modules SET organization_id = NULL WHERE organization_id IS NOT NULL`)
+      console.log('  ✓ modules migrated to global (organization_id = NULL)')
+    }
+
+    await db.query(`
+      INSERT INTO module_overrides (org_id, module_code, settings)
+      SELECT 1, code, settings FROM modules
+      WHERE NOT EXISTS (
+        SELECT 1 FROM module_overrides mo WHERE mo.org_id = 1 AND mo.module_code = modules.code
+      ) AND modules.settings IS NOT NULL AND modules.settings != '{}'::jsonb
+    `).catch(() => {})
+
+    await db.query(`
+      UPDATE system_settings SET organization_id = NULL WHERE organization_id = 1
+    `).catch(() => {})
+    console.log('  ✓ system_settings migrated to global (NULL)')
+
+    console.log('✅ Module overrides + global settings migration completed')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
 

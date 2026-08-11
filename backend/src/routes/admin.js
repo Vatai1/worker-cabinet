@@ -2,7 +2,7 @@ import { updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, 
 import keycloakConfig from '../config/keycloak.js'
 import express from 'express'
 import bcrypt from 'bcryptjs'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken, authorizeRoles, authorizeGlobalRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '../middleware/errors.js'
 import { query, getClient } from '../config/database.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
@@ -550,9 +550,18 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
  *         description: Системные настройки
  */
 router.get('/settings', asyncHandler(async (req, res) => {
-  const { text, values } = orgScopedQuery('SELECT key, value, description, updated_at FROM system_settings ORDER BY key', [], req)
-  const result = await query(text, values)
-  res.json(result.rows)
+  const globalRes = await query('SELECT key, value, description, updated_at FROM system_settings WHERE organization_id IS NULL ORDER BY key')
+  let merged = {}
+  for (const row of globalRes.rows) {
+    merged[row.key] = row
+  }
+  if (req.org) {
+    const orgRes = await query('SELECT key, value, description, updated_at FROM system_settings WHERE organization_id = $1 ORDER BY key', [req.org.org_id])
+    for (const row of orgRes.rows) {
+      merged[row.key] = row
+    }
+  }
+  res.json(Object.values(merged))
 }))
 
 /**
@@ -584,22 +593,23 @@ router.put('/settings', asyncHandler(async (req, res) => {
   const { settings } = req.body
   if (!Array.isArray(settings)) throw new ValidationError('Ожидается массив настроек')
 
-    const valid = settings.filter(s => s.key && s.value !== undefined)
-    if (valid.length > 0) {
-      const orgId = currentOrgId(req)
-      const values = []
-      const params = []
-      valid.forEach((s, i) => {
-        const base = i * 3
-        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, NOW())`)
-        params.push(s.key, String(s.value), orgId)
-      })
-      await query(
-        `INSERT INTO system_settings (key, value, organization_id, updated_at) VALUES ${values.join(', ')}
-         ON CONFLICT (key, organization_id) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-        params
-      )
-    }
+  const valid = settings.filter(s => s.key && s.value !== undefined)
+  if (valid.length > 0) {
+    const isSuperadmin = req.user.role === 'superadmin'
+    const targetOrgId = isSuperadmin ? null : (req.org?.org_id || null)
+    const placeholders = []
+    const params = []
+    valid.forEach((s, i) => {
+      const base = i * 3
+      placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, NOW())`)
+      params.push(s.key, String(s.value), targetOrgId)
+    })
+    await query(
+      `INSERT INTO system_settings (key, value, organization_id, updated_at) VALUES ${placeholders.join(', ')}
+       ON CONFLICT (key, organization_id) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      params
+    )
+  }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'settings_update', 'system', null, { count: settings.length }, req.ip)
   res.json({ success: true })
@@ -1508,9 +1518,25 @@ router.delete('/dictionaries/skills/:id', asyncHandler(async (req, res) => {
  *         description: Список модулей
  */
 router.get('/modules', asyncHandler(async (req, res) => {
-  const { text, values } = orgScopedQuery('SELECT * FROM modules ORDER BY sort_order', [], req)
-  const result = await query(text, values)
-  res.json(result.rows.map(r => ({ ...r, locked: r.category === 'core' || r.code === 'appearance' })))
+  const result = await query('SELECT * FROM modules ORDER BY sort_order')
+  let overrides = []
+  if (req.org) {
+    const ovRes = await query('SELECT * FROM module_overrides WHERE org_id = $1', [req.org.org_id])
+    overrides = ovRes.rows
+  }
+  const overrideMap = Object.fromEntries(overrides.map(o => [o.module_code, o]))
+  res.json(result.rows.map(r => {
+    const ov = overrideMap[r.code]
+    return {
+      ...r,
+      locked: r.category === 'core' || r.code === 'appearance',
+      global_name: r.name,
+      global_is_enabled: r.is_enabled,
+      org_name: ov?.name || null,
+      org_settings: ov?.settings || null,
+      is_overridden: !!ov,
+    }
+  }))
 }))
 
 /**
@@ -1546,10 +1572,9 @@ router.post('/modules', asyncHandler(async (req, res) => {
   if (!code?.trim()) throw new ValidationError('Код модуля обязателен')
   if (!name?.trim()) throw new ValidationError('Название модуля обязательно')
 
-  const orgId = currentOrgId(req)
   const result = await query(
-    `INSERT INTO modules (code, name, description, icon, route, category, sort_order, organization_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-    [code.trim(), name.trim(), description || null, icon || null, route || null, category || 'general', sort_order || 0, orgId]
+    `INSERT INTO modules (code, name, description, icon, route, category, sort_order, organization_id) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL) RETURNING *`,
+    [code.trim(), name.trim(), description || null, icon || null, route || null, category || 'general', sort_order || 0]
   )
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
@@ -1587,23 +1612,20 @@ router.post('/modules', asyncHandler(async (req, res) => {
  *       404:
  *         description: Модуль не найден
  */
-router.put('/modules/:id', asyncHandler(async (req, res) => {
+router.put('/modules/:id', authorizeGlobalRoles('admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { name, description, icon, route, category, sort_order } = req.body
 
-  const existingQ = orgScopedQuery('SELECT * FROM modules WHERE id = $1', [id], req)
-  const existing = await query(existingQ.text, existingQ.values)
+  const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
 
-  const updateQ = orgScopedQuery(
+  const result = await query(
     `UPDATE modules SET name = COALESCE($1, name), description = COALESCE($2, description),
       icon = COALESCE($3, icon), route = COALESCE($4, route), category = COALESCE($5, category),
       sort_order = COALESCE($6, sort_order),
       updated_at = NOW() WHERE id = $7 RETURNING *`,
-    [name || null, description !== undefined ? description : null, icon || null, route || null, category || null, sort_order !== undefined ? sort_order : null, id],
-    req
+    [name || null, description !== undefined ? description : null, icon || null, route || null, category || null, sort_order !== undefined ? sort_order : null, id]
   )
-  const result = await query(updateQ.text, updateQ.values)
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_update', 'module', id,
@@ -1627,17 +1649,15 @@ router.put('/modules/:id', asyncHandler(async (req, res) => {
  *       404:
  *         description: Модуль не найден
  */
-router.delete('/modules/:id', asyncHandler(async (req, res) => {
+router.delete('/modules/:id', authorizeGlobalRoles('admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
-  const existingQ = orgScopedQuery('SELECT * FROM modules WHERE id = $1', [id], req)
-  const existing = await query(existingQ.text, existingQ.values)
+  const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
   if (existing.rows[0].category === 'core' || existing.rows[0].code === 'appearance') {
     throw new ValidationError('Базовый модуль нельзя отключить')
   }
 
-  const delQ = orgScopedQuery('DELETE FROM modules WHERE id = $1', [id], req)
-  await query(delQ.text, delQ.values)
+  await query('DELETE FROM modules WHERE id = $1', [id])
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_delete', 'module', id,
@@ -1661,18 +1681,16 @@ router.delete('/modules/:id', asyncHandler(async (req, res) => {
  *       400:
  *         description: Базовый модуль нельзя отключить
  */
-router.put('/modules/:id/toggle', asyncHandler(async (req, res) => {
+router.put('/modules/:id/toggle', authorizeGlobalRoles('superadmin'), asyncHandler(async (req, res) => {
   const { id } = req.params
-  const existingQ = orgScopedQuery('SELECT * FROM modules WHERE id = $1', [id], req)
-  const existing = await query(existingQ.text, existingQ.values)
+  const existing = await query('SELECT * FROM modules WHERE id = $1', [id])
   if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
   if (existing.rows[0].category === 'core' || existing.rows[0].code === 'appearance') {
     throw new ValidationError('Базовый модуль нельзя отключить')
   }
 
   const newStatus = !existing.rows[0].is_enabled
-  const toggleQ = orgScopedQuery('UPDATE modules SET is_enabled = $1, updated_at = NOW() WHERE id = $2', [newStatus, id], req)
-  await query(toggleQ.text, toggleQ.values)
+  await query('UPDATE modules SET is_enabled = $1, updated_at = NOW() WHERE id = $2', [newStatus, id])
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_toggle', 'module', id,
@@ -1692,8 +1710,7 @@ router.put('/modules/:id/toggle', asyncHandler(async (req, res) => {
  *         description: Включённые модули
  */
 router.get('/modules/enabled', asyncHandler(async (req, res) => {
-  const { text, values } = orgScopedQuery('SELECT code FROM modules WHERE is_enabled = true', [], req)
-  const result = await query(text, values)
+  const result = await query('SELECT code FROM modules WHERE is_enabled = true')
   res.json(result.rows.map(r => r.code))
 }))
 
@@ -1713,10 +1730,18 @@ router.get('/modules/enabled', asyncHandler(async (req, res) => {
  *         description: Модуль не найден
  */
 router.get('/modules/:id/settings', asyncHandler(async (req, res) => {
-  const { text, values } = orgScopedQuery('SELECT settings FROM modules WHERE code = $1', [req.params.id], req)
-  const result = await query(text, values)
-  if (result.rows.length === 0) throw new NotFoundError('Модуль не найден')
-  res.json(result.rows[0].settings || {})
+  const { id } = req.params
+  const globalRes = await query('SELECT settings FROM modules WHERE code = $1', [id])
+  if (globalRes.rows.length === 0) throw new NotFoundError('Модуль не найден')
+  const globalSettings = globalRes.rows[0].settings || {}
+  if (req.org) {
+    const ovRes = await query('SELECT settings FROM module_overrides WHERE org_id = $1 AND module_code = $2', [req.org.org_id, id])
+    if (ovRes.rows.length > 0 && ovRes.rows[0].settings) {
+      res.json({ ...globalSettings, ...ovRes.rows[0].settings })
+      return
+    }
+  }
+  res.json(globalSettings)
 }))
 
 /**
@@ -1743,11 +1768,10 @@ router.get('/modules/:id/settings', asyncHandler(async (req, res) => {
  */
 router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
   const { id } = req.params
-  const existingQ = orgScopedQuery('SELECT id, settings FROM modules WHERE code = $1', [id], req)
-  const existing = await query(existingQ.text, existingQ.values)
-  if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
+  const globalRes = await query('SELECT id, settings FROM modules WHERE code = $1', [id])
+  if (globalRes.rows.length === 0) throw new NotFoundError('Модуль не найден')
 
-  const oldSettings = existing.rows[0].settings || {}
+  const oldSettings = globalRes.rows[0].settings || {}
   let settingsToSave = req.body
 
   if (id === 'auth' && keycloakConfig.enabled) {
@@ -1762,24 +1786,36 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
     for (const key of KC_STRIPPED_KEYS) delete settingsToSave[key]
   }
 
-  const updateQ = orgScopedQuery(
-    'UPDATE modules SET settings = $1, updated_at = NOW() WHERE code = $2 RETURNING settings',
-    [JSON.stringify(settingsToSave), id],
-    req
-  )
-  const result = await query(updateQ.text, updateQ.values)
+  const isSuperadmin = req.user.role === 'superadmin'
 
-  const changed = {}
-  for (const key of Object.keys(settingsToSave)) {
-    const oldVal = oldSettings[key]
-    const newVal = settingsToSave[key]
-    if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-      changed[key] = { old: oldVal ?? null, new: newVal }
+  if (isSuperadmin) {
+    const result = await query(
+      'UPDATE modules SET settings = $1, updated_at = NOW() WHERE code = $2 RETURNING settings',
+      [JSON.stringify(settingsToSave), id]
+    )
+    const changed = {}
+    for (const key of Object.keys(settingsToSave)) {
+      const oldVal = oldSettings[key]
+      const newVal = settingsToSave[key]
+      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        changed[key] = { old: oldVal ?? null, new: newVal }
+      }
     }
+    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+      'module_settings_update', 'module', String(globalRes.rows[0].id), { changed, scope: 'global' }, req.ip)
+    res.json(result.rows[0].settings)
+  } else if (req.org) {
+    await query(`
+      INSERT INTO module_overrides (org_id, module_code, settings)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (org_id, module_code) DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
+    `, [req.org.org_id, id, JSON.stringify(settingsToSave)])
+    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+      'module_settings_update', 'module', String(globalRes.rows[0].id), { scope: 'org', org_id: req.org.org_id }, req.ip)
+    res.json(settingsToSave)
+  } else {
+    res.json(settingsToSave)
   }
-
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
-    'module_settings_update', 'module', String(existing.rows[0].id), { changed }, req.ip)
 
   if (id === 'auth') {
     const oldSL = Number(oldSettings.sessionLifetime)
@@ -1793,8 +1829,27 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
       }).catch((err) => console.error('[KC] syncKcSessionSettings:', err.message))
     }
   }
+}))
 
-  res.json(result.rows[0].settings)
+router.put('/modules/:code/override', authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
+  const { code } = req.params
+  const { name } = req.body
+  if (!req.org) throw new ForbiddenError()
+  const existing = await query('SELECT id FROM modules WHERE code = $1', [code])
+  if (existing.rows.length === 0) throw new NotFoundError('Модуль не найден')
+  await query(`
+    INSERT INTO module_overrides (org_id, module_code, name)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (org_id, module_code) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()
+  `, [req.org.org_id, code, name?.trim() || null])
+  res.json({ success: true })
+}))
+
+router.delete('/modules/:code/override', authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
+  const { code } = req.params
+  if (!req.org) throw new ForbiddenError()
+  await query('DELETE FROM module_overrides WHERE org_id = $1 AND module_code = $2', [req.org.org_id, code])
+  res.json({ success: true })
 }))
 
 // ===================== MINI-AGENT =====================

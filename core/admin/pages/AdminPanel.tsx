@@ -4,6 +4,7 @@ import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { isSuperAdmin } from '@/shared/lib/permissions'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
@@ -275,6 +276,7 @@ export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<TabId>('users')
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const [apiVersion, setApiVersion] = useState<string | null>(null)
+  const isSuper = isSuperAdmin()
 
   useEffect(() => {
     fetchWithRetry(`${API_BASE_URL}/version`, { headers: getAuthHeaders() })
@@ -283,10 +285,15 @@ export function AdminPanel() {
       .catch(() => {})
   }, [])
 
+  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'security', 'health', 'errors', 'reports']
+
   const filteredGroups = TAB_GROUPS
     .map((group) => ({
       ...group,
-      tabs: group.tabs.filter((tab) => !tab.module || isModuleEnabled(tab.module)),
+      tabs: group.tabs.filter((tab) => {
+        if (!isSuper && HIDDEN_FOR_ORG_ADMIN.includes(tab.id)) return false
+        return !tab.module || isModuleEnabled(tab.module)
+      }),
     }))
     .filter((group) => group.tabs.length > 0)
 
@@ -1460,6 +1467,7 @@ function SettingsTab() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const isSuper = isSuperAdmin()
 
   useEffect(() => { fetchSettings() }, [])
 
@@ -1545,6 +1553,12 @@ function SettingsTab() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center gap-2 text-sm">
+        {isSuper ? <Globe className="h-4 w-4 text-muted-foreground" /> : <Building2 className="h-4 w-4 text-muted-foreground" />}
+        <span className="font-medium text-muted-foreground">
+          {isSuper ? 'Глобальные настройки' : 'Настройки учреждения'}
+        </span>
+      </div>
       {error && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
@@ -2967,6 +2981,11 @@ interface ModuleItem {
   is_enabled: boolean
   locked?: boolean
   updated_at: string
+  global_name?: string | null
+  global_is_enabled?: boolean
+  org_name?: string | null
+  org_settings?: Record<string, unknown> | null
+  is_overridden?: boolean
 }
 
 type ModuleCategoryKey = 'core' | 'hr' | 'work' | 'docs' | 'admin'
@@ -3144,6 +3163,10 @@ function ModulesTab() {
   const [error, setError] = useState<string | null>(null)
   const [settingsModule, setSettingsModule] = useState<ModuleId | null>(null)
   const [customSettings, setCustomSettings] = useState<'timesheet' | 'assistant' | null>(null)
+  const [editingOverride, setEditingOverride] = useState<number | null>(null)
+  const [overrideValue, setOverrideValue] = useState('')
+  const [savingOverrideId, setSavingOverrideId] = useState<number | null>(null)
+  const isSuper = isSuperAdmin()
 
   useEffect(() => { fetchModules() }, [])
 
@@ -3172,6 +3195,54 @@ function ModulesTab() {
       }
     } catch (err) { setError(getErrorMessage(err)) }
     finally { setTogglingId(null) }
+  }
+
+  const saveOverride = async (mod: ModuleItem) => {
+    const trimmed = overrideValue.trim()
+    if (!trimmed) return
+    setSavingOverrideId(mod.id)
+    setError(null)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/modules/${mod.code}/override`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ name: trimmed }),
+      })
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        const newName = data.name ?? trimmed
+        setModules((prev) => prev.map((m) => m.id === mod.id ? {
+          ...m, name: newName, org_name: newName, is_overridden: true,
+        } : m))
+        setEditingOverride(null)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Ошибка')
+      }
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setSavingOverrideId(null) }
+  }
+
+  const resetOverride = async (mod: ModuleItem) => {
+    setSavingOverrideId(mod.id)
+    setError(null)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/modules/${mod.code}/override`, {
+        method: 'DELETE', headers: getAuthHeaders(),
+      })
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        const fallbackName = mod.global_name ?? mod.name
+        const newName = data.name ?? fallbackName
+        setModules((prev) => prev.map((m) => m.id === mod.id ? {
+          ...m, name: newName, org_name: null, is_overridden: false,
+        } : m))
+        if (editingOverride === mod.id) setEditingOverride(null)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Ошибка')
+      }
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setSavingOverrideId(null) }
   }
 
   const enabledCount = modules.filter(m => m.is_enabled).length
@@ -3279,7 +3350,7 @@ function ModulesTab() {
                                 <Lock className="h-3.5 w-3.5" />
                                 <span className="text-[10px] font-medium">Нельзя отключить</span>
                               </div>
-                            ) : (
+                            ) : isSuper ? (
                               <button
                                 onClick={() => toggleModule(mod)}
                                 disabled={isLoading}
@@ -3297,6 +3368,24 @@ function ModulesTab() {
                                   <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-primary" />
                                 )}
                               </button>
+                            ) : (
+                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  <Globe className="h-3.5 w-3.5" />
+                                  <span className="text-[10px] font-medium">Глобально</span>
+                                </div>
+                                <div
+                                  className={cn(
+                                    'relative w-12 h-7 rounded-full shrink-0',
+                                    mod.is_enabled ? 'bg-primary/40' : 'bg-muted-foreground/20',
+                                  )}
+                                >
+                                  <div className={cn(
+                                    'absolute top-0.5 w-6 h-6 rounded-full bg-card shadow-sm',
+                                    mod.is_enabled ? 'left-[22px]' : 'left-0.5',
+                                  )} />
+                                </div>
+                              </div>
                             )}
                           </div>
 
@@ -3314,8 +3403,13 @@ function ModulesTab() {
                                     ? { backgroundColor: 'rgba(16,185,129,0.15)', color: '#10B981', borderColor: 'rgba(16,185,129,0.3)' }
                                     : { backgroundColor: 'rgba(107,114,128,0.15)', color: '#6B7280', borderColor: 'transparent' }
                                 }>
-                                  {mod.is_enabled ? 'Активен' : 'Отключен'}
+                                  {mod.is_enabled ? 'Активен' : (isSuper ? 'Отключен' : 'Глобально отключено')}
                                 </span>
+                              )}
+                              {!isSuper && mod.is_overridden && (
+                                <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent">
+                                  Своё название
+                                </Badge>
                               )}
                             </div>
                             {mod.description && (
@@ -3323,6 +3417,66 @@ function ModulesTab() {
                             )}
                             {mod.route && (
                               <p className="text-[10px] font-mono text-muted-foreground/60 mt-2">{mod.route}</p>
+                            )}
+                            {!isSuper && (
+                              <div className="mt-3 pt-3 border-t border-border/40">
+                                {editingOverride === mod.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={overrideValue}
+                                      onChange={(e) => setOverrideValue(e.target.value)}
+                                      placeholder={mod.global_name || mod.name}
+                                      className="h-8 text-sm"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') saveOverride(mod)
+                                        if (e.key === 'Escape') setEditingOverride(null)
+                                      }}
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => saveOverride(mod)}
+                                      disabled={savingOverrideId === mod.id || !overrideValue.trim()}
+                                    >
+                                      {savingOverrideId === mod.id
+                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        : <Check className="h-3.5 w-3.5" />}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setEditingOverride(null)}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setEditingOverride(mod.id)
+                                        setOverrideValue(mod.org_name || mod.name)
+                                      }}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                                      {mod.is_overridden ? 'Изменить название' : 'Своё название'}
+                                    </Button>
+                                    {mod.is_overridden && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => resetOverride(mod)}
+                                        disabled={savingOverrideId === mod.id}
+                                      >
+                                        <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                                        Сбросить
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
 
