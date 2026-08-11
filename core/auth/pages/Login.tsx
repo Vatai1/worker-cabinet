@@ -444,6 +444,19 @@ export function Login() {
                       </div>
                     </div>
                   </button>
+                  <button type="button" onClick={() => handleDemoLogin('superadmin@example.com')} disabled={isLoading} className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:bg-primary/10 transition-colors text-left w-full disabled:opacity-50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Супер-админ</p>
+                        <p className="font-mono text-xs text-muted-foreground mt-0.5">superadmin@example.com</p>
+                      </div>
+                    </div>
+                  </button>
                 </div>
               </div>
             )}
