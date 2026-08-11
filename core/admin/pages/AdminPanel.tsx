@@ -1501,7 +1501,7 @@ function SettingsTab() {
       const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
       if (res.ok) {
         const all = await res.json()
-        const hidden = ['timesheet_auto_create', 'vacation_default_days', 'session_duration_days', 'password_min_length', 'login_stat_1_value', 'login_stat_1_label', 'login_stat_2_value', 'login_stat_2_label', 'login_stat_3_value', 'login_stat_3_label', 'login_show_stats']
+        const hidden = ['timesheet_auto_create', 'vacation_default_days', 'session_duration_days', 'password_min_length']
         setSettings(all.filter((s: SystemSetting) => !s.key.startsWith('assistant_') && !hidden.includes(s.key)))
       }
     } catch {} finally { setLoading(false) }
@@ -1595,7 +1595,7 @@ function SettingsTab() {
       )}
 
       {renderBlock('Компания', Building2, 'Название организации', companySettings)}
-      {renderBlock('Страница входа', LogIn, 'Текст и статистика на странице авторизации', loginSettings)}
+      {renderBlock('Страница входа', LogIn, 'Текст на странице авторизации', loginSettings)}
       {otherSettings.length > 0 && renderBlock('Прочие настройки', Settings2, 'Дополнительные системные параметры', otherSettings)}
 
       <div className="flex justify-end">
@@ -2915,6 +2915,19 @@ function ModulesTab({ mode = 'global' }: { mode?: 'global' | 'org' }) {
             <div>
               <CardTitle className="flex items-center gap-2"><Boxes className="h-5 w-5" /> Модули системы</CardTitle>
               <CardDescription>Включено {enabledCount} из {modules.length} модулей</CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-2">
+                <div className="w-32 h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full gradient-primary transition-all duration-500"
+                    style={{ width: `${modules.length > 0 ? (enabledCount / modules.length) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                  {modules.length > 0 ? Math.round((enabledCount / modules.length) * 100) : 0}%
+                </span>
+              </div>
             </div>
           </div>
         </CardHeader>

@@ -5,14 +5,7 @@ import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/auth
 interface LoginSettings {
   login_title: string
   login_subtitle: string
-  login_stat_1_value: string
-  login_stat_1_label: string
-  login_stat_2_value: string
-  login_stat_2_label: string
-  login_stat_3_value: string
-  login_stat_3_label: string
   login_demo_buttons: string
-  login_show_stats: string
 }
 
 interface SiteSettingsState {
@@ -27,14 +20,7 @@ interface SiteSettingsState {
 const defaults: LoginSettings = {
   login_title: 'Личный кабинет сотрудника',
   login_subtitle: 'Единая платформа для управления персоналом, отпусками и документами',
-  login_stat_1_value: '24',
-  login_stat_1_label: 'дня отпуска',
-  login_stat_2_value: '156',
-  login_stat_2_label: 'сотрудников',
-  login_stat_3_value: '12',
-  login_stat_3_label: 'отделов',
   login_demo_buttons: 'true',
-  login_show_stats: 'true',
 }
 
 export const useSiteSettingsStore = create<SiteSettingsState>((set, get) => ({

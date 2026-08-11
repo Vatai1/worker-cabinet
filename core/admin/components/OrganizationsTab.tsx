@@ -3,13 +3,14 @@ import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/auth
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn, formatDateTime } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { useOrgStore } from '@/shared/store/orgStore'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import {
   Building2, Plus, X, Search, Loader2, AlertTriangle,
-  Users, FolderOpen, Boxes, Settings as SettingsIcon,
+  Users, FolderOpen, Boxes, Settings as SettingsIcon, ChevronLeft, ExternalLink,
 } from 'lucide-react'
 
 interface Organization {
@@ -251,12 +252,45 @@ function OrganizationDetailModal({
   onUpdated: (updated: Partial<Organization>) => void
 }) {
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('info')
+  const [displayedTab, setDisplayedTab] = useState<DetailTab>('info')
+  const [fading, setFading] = useState(false)
+  const [departmentFilter, setDepartmentFilter] = useState<number | null>(null)
+  const [departmentFilterName, setDepartmentFilterName] = useState<string | null>(null)
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handleEsc)
     return () => window.removeEventListener('keydown', handleEsc)
   }, [onClose])
+
+  useEffect(() => {
+    if (activeDetailTab === displayedTab) return
+    setFading(true)
+    const t = setTimeout(() => {
+      setDisplayedTab(activeDetailTab)
+      setFading(false)
+    }, 200)
+    return () => clearTimeout(t)
+  }, [activeDetailTab, displayedTab])
+
+  const switchTab = (tab: DetailTab) => {
+    if (tab !== 'members') {
+      setDepartmentFilter(null)
+      setDepartmentFilterName(null)
+    }
+    setActiveDetailTab(tab)
+  }
+
+  const handleSelectDept = (deptId: number, deptName: string) => {
+    setDepartmentFilter(deptId)
+    setDepartmentFilterName(deptName)
+    setActiveDetailTab('members')
+  }
+
+  const handleClearDeptFilter = () => {
+    setDepartmentFilter(null)
+    setDepartmentFilterName(null)
+  }
 
   const handleToggleActive = async () => {
     try {
@@ -269,6 +303,11 @@ function OrganizationDetailModal({
         onUpdated({ is_active: data.is_active })
       }
     } catch {}
+  }
+
+  const handleOpenInAdmin = () => {
+    useOrgStore.getState().setCurrentOrg(org.id)
+    onClose()
   }
 
   const detailTabs: { id: DetailTab; name: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -307,7 +346,7 @@ function OrganizationDetailModal({
           {detailTabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveDetailTab(tab.id)}
+              onClick={() => switchTab(tab.id)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors',
                 activeDetailTab === tab.id
@@ -322,11 +361,24 @@ function OrganizationDetailModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
-          {activeDetailTab === 'info' && <InfoTab org={org} onToggleActive={handleToggleActive} />}
-          {activeDetailTab === 'departments' && <DepartmentsTabContent orgId={org.id} />}
-          {activeDetailTab === 'members' && <MembersTabContent orgId={org.id} />}
-          {activeDetailTab === 'modules' && <ModulesTabContent orgId={org.id} />}
-          {activeDetailTab === 'settings' && <SettingsTabContent orgId={org.id} />}
+          <div className={cn(
+            'transition-opacity duration-200 ease-out',
+            fading ? 'opacity-0' : 'opacity-100'
+          )}>
+            {displayedTab === 'info' && <InfoTab org={org} onToggleActive={handleToggleActive} />}
+            {displayedTab === 'departments' && <DepartmentsTabContent orgId={org.id} onSelectDept={handleSelectDept} />}
+            {displayedTab === 'members' && (
+              <MembersTabContent
+                orgId={org.id}
+                departmentFilter={departmentFilter}
+                departmentFilterName={departmentFilterName}
+                onClearDeptFilter={handleClearDeptFilter}
+                onBackToDepts={() => switchTab('departments')}
+              />
+            )}
+            {displayedTab === 'modules' && <ModulesTabContent orgId={org.id} onOpenInAdmin={handleOpenInAdmin} />}
+            {displayedTab === 'settings' && <SettingsTabContent orgId={org.id} onOpenInAdmin={handleOpenInAdmin} />}
+          </div>
         </div>
       </div>
     </div>
@@ -378,13 +430,6 @@ function InfoTab({ org, onToggleActive }: { org: Organization; onToggleActive: (
         </div>
         <div className="p-4 rounded-xl border border-border/50 bg-muted/20">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Boxes className="h-4 w-4" />
-            <span className="text-xs">Модулей включено</span>
-          </div>
-          <p className="text-2xl font-bold">{stats?.modulesEnabled ?? '—'}</p>
-        </div>
-        <div className="p-4 rounded-xl border border-border/50 bg-muted/20">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <FolderOpen className="h-4 w-4" />
             <span className="text-xs">Отделы</span>
           </div>
@@ -392,10 +437,10 @@ function InfoTab({ org, onToggleActive }: { org: Organization; onToggleActive: (
         </div>
         <div className="p-4 rounded-xl border border-border/50 bg-muted/20">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Building2 className="h-4 w-4" />
-            <span className="text-xs">ID</span>
+            <Boxes className="h-4 w-4" />
+            <span className="text-xs">Модулей включено</span>
           </div>
-          <p className="text-2xl font-bold">{org.id}</p>
+          <p className="text-2xl font-bold">{stats?.modulesEnabled ?? '—'}</p>
         </div>
       </div>
 
@@ -419,7 +464,7 @@ function InfoTab({ org, onToggleActive }: { org: Organization; onToggleActive: (
   )
 }
 
-function DepartmentsTabContent({ orgId }: { orgId: number }) {
+function DepartmentsTabContent({ orgId, onSelectDept }: { orgId: number; onSelectDept: (deptId: number, deptName: string) => void }) {
   const [departments, setDepartments] = useState<OrgDepartment[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -453,8 +498,13 @@ function DepartmentsTabContent({ orgId }: { orgId: number }) {
 
   return (
     <div className="space-y-2">
+      <p className="text-xs text-muted-foreground mb-3">Нажмите на отдел, чтобы посмотреть сотрудников</p>
       {departments.map((dept) => (
-        <div key={dept.id} className="flex items-center gap-3 p-3 rounded-xl border border-border/40">
+        <button
+          key={dept.id}
+          onClick={() => onSelectDept(dept.id, dept.name)}
+          className="flex items-center gap-3 p-3 rounded-xl border border-border/40 hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 w-full text-left"
+        >
           <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
             <Building2 className="h-4 w-4" />
           </div>
@@ -466,13 +516,22 @@ function DepartmentsTabContent({ orgId }: { orgId: number }) {
               </p>
             )}
           </div>
-        </div>
+          <ChevronLeft className="h-4 w-4 text-muted-foreground/50 rotate-180 shrink-0" />
+        </button>
       ))}
     </div>
   )
 }
 
-function MembersTabContent({ orgId }: { orgId: number }) {
+function MembersTabContent({
+  orgId, departmentFilter, departmentFilterName, onClearDeptFilter, onBackToDepts,
+}: {
+  orgId: number
+  departmentFilter: number | null
+  departmentFilterName: string | null
+  onClearDeptFilter: () => void
+  onBackToDepts: () => void
+}) {
   const [members, setMembers] = useState<OrgMember[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -504,6 +563,7 @@ function MembersTabContent({ orgId }: { orgId: number }) {
   }
 
   const filtered = members.filter((m) => {
+    if (departmentFilter !== null && m.department_id !== departmentFilter) return false
     const q = search.toLowerCase()
     return !q ||
       `${m.last_name} ${m.first_name} ${m.middle_name || ''}`.toLowerCase().includes(q) ||
@@ -514,6 +574,30 @@ function MembersTabContent({ orgId }: { orgId: number }) {
 
   return (
     <div className="space-y-3">
+      {departmentFilter !== null && (
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20">
+          <button
+            onClick={onBackToDepts}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Отделы
+          </button>
+          <ChevronLeft className="h-3 w-3 text-muted-foreground/30" />
+          <Badge className="text-[10px] bg-primary/10 text-primary border-transparent">
+            <Users className="h-3 w-3 mr-1" />
+            {departmentFilterName}
+          </Badge>
+          <button
+            onClick={onClearDeptFilter}
+            className="ml-auto text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+          >
+            <X className="h-3 w-3" />
+            Все сотрудники
+          </button>
+        </div>
+      )}
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -571,7 +655,7 @@ function MembersTabContent({ orgId }: { orgId: number }) {
   )
 }
 
-function ModulesTabContent({ orgId }: { orgId: number }) {
+function ModulesTabContent({ orgId, onOpenInAdmin }: { orgId: number; onOpenInAdmin: () => void }) {
   const [modules, setModules] = useState<OrgModule[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -600,45 +684,56 @@ function ModulesTabContent({ orgId }: { orgId: number }) {
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
 
+  const enabledCount = modules.filter(m => m.effective_enabled).length
+
   return (
-    <div className="space-y-2">
-      {modules.map((mod) => (
-        <div key={mod.code} className="flex items-center gap-3 p-3 rounded-xl border border-border/40">
-          <div className={cn(
-            'p-2 rounded-lg shrink-0',
-            mod.effective_enabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-          )}>
-            <Boxes className="h-4 w-4" />
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">Включено {enabledCount} из {modules.length}</p>
+        <Button size="sm" variant="outline" onClick={onOpenInAdmin}>
+          <ExternalLink className="h-3.5 w-3.5 mr-1" />
+          Открыть в админке
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {modules.map((mod) => (
+          <div key={mod.code} className="flex items-center gap-3 p-3 rounded-xl border border-border/40">
+            <div className={cn(
+              'p-2 rounded-lg shrink-0',
+              mod.effective_enabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+            )}>
+              <Boxes className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-sm">{mod.name}</p>
+              <p className="font-mono text-xs text-muted-foreground">{mod.code}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {!mod.global_is_enabled && (
+                <Badge className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-transparent">
+                  Глобально отключён
+                </Badge>
+              )}
+              {mod.global_is_enabled && mod.is_enabled_override === false && (
+                <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent">
+                  Отключён локально
+                </Badge>
+              )}
+              {mod.global_is_enabled && mod.is_enabled_override !== false && (
+                <Badge className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-transparent">
+                  Включён
+                </Badge>
+              )}
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-sm">{mod.name}</p>
-            <p className="font-mono text-xs text-muted-foreground">{mod.code}</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {!mod.global_is_enabled && (
-              <Badge className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-transparent">
-                Глобально отключён
-              </Badge>
-            )}
-            {mod.global_is_enabled && mod.is_enabled_override === false && (
-              <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent">
-                Отключён локально
-              </Badge>
-            )}
-            {mod.global_is_enabled && mod.is_enabled_override !== false && (
-              <Badge className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-transparent">
-                Включён
-              </Badge>
-            )}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   )
 }
 
-function SettingsTabContent({ orgId }: { orgId: number }) {
-  const [settings, setSettings] = useState<{ key: string; value: string }[]>([])
+function SettingsTabContent({ orgId, onOpenInAdmin }: { orgId: number; onOpenInAdmin: () => void }) {
+  const [settings, setSettings] = useState<{ key: string; value: string; description?: string }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -653,7 +748,7 @@ function SettingsTabContent({ orgId }: { orgId: number }) {
           const filtered = (Array.isArray(data) ? data : []).filter(
             (s: { key: string }) => s.key.startsWith('company_') || s.key.startsWith('login_')
           )
-          setSettings(filtered.map((s: { key: string; value: string }) => ({ key: s.key, value: s.value })))
+          setSettings(filtered.map((s: { key: string; value: string; description?: string }) => ({ key: s.key, value: s.value, description: s.description })))
         }
       } catch {}
       finally { setLoading(false) }
@@ -673,13 +768,24 @@ function SettingsTabContent({ orgId }: { orgId: number }) {
   }
 
   return (
-    <div className="rounded-xl border border-border/50 divide-y divide-border/40">
-      {settings.map((s) => (
-        <div key={s.key} className="flex items-center justify-between px-4 py-2.5 gap-4">
-          <span className="text-sm font-mono text-muted-foreground shrink-0">{s.key}</span>
-          <span className="text-sm font-medium text-right truncate">{s.value || '—'}</span>
-        </div>
-      ))}
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button size="sm" variant="outline" onClick={onOpenInAdmin}>
+          <ExternalLink className="h-3.5 w-3.5 mr-1" />
+          Открыть в админке
+        </Button>
+      </div>
+      <div className="rounded-xl border border-border/50 divide-y divide-border/40">
+        {settings.map((s) => (
+          <div key={s.key} className="flex items-center justify-between px-4 py-2.5 gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-mono text-muted-foreground shrink-0">{s.key}</p>
+              {s.description && <p className="text-xs text-muted-foreground/70 mt-0.5">{s.description}</p>}
+            </div>
+            <span className="text-sm font-medium text-right truncate">{s.value || '—'}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
