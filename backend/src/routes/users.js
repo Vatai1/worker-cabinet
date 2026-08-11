@@ -352,6 +352,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.position,
         u.department_id,
         d.name as department_name,
+        uo.org_id as organization_id,
+        o.name as organization_name,
         u.phone,
         u.birth_date,
         u.hire_date,
@@ -371,6 +373,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
         vb.travel_next_available_date
       FROM users u
       LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.is_active = true
+      LEFT JOIN organizations o ON uo.org_id = o.id
       LEFT JOIN users m ON u.manager_id = m.id
       LEFT JOIN vacation_balances vb ON vb.user_id = u.id
       WHERE u.id = $1`,

@@ -33,6 +33,9 @@ interface EmployeeData {
   department?: string
   department_name?: string
   departmentId?: string
+  organization_id?: number
+  organization_name?: string
+  organizationName?: string
   phone?: string
   birthDate?: string
   birth_date?: string
@@ -110,6 +113,7 @@ export function EmployeeProfile() {
           lastName:   data.lastName   || data.last_name   || '',
           middleName: data.middleName || data.middle_name,
           department: data.department || data.department_name || '',
+          organizationName: data.organization_name || data.organizationName,
           birthDate:  data.birthDate  || data.birth_date,
           hireDate:   data.hireDate   || data.hire_date   || '',
           status:     data.status     || 'active',
@@ -327,6 +331,7 @@ export function EmployeeProfile() {
           <CardContent className="space-y-3">
             <InfoRow label="Должность" value={employee.position} />
             <InfoRow label="Отдел" value={employee.department} />
+            <InfoRow label="Организация" value={employee.organizationName} />
             <InfoRow label="Дата найма" value={employee.hireDate ? formatDate(employee.hireDate) : undefined} />
             <InfoRow label="Стаж" value={calculateWorkExperience(employee.hireDate)} />
             <InfoRow label="Офис" value={employee.office} />
