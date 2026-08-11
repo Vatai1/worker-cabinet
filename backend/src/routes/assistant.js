@@ -15,10 +15,12 @@ function generateAssistantToken(userId) {
 
 const router = Router()
 
-async function getAssistantConfig() {
-  const result = await query(
-    `SELECT key, value FROM system_settings WHERE key LIKE 'assistant_%'`
+async function getAssistantConfig(req) {
+  const { orgScopedQuery } = await import('../lib/orgQuery.js')
+  const { text, values } = orgScopedQuery(
+    `SELECT key, value FROM system_settings WHERE key LIKE 'assistant_%'`, [], req
   )
+  const result = await query(text, values)
   const map = Object.fromEntries(result.rows.map(r => [r.key, r.value]))
   return {
     apiUrl: map.assistant_api_url || '',
@@ -169,7 +171,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Не указана сессия' })
     }
 
-    const config = await getAssistantConfig()
+    const config = await getAssistantConfig(req)
 
     if (config.agentEnabled) {
       // Встроенный mini-agent — не требует apiKey

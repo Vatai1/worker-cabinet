@@ -100,9 +100,26 @@ async function seed() {
       if (existing.rows.length > 0) {
         continue
       }
-      await query('INSERT INTO departments (name, manager_id) VALUES ($1, NULL)', [deptData.name])
+      await query('INSERT INTO departments (name, manager_id, organization_id) VALUES ($1, NULL, 1)', [deptData.name])
     }
     console.log(`  ✓ ${DEPARTMENTS_DATA.length} departments`)
+
+    console.log('Creating test organizations...')
+    await query(`
+      INSERT INTO organizations (name, slug, inn, is_active)
+      VALUES ('ГКУ СО ЦРЦТ', 'crct', '6511000001', true)
+      ON CONFLICT (slug) DO NOTHING
+    `)
+    await query(`
+      INSERT INTO organizations (name, slug, inn, is_active)
+      VALUES ('Минцифры Сахалинской области', 'mindit', '6501000001', true)
+      ON CONFLICT (slug) DO NOTHING
+    `)
+    const crctOrg = await query("SELECT id FROM organizations WHERE slug = 'crct'")
+    const minditOrg = await query("SELECT id FROM organizations WHERE slug = 'mindit'")
+    const crctId = crctOrg.rows[0]?.id || 1
+    const minditId = minditOrg.rows[0]?.id || 2
+    console.log(`  ✓ test organizations (crct=${crctId}, mindit=${minditId})`)
 
     console.log('Creating test users...')
     const passwordHash = await bcrypt.hash('password123', 10)
@@ -194,6 +211,24 @@ async function seed() {
       RETURNING user_id
     `)
     console.log(`  ✓ ${uoResult.rows.length} user_organizations entries`)
+
+    const adminUser = await query("SELECT id FROM users WHERE email = 'admin@example.com'")
+    const petrovUser = await query("SELECT id FROM users WHERE email = 'petrov@example.com'")
+    if (adminUser.rows.length > 0) {
+      await query(`
+        INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
+        VALUES ($1, $2, 'hr', true)
+        ON CONFLICT (user_id, org_id) DO UPDATE SET org_role = EXCLUDED.org_role, is_active = true
+      `, [adminUser.rows[0].id, minditId]).catch(() => {})
+    }
+    if (petrovUser.rows.length > 0) {
+      await query(`
+        INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
+        VALUES ($1, $2, 'manager', true)
+        ON CONFLICT (user_id, org_id) DO UPDATE SET org_role = EXCLUDED.org_role, is_active = true
+      `, [petrovUser.rows[0].id, minditId]).catch(() => {})
+    }
+    console.log('  ✓ cross-org memberships (admin→mindit hr, petrov→mindit manager)')
 
     console.log('Creating vacation balances...')
     const allUsers = await query('SELECT id, hire_date FROM users ORDER BY id')

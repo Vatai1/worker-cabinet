@@ -192,3 +192,22 @@ export const useModuleSettingsStore = create<ModuleSettingsState>((set, get) => 
     }))
   },
 }))
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('org-changed', () => {
+    const store = useModuleSettingsStore.getState()
+    const resetLoaded: Record<string, boolean> = {}
+    const resetSettings: Record<string, unknown> = {}
+    const resetOriginal: Record<string, unknown> = {}
+    for (const key of Object.keys(store.loaded)) {
+      resetLoaded[key] = false
+      resetSettings[key] = { ...DEFAULTS[key as ModuleId] }
+      resetOriginal[key] = { ...DEFAULTS[key as ModuleId] }
+    }
+    useModuleSettingsStore.setState({
+      loaded: resetLoaded as Record<ModuleId, boolean>,
+      settings: resetSettings as Record<ModuleId, SettingsValue>,
+      originalSettings: resetOriginal as Record<ModuleId, SettingsValue>,
+    })
+  })
+}

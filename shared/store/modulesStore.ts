@@ -36,3 +36,9 @@ export const useModulesStore = create<ModulesState>((set, get) => ({
     return state.enabledModules.has(code)
   },
 }))
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('org-changed', () => {
+    useModulesStore.getState().fetchModules()
+  })
+}
