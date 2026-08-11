@@ -44,7 +44,7 @@ async function checkOrgAdmin(req, orgId) {
  *               items: { $ref: '#/components/schemas/Organization' }
  */
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
-  if (req.user.role === 'superadmin' && !req.org) {
+  if (req.user.role === 'superadmin') {
     const result = await query(`
       SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
              o.is_active, o.created_at,
