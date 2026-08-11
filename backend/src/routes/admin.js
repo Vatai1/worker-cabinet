@@ -318,7 +318,13 @@ router.get('/users', asyncHandler(async (req, res) => {
       u.status, u.role, u.department_id, u.hire_date, u.phone, u.avatar,
       u.manager_id, u.responsibility_area, u.office, u.cabinet, u.created_at,
       d.name as department_name,
-      m.first_name as manager_first_name, m.last_name as manager_last_name
+      m.first_name as manager_first_name, m.last_name as manager_last_name,
+      (
+        SELECT string_agg(o.name, ', ')
+        FROM user_organizations uo2
+        JOIN organizations o ON uo2.org_id = o.id
+        WHERE uo2.user_id = u.id AND uo2.is_active = true AND o.is_active = true
+      ) as organizations
     FROM users u
     LEFT JOIN departments d ON u.department_id = d.id
     LEFT JOIN users m ON u.manager_id = m.id

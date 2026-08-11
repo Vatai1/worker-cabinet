@@ -27,6 +27,7 @@ export interface AdminUser {
   role: string
   department_id: number | null
   department_name: string | null
+  organizations: string | null
   hire_date: string | null
   phone: string | null
   avatar: string | null

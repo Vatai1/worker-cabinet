@@ -748,6 +748,11 @@ function UsersTab() {
                           <Building2 className="h-2.5 w-2.5" /> {user.department_name}
                         </span>
                       )}
+                      {user.organizations && (
+                        <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
+                          <Globe className="h-2.5 w-2.5" /> {user.organizations}
+                        </span>
+                      )}
                       <span className="text-[11px] text-muted-foreground truncate">{user.email}</span>
                     </div>
                   </div>
@@ -900,6 +905,7 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
             <div className="space-y-4">
               <InfoRow label="Должность" value={user.position || '—'} />
               <InfoRow label="Отдел" value={user.department_name || '—'} />
+              <InfoRow label="Организация" value={user.organizations || '—'} />
               <InfoRow label="Телефон" value={user.phone || '—'} />
               <InfoRow label="Дата приёма" value={user.hire_date || '—'} />
               {user.manager_first_name && (
