@@ -279,6 +279,14 @@ router.get('/users', asyncHandler(async (req, res) => {
   const conditions = []
   const values = []
   let paramIdx = 1
+  let orgJoin = ''
+
+  if (req.user.role !== 'superadmin' && req.org) {
+    orgJoin = 'JOIN user_organizations uo ON u.id = uo.user_id'
+    conditions.push(`uo.org_id = $${paramIdx} AND uo.is_active = true`)
+    values.push(req.org.org_id)
+    paramIdx++
+  }
 
   if (search) {
     conditions.push(`(u.first_name ILIKE $${paramIdx} OR u.last_name ILIKE $${paramIdx} OR u.email ILIKE $${paramIdx} OR u.position ILIKE $${paramIdx})`)
@@ -310,7 +318,7 @@ router.get('/users', asyncHandler(async (req, res) => {
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
-  const countResult = await query(`SELECT COUNT(*) as total FROM users u ${where}`, values)
+  const countResult = await query(`SELECT COUNT(*) as total FROM users u ${orgJoin} ${where}`, values)
   const total = parseInt(countResult.rows[0].total)
 
   const usersResult = await query(`
@@ -326,6 +334,7 @@ router.get('/users', asyncHandler(async (req, res) => {
         WHERE uo2.user_id = u.id AND uo2.is_active = true AND o.is_active = true
       ) as organizations
     FROM users u
+    ${orgJoin}
     LEFT JOIN departments d ON u.department_id = d.id
     LEFT JOIN users m ON u.manager_id = m.id
     ${where}
@@ -650,6 +659,12 @@ router.get('/audit-log', asyncHandler(async (req, res) => {
   const values = []
   let paramIdx = 1
 
+  if (req.user.role !== 'superadmin' && req.org) {
+    conditions.push(`a.user_id IN (SELECT user_id FROM user_organizations WHERE org_id = $${paramIdx} AND is_active = true)`)
+    values.push(req.org.org_id)
+    paramIdx++
+  }
+
   if (action) {
     conditions.push(`a.action = $${paramIdx}`)
     values.push(action)
@@ -708,12 +723,18 @@ router.get('/audit-log', asyncHandler(async (req, res) => {
  */
 router.get('/stats', asyncHandler(async (req, res) => {
   const deptCount = orgScopedQuery('SELECT COUNT(*) as count FROM departments', [], req)
+  const orgUsersQuery = req.user.role !== 'superadmin' && req.org
+    ? query('SELECT COUNT(*) as count FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true', [req.org.org_id])
+    : query('SELECT COUNT(*) as count FROM users')
+  const orgActiveUsersQuery = req.user.role !== 'superadmin' && req.org
+    ? query('SELECT COUNT(*) as count FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true AND u.status = \'active\'', [req.org.org_id])
+    : query(`SELECT COUNT(*) as count FROM users WHERE status = 'active'`)
   const [users, roles, departments, auditToday, activeUsers] = await Promise.all([
-    query('SELECT COUNT(*) as count FROM users'),
+    orgUsersQuery,
     query('SELECT COUNT(*) as count FROM roles'),
     query(deptCount.text, deptCount.values),
     query(`SELECT COUNT(*) as count FROM audit_log WHERE created_at >= CURRENT_DATE`),
-    query(`SELECT COUNT(*) as count FROM users WHERE status = 'active'`),
+    orgActiveUsersQuery,
   ])
 
   const roleDistribution = await query(`
@@ -870,7 +891,9 @@ router.get('/health', asyncHandler(async (req, res) => {
   const dbVersion = await query('SELECT version() as v')
   const dbSize = await query("SELECT pg_database_size(current_database()) as size")
 
-  const usersCount = await query('SELECT COUNT(*) as c FROM users')
+  const usersCount = req.user.role !== 'superadmin' && req.org
+    ? await query('SELECT COUNT(*) as c FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true', [req.org.org_id])
+    : await query('SELECT COUNT(*) as c FROM users')
   const modulesCountQuery = orgScopedQuery("SELECT COUNT(*) as c FROM modules WHERE is_enabled = true", [], req)
   const modulesCount = await query(modulesCountQuery.text, modulesCountQuery.values)
   const errorsCount = await query("SELECT COUNT(*) as c FROM error_log WHERE created_at >= NOW() - INTERVAL '24 hours'")
