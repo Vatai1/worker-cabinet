@@ -329,9 +329,9 @@ export function EmployeeProfile() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <InfoRow label="Организация" value={employee.organizationName} />
             <InfoRow label="Должность" value={employee.position} />
             <InfoRow label="Отдел" value={employee.department} />
-            <InfoRow label="Организация" value={employee.organizationName} />
             <InfoRow label="Дата найма" value={employee.hireDate ? formatDate(employee.hireDate) : undefined} />
             <InfoRow label="Стаж" value={calculateWorkExperience(employee.hireDate)} />
             <InfoRow label="Офис" value={employee.office} />
