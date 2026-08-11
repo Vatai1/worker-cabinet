@@ -252,8 +252,6 @@ function OrganizationDetailModal({
   onUpdated: (updated: Partial<Organization>) => void
 }) {
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('info')
-  const [displayedTab, setDisplayedTab] = useState<DetailTab>('info')
-  const [fading, setFading] = useState(false)
   const [departmentFilter, setDepartmentFilter] = useState<number | null>(null)
   const [departmentFilterName, setDepartmentFilterName] = useState<string | null>(null)
 
@@ -262,16 +260,6 @@ function OrganizationDetailModal({
     window.addEventListener('keydown', handleEsc)
     return () => window.removeEventListener('keydown', handleEsc)
   }, [onClose])
-
-  useEffect(() => {
-    if (activeDetailTab === displayedTab) return
-    setFading(true)
-    const t = setTimeout(() => {
-      setDisplayedTab(activeDetailTab)
-      setFading(false)
-    }, 200)
-    return () => clearTimeout(t)
-  }, [activeDetailTab, displayedTab])
 
   const switchTab = (tab: DetailTab) => {
     if (tab !== 'members') {
@@ -361,13 +349,10 @@ function OrganizationDetailModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
-          <div className={cn(
-            'transition-opacity duration-200 ease-out',
-            fading ? 'opacity-0' : 'opacity-100'
-          )}>
-            {displayedTab === 'info' && <InfoTab org={org} onToggleActive={handleToggleActive} />}
-            {displayedTab === 'departments' && <DepartmentsTabContent orgId={org.id} onSelectDept={handleSelectDept} />}
-            {displayedTab === 'members' && (
+          <div key={activeDetailTab} className="animate-fade-in">
+            {activeDetailTab === 'info' && <InfoTab org={org} onToggleActive={handleToggleActive} />}
+            {activeDetailTab === 'departments' && <DepartmentsTabContent orgId={org.id} onSelectDept={handleSelectDept} />}
+            {activeDetailTab === 'members' && (
               <MembersTabContent
                 orgId={org.id}
                 departmentFilter={departmentFilter}
@@ -376,8 +361,8 @@ function OrganizationDetailModal({
                 onBackToDepts={() => switchTab('departments')}
               />
             )}
-            {displayedTab === 'modules' && <ModulesTabContent orgId={org.id} onOpenInAdmin={handleOpenInAdmin} />}
-            {displayedTab === 'settings' && <SettingsTabContent orgId={org.id} onOpenInAdmin={handleOpenInAdmin} />}
+            {activeDetailTab === 'modules' && <ModulesTabContent orgId={org.id} onOpenInAdmin={handleOpenInAdmin} />}
+            {activeDetailTab === 'settings' && <SettingsTabContent orgId={org.id} onOpenInAdmin={handleOpenInAdmin} />}
           </div>
         </div>
       </div>
