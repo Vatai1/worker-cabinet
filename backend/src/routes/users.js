@@ -7,6 +7,20 @@ import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 
 const router = express.Router()
 
+async function checkProfileAccess(req, targetId) {
+  const currentUser = req.user
+  if (currentUser.id === targetId || currentUser.role === 'superadmin') return true
+  const isHrOrAdmin = currentUser.role === 'hr' || currentUser.role === 'admin' ||
+    (req.org && ['hr', 'admin'].includes(req.org.org_role))
+  if (!isHrOrAdmin) return false
+  if (!req.org) return true
+  const membership = await query(
+    'SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2 AND is_active = true',
+    [targetId, req.org.org_id]
+  )
+  return membership.rows.length > 0
+}
+
 // Get all unique skills
 /**
  * @swagger
@@ -335,11 +349,10 @@ router.post('/me/avatar', authenticateToken, uploadAvatar.single('avatar'), asyn
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
-    const currentUser = req.user
+    const targetId = parseInt(id)
 
-    // Проверка прав
-    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden' })
+    if (!(await checkProfileAccess(req, targetId))) {
+      return res.status(403).json({ error: 'Нет доступа к профилю этого сотрудника' })
     }
 
     const result = await query(
@@ -482,10 +495,8 @@ router.post('/:id/skills', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
     const { skill } = req.body
-    const currentUser = req.user
 
-    // Проверка прав: только владелец профиля или admin
-    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
+    if (!(await checkProfileAccess(req, parseInt(id)))) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -567,10 +578,8 @@ router.delete('/:id/skills', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
     const { skill } = req.body
-    const currentUser = req.user
 
-    // Проверка прав: только владелец профиля или admin
-    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
+    if (!(await checkProfileAccess(req, parseInt(id)))) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -634,10 +643,8 @@ router.post('/:id/projects', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
     const { name, role, status, startDate, endDate, description } = req.body
-    const currentUser = req.user
 
-    // Проверка прав: только владелец профиля или admin
-    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
+    if (!(await checkProfileAccess(req, parseInt(id)))) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -716,10 +723,8 @@ router.post('/:id/projects', authenticateToken, async (req, res) => {
 router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) => {
   try {
     const { id, projectId } = req.params
-    const currentUser = req.user
 
-    // Проверка прав: только владелец профиля или admin
-    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
+    if (!(await checkProfileAccess(req, parseInt(id)))) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -779,10 +784,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
     const { responsibility_area, phone, first_name, last_name, middle_name, office, cabinet } = req.body
-    const currentUser = req.user
 
-    // Проверка прав: только владелец профиля или admin
-    if (currentUser.id !== parseInt(id) && currentUser.role !== 'hr' && currentUser.role !== 'admin') {
+    if (!(await checkProfileAccess(req, parseInt(id)))) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
