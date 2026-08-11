@@ -1,5 +1,6 @@
 ﻿import { create } from 'zustand'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { getAuthHeaders } from '@/shared/lib/authHeaders'
 
 interface ModulesState {
   enabledModules: Set<string>
@@ -16,7 +17,7 @@ export const useModulesStore = create<ModulesState>((set, get) => ({
 
   fetchModules: async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/modules`)
+      const res = await fetch(`${API_BASE_URL}/modules`, { headers: getAuthHeaders() })
       if (res.ok) {
         const data = await res.json()
         set({ enabledModules: new Set(data.enabled as string[]), loaded: true, modulesLoaded: true })

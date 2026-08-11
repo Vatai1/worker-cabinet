@@ -1518,7 +1518,7 @@ router.delete('/dictionaries/skills/:id', asyncHandler(async (req, res) => {
  *         description: Список модулей
  */
 router.get('/modules', asyncHandler(async (req, res) => {
-  const result = await query('SELECT * FROM modules ORDER BY sort_order')
+  const result = await query('SELECT * FROM modules WHERE organization_id IS NULL ORDER BY sort_order')
   let overrides = []
   if (req.org) {
     const ovRes = await query('SELECT * FROM module_overrides WHERE org_id = $1', [req.org.org_id])
@@ -1527,14 +1527,18 @@ router.get('/modules', asyncHandler(async (req, res) => {
   const overrideMap = Object.fromEntries(overrides.map(o => [o.module_code, o]))
   res.json(result.rows.map(r => {
     const ov = overrideMap[r.code]
+    const globalEnabled = r.is_enabled
+    const isEnabledOverride = ov?.is_enabled_override ?? null
     return {
       ...r,
       locked: r.category === 'core' || r.code === 'appearance',
       global_name: r.name,
-      global_is_enabled: r.is_enabled,
+      global_is_enabled: globalEnabled,
       org_name: ov?.name || null,
       org_settings: ov?.settings || null,
       is_overridden: !!ov,
+      is_enabled_override: isEnabledOverride,
+      effective_enabled: globalEnabled && (isEnabledOverride !== false),
     }
   }))
 }))
@@ -1696,6 +1700,64 @@ router.put('/modules/:id/toggle', authorizeGlobalRoles('superadmin'), asyncHandl
     'module_toggle', 'module', id,
     { module: existing.rows[0].code, name: existing.rows[0].name, enabled: newStatus }, req.ip)
   res.json({ success: true, enabled: newStatus })
+}))
+
+/**
+ * @swagger
+ * /admin/modules/{code}/org-toggle:
+ *   put:
+ *     tags: [Admin]
+ *     summary: Локальное отключение/включение модуля для учреждения
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: code, in: path, required: true, schema: { type: string }, description: 'Код модуля' }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               enable: { type: boolean, description: 'true — сбросить переопределение (наследовать глобальное), false — отключить локально' }
+ *     responses:
+ *       200:
+ *         description: Локальный статус модуля обновлён
+ *       400:
+ *         description: Модуль отключён глобально или нет контекста учреждения
+ *       403:
+ *         description: Нет прав
+ */
+router.put('/modules/:code/org-toggle', authorizeRoles('admin'), asyncHandler(async (req, res) => {
+  const { code } = req.params
+  const { enable } = req.body
+  if (!req.org) throw new ValidationError('Не выбрано учреждение')
+
+  const moduleRes = await query('SELECT id, is_enabled, name FROM modules WHERE code = $1 AND organization_id IS NULL', [code])
+  if (moduleRes.rows.length === 0) throw new NotFoundError('Модуль не найден')
+  if (!moduleRes.rows[0].is_enabled) {
+    throw new ValidationError('Модуль отключён глобально, включение невозможно')
+  }
+
+  const moduleId = moduleRes.rows[0].id
+  if (enable === false) {
+    await query(`
+      INSERT INTO module_overrides (org_id, module_code, is_enabled_override)
+      VALUES ($1, $2, false)
+      ON CONFLICT (org_id, module_code) DO UPDATE SET is_enabled_override = false, updated_at = NOW()
+    `, [req.org.org_id, code])
+  } else {
+    await query(`
+      INSERT INTO module_overrides (org_id, module_code, is_enabled_override)
+      VALUES ($1, $2, NULL)
+      ON CONFLICT (org_id, module_code) DO UPDATE SET is_enabled_override = NULL, updated_at = NOW()
+    `, [req.org.org_id, code])
+  }
+
+  const effectiveEnabled = enable !== false
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    'module_org_toggle', 'module', String(moduleId),
+    { module: code, name: moduleRes.rows[0].name, org_id: req.org.org_id, enabled: effectiveEnabled }, req.ip)
+  res.json({ success: true, enabled: effectiveEnabled })
 }))
 
 /**

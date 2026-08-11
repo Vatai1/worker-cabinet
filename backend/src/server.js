@@ -158,9 +158,26 @@ app.get('/api/health', (req, res) => {
 app.get('/api/modules', async (req, res) => {
   try {
     const { query } = await import('./config/database.js')
-    const result = await query('SELECT code, is_enabled FROM modules ORDER BY sort_order')
-    const enabled = result.rows.filter(r => r.is_enabled).map(r => r.code)
-    res.json({ modules: result.rows, enabled })
+    const orgId = req.headers['x-organization-id'] || req.cookies?.active_org_id
+    let rows
+    if (orgId) {
+      const result = await query(
+        `SELECT m.code, m.is_enabled, mo.is_enabled_override
+         FROM modules m
+         LEFT JOIN module_overrides mo ON mo.module_code = m.code AND mo.org_id = $1
+         WHERE m.organization_id IS NULL
+         ORDER BY m.sort_order`,
+        [orgId]
+      )
+      rows = result.rows
+    } else {
+      const result = await query('SELECT code, is_enabled FROM modules WHERE organization_id IS NULL ORDER BY sort_order')
+      rows = result.rows
+    }
+    const enabled = rows
+      .filter(r => r.is_enabled && (r.is_enabled_override !== false))
+      .map(r => r.code)
+    res.json({ modules: rows, enabled })
   } catch {
     res.json({ modules: [], enabled: [] })
   }

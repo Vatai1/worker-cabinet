@@ -7,6 +7,7 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { isSuperAdmin } from '@/shared/lib/permissions'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
+import { useOrgStore } from '@/shared/store/orgStore'
 import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
 import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
@@ -114,6 +115,7 @@ const ACTION_LABELS: Record<string, string> = {
   account_unlock: 'Разблокировка аккаунта',
   login: 'Вход в систему',
   module_toggle: 'Переключение модуля',
+  module_org_toggle: 'Локальное переключение модуля',
   module_create: 'Создание модуля',
   module_update: 'Обновление модуля',
   module_delete: 'Удаление модуля',
@@ -134,6 +136,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: st
   account_unlock:     { icon: Unlock,        color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
   login:              { icon: Activity,      color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-100 dark:bg-blue-900/30' },
   module_toggle:      { icon: Boxes,         color: 'text-orange-600 dark:text-orange-400',   bg: 'bg-orange-100 dark:bg-orange-900/30' },
+  module_org_toggle:  { icon: Boxes,         color: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-100 dark:bg-amber-900/30' },
   module_create:      { icon: Boxes,         color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
   module_update:      { icon: Boxes,         color: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-100 dark:bg-blue-900/30' },
   module_delete:      { icon: Trash2,        color: 'text-red-600 dark:text-red-400',         bg: 'bg-red-100 dark:bg-red-900/30' },
@@ -272,11 +275,15 @@ const STATUS_LABELS: Record<string, string> = {
   on_leave: 'В отпуске',
 }
 
-export function AdminPanel() {
+interface Props {
+  mode?: 'global' | 'org'
+}
+
+export function AdminPanel({ mode = 'global' }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('users')
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const [apiVersion, setApiVersion] = useState<string | null>(null)
-  const isSuper = isSuperAdmin()
+  const isGlobalMode = mode === 'global'
 
   useEffect(() => {
     fetchWithRetry(`${API_BASE_URL}/version`, { headers: getAuthHeaders() })
@@ -291,7 +298,7 @@ export function AdminPanel() {
     .map((group) => ({
       ...group,
       tabs: group.tabs.filter((tab) => {
-        if (!isSuper && HIDDEN_FOR_ORG_ADMIN.includes(tab.id)) return false
+        if (!isGlobalMode && HIDDEN_FOR_ORG_ADMIN.includes(tab.id)) return false
         return !tab.module || isModuleEnabled(tab.module)
       }),
     }))
@@ -299,6 +306,9 @@ export function AdminPanel() {
 
   const allTabs = filteredGroups.flatMap((g) => g.tabs)
   const activeTabInfo = allTabs.find((t) => t.id === activeTab)
+
+  const orgStore = useOrgStore()
+  const currentOrg = orgStore.organizations.find((o) => o.id === orgStore.currentOrgId)
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
     try {
@@ -328,11 +338,24 @@ export function AdminPanel() {
         <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/5 rounded-full" />
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <Sparkles className="h-6 w-6 text-white/80" />
-              <h1 className="text-2xl font-bold text-white">Администрирование</h1>
+              <h1 className="text-2xl font-bold text-white">
+                {isGlobalMode ? 'Глобальная админ-панель' : 'Админ панель учреждения'}
+              </h1>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/15 text-white/80 text-xs">
+                {isGlobalMode ? (
+                  <><Globe className="h-3 w-3" /> Все организации</>
+                ) : (
+                  <><Building2 className="h-3 w-3" /> {currentOrg?.name || 'Учреждение'}</>
+                )}
+              </span>
             </div>
-            <p className="text-sm text-white/60">Управление ролями, доступами и настройками системы</p>
+            <p className="text-sm text-white/60">
+              {isGlobalMode
+                ? 'Глобальное управление ролями, модулями и настройками'
+                : 'Управление учреждением: пользователи, модули, настройки'}
+            </p>
           </div>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 text-white/70 text-xs whitespace-nowrap">
             <Tag className="h-3 w-3" />
@@ -422,7 +445,7 @@ export function AdminPanel() {
           {activeTab === 'dict_positions' && <DictionariesTab initialTab="positions" />}
           {activeTab === 'dict_vacation' && <DictionariesTab initialTab="vacationTypes" />}
           {activeTab === 'dict_skills' && <DictionariesTab initialTab="skills" />}
-          {activeTab === 'modules' && <ModulesTab />}
+          {activeTab === 'modules' && <ModulesTab mode={mode} />}
           {activeTab === 'appearance' && <AppearanceTab />}
         </div>
       </div>
@@ -2986,6 +3009,8 @@ interface ModuleItem {
   org_name?: string | null
   org_settings?: Record<string, unknown> | null
   is_overridden?: boolean
+  is_enabled_override?: boolean | null
+  effective_enabled?: boolean
 }
 
 type ModuleCategoryKey = 'core' | 'hr' | 'work' | 'docs' | 'admin'
@@ -3156,7 +3181,7 @@ const MODULE_COLORS: Record<string, { active: string; inactive: string; icon: st
   calendar:     { active: 'from-sky-500 to-blue-600',      inactive: 'bg-sky-100 dark:bg-sky-900/30', icon: 'text-sky-600 dark:text-sky-400' },
 }
 
-function ModulesTab() {
+function ModulesTab({ mode = 'global' }: { mode?: 'global' | 'org' }) {
   const [modules, setModules] = useState<ModuleItem[]>([])
   const [loading, setLoading] = useState(true)
   const [togglingId, setTogglingId] = useState<number | null>(null)
@@ -3166,7 +3191,7 @@ function ModulesTab() {
   const [editingOverride, setEditingOverride] = useState<number | null>(null)
   const [overrideValue, setOverrideValue] = useState('')
   const [savingOverrideId, setSavingOverrideId] = useState<number | null>(null)
-  const isSuper = isSuperAdmin()
+  const isGlobalMode = mode === 'global'
 
   useEffect(() => { fetchModules() }, [])
 
@@ -3191,6 +3216,31 @@ function ModulesTab() {
         useModulesStore.getState().fetchModules()
       } else {
         const data = await res.json()
+        setError(data.error || 'Ошибка')
+      }
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setTogglingId(null) }
+  }
+
+  const toggleOrgModule = async (mod: ModuleItem) => {
+    const newEnabled = !(mod.effective_enabled ?? mod.is_enabled)
+    setTogglingId(mod.id)
+    setError(null)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/modules/${mod.code}/org-toggle`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ enable: newEnabled }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setModules((prev) => prev.map((m) => m.id === mod.id ? {
+          ...m,
+          effective_enabled: data.enabled,
+          is_enabled_override: newEnabled ? null : false,
+        } : m))
+        useModulesStore.getState().fetchModules()
+      } else {
+        const data = await res.json().catch(() => ({}))
         setError(data.error || 'Ошибка')
       }
     } catch (err) { setError(getErrorMessage(err)) }
@@ -3245,7 +3295,7 @@ function ModulesTab() {
     finally { setSavingOverrideId(null) }
   }
 
-  const enabledCount = modules.filter(m => m.is_enabled).length
+  const enabledCount = modules.filter(m => isGlobalMode ? m.is_enabled : (m.effective_enabled ?? m.is_enabled)).length
 
   const visibleModules = modules.filter(m => m.code !== 'appearance')
 
@@ -3304,7 +3354,7 @@ function ModulesTab() {
           <div className="space-y-6">
             {groupedModules.map(group => {
               const CategoryIcon = group.icon
-              const groupEnabled = group.modules.filter(m => m.is_enabled).length
+              const groupEnabled = group.modules.filter(m => isGlobalMode ? m.is_enabled : (m.effective_enabled ?? m.is_enabled)).length
               return (
                 <div key={group.key}>
                   <div className="flex items-center gap-2 mb-3">
@@ -3320,13 +3370,14 @@ function ModulesTab() {
                       const isLoading = togglingId === mod.id
                       const hasSettings = mod.code in SETTINGS_MAP || CUSTOM_SETTINGS.has(mod.code)
                       const settingsInfo = SETTINGS_INFO[mod.code]
+                      const enabled = isGlobalMode ? mod.is_enabled : (mod.effective_enabled ?? mod.is_enabled)
 
                       return (
                         <div
                           key={mod.id}
                           className={cn(
                             'relative flex flex-col p-5 rounded-2xl border-2 transition-all duration-300',
-                            mod.is_enabled
+                            enabled
                               ? 'border-primary/20 bg-card shadow-sm hover:shadow-md hover:border-primary/40'
                               : 'border-border/30 bg-muted/20 opacity-70 hover:opacity-100',
                           )}
@@ -3334,14 +3385,14 @@ function ModulesTab() {
                           <div className="flex items-start justify-between mb-3">
                             <div className={cn(
                               'p-2.5 rounded-xl transition-all duration-300',
-                              mod.is_enabled
+                              enabled
                                 ? `bg-primary/10 text-primary`
                                 : colors.inactive,
                             )}>
                               {settingsInfo ? (
                                 <span className="block w-5 h-5 text-center text-base leading-5">{settingsInfo.emoji}</span>
                               ) : (
-                                <Boxes className={cn('h-5 w-5', !mod.is_enabled && (colors.icon || 'text-muted-foreground'))} />
+                                <Boxes className={cn('h-5 w-5', !enabled && (colors.icon || 'text-muted-foreground'))} />
                               )}
                             </div>
 
@@ -3350,42 +3401,52 @@ function ModulesTab() {
                                 <Lock className="h-3.5 w-3.5" />
                                 <span className="text-[10px] font-medium">Нельзя отключить</span>
                               </div>
-                            ) : isSuper ? (
+                            ) : isGlobalMode ? (
                               <button
                                 onClick={() => toggleModule(mod)}
                                 disabled={isLoading}
                                 className={cn(
                                   'relative w-12 h-7 rounded-full transition-all duration-300 shrink-0',
-                                  mod.is_enabled ? 'bg-primary shadow-sm' : 'bg-muted-foreground/20',
+                                  enabled ? 'bg-primary shadow-sm' : 'bg-muted-foreground/20',
                                   isLoading && 'opacity-50 cursor-wait',
                                 )}
                               >
                                 <div className={cn(
                                   'absolute top-0.5 w-6 h-6 rounded-full bg-card shadow-sm transition-all duration-300',
-                                  mod.is_enabled ? 'left-[22px]' : 'left-0.5',
+                                  enabled ? 'left-[22px]' : 'left-0.5',
                                 )} />
                                 {isLoading && (
                                   <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-primary" />
                                 )}
                               </button>
-                            ) : (
+                            ) : mod.global_is_enabled === false ? (
                               <div className="flex flex-col items-end gap-1 shrink-0">
                                 <div className="flex items-center gap-1 text-muted-foreground">
                                   <Globe className="h-3.5 w-3.5" />
-                                  <span className="text-[10px] font-medium">Глобально</span>
+                                  <span className="text-[10px] font-medium">Глобально отключён</span>
                                 </div>
-                                <div
-                                  className={cn(
-                                    'relative w-12 h-7 rounded-full shrink-0',
-                                    mod.is_enabled ? 'bg-primary/40' : 'bg-muted-foreground/20',
-                                  )}
-                                >
-                                  <div className={cn(
-                                    'absolute top-0.5 w-6 h-6 rounded-full bg-card shadow-sm',
-                                    mod.is_enabled ? 'left-[22px]' : 'left-0.5',
-                                  )} />
+                                <div className="relative w-12 h-7 rounded-full shrink-0 bg-muted-foreground/20 opacity-50">
+                                  <div className="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-card shadow-sm" />
                                 </div>
                               </div>
+                            ) : (
+                              <button
+                                onClick={() => toggleOrgModule(mod)}
+                                disabled={isLoading}
+                                className={cn(
+                                  'relative w-12 h-7 rounded-full transition-all duration-300 shrink-0',
+                                  enabled ? 'bg-primary shadow-sm' : 'bg-muted-foreground/20',
+                                  isLoading && 'opacity-50 cursor-wait',
+                                )}
+                              >
+                                <div className={cn(
+                                  'absolute top-0.5 w-6 h-6 rounded-full bg-card shadow-sm transition-all duration-300',
+                                  enabled ? 'left-[22px]' : 'left-0.5',
+                                )} />
+                                {isLoading && (
+                                  <Loader2 className="absolute inset-0 m-auto h-4 w-4 animate-spin text-primary" />
+                                )}
+                              </button>
                             )}
                           </div>
 
@@ -3393,20 +3454,20 @@ function ModulesTab() {
                             <div className="flex items-center gap-2">
                               <h3 className={cn(
                                 'font-semibold transition-colors',
-                                mod.is_enabled ? 'text-foreground' : 'text-muted-foreground',
+                                enabled ? 'text-foreground' : 'text-muted-foreground',
                               )}>
                                 {mod.name}
                               </h3>
                               {!mod.locked && (
                                 <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={
-                                  mod.is_enabled
+                                  enabled
                                     ? { backgroundColor: 'rgba(16,185,129,0.15)', color: '#10B981', borderColor: 'rgba(16,185,129,0.3)' }
                                     : { backgroundColor: 'rgba(107,114,128,0.15)', color: '#6B7280', borderColor: 'transparent' }
                                 }>
-                                  {mod.is_enabled ? 'Активен' : (isSuper ? 'Отключен' : 'Глобально отключено')}
+                                  {enabled ? 'Активен' : (isGlobalMode ? 'Отключен' : (mod.global_is_enabled === false ? 'Глобально отключён' : 'Отключён локально'))}
                                 </span>
                               )}
-                              {!isSuper && mod.is_overridden && (
+                              {!isGlobalMode && mod.is_overridden && (
                                 <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-transparent">
                                   Своё название
                                 </Badge>
@@ -3418,7 +3479,7 @@ function ModulesTab() {
                             {mod.route && (
                               <p className="text-[10px] font-mono text-muted-foreground/60 mt-2">{mod.route}</p>
                             )}
-                            {!isSuper && (
+                            {!isGlobalMode && (
                               <div className="mt-3 pt-3 border-t border-border/40">
                                 {editingOverride === mod.id ? (
                                   <div className="flex items-center gap-2">
@@ -3483,10 +3544,10 @@ function ModulesTab() {
                           {hasSettings && (
                             <button
                               onClick={() => mod.code in SETTINGS_MAP ? setSettingsModule(SETTINGS_MAP[mod.code]) : setCustomSettings(mod.code as 'timesheet' | 'assistant')}
-                              disabled={!mod.is_enabled}
+                              disabled={!enabled}
                               className={cn(
                                 'flex items-center gap-2 w-full px-4 py-2.5 rounded-lg text-sm mt-4 transition-colors duration-200 border',
-                                mod.is_enabled
+                                enabled
                                   ? 'bg-primary text-primary-foreground border-primary/20 hover:bg-primary/90'
                                   : 'text-muted-foreground cursor-not-allowed border-transparent bg-transparent',
                               )}
@@ -3496,7 +3557,7 @@ function ModulesTab() {
                             </button>
                           )}
 
-                          {mod.is_enabled && (
+                          {enabled && (
                             <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                           )}
                         </div>

@@ -1690,6 +1690,7 @@ async function runMigrations() {
       )
     `).catch(e => console.log('  - module_overrides:', e.message))
     await db.query('CREATE INDEX IF NOT EXISTS idx_module_overrides_org ON module_overrides(org_id)').catch(() => {})
+    await db.query('ALTER TABLE module_overrides ADD COLUMN IF NOT EXISTS is_enabled_override BOOLEAN').catch(() => {})
     console.log('  ✓ module_overrides')
 
     await db.query(`ALTER TABLE modules ALTER COLUMN organization_id DROP NOT NULL`).catch(() => {})

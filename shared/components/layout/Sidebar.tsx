@@ -24,6 +24,8 @@ interface NavItem {
   children?: { name: string; href: string; module?: string }[]
   module?: string
   section?: string
+  superAdminOnly?: boolean
+  orgAdminOnly?: boolean
 }
 
 const getOnboardingNavigation = (): NavItem[] => [
@@ -93,7 +95,8 @@ const getAdminNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
-  { name: 'Администрирование', href: '/admin', icon: Shield, section: 'Основное' },
+  { name: 'Глобальная админ-панель', href: '/admin/global', icon: Shield, section: 'Основное', superAdminOnly: true },
+  { name: 'Админ панель учреждения', href: '/admin/org', icon: Building2, section: 'Основное', orgAdminOnly: true },
   { name: 'HR-панель', href: '/hr', icon: Users, section: 'Основное' },
   { name: 'Сотрудники', href: '/employees', icon: Users, section: 'Управление' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Управление' },
@@ -125,15 +128,23 @@ export function Sidebar() {
   const location = useLocation()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
 
+  const isSuper = isSuperAdmin()
+  const isAdminRole = hasAnyRole('admin')
+
   const rawNavigation =
     user?.role === 'onboarding' ? getOnboardingNavigation() :
-    isSuperAdmin() ? getAdminNavigation(user?.id) :
-    hasAnyRole('admin') ? getAdminNavigation(user?.id) :
+    isSuper ? getAdminNavigation(user?.id) :
+    isAdminRole ? getAdminNavigation(user?.id) :
     hasAnyRole('hr') ? getHRNavigation(user?.id) :
     user?.role === 'manager' || hasAnyRole('manager') ? getManagerNavigation(user?.id) :
     getEmployeeNavigation(user?.id)
 
   const navigation = !modulesLoaded ? [] : rawNavigation
+    .filter((item) => {
+      if (item.superAdminOnly && !isSuper) return false
+      if (item.orgAdminOnly && !isAdminRole) return false
+      return true
+    })
     .filter((item) => !item.module || isModuleEnabled(item.module))
     .map((item) => {
       if (!item.children) return item

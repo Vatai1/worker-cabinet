@@ -116,6 +116,11 @@ export function SuperAdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function AdminRedirect() {
+  if (isSuperAdmin()) return <Navigate to="/admin/global" replace />
+  return <Navigate to="/admin/org" replace />
+}
+
 function ModuleGuard({ module, children }: { module: string; children: React.ReactNode }) {
   const loaded = useModulesStore((s) => s.loaded)
   const enabledModules = useModulesStore((s) => s.enabledModules)
@@ -158,7 +163,7 @@ function App() {
                       to={
                         user?.role === 'onboarding' ? '/onboarding' :
                         user?.role === 'manager' ? '/leader' :
-                        user?.role === 'superadmin' ? '/admin' :
+                        user?.role === 'superadmin' ? '/admin/global' :
                         hasAnyRoleSync('hr', 'admin') ? '/hr' :
                         '/dashboard'
                       }
@@ -190,7 +195,9 @@ function App() {
                 <Route path="hr" element={<HRRoute><HRPanel /></HRRoute>} />
                 <Route path="hr/onboarding/:id" element={<ModuleGuard module="onboarding"><HRRoute><HROnboarding /></HRRoute></ModuleGuard>} />
                 <Route path="leader/timesheet" element={<ModuleGuard module="timesheet"><ManagerRoute><ManagerTimesheet /></ManagerRoute></ModuleGuard>} />
-                <Route path="admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+                <Route path="admin/global" element={<SuperAdminRoute><AdminPanel mode="global" /></SuperAdminRoute>} />
+                <Route path="admin/org" element={<AdminRoute><AdminPanel mode="org" /></AdminRoute>} />
+                <Route path="admin" element={<AdminRedirect />} />
                 <Route path="assistant" element={<ModuleGuard module="assistant"><BlockOnboardingRoute><Assistant /></BlockOnboardingRoute></ModuleGuard>} />
               </Route>
               <Route path="*" element={<Navigate to="/login" replace />} />
