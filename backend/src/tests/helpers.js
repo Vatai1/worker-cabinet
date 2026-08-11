@@ -27,11 +27,11 @@ export async function login(email, password = PASSWORD) {
 }
 
 export function headers(token) {
-  return { Authorization: `Bearer ${token}` }
+  return { Authorization: `Bearer ${token}`, 'x-organization-id': '1' }
 }
 
 export function headersJSON(token) {
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-organization-id': '1' }
 }
 
 function readCache() {

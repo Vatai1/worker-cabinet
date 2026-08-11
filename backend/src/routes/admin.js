@@ -1468,7 +1468,7 @@ router.post('/dictionaries/skills', asyncHandler(async (req, res) => {
   if (!name?.trim()) throw new ValidationError('Название обязательно')
   const orgId = currentOrgId(req)
   const result = await query(
-    `INSERT INTO skills_dictionary (name, organization_id) VALUES ($1, $2) ON CONFLICT (name, organization_id) DO NOTHING RETURNING *`,
+    `INSERT INTO skills_dictionary (name, organization_id) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING RETURNING *`,
     [name.trim(), orgId]
   )
   if (result.rows.length === 0) throw new ValidationError('Такой навык уже существует')

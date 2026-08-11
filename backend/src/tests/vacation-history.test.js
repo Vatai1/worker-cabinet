@@ -33,13 +33,14 @@ describe('Vacation Request Status History', () => {
   const VACATION_REQUEST = {
     startDate: '2025-03-10',
     endDate: '2025-03-14',
-    vacationType: 'annual_paid',
+    vacationTypeCode: 'annual_paid',
     comment: 'Test vacation request'
   }
 
   beforeEach(async () => {
+    let client
     try {
-      const client = await getClient()
+      client = await getClient()
       await client.query('BEGIN')
 
       const empHash = await bcrypt.hash(EMPLOYEE.password, 10)
@@ -63,29 +64,50 @@ describe('Vacation Request Status History', () => {
       managerId = mgrResult.rows[0].id
 
       await client.query(
-        `INSERT INTO vacation_balances (user_id, total_days, used_days, available_days, reserved_days)
-         VALUES ($1, 28, 0, 28, 0)`,
+        `INSERT INTO vacation_balances (user_id, total_days, used_days, available_days, reserved_days, organization_id)
+         VALUES ($1, 28, 0, 28, 0, 1)`,
         [employeeId]
       )
 
+      const vtResult = await client.query(
+        'SELECT id FROM vacation_types WHERE code = $1',
+        [VACATION_REQUEST.vacationTypeCode]
+      )
+      const vacationTypeId = vtResult.rows[0].id
+
       const vacationResult = await client.query(
         `INSERT INTO vacation_requests 
-         (user_id, start_date, end_date, duration, vacation_type, comment, status)
-         VALUES ($1, $2, $3, 5, $4, $5, 'on_approval')
+         (user_id, start_date, end_date, duration, vacation_type_id, comment, status_id, organization_id)
+         VALUES ($1, $2, $3, 5, $4, $5, (SELECT id FROM request_statuses WHERE code = 'on_approval'), 1)
          RETURNING id`,
-        [employeeId, VACATION_REQUEST.startDate, VACATION_REQUEST.endDate, VACATION_REQUEST.vacationType, VACATION_REQUEST.comment]
+        [employeeId, VACATION_REQUEST.startDate, VACATION_REQUEST.endDate, vacationTypeId, VACATION_REQUEST.comment]
       )
       vacationRequestId = vacationResult.rows[0].id
 
+      await client.query(
+        `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, organization_id)
+         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $2, 1)`,
+        [vacationRequestId, employeeId]
+      )
+
       await client.query('COMMIT')
+      client.release()
     } catch (error) {
       console.error('Setup error:', error.message)
+      if (client) {
+        await client.query('ROLLBACK').catch(() => {})
+        client.release()
+      }
       throw error
     }
   })
 
   afterEach(async () => {
     try {
+      if (vacationRequestId) {
+        await query('DELETE FROM vacation_request_status_history WHERE request_id = $1', [vacationRequestId])
+        await query('DELETE FROM vacation_requests WHERE id = $1', [vacationRequestId])
+      }
       if (managerId) {
         await query('DELETE FROM vacation_balances WHERE user_id = $1', [managerId])
         await query('DELETE FROM users WHERE id = $1', [managerId])
@@ -102,9 +124,10 @@ describe('Vacation Request Status History', () => {
   describe('Status History Creation', () => {
     it('should create initial status history entry when vacation request is created', async () => {
       const result = await query(
-        `SELECT * FROM vacation_request_status_history 
-         WHERE request_id = $1 
-         ORDER BY changed_at DESC 
+        `SELECT vrsh.*, rs.code as status FROM vacation_request_status_history vrsh
+         JOIN request_statuses rs ON vrsh.status_id = rs.id
+         WHERE vrsh.request_id = $1 
+         ORDER BY vrsh.changed_at DESC 
          LIMIT 1`,
         [vacationRequestId]
       )
@@ -119,22 +142,23 @@ describe('Vacation Request Status History', () => {
     it('should record who approved a vacation request', async () => {
       await query(
         `UPDATE vacation_requests 
-         SET status = 'approved', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
+         SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'), reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
          WHERE id = $2`,
         [managerId, vacationRequestId]
       )
 
       await query(
         `INSERT INTO vacation_request_status_history 
-         (request_id, status, changed_by, comment) 
-         VALUES ($1, 'approved', $2, 'Согласовано')`,
+         (request_id, status_id, changed_by, comment, organization_id) 
+         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, 'Согласовано', 1)`,
         [vacationRequestId, managerId]
       )
 
       const result = await query(
-        `SELECT * FROM vacation_request_status_history 
-         WHERE request_id = $1 
-         ORDER BY changed_at DESC`,
+        `SELECT vrsh.*, rs.code as status FROM vacation_request_status_history vrsh
+         JOIN request_statuses rs ON vrsh.status_id = rs.id
+         WHERE vrsh.request_id = $1 
+         ORDER BY vrsh.changed_at DESC`,
         [vacationRequestId]
       )
 
@@ -151,21 +175,22 @@ describe('Vacation Request Status History', () => {
       
       await query(
         `UPDATE vacation_requests 
-         SET status = 'rejected', rejection_reason = $1, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $2
+         SET status_id = (SELECT id FROM request_statuses WHERE code = 'rejected'), rejection_reason = $1, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $2
          WHERE id = $3`,
         [rejectionReason, managerId, vacationRequestId]
       )
 
       await query(
         `INSERT INTO vacation_request_status_history 
-         (request_id, status, changed_by, comment) 
-         VALUES ($1, 'rejected', $2, $3)`,
+         (request_id, status_id, changed_by, comment, organization_id) 
+         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3, 1)`,
         [vacationRequestId, managerId, rejectionReason]
       )
 
       const result = await query(
-        `SELECT * FROM vacation_request_status_history 
-         WHERE request_id = $1 AND status = 'rejected'
+        `SELECT vrsh.*, rs.code as status FROM vacation_request_status_history vrsh
+         JOIN request_statuses rs ON vrsh.status_id = rs.id
+         WHERE vrsh.request_id = $1 AND rs.code = 'rejected'
          LIMIT 1`,
         [vacationRequestId]
       )
@@ -180,21 +205,22 @@ describe('Vacation Request Status History', () => {
     it('should record employee cancellation', async () => {
       await query(
         `UPDATE vacation_requests 
-         SET status = 'cancelled_by_employee'
+         SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee')
          WHERE id = $1`,
         [vacationRequestId]
       )
 
       await query(
         `INSERT INTO vacation_request_status_history 
-         (request_id, status, changed_by) 
-         VALUES ($1, 'cancelled_by_employee', $2)`,
+         (request_id, status_id, changed_by, organization_id) 
+         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2, 1)`,
         [vacationRequestId, employeeId]
       )
 
       const result = await query(
-        `SELECT * FROM vacation_request_status_history 
-         WHERE request_id = $1 AND status = 'cancelled_by_employee'
+        `SELECT vrsh.*, rs.code as status FROM vacation_request_status_history vrsh
+         JOIN request_statuses rs ON vrsh.status_id = rs.id
+         WHERE vrsh.request_id = $1 AND rs.code = 'cancelled_by_employee'
          LIMIT 1`,
         [vacationRequestId]
       )
@@ -207,28 +233,29 @@ describe('Vacation Request Status History', () => {
     it('should record manager cancellation with reason', async () => {
       await query(
         `UPDATE vacation_requests 
-         SET status = 'approved'
+         SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved')
          WHERE id = $1`,
         [vacationRequestId]
       )
 
       await query(
         `UPDATE vacation_requests 
-         SET status = 'cancelled_by_manager', cancellation_reason = $1
+         SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_manager'), cancellation_reason = $1
          WHERE id = $2`,
         ['Срочная работа', vacationRequestId]
       )
 
       await query(
         `INSERT INTO vacation_request_status_history 
-         (request_id, status, changed_by, comment) 
-         VALUES ($1, 'cancelled_by_manager', $2, $3)`,
+         (request_id, status_id, changed_by, comment, organization_id) 
+         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_manager'), $2, $3, 1)`,
         [vacationRequestId, managerId, 'Срочная работа']
       )
 
       const result = await query(
-        `SELECT * FROM vacation_request_status_history 
-         WHERE request_id = $1 AND status = 'cancelled_by_manager'
+        `SELECT vrsh.*, rs.code as status FROM vacation_request_status_history vrsh
+         JOIN request_statuses rs ON vrsh.status_id = rs.id
+         WHERE vrsh.request_id = $1 AND rs.code = 'cancelled_by_manager'
          LIMIT 1`,
         [vacationRequestId]
       )
@@ -244,26 +271,28 @@ describe('Vacation Request Status History', () => {
     it('should return status history with user who made the change', async () => {
       await query(
         `UPDATE vacation_requests 
-         SET status = 'approved', reviewed_by = $1
+         SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'), reviewed_by = $1
          WHERE id = $2`,
         [managerId, vacationRequestId]
       )
 
       await query(
         `INSERT INTO vacation_request_status_history 
-         (request_id, status, changed_by, comment) 
-         VALUES ($1, 'approved', $2, 'Согласовано')`,
+         (request_id, status_id, changed_by, comment, organization_id) 
+         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, 'Согласовано', 1)`,
         [vacationRequestId, managerId]
       )
 
       const result = await query(
         `SELECT 
            vrsh.*,
+           rs.code as status,
            hu.first_name as changer_first_name,
            hu.last_name as changer_last_name,
            hu.email as changer_email,
            hu.role as changer_role
          FROM vacation_request_status_history vrsh
+         JOIN request_statuses rs ON vrsh.status_id = rs.id
          LEFT JOIN users hu ON vrsh.changed_by = hu.id
          WHERE vrsh.request_id = $1
          ORDER BY vrsh.changed_at DESC`,
@@ -283,8 +312,10 @@ describe('Vacation Request Status History', () => {
       const result = await query(
         `SELECT 
            vrsh.*,
+           rs.code as status,
            CONCAT(hu.last_name, ' ', hu.first_name) as changed_by_name
          FROM vacation_request_status_history vrsh
+         JOIN request_statuses rs ON vrsh.status_id = rs.id
          LEFT JOIN users hu ON vrsh.changed_by = hu.id
          WHERE vrsh.request_id = $1
          ORDER BY vrsh.changed_at ASC`,
@@ -311,15 +342,15 @@ describe('Vacation Request Status History', () => {
     it('should format status history as JSON for API response', async () => {
       await query(
         `UPDATE vacation_requests 
-         SET status = 'approved', reviewed_by = $1
+         SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved'), reviewed_by = $1
          WHERE id = $2`,
         [managerId, vacationRequestId]
       )
 
       await query(
         `INSERT INTO vacation_request_status_history 
-         (request_id, status, changed_by, comment) 
-         VALUES ($1, 'approved', $2, 'Согласовано')`,
+         (request_id, status_id, changed_by, comment, organization_id) 
+         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, 'Согласовано', 1)`,
         [vacationRequestId, managerId]
       )
 
@@ -328,7 +359,7 @@ describe('Vacation Request Status History', () => {
            json_agg(
              json_build_object(
                'id', vrsh.id,
-               'status', vrsh.status,
+               'status', rs.code,
                'changedAt', vrsh.changed_at,
                'changedBy', vrsh.changed_by,
                'changedByName', hu.last_name || ' ' || hu.first_name,
@@ -336,6 +367,7 @@ describe('Vacation Request Status History', () => {
              ) ORDER BY vrsh.changed_at
            ) as status_history
          FROM vacation_request_status_history vrsh
+         JOIN request_statuses rs ON vrsh.status_id = rs.id
          LEFT JOIN users hu ON vrsh.changed_by = hu.id
          WHERE vrsh.request_id = $1`,
         [vacationRequestId]

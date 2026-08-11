@@ -1,6 +1,7 @@
 import { describe, it, before } from 'node:test'
 import assert from 'node:assert'
-import { BASE, headers, getAdminToken, getEmployeeToken } from './helpers.js'
+import { BASE, headers as _baseHeaders, getAdminToken, getEmployeeToken } from './helpers.js'
+const headers = (t) => ({ ..._baseHeaders(t), 'x-organization-id': '1' })
 
 describe('Documents API', () => {
   let adminToken, employeeToken

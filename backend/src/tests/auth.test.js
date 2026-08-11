@@ -1,13 +1,23 @@
-import { describe, it, beforeEach, afterEach, after } from 'node:test'
+import { describe, it, beforeEach, afterEach, before, after } from 'node:test'
 import assert from 'node:assert'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { pool, query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import keycloakConfig from '../config/keycloak.js'
 
 describe('Authentication System', () => {
+  let originalKcEnabled
 
-  after(() => pool.end())
+  before(() => {
+    originalKcEnabled = keycloakConfig.enabled
+    keycloakConfig.enabled = false
+  })
+
+  after(() => {
+    keycloakConfig.enabled = originalKcEnabled
+    return pool.end()
+  })
 
   let testUserId
   const TEST_USER = {
@@ -27,10 +37,21 @@ describe('Authentication System', () => {
         `INSERT INTO users 
          (email, password_hash, first_name, last_name, position, department_id, role, hire_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE)
+         ON CONFLICT (email) DO UPDATE SET 
+           password_hash = EXCLUDED.password_hash,
+           failed_login_count = 0,
+           locked_until = NULL,
+           status = 'active'
          RETURNING id`,
         [TEST_USER.email, passwordHash, TEST_USER.firstName, TEST_USER.lastName, TEST_USER.position, TEST_USER.departmentId, TEST_USER.role]
       )
       testUserId = result.rows[0].id
+      await query(
+        `INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
+         VALUES ($1, 1, 'admin', true)
+         ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true, org_role = 'admin'`,
+        [testUserId]
+      )
     } catch (error) {
       console.error('Setup error:', error.message)
     }
@@ -39,6 +60,7 @@ describe('Authentication System', () => {
   afterEach(async () => {
     try {
       if (testUserId) {
+        await query('DELETE FROM user_organizations WHERE user_id = $1', [testUserId])
         await query('DELETE FROM vacation_balances WHERE user_id = $1', [testUserId])
         await query('DELETE FROM users WHERE id = $1', [testUserId])
       }
@@ -356,10 +378,21 @@ describe('Authentication System', () => {
         `INSERT INTO users 
          (email, password_hash, first_name, last_name, position, department_id, role, hire_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE)
+         ON CONFLICT (email) DO UPDATE SET 
+           password_hash = EXCLUDED.password_hash,
+           failed_login_count = 0,
+           locked_until = NULL,
+           status = 'active'
          RETURNING id`,
         ['manager-auth@example.com', passwordHash, 'Manager', 'User', 'Manager', TEST_USER.departmentId, 'manager']
       )
       managerUserId = result.rows[0].id
+      await query(
+        `INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
+         VALUES ($1, 1, 'manager', true)
+         ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true, org_role = 'manager'`,
+        [managerUserId]
+      )
       
       const managerLogin = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
@@ -386,6 +419,7 @@ describe('Authentication System', () => {
 
     afterEach(async () => {
       if (managerUserId) {
+        await query('DELETE FROM user_organizations WHERE user_id = $1', [managerUserId])
         await query('DELETE FROM vacation_balances WHERE user_id = $1', [managerUserId])
         await query('DELETE FROM users WHERE id = $1', [managerUserId])
       }
