@@ -415,6 +415,17 @@ export function Login() {
                       </div>
                     </div>
                   </button>
+                  <button type="button" onClick={() => handleDemoLogin('zaitseva@crct.ru')} disabled={isLoading} className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:bg-primary/10 transition-colors text-left w-full disabled:opacity-50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">HR (ЦРЦТ)</p>
+                        <p className="font-mono text-xs text-muted-foreground mt-0.5">zaitseva@crct.ru</p>
+                      </div>
+                    </div>
+                  </button>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 pt-2">Минцифры</p>
                   <button type="button" onClick={() => handleDemoLogin('orlova@mindit.ru')} disabled={isLoading} className="rounded-xl border border-primary/20 bg-primary/5 p-4 hover:bg-primary/10 transition-colors text-left w-full disabled:opacity-50">
                     <div className="flex items-center gap-3">
