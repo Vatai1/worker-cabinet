@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Building2, Check, Search, X } from 'lucide-react'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { cn } from '@/shared/lib/utils'
@@ -38,7 +39,7 @@ export function OrgSwitcher() {
         <ChevronDown className="h-3.5 w-3.5" />
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
           className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] bg-black/50"
           onClick={() => setOpen(false)}
@@ -63,7 +64,7 @@ export function OrgSwitcher() {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Поиск по названию, slug, ИНН..."
+                  placeholder="Поиск по названию..."
                   className="pl-9"
                   autoFocus
                 />
@@ -114,7 +115,8 @@ export function OrgSwitcher() {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )
