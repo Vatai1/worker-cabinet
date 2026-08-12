@@ -129,11 +129,18 @@ async function seed() {
     const hrDept = deptMap['HR отдел'] || depts.rows[0]?.id
 
     const FIXED_USERS = [
-      { email: 'admin@example.com', firstName: 'Админ', lastName: 'Системы', position: 'System Administrator', role: 'admin', deptId: devDept },
+      { email: 'admin@example.com', firstName: 'Админ', lastName: 'Системы', middleName: '', position: 'System Administrator', role: 'admin', deptId: devDept },
+      { email: 'superadmin@example.com', firstName: 'Супер', lastName: 'Админ', middleName: 'Глобальный', position: 'Super Administrator', role: 'superadmin', deptId: devDept },
       { email: 'ivanov@example.com', firstName: 'Иван', lastName: 'Иванов', middleName: 'Иванович', position: 'Senior Backend Developer', role: 'employee', deptId: devDept },
       { email: 'petrov@example.com', firstName: 'Пётр', lastName: 'Петров', middleName: 'Петрович', position: 'Middle Frontend Developer', role: 'manager', deptId: devDept },
       { email: 'elena@example.com', firstName: 'Елена', lastName: 'Смирнова', middleName: 'Александровна', position: 'HR Manager', role: 'hr', deptId: hrDept },
-      { email: 'superadmin@example.com', firstName: 'Супер', lastName: 'Админ', middleName: 'Глобальный', position: 'Super Administrator', role: 'superadmin', deptId: devDept },
+      { email: 'volkov@crct.ru', firstName: 'Дмитрий', lastName: 'Волков', middleName: 'Сергеевич', position: 'Руководитель отдела ИТ', role: 'manager', deptId: devDept },
+      { email: 'morozova@crct.ru', firstName: 'Ольга', lastName: 'Морозова', middleName: 'Викторовна', position: 'Ведущий специалист', role: 'employee', deptId: devDept },
+      { email: 'kuznetsov@crct.ru', firstName: 'Алексей', lastName: 'Кузнецов', middleName: 'Игоревич', position: 'Системный администратор', role: 'employee', deptId: devDept },
+      { email: 'orlova@mindit.ru', firstName: 'Мария', lastName: 'Орлова', middleName: 'Анатольевна', position: 'Администратор системы', role: 'admin', deptId: devDept },
+      { email: 'fedorov@mindit.ru', firstName: 'Сергей', lastName: 'Фёдоров', middleName: 'Николаевич', position: 'HR-директор', role: 'hr', deptId: hrDept },
+      { email: 'belova@mindit.ru', firstName: 'Анна', lastName: 'Белова', middleName: 'Дмитриевна', position: 'Начальник отдела', role: 'manager', deptId: devDept },
+      { email: 'sidorov@mindit.ru', firstName: 'Михаил', lastName: 'Сидоров', middleName: 'Петрович', position: 'Инженер', role: 'employee', deptId: devDept },
     ]
 
     for (const u of FIXED_USERS) {
@@ -229,6 +236,27 @@ async function seed() {
       `, [petrovUser.rows[0].id, minditId]).catch(() => {})
     }
     console.log('  ✓ cross-org memberships (admin→mindit hr, petrov→mindit manager)')
+
+    const ORG_USERS = [
+      { email: 'volkov@crct.ru', orgId: crctId, orgRole: 'manager' },
+      { email: 'morozova@crct.ru', orgId: crctId, orgRole: 'employee' },
+      { email: 'kuznetsov@crct.ru', orgId: crctId, orgRole: 'employee' },
+      { email: 'orlova@mindit.ru', orgId: minditId, orgRole: 'admin' },
+      { email: 'fedorov@mindit.ru', orgId: minditId, orgRole: 'hr' },
+      { email: 'belova@mindit.ru', orgId: minditId, orgRole: 'manager' },
+      { email: 'sidorov@mindit.ru', orgId: minditId, orgRole: 'employee' },
+    ]
+    for (const ou of ORG_USERS) {
+      const u = await query('SELECT id FROM users WHERE email = $1', [ou.email])
+      if (u.rows.length > 0) {
+        await query(`
+          INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
+          VALUES ($1, $2, $3::org_role_enum, true)
+          ON CONFLICT (user_id, org_id) DO UPDATE SET org_role = EXCLUDED.org_role, is_active = true
+        `, [u.rows[0].id, ou.orgId, ou.orgRole]).catch(() => {})
+      }
+    }
+    console.log(`  ✓ ${ORG_USERS.length} org-scoped users (crct + mindit)`)
 
     console.log('Creating vacation balances...')
     const allUsers = await query('SELECT id, hire_date FROM users ORDER BY id')
