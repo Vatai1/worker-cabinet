@@ -48,6 +48,7 @@ export const useOrgStore = create<OrgStore>((set, get) => ({
     setCookie('active_org_id', String(id))
     set({ currentOrgId: id })
     window.dispatchEvent(new CustomEvent('org-changed'))
+    setTimeout(() => window.location.reload(), 50)
   },
 
   currentOrg: () => {
