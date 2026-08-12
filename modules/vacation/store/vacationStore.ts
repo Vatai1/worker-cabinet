@@ -54,12 +54,18 @@ interface VacationStore {
   ) => Promise<void>
   
   deleteRestriction: (restrictionId: string) => Promise<void>
+
+  addSubstitutes: (requestId: string, userIds: number[]) => Promise<void>
+  removeSubstitute: (requestId: string, userId: number) => Promise<void>
+  mySubstitutions: any[]
+  fetchMySubstitutions: () => Promise<void>
 }
 
 export const useVacationStore = create<VacationStore>()((set, get) => ({
       requests: [],
       balances: {},
       restrictions: [],
+      mySubstitutions: [],
       
       currentUserRequests: [],
       departmentRequests: [],
@@ -362,6 +368,33 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
           throw error
         }
       },
-      
+
+      addSubstitutes: async (requestId: string, userIds: number[]) => {
+        try {
+          await vacationApi.addSubstitutes(requestId, userIds)
+        } catch (error: any) {
+          set({ error: error.message || 'Ошибка при добавлении замещающих' })
+          throw error
+        }
+      },
+
+      removeSubstitute: async (requestId: string, userId: number) => {
+        try {
+          await vacationApi.removeSubstitute(requestId, userId)
+        } catch (error: any) {
+          set({ error: error.message || 'Ошибка при удалении замещающего' })
+          throw error
+        }
+      },
+
+      fetchMySubstitutions: async () => {
+        try {
+          const data = await vacationApi.getMySubstitutions()
+          set({ mySubstitutions: data })
+        } catch (error: any) {
+          console.error('Error fetching my substitutions:', error)
+        }
+      },
+
     })
 )

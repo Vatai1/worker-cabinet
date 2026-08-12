@@ -175,6 +175,7 @@ function App() {
                 <Route path="leader" element={<BlockOnboardingRoute><LeaderDashboard /></BlockOnboardingRoute>} />
                 <Route path="manager" element={<BlockOnboardingRoute><ManagerDashboard /></BlockOnboardingRoute>} />
                 <Route path="vacation" element={<ModuleGuard module="vacation"><BlockOnboardingRoute><Vacation /></BlockOnboardingRoute></ModuleGuard>} />
+                <Route path="vacation/my-substitutions" element={<ModuleGuard module="substitution"><BlockOnboardingRoute><Vacation /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="employees" element={<Employees />} />
                 <Route path="departments" element={<Departments />} />
                 <Route path="departments/:id" element={<DepartmentDetail />} />

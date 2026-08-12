@@ -14,7 +14,7 @@ import { hasAnyRole } from '@/shared/lib/permissions'
 import {
   Mail, Phone, Building2, Briefcase,
   User, Target, ChevronLeft, Sparkles,
-  Clock, FolderKanban, Plus, MapPin,
+  Clock, FolderKanban, Plus, MapPin, UserCheck,
 } from 'lucide-react'
 
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -95,6 +95,7 @@ export function EmployeeProfile() {
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false)
   const [editingResponsibility, setEditingResponsibility] = useState(false)
   const [responsibilityText, setResponsibilityText] = useState('')
+  const [substitutes, setSubstitutes] = useState<Array<{ id: number; first_name: string; last_name: string; position: string; avatar?: string }>>([])
 
   const isOwnProfile = currentUser?.id === id
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
@@ -132,6 +133,20 @@ export function EmployeeProfile() {
     }
     fetchEmployee()
   }, [id])
+
+  useEffect(() => {
+    if (!id || !employee || employee.status !== 'on_leave') return
+    if (!isModuleEnabled('substitution')) return
+    fetch(`${API_BASE_URL}/vacation/requests?userId=${id}&status=approved`, {
+      headers: getAuthHeadersWithContentType(),
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        const subs = (data || []).flatMap((r: any) => r.substitutes || [])
+        setSubstitutes(subs)
+      })
+      .catch(() => {})
+  }, [id, employee?.status, isModuleEnabled])
 
   const handleAddProject: (project: Omit<Project, 'id'>) => void | Promise<void> = (project) => {
     if (!employee) return
@@ -265,6 +280,20 @@ export function EmployeeProfile() {
                   <Building2 className="h-3 w-3" />
                   {employee.department}
                 </Link>
+              )}
+              {employee.status === 'on_leave' && substitutes.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-card/10 backdrop-blur-sm border border-white/10 text-white/80">
+                  <UserCheck className="h-3 w-3" />
+                  Замещают: {' '}
+                  {substitutes.map((s, i) => (
+                    <span key={s.id}>
+                      <Link to={`/employees/${s.id}`} className="underline hover:text-white">
+                        {s.last_name} {s.first_name}
+                      </Link>
+                      {i < substitutes.length - 1 ? ', ' : ''}
+                    </span>
+                  ))}
+                </span>
               )}
             </div>
           </div>

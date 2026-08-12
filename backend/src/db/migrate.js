@@ -340,6 +340,19 @@ async function runMigrations() {
     `).catch(e => console.log('  - vacation_restrictions:', e.message))
 
     await db.query(`
+      CREATE TABLE IF NOT EXISTS vacation_substitutions (
+        id SERIAL PRIMARY KEY,
+        vacation_request_id INTEGER NOT NULL REFERENCES vacation_requests(id) ON DELETE CASCADE,
+        substitute_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        assigned_by INTEGER REFERENCES users(id),
+        organization_id INTEGER NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(vacation_request_id, substitute_user_id)
+      )
+    `).catch(e => console.log('  - vacation_substitutions:', e.message))
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_vacation_substitutions_substitute ON vacation_substitutions(substitute_user_id)`).catch(() => {})
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS assistant_messages (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1516,7 +1529,7 @@ async function runMigrations() {
       vacation: 'hr', surveys: 'work', projects: 'work', documents: 'docs',
       timesheet: 'work', onboarding: 'hr', hierarchy: 'hr',
       dictionaries: 'admin', skills: 'hr', calendar: 'admin',
-      notifications: 'docs', assistant: 'general',
+      notifications: 'docs', assistant: 'general', substitution: 'work',
     }
     for (const [code, category] of Object.entries(categoryMap)) {
       await db.query(`UPDATE modules SET category = $1 WHERE code = $2 AND (category IS NULL OR category = 'general')`, [category, code])
@@ -1538,6 +1551,7 @@ async function runMigrations() {
       { code: 'assistant', name: 'AI Ассистент', description: 'Кадровый AI-ассистент для ответов на вопросы сотрудников', icon: 'Bot', route: '/assistant', sort: 15, category: 'general' },
       { code: 'appearance', name: 'Внешний вид', description: 'Тема оформления системы', icon: 'Palette', route: null, sort: 3, category: 'core' },
       { code: 'mailing', name: 'Рассылки', description: 'Рассылка информации сотрудникам', icon: 'Send', route: '/hr/mailing', sort: 25, category: 'hr' },
+      { code: 'substitution', name: 'Замещение', description: 'Делегирование обязанностей на время отпуска', icon: 'UserCheck', route: null, sort: 55, category: 'work' },
     ]
     for (const m of defaultModules) {
       await db.query(

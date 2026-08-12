@@ -16,6 +16,7 @@ interface CreateVacationFormModalProps {
     travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
     referenceDocument?: string
+    substitute_ids?: number[]
   }) => void
   loading?: boolean
   balance?: {
@@ -30,6 +31,7 @@ interface CreateVacationFormModalProps {
   }>
   userId?: string
   onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
+  showSubstitutes?: boolean
 }
 
 export function CreateVacationFormModal({
@@ -41,6 +43,7 @@ export function CreateVacationFormModal({
   restrictionWarnings = [],
   userId,
   onCheckRestrictions,
+  showSubstitutes = false,
 }: CreateVacationFormModalProps) {
   useModalOpen(isOpen)
   const [startDate, setStartDate] = useState('')
@@ -54,6 +57,27 @@ export function CreateVacationFormModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null)
+  const [selectedSubstitutes, setSelectedSubstitutes] = useState<number[]>([])
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  const [employees, setEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
+
+  useEffect(() => {
+    if (isOpen && showSubstitutes) {
+      import('@/shared/lib/api').then(({ API_BASE_URL }) => {
+        import('@/shared/lib/authHeaders').then(({ getAuthHeaders }) => {
+          fetch(`${API_BASE_URL}/users`, { headers: getAuthHeaders() })
+            .then((r) => (r.ok ? r.json() : []))
+            .then((data) => {
+              const list = (Array.isArray(data) ? data : data.users || []).map((u: any) => ({
+                id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || ''
+              })).filter((u: any) => u.id !== parseInt(userId || '0'))
+              setEmployees(list)
+            })
+            .catch(() => {})
+        })
+      })
+    }
+  }, [isOpen, showSubstitutes, userId])
 
   if (!isOpen) return null
 
@@ -145,6 +169,7 @@ export function CreateVacationFormModal({
       travelChildren: hasTravel ? travelChildren : [],
       comment,
       referenceDocument,
+      substitute_ids: showSubstitutes ? selectedSubstitutes : undefined,
     })
   }
 
@@ -360,6 +385,71 @@ export function CreateVacationFormModal({
               disabled={loading}
             />
           </div>
+
+          {showSubstitutes && (
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1.5">
+                Замещающие <span className="text-muted-foreground">(необязательно)</span>
+              </label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Выберите сотрудников, которые будут замещать вас на время отпуска. Им будут перенаправлены заявки на согласование.
+              </p>
+              <input
+                type="text"
+                value={employeeSearch}
+                onChange={(e) => setEmployeeSearch(e.target.value)}
+                placeholder="Поиск сотрудника..."
+                className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm mb-2"
+                disabled={loading}
+              />
+              <div className="max-h-40 overflow-y-auto border border-input rounded-lg">
+                {employees
+                  .filter((e) => {
+                    const q = employeeSearch.toLowerCase()
+                    return !q || `${e.last_name} ${e.first_name} ${e.position}`.toLowerCase().includes(q)
+                  })
+                  .map((e) => (
+                    <label
+                      key={e.id}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedSubstitutes.includes(e.id)}
+                        onChange={() => {
+                          setSelectedSubstitutes((prev) =>
+                            prev.includes(e.id) ? prev.filter((id) => id !== e.id) : [...prev, e.id]
+                          )
+                        }}
+                        className="rounded"
+                      />
+                      <span>{e.last_name} {e.first_name}</span>
+                      {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
+                    </label>
+                  ))}
+              </div>
+              {selectedSubstitutes.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {selectedSubstitutes.map((id) => {
+                    const emp = employees.find((e) => e.id === id)
+                    if (!emp) return null
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
+                        {emp.last_name} {emp.first_name}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSubstitutes((prev) => prev.filter((x) => x !== id))}
+                          className="hover:text-primary/70"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {vacationType === VacationType.EDUCATIONAL && (
             <div>

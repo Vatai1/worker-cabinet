@@ -32,6 +32,32 @@ async function getDeptManagerId(userId, req) {
   return r.rows[0]?.manager_id || null
 }
 
+async function isSubstitutionEnabled(req) {
+  const { text, values } = orgScopedQuery(
+    'SELECT is_enabled FROM modules WHERE code = $1', ['substitution'], req
+  )
+  const r = await query(text, values)
+  return r.rows[0]?.is_enabled === true
+}
+
+async function getDeptManagerIds(userId, req) {
+  const managerId = await getDeptManagerId(userId, req)
+  if (!managerId) return []
+  if (!(await isSubstitutionEnabled(req))) return [managerId]
+  const { text, values } = orgScopedQuery(
+    `SELECT vs.substitute_user_id
+     FROM vacation_substitutions vs
+     JOIN vacation_requests vr ON vs.vacation_request_id = vr.id
+     JOIN request_statuses rs ON vr.status_id = rs.id
+     WHERE vr.user_id = $1 AND rs.code = 'approved'
+       AND vr.start_date <= CURRENT_DATE AND vr.end_date >= CURRENT_DATE`,
+    [managerId], req
+  )
+  const r = await query(text, values)
+  if (r.rows.length > 0) return r.rows.map((row) => row.substitute_user_id)
+  return [managerId]
+}
+
 async function vacationDatesByMonth(startDate, endDate) {
   const byMonth = {}
   const [sy, sm, sd] = startDate.split('-').map(Number)
@@ -232,12 +258,60 @@ router.get('/requests', authenticateToken, async (req, res) => {
 
     const result = await query(sql, params)
 
+    const requestIds = result.rows.map((r) => r.id)
+    let subsByRequest = {}
+    let delegatedByUser = {}
+    if (requestIds.length > 0) {
+      const subsResult = await query(
+        `SELECT vs.vacation_request_id, u.id, u.first_name, u.last_name, u.position, u.avatar
+         FROM vacation_substitutions vs
+         JOIN users u ON vs.substitute_user_id = u.id
+         WHERE vs.vacation_request_id = ANY($1)`,
+        [requestIds]
+      )
+      for (const row of subsResult.rows) {
+        if (!subsByRequest[row.vacation_request_id]) subsByRequest[row.vacation_request_id] = []
+        subsByRequest[row.vacation_request_id].push({
+          id: row.id, first_name: row.first_name, last_name: row.last_name,
+          position: row.position, avatar: row.avatar
+        })
+      }
+
+      const onApprovalUserIds = result.rows
+        .filter((r) => r.status === 'on_approval')
+        .map((r) => r.user_id)
+      if (onApprovalUserIds.length > 0 && await isSubstitutionEnabled(req)) {
+        const delegationResult = await query(
+          `SELECT DISTINCT u.id as user_id, sub.id as delegate_id,
+                  sub.first_name, sub.last_name, sub.position, sub.avatar
+           FROM users u
+           JOIN departments d ON u.department_id = d.id
+           JOIN vacation_requests mvr ON mvr.user_id = d.manager_id
+           JOIN request_statuses mrs ON mvr.status_id = mrs.id
+           JOIN vacation_substitutions mvs ON mvs.vacation_request_id = mvr.id
+           JOIN users sub ON mvs.substitute_user_id = sub.id
+           WHERE u.id = ANY($1)
+             AND mrs.code = 'approved'
+             AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE`,
+          [onApprovalUserIds]
+        )
+        for (const row of delegationResult.rows) {
+          delegatedByUser[row.user_id] = {
+            id: row.delegate_id, first_name: row.first_name, last_name: row.last_name,
+            position: row.position, avatar: row.avatar
+          }
+        }
+      }
+    }
+
     const requests = result.rows.map((request) => ({
       ...request,
       status_code: request.status,
       vacation_type_code: request.vacation_type,
       statusHistory: request.status_history,
       departmentManagerId: request.department_manager_id,
+      substitutes: subsByRequest[request.id] || [],
+      delegated_to: delegatedByUser[request.user_id] || null,
     }))
 
     res.json(requests)
@@ -396,7 +470,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
   const client = await getClient()
   
   try {
-    const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, travelChildren, referenceDocument } = req.body
+    const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, travelChildren, referenceDocument, substitute_ids } = req.body
     const userId = req.user.id
 
     const { text: blockText, values: blockValues } = orgScopedQuery(
@@ -562,12 +636,22 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req)
 
+    if (Array.isArray(substitute_ids) && substitute_ids.length > 0 && await isSubstitutionEnabled(req)) {
+      for (const subId of substitute_ids) {
+        await client.query(
+          `INSERT INTO vacation_substitutions (vacation_request_id, substitute_user_id, assigned_by, organization_id)
+           VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+          [request.id, subId, userId, currentOrgId(req)]
+        )
+      }
+    }
+
     await client.query('COMMIT')
 
-    const managerId = await getDeptManagerId(userId, req)
-    if (managerId) {
+    const managerIds = await getDeptManagerIds(userId, req)
+    for (const mid of managerIds) {
       notify({
-        userId: managerId,
+        userId: mid,
         type: 'vacation_created',
         data: {
           employeeName: await getEmpName(userId),
@@ -577,6 +661,22 @@ router.post('/requests', authenticateToken, async (req, res) => {
           link: '/leader'
         }
       }).catch((err) => console.warn(`[NOTIFY] vacation create #${request.id}: ${err.message}`))
+    }
+
+    if (Array.isArray(substitute_ids) && substitute_ids.length > 0 && await isSubstitutionEnabled(req)) {
+      const empName = await getEmpName(userId)
+      for (const subId of substitute_ids) {
+        notify({
+          userId: subId,
+          type: 'vacation_substitution',
+          data: {
+            employeeName: empName,
+            startDate: fmtDate(request.start_date),
+            endDate: fmtDate(request.end_date),
+            link: '/vacation'
+          }
+        }).catch((err) => console.warn(`[NOTIFY] substitute ${subId}: ${err.message}`))
+      }
     }
 
     res.status(201).json(request)
@@ -731,10 +831,9 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
     if (req.user.role === 'manager') {
-      const mgrDept = await client.query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
-      const { text: empText, values: empValues } = orgScopedQuery('SELECT u.department_id FROM users u JOIN vacation_requests vr ON vr.user_id = u.id WHERE vr.id = $1', [id], req)
-      const empDept = await client.query(empText, empValues)
-      if (mgrDept.rows[0]?.department_id !== empDept.rows[0]?.department_id) {
+      const empUserId = request.rows[0].user_id
+      const managerIds = await getDeptManagerIds(empUserId, req)
+      if (!managerIds.includes(req.user.id)) {
         await client.query('ROLLBACK')
         return res.status(403).json({ error: 'Нет прав на этот отдел' })
       }
@@ -804,10 +903,9 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
     if (req.user.role === 'manager') {
-      const mgrDept = await client.query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
-      const { text: empText, values: empValues } = orgScopedQuery('SELECT u.department_id FROM users u JOIN vacation_requests vr ON vr.user_id = u.id WHERE vr.id = $1', [id], req)
-      const empDept = await client.query(empText, empValues)
-      if (mgrDept.rows[0]?.department_id !== empDept.rows[0]?.department_id) {
+      const empUserId = request.rows[0].user_id
+      const managerIds = await getDeptManagerIds(empUserId, req)
+      if (!managerIds.includes(req.user.id)) {
         await client.query('ROLLBACK')
         return res.status(403).json({ error: 'Нет прав на этот отдел' })
       }
@@ -953,7 +1051,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
 
   try {
     const { id } = req.params
-    const { newStartDate, newEndDate, reason, hasTravel, travelDestination, travelChildren } = req.body
+    const { newStartDate, newEndDate, reason, hasTravel, travelDestination, travelChildren, substitute_ids } = req.body
     const userId = req.user.id
 
     if (!newStartDate || !newEndDate || !reason?.trim()) {
@@ -1025,6 +1123,16 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       [insertResult.rows[0].id, userId, `Запрос на перенос от заявки #${id}`, currentOrgId(req)]
     )
 
+    if (Array.isArray(substitute_ids) && substitute_ids.length > 0 && await isSubstitutionEnabled(req)) {
+      for (const subId of substitute_ids) {
+        await client.query(
+          `INSERT INTO vacation_substitutions (vacation_request_id, substitute_user_id, assigned_by, organization_id)
+           VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+          [insertResult.rows[0].id, subId, userId, currentOrgId(req)]
+        )
+      }
+    }
+
     await client.query('COMMIT')
 
     const fullResult = await client.query(
@@ -1038,10 +1146,10 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     )
 
     const newReq = fullResult.rows[0]
-    const managerId = await getDeptManagerId(userId, req)
-    if (managerId) {
+    const managerIds = await getDeptManagerIds(userId, req)
+    for (const mid of managerIds) {
       notify({
-        userId: managerId,
+        userId: mid,
         type: 'vacation_created',
         data: {
           employeeName: await getEmpName(userId),
@@ -2209,6 +2317,148 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
     res.json(violations)
   } catch (error) {
     res.status(500).json({ error: 'Не удалось проверить ограничения' })
+  }
+})
+
+router.get('/my-substitutions', authenticateToken, async (req, res) => {
+  try {
+    if (!(await isSubstitutionEnabled(req))) return res.json([])
+    const { text, values } = orgScopedQuery(
+      `SELECT vr.id, vr.start_date, vr.end_date, vr.duration,
+              u.id as user_id, u.first_name, u.last_name, u.middle_name,
+              u.position, u.avatar, u.gender,
+              rs.code as status
+       FROM vacation_substitutions vs
+       JOIN vacation_requests vr ON vs.vacation_request_id = vr.id
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       JOIN users u ON vr.user_id = u.id
+       WHERE vs.substitute_user_id = $1 AND vr.end_date >= CURRENT_DATE
+       ORDER BY vr.start_date ASC`,
+      [req.user.id], req
+    )
+    const result = await query(text, values)
+    res.json(result.rows)
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось получить замещения' })
+  }
+})
+
+router.post('/requests/:id/substitutes', authenticateToken, async (req, res) => {
+  try {
+    if (!(await isSubstitutionEnabled(req))) {
+      return res.status(403).json({ error: 'Модуль замещения отключён' })
+    }
+    const { id } = req.params
+    const { substitute_ids } = req.body
+    if (!Array.isArray(substitute_ids) || substitute_ids.length === 0) {
+      return res.status(400).json({ error: 'Укажите замещающих' })
+    }
+
+    const { text: reqText, values: reqValues } = orgScopedQuery(
+      `SELECT vr.*, rs.code as status FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`,
+      [id], req
+    )
+    const request = await query(reqText, reqValues)
+    if (request.rows.length === 0) {
+      return res.status(404).json({ error: 'Заявка не найдена' })
+    }
+
+    const vacation = request.rows[0]
+    const isOwner = vacation.user_id === req.user.id
+    const isPrivileged = ['hr', 'admin'].includes(req.user.role)
+    if (!isOwner && !isPrivileged) {
+      if (req.user.role === 'manager') {
+        const empUserId = vacation.user_id
+        const managerIds = await getDeptManagerIds(empUserId, req)
+        if (!managerIds.includes(req.user.id)) {
+          return res.status(403).json({ error: 'Нет прав' })
+        }
+      } else {
+        return res.status(403).json({ error: 'Нет прав' })
+      }
+    }
+
+    const { text: chkText, values: chkValues } = orgScopedQuery(
+      `SELECT id FROM users WHERE id = ANY($1)`,
+      [substitute_ids], req
+    )
+    const validUsers = await query(chkText, chkValues)
+    const validIds = validUsers.rows.map((r) => r.id)
+    if (validIds.length === 0) {
+      return res.status(400).json({ error: 'Замещающие не найдены в организации' })
+    }
+
+    const empName = await getEmpName(vacation.user_id)
+    for (const subId of validIds) {
+      await query(
+        `INSERT INTO vacation_substitutions (vacation_request_id, substitute_user_id, assigned_by, organization_id)
+         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+        [id, subId, req.user.id, currentOrgId(req)]
+      )
+      notify({
+        userId: subId,
+        type: 'vacation_substitution',
+        data: {
+          employeeName: empName,
+          startDate: fmtDate(vacation.start_date),
+          endDate: fmtDate(vacation.end_date),
+          link: '/vacation'
+        }
+      }).catch((err) => console.warn(`[NOTIFY] substitute add ${subId}: ${err.message}`))
+    }
+
+    res.status(201).json({ added: validIds.length })
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось добавить замещающих' })
+  }
+})
+
+router.delete('/requests/:id/substitutes/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { id, userId } = req.params
+    const subUserId = parseInt(userId)
+
+    const { text: reqText, values: reqValues } = orgScopedQuery(
+      `SELECT vr.*, rs.code as status FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`,
+      [id], req
+    )
+    const request = await query(reqText, reqValues)
+    if (request.rows.length === 0) {
+      return res.status(404).json({ error: 'Заявка не найдена' })
+    }
+
+    const vacation = request.rows[0]
+    const isOwner = vacation.user_id === req.user.id
+    const isPrivileged = ['hr', 'admin'].includes(req.user.role)
+    if (!isOwner && !isPrivileged) {
+      if (req.user.role === 'manager') {
+        const empUserId = vacation.user_id
+        const managerIds = await getDeptManagerIds(empUserId, req)
+        if (!managerIds.includes(req.user.id)) {
+          return res.status(403).json({ error: 'Нет прав' })
+        }
+      } else {
+        return res.status(403).json({ error: 'Нет прав' })
+      }
+    }
+
+    const { text: delText, values: delValues } = orgScopedQuery(
+      `DELETE FROM vacation_substitutions WHERE vacation_request_id = $1 AND substitute_user_id = $2`,
+      [id, subUserId], req
+    )
+    await query(delText, delValues)
+
+    notify({
+      userId: subUserId,
+      type: 'vacation_substitution_removed',
+      data: { link: '/vacation' }
+    }).catch((err) => console.warn(`[NOTIFY] substitute remove ${subUserId}: ${err.message}`))
+
+    res.json({ removed: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось удалить замещающего' })
   }
 })
 

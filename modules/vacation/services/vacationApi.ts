@@ -68,6 +68,8 @@ const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
   createdAt: dbRequest.created_at,
   statusHistory: dbRequest.statusHistory || [],
   departmentManagerId: (dbRequest.department_manager_id ?? dbRequest.departmentManagerId)?.toString(),
+  substitutes: dbRequest.substitutes || [],
+  delegated_to: dbRequest.delegated_to || null,
 })
 
 export const vacationApi = {
@@ -152,6 +154,7 @@ export const vacationApi = {
         travelDestination: data.travelDestination,
         travelChildren: data.travelChildren,
         referenceDocument: data.referenceDocument,
+        substitute_ids: data.substitute_ids || [],
       }),
     })
     const dbRequest = await handleResponse(response)
@@ -231,7 +234,7 @@ export const vacationApi = {
 
   async requestTransfer(
     requestId: string,
-    data: { newStartDate: string; newEndDate: string; reason: string }
+    data: { newStartDate: string; newEndDate: string; reason: string; substitute_ids?: number[] }
   ): Promise<VacationRequest> {
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/transfer`, {
       method: 'POST',
@@ -240,6 +243,29 @@ export const vacationApi = {
     })
     const dbRequest = await handleResponse(response)
     return mapDbRequestToApi(dbRequest)
+  },
+
+  async addSubstitutes(requestId: string, substituteIds: number[]): Promise<{ added: number }> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/substitutes`, {
+      method: 'POST',
+      headers: getAuthHeadersWithContentType(),
+      body: JSON.stringify({ substitute_ids: substituteIds }),
+    })
+    return handleResponse(response)
+  },
+
+  async removeSubstitute(requestId: string, userId: number): Promise<void> {
+    await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/substitutes/${userId}`, {
+      method: 'DELETE',
+      headers: getAuthHeadersWithContentType(),
+    })
+  },
+
+  async getMySubstitutions(): Promise<any[]> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/my-substitutions`, {
+      headers: getAuthHeadersWithContentType(),
+    })
+    return handleResponse(response)
   },
 
 }

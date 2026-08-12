@@ -1,7 +1,9 @@
 ﻿import { useEffect, useState, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
+import { useModulesStore } from '@/shared/store/modulesStore'
 import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
@@ -21,7 +23,7 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
 import { hasAnyRole, hasAnyRoleSync } from '@/shared/lib/permissions'
-import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon, UserCheck } from 'lucide-react'
 import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
 import { VacationTransferApplicationModal } from '@/modules/vacation/components/modals/VacationTransferApplicationModal'
 
@@ -66,6 +68,8 @@ export function Vacation() {
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
   const [vacationBlocked, setVacationBlocked] = useState(false)
   const [year, setYear] = useState(new Date().getFullYear())
+  const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
+  const [pickerEmployees, setPickerEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
 
   useEffect(() => {
     if (user) {
@@ -244,6 +248,7 @@ export function Vacation() {
     travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
     referenceDocument?: string
+    substitute_ids?: number[]
   }) => {
     if (!user) return
 
@@ -257,6 +262,7 @@ export function Vacation() {
         travelDestination: data.travelDestination,
         travelChildren: data.travelChildren,
         referenceDocument: data.referenceDocument,
+        substitute_ids: data.substitute_ids,
       })
       setShowCreateForm(false)
       fetchUserRequests(user.id)
@@ -345,6 +351,48 @@ export function Vacation() {
     setRestrictionWarningsCalendar(warnings)
   }
 
+  const handleOpenSubstitutePicker = async (requestId: string) => {
+    if (showSubstitutePicker === requestId) {
+      setShowSubstitutePicker(null)
+      return
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/users`, { headers: getAuthHeaders() })
+      const data = await (res.ok ? res.json() : [])
+      const list = (Array.isArray(data) ? data : data.users || [])
+        .filter((u: any) => u.id !== user?.id)
+        .map((u: any) => ({ id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || '' }))
+      setPickerEmployees(list)
+      setShowSubstitutePicker(requestId)
+    } catch {}
+  }
+
+  const handleAddSubstitute = async (requestId: string, userId: number) => {
+    try {
+      await useVacationStore.getState().addSubstitutes(requestId, [userId])
+      toast.success('Замещающий назначен')
+      if (user) {
+        fetchUserRequests(user.id)
+        fetchDepartmentRequests(user.departmentId || '1')
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка')
+    }
+  }
+
+  const handleRemoveSubstitute = async (requestId: string, userId: number) => {
+    try {
+      await useVacationStore.getState().removeSubstitute(requestId, userId)
+      toast.success('Замещающий удалён')
+      if (user) {
+        fetchUserRequests(user.id)
+        fetchDepartmentRequests(user.departmentId || '1')
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Ошибка')
+    }
+  }
+
 
 
   const calendarRequests = useMemo(() => {
@@ -359,8 +407,68 @@ export function Vacation() {
   const handlePrevYear = () => setYear((y) => y - 1)
   const handleNextYear = () => setYear((y) => y + 1)
 
+  const location = useLocation()
+  const isMySubstitutions = location.pathname.includes('my-substitutions')
+  const { mySubstitutions, fetchMySubstitutions } = useVacationStore()
+
+  useEffect(() => {
+    if (isMySubstitutions) fetchMySubstitutions()
+  }, [isMySubstitutions])
+
   const isManager = hasAnyRole('manager', 'hr', 'admin')
   const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
+
+  if (isMySubstitutions) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="relative overflow-hidden gradient-primary text-white rounded-xl animate-slide-up">
+          <div className="relative z-10 p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <UserCheck className="h-3.5 w-3.5 text-white/60" />
+              <span className="text-white/40 text-[10px] font-medium uppercase tracking-wider">
+                Замещение
+              </span>
+            </div>
+            <h1 className="text-2xl font-extrabold tracking-tight">Мои замещения</h1>
+            <p className="mt-1 text-white/50 text-sm">
+              Сотрудники, которых вы замещаете на время отпуска
+            </p>
+          </div>
+        </div>
+
+        {mySubstitutions.length === 0 ? (
+          <Card className="p-8 text-center text-muted-foreground">
+            У вас нет активных замещений
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {mySubstitutions.map((sub: any) => (
+              <Card key={sub.id} className="p-4 hover-lift">
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={sub.avatar || generateAvatarUrl(sub.user_id, sub.gender)} alt="" />
+                    <AvatarFallback>{sub.last_name?.[0]}{sub.first_name?.[0]}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="font-medium">
+                      {sub.last_name} {sub.first_name} {sub.middle_name || ''}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{sub.position}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {sub.start_date} — {sub.end_date} ({sub.duration} дн.)
+                    </p>
+                  </div>
+                  <Badge variant={sub.status === 'approved' ? 'success' : 'secondary'}>
+                    {sub.status === 'approved' ? 'В отпуске' : 'Предстоит'}
+                  </Badge>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -636,6 +744,12 @@ export function Vacation() {
                             {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
                             {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
                           </div>
+                          {request.delegated_to && (
+                            <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-600 dark:text-violet-400 text-xs font-medium">
+                              <UserCheck className="h-3 w-3" />
+                              Делегировано: {request.delegated_to.last_name} {request.delegated_to.first_name}
+                            </div>
+                          )}
                         </div>
                         <svg
                           className="w-5 h-5 text-muted-foreground shrink-0"
@@ -791,6 +905,45 @@ export function Vacation() {
                                   </div>
                                 </div>
                               )}
+                              {useModulesStore.getState().isModuleEnabled('substitution') && request.substitutes && request.substitutes.length > 0 && (
+                                <div className="flex items-start gap-2">
+                                  <UserCheck className="w-4 h-4 text-muted-foreground mt-0.5" />
+                                  <div>
+                                    <div className="text-xs text-muted-foreground mb-1">Замещающие</div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {request.substitutes.map((s) => (
+                                        <span key={s.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
+                                          {s.last_name} {s.first_name}
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleRemoveSubstitute(request.id, s.id) }}
+                                            className="hover:text-destructive"
+                                          >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                          </button>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              {useModulesStore.getState().isModuleEnabled('substitution') && showSubstitutePicker === request.id && (
+                                <div className="max-h-40 overflow-y-auto border border-input rounded-lg">
+                                  {pickerEmployees.map((e) => (
+                                    <button
+                                      key={e.id}
+                                      type="button"
+                                      onClick={(ev) => { ev.stopPropagation(); handleAddSubstitute(request.id, e.id); setShowSubstitutePicker(null) }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted text-sm text-left"
+                                    >
+                                      {e.last_name} {e.first_name}
+                                      {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                               <div className="flex flex-wrap gap-3 pt-2">
                                 <Button
                                   size="sm"
@@ -806,6 +959,17 @@ export function Vacation() {
                                   </svg>
                                   Добавить комментарий
                                 </Button>
+                                {useModulesStore.getState().isModuleEnabled('substitution') && request.status === VacationRequestStatus.APPROVED && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => { e.stopPropagation(); handleOpenSubstitutePicker(request.id) }}
+                                    disabled={loading}
+                                  >
+                                    <UserCheck className="w-4 h-4 mr-1" />
+                                    Добавить замещающего
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="destructive"
@@ -883,6 +1047,7 @@ export function Vacation() {
           restrictionWarnings={restrictionWarnings}
           userId={user?.id}
           onCheckRestrictions={handleCheckRestrictions}
+          showSubstitutes={useModulesStore.getState().isModuleEnabled('substitution')}
         />
       )}
 

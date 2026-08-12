@@ -9,7 +9,7 @@ import {
   LayoutDashboard, User, FileText, FolderOpen, FolderKanban,
   LogOut, Menu, X, Users, Plane, Settings, Sun, Moon,
   ChevronDown, FileStack, Building2, ClipboardList,
-  Calendar, Shield, Bell, Crown, Bot,
+  Calendar, Shield, Bell, Crown, Bot, UserCheck,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -44,6 +44,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
     { name: 'Сотрудники', href: '/employees' },
   ]},
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
+  { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Заявления', href: '/requests', icon: FileText, section: 'Работа' },
@@ -65,6 +66,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   ]},
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText, section: 'Управление' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Управление' },
+  { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
@@ -83,6 +85,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Управление' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
+  { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Справочники' },
@@ -102,6 +105,7 @@ const getAdminNavigation = (userId?: string): NavItem[] => [
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Управление' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
+  { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Справочники' },

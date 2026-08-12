@@ -107,6 +107,9 @@ export interface VacationRequest {
   reviewedBy?: string
   
   statusHistory: VacationRequestStatusHistory[]
+
+  substitutes?: Array<{ id: number; first_name: string; last_name: string; position: string; avatar?: string }>
+  delegated_to?: { id: number; first_name: string; last_name: string; position: string; avatar?: string } | null
 }
 
 interface VacationRequestStatusHistory {
@@ -173,6 +176,7 @@ export interface VacationFormData {
   travelDestination?: string
   travelChildren?: Array<{ fullName: string; birthDate: string }>
   referenceDocument?: string
+  substitute_ids?: number[]
 }
 
 export interface VacationValidationError {
