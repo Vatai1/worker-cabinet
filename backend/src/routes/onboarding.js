@@ -456,14 +456,17 @@ router.get('/documents/:id/file', async (req, res) => {
 
     await query('DELETE FROM document_access_tokens WHERE token = $1', [token])
 
-    const docResult = await query(
-      `SELECT eod.*, eo.user_id, ot.file_key, ot.title
+    let docFileSql = `SELECT eod.*, eo.user_id, ot.file_key, ot.title
        FROM employee_onboarding_documents eod
        JOIN employee_onboarding eo ON eod.onboarding_id = eo.id
        JOIN onboarding_templates ot ON eod.template_id = ot.id
-       WHERE eod.id = $1`,
-      [id]
-    )
+       WHERE eod.id = $1`
+    const docFileParams = [id]
+    if (req.org) {
+      docFileSql += ` AND eod.organization_id = $${docFileParams.length + 1}`
+      docFileParams.push(currentOrgId(req))
+    }
+    const docResult = await query(docFileSql, docFileParams)
 
     if (docResult.rows.length === 0) {
       return res.status(404).json({ error: 'Документ не найден' })
@@ -585,6 +588,12 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('
  */
 router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
+    const listParams = []
+    let subqOrgFilter = ''
+    if (req.org) {
+      listParams.push(currentOrgId(req))
+      subqOrgFilter = ` AND organization_id = $1`
+    }
     let listSql = `SELECT
         eo.id,
         eo.user_id,
@@ -594,15 +603,13 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
         u.last_name,
         u.position,
         d.name as department,
-        (SELECT COUNT(*) FROM employee_onboarding_documents WHERE onboarding_id = eo.id) as total_docs,
-        (SELECT COUNT(*) FROM employee_onboarding_documents WHERE onboarding_id = eo.id AND acknowledged_at IS NOT NULL) as acknowledged_docs
+        (SELECT COUNT(*) FROM employee_onboarding_documents WHERE onboarding_id = eo.id${subqOrgFilter}) as total_docs,
+        (SELECT COUNT(*) FROM employee_onboarding_documents WHERE onboarding_id = eo.id${subqOrgFilter} AND acknowledged_at IS NOT NULL) as acknowledged_docs
        FROM employee_onboarding eo
        JOIN users u ON eo.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id`
-    const listParams = []
     if (req.org) {
-      listSql += ` WHERE eo.organization_id = $${listParams.length + 1}`
-      listParams.push(currentOrgId(req))
+      listSql += ` WHERE eo.organization_id = $1`
     }
     listSql += ` ORDER BY eo.started_at DESC`
     const result = await query(listSql, listParams)

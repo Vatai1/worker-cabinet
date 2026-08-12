@@ -38,6 +38,12 @@ const router = express.Router()
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id
+    const params = [userId]
+    let orgClause = ''
+    if (req.org) {
+      orgClause = ' AND p.organization_id = $2'
+      params.push(req.org.org_id)
+    }
 
     const result = await query(
       `SELECT
@@ -53,9 +59,9 @@ router.get('/', authenticateToken, async (req, res) => {
          SELECT project_id FROM company_project_members WHERE user_id = $1
          UNION
          SELECT id FROM company_projects WHERE created_by = $1
-       )
+       )${orgClause}
        ORDER BY d.created_at DESC`,
-      [userId]
+      params
     )
 
     const documents = result.rows.map(doc => ({

@@ -46,44 +46,49 @@ async function vacationDatesByMonth(startDate, endDate) {
   return byMonth
 }
 
-async function fillVacationTimesheetEntries(client, userId, startDate, endDate) {
+async function fillVacationTimesheetEntries(client, userId, startDate, endDate, req) {
   const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
   const deptId = deptResult.rows[0]?.department_id
   if (!deptId) return
   const byMonth = await vacationDatesByMonth(startDate, endDate)
   for (const { year, month, dates } of Object.values(byMonth)) {
+    const tsOrgClause = req.org ? ' AND organization_id = $4' : ''
     const tsResult = await client.query(
-      `SELECT id FROM timesheets WHERE department_id = $1 AND year = $2 AND month = $3 AND status != 'approved'`,
-      [deptId, year, month]
+      `SELECT id FROM timesheets WHERE department_id = $1 AND year = $2 AND month = $3 AND status != 'approved'${tsOrgClause}`,
+      req.org ? [deptId, year, month, req.org.org_id] : [deptId, year, month]
     )
     if (tsResult.rows.length === 0) continue
     const tsId = tsResult.rows[0].id
-    const placeholders = dates.map((_, i) => `($1, $2, $${i + 3}, 'ОТ')`).join(', ')
+    const orgCol = req.org ? ', organization_id' : ''
+    const orgParam = req.org ? `, $${dates.length + 3}` : ''
+    const placeholders = dates.map((_, i) => `($1, $2, $${i + 3}, 'ОТ'${orgParam})`).join(', ')
     await client.query(
-      `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code)
+      `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code${orgCol})
        VALUES ${placeholders}
        ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE SET code = 'ОТ'`,
-      [tsId, userId, ...dates]
+      req.org ? [tsId, userId, ...dates, req.org.org_id] : [tsId, userId, ...dates]
     )
   }
 }
 
-async function clearVacationTimesheetEntries(client, userId, startDate, endDate) {
+async function clearVacationTimesheetEntries(client, userId, startDate, endDate, req) {
   const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
   const deptId = deptResult.rows[0]?.department_id
   if (!deptId) return
   const byMonth = await vacationDatesByMonth(startDate, endDate)
   for (const { year, month, dates } of Object.values(byMonth)) {
+    const tsOrgClause = req.org ? ' AND organization_id = $4' : ''
     const tsResult = await client.query(
-      `SELECT id FROM timesheets WHERE department_id = $1 AND year = $2 AND month = $3 AND status != 'approved'`,
-      [deptId, year, month]
+      `SELECT id FROM timesheets WHERE department_id = $1 AND year = $2 AND month = $3 AND status != 'approved'${tsOrgClause}`,
+      req.org ? [deptId, year, month, req.org.org_id] : [deptId, year, month]
     )
     if (tsResult.rows.length === 0) continue
     const tsId = tsResult.rows[0].id
+    const delOrgClause = req.org ? ' AND organization_id = $4' : ''
     await client.query(
       `DELETE FROM timesheet_entries
-       WHERE timesheet_id = $1 AND employee_id = $2 AND date = ANY($3) AND code = 'ОТ'`,
-      [tsId, userId, dates]
+       WHERE timesheet_id = $1 AND employee_id = $2 AND date = ANY($3) AND code = 'ОТ'${delOrgClause}`,
+      req.org ? [tsId, userId, dates, req.org.org_id] : [tsId, userId, dates]
     )
   }
 }
@@ -311,8 +316,8 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
                 END as effective_travel_next
          FROM vacation_balances vb
          LEFT JOIN users u ON u.id = vb.user_id
-         WHERE vb.user_id = $1 AND vb.year = $2`,
-        [userId, targetYear]
+         WHERE vb.user_id = $1 AND vb.year = $2${req.org ? ' AND vb.organization_id = $3' : ''}`,
+        req.org ? [userId, targetYear, req.org.org_id] : [userId, targetYear]
       )
       if (fallback.rows.length > 0) {
         const row = fallback.rows[0]
@@ -555,7 +560,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
       [request.id, userId, currentOrgId(req)]
     )
 
-    await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date)
+    await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req)
 
     await client.query('COMMIT')
 
@@ -1166,8 +1171,8 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
       [id, managerId, currentOrgId(req)]
     )
 
-    await clearVacationTimesheetEntries(client, originalRequest.user_id, originalRequest.start_date, originalRequest.end_date)
-    await fillVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date)
+    await clearVacationTimesheetEntries(client, originalRequest.user_id, originalRequest.start_date, originalRequest.end_date, req)
+    await fillVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date, req)
 
     await client.query('COMMIT')
 
@@ -1437,7 +1442,7 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
       [id, userId, 'Отменено сотрудником', currentOrgId(req)]
     )
 
-    await clearVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date)
+    await clearVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date, req)
 
     await client.query('COMMIT')
 

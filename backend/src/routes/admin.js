@@ -1378,6 +1378,11 @@ router.get('/reports/vacations', asyncHandler(async (req, res) => {
     deptFilter = ` AND u.department_id = $2`
     values.push(deptId)
   }
+  let orgFilter = ''
+  if (req.org) {
+    orgFilter = ` AND vr.organization_id = $${values.length + 1}`
+    values.push(req.org.org_id)
+  }
 
   const result = await query(`
     SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, d.name as department,
@@ -1385,7 +1390,7 @@ router.get('/reports/vacations', asyncHandler(async (req, res) => {
       COALESCE(vb.used_days, 0) as used_days,
       COALESCE(vb.available_days, 28) as available_days,
       COALESCE(vb.reserved_days, 0) as reserved_days,
-      (SELECT COUNT(*) FROM vacation_requests vr WHERE vr.user_id = u.id AND EXTRACT(YEAR FROM vr.created_at) = $1) as request_count
+      (SELECT COUNT(*) FROM vacation_requests vr WHERE vr.user_id = u.id AND EXTRACT(YEAR FROM vr.created_at) = $1${orgFilter}) as request_count
     FROM users u
     LEFT JOIN departments d ON u.department_id = d.id
     LEFT JOIN vacation_balances vb ON vb.user_id = u.id AND vb.year = $1
