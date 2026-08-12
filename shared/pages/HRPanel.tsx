@@ -11,6 +11,7 @@ import { HRVacationCalendar } from '@/modules/vacation/pages/HRVacationCalendar'
 import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
 import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { HRTimesheet } from '@/modules/timesheet/pages/HRTimesheet'
+import { HRInstitution } from '@/modules/institution/pages/HRInstitution'
 const HRHierarchy = lazy(() => import('@/modules/hierarchy/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
 const HRDocTemplates = lazy(() => import('@/modules/documents/pages/HRDocTemplates').then(m => ({ default: m.HRDocTemplates })))
 const HRMailing = lazy(() => import('@/modules/mailing/pages/HRMailing').then(m => ({ default: m.HRMailing })))
@@ -18,7 +19,7 @@ const HRPositionsTab = () => <DictionariesTab variant="hr" initialTab="positions
 const HRVacationTypesTab = () => <DictionariesTab variant="hr" initialTab="vacationTypes" />
 const HRSkillsTab = () => <DictionariesTab variant="hr" initialTab="skills" />
 
-type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing'
+type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
 
 interface TabItem {
   id: TabId
@@ -49,6 +50,7 @@ const TAB_GROUPS: TabGroup[] = [
     { id: 'doc-templates', name: 'Шаблоны документов', icon: FileText, description: 'Шаблоны документов организации', module: 'documents', color: 'from-pink-500 to-rose-600' },
   ]},
   { label: 'Справочники', tabs: [
+    { id: 'institution', name: 'Учреждение', icon: Building2, description: 'Информация и руководитель', module: 'dictionaries', color: 'from-indigo-500 to-blue-600' },
     { id: 'hr_departments', name: 'Отделы', icon: Building2, description: 'Структура организации', module: 'dictionaries', color: 'from-blue-500 to-indigo-600' },
     { id: 'hr_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', module: 'dictionaries', color: 'from-violet-500 to-purple-600' },
     { id: 'hr_vacation_types', name: 'Типы отпусков', icon: Plane, description: 'Типы отпусков', module: 'vacation', color: 'from-amber-500 to-orange-600' },
@@ -224,6 +226,7 @@ export function HRPanel() {
                 {([
                   ['surveys', HRSurveys],
                   ['mailing', HRMailing],
+                  ['institution', HRInstitution],
                   ['onboarding', HROnboarding],
                   ['vacation', HRVacationCalendar],
                   ['hr_departments', DepartmentsTab],

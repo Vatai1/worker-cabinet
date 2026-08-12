@@ -156,10 +156,13 @@ async function runMigrations() {
         logo_s3_key VARCHAR(500),
         settings JSONB DEFAULT '{}',
         is_active BOOLEAN DEFAULT true,
+        head_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `).catch(e => console.log('  - organizations:', e.message))
     console.log('  ✓ organizations')
+
+    await db.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS head_id INTEGER REFERENCES users(id) ON DELETE SET NULL`).catch(() => {})
 
     try {
       await db.query(`CREATE TYPE org_role_enum AS ENUM ('employee', 'manager', 'hr', 'admin')`)

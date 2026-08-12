@@ -26,6 +26,16 @@ async function checkOrgAdmin(req, orgId) {
   return result.rows.length > 0
 }
 
+async function checkOrgAdminOrHr(req, orgId) {
+  if (req.user.role === 'superadmin') return true
+  if (req.user.role === 'admin' || req.user.role === 'hr') return true
+  const result = await query(
+    "SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2 AND org_role IN ('admin', 'hr') AND is_active = true",
+    [req.user.id, orgId]
+  )
+  return result.rows.length > 0
+}
+
 /**
  * @swagger
  * /organizations:
@@ -65,25 +75,6 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     ORDER BY o.name
   `, [req.user.id])
   res.json(result.rows)
-}))
-
-/**
- * @swagger
- * /organizations/current:
- *   get:
- *     tags: [Organizations]
- *     summary: Текущая активная организация
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Текущая организация или null
- */
-router.get('/current', authenticateToken, asyncHandler(async (req, res) => {
-  if (!req.org) {
-    return res.json({ org_id: null, name: null, slug: null, org_role: null })
-  }
-  res.json(req.org)
 }))
 
 /**
@@ -170,14 +161,14 @@ router.post('/', authenticateToken, authorizeGlobalRoles('superadmin'), asyncHan
  */
 router.put('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const orgId = parseInt(req.params.id)
-  const { name, inn, address, logo_s3_key, settings, is_active } = req.body
+  const { name, inn, address, logo_s3_key, settings, is_active, head_id } = req.body
 
   const orgResult = await query('SELECT * FROM organizations WHERE id = $1', [orgId])
   if (orgResult.rows.length === 0) throw new NotFoundError('Организация не найдена')
 
   const isSuperadmin = req.user.role === 'superadmin'
-  const isOrgAdmin = await checkOrgAdmin(req, orgId)
-  if (!isSuperadmin && !isOrgAdmin) throw new ForbiddenError()
+  const canEdit = await checkOrgAdminOrHr(req, orgId)
+  if (!isSuperadmin && !canEdit) throw new ForbiddenError()
 
   const updates = []
   const values = []
@@ -189,6 +180,20 @@ router.put('/:id', authenticateToken, asyncHandler(async (req, res) => {
   if (logo_s3_key !== undefined) { updates.push(`logo_s3_key = $${paramIndex++}`); values.push(logo_s3_key) }
   if (settings !== undefined) { updates.push(`settings = $${paramIndex++}`); values.push(JSON.stringify(settings)) }
   if (is_active !== undefined && isSuperadmin) { updates.push(`is_active = $${paramIndex++}`); values.push(is_active) }
+
+  if (head_id !== undefined) {
+    if (head_id !== null) {
+      const memberCheck = await query(
+        'SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2 AND is_active = true',
+        [head_id, orgId]
+      )
+      if (memberCheck.rows.length === 0) {
+        throw new ValidationError('Пользователь не состоит в учреждении')
+      }
+    }
+    updates.push(`head_id = $${paramIndex++}`)
+    values.push(head_id)
+  }
 
   if (updates.length === 0) {
     return res.json(orgResult.rows[0])
@@ -457,6 +462,65 @@ router.delete('/:id/members/:userId', authenticateToken, authorizeRoles('admin',
 
   await query('DELETE FROM user_organizations WHERE user_id = $1 AND org_id = $2', [userId, orgId])
   res.json({ ok: true })
+}))
+
+/**
+ * @swagger
+ * /organizations/current:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: Текущая организация с руководителем
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Информация об учреждении
+ *       403:
+ *         description: Нет активной организации
+ */
+router.get('/current', authenticateToken, asyncHandler(async (req, res) => {
+  if (!req.org) throw new ForbiddenError('Нет активной организации')
+  const result = await query(
+    `SELECT o.*, h.first_name as head_first_name, h.last_name as head_last_name,
+            h.middle_name as head_middle_name, h.position as head_position,
+            h.email as head_email, h.avatar as head_avatar
+     FROM organizations o
+     LEFT JOIN users h ON o.head_id = h.id
+     WHERE o.id = $1`,
+    [req.org.org_id]
+  )
+  if (result.rows.length === 0) throw new NotFoundError('Организация не найдена')
+  res.json(result.rows[0])
+}))
+
+/**
+ * @swagger
+ * /organizations/{id}/candidates:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: Кандидаты на руководителя учреждения
+ *     description: 'Доступно для ролей: admin, hr'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Список кандидатов
+ */
+router.get('/:id/candidates', authenticateToken, authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
+  const orgId = parseInt(req.params.id)
+  const hasAccess = await checkOrgAccess(req, orgId)
+  if (!hasAccess) throw new ForbiddenError()
+  const result = await query(
+    `SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, u.avatar
+     FROM users u
+     JOIN user_organizations uo ON u.id = uo.user_id
+     WHERE uo.org_id = $1 AND uo.is_active = true AND u.status = 'active'
+     ORDER BY u.last_name, u.first_name`,
+    [orgId]
+  )
+  res.json(result.rows)
 }))
 
 export default router
