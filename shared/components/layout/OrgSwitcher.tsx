@@ -23,10 +23,7 @@ export function OrgSwitcher() {
 
   const filtered = organizations.filter((org) => {
     const q = search.toLowerCase()
-    return !q ||
-      org.name.toLowerCase().includes(q) ||
-      (org.slug && org.slug.toLowerCase().includes(q)) ||
-      (org.inn && org.inn.includes(q))
+    return !q || org.name.toLowerCase().includes(q)
   })
 
   return (
@@ -43,7 +40,7 @@ export function OrgSwitcher() {
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] bg-black/50"
           onClick={() => setOpen(false)}
         >
           <div
