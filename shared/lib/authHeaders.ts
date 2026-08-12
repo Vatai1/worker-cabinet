@@ -1,7 +1,9 @@
 import { getCookie } from './cookies'
 
 function getOrgHeaders(): Record<string, string> {
-  const orgId = typeof document !== 'undefined' ? getCookie('active_org_id') : ''
+  if (typeof document === 'undefined') return {}
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin/global')) return {}
+  const orgId = getCookie('active_org_id')
   return orgId ? { 'X-Organization-Id': orgId } : {}
 }
 

@@ -281,7 +281,7 @@ router.get('/users', asyncHandler(async (req, res) => {
   let paramIdx = 1
   let orgJoin = ''
 
-  if (req.user.role !== 'superadmin' && req.org) {
+  if (req.org) {
     orgJoin = 'JOIN user_organizations uo ON u.id = uo.user_id'
     conditions.push(`uo.org_id = $${paramIdx} AND uo.is_active = true`)
     values.push(req.org.org_id)
@@ -659,7 +659,7 @@ router.get('/audit-log', asyncHandler(async (req, res) => {
   const values = []
   let paramIdx = 1
 
-  if (req.user.role !== 'superadmin' && req.org) {
+  if (req.org) {
     conditions.push(`a.user_id IN (SELECT user_id FROM user_organizations WHERE org_id = $${paramIdx} AND is_active = true)`)
     values.push(req.org.org_id)
     paramIdx++
@@ -723,10 +723,10 @@ router.get('/audit-log', asyncHandler(async (req, res) => {
  */
 router.get('/stats', asyncHandler(async (req, res) => {
   const deptCount = orgScopedQuery('SELECT COUNT(*) as count FROM departments', [], req)
-  const orgUsersQuery = req.user.role !== 'superadmin' && req.org
+  const orgUsersQuery = req.org
     ? query('SELECT COUNT(*) as count FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true', [req.org.org_id])
     : query('SELECT COUNT(*) as count FROM users')
-  const orgActiveUsersQuery = req.user.role !== 'superadmin' && req.org
+  const orgActiveUsersQuery = req.org
     ? query('SELECT COUNT(*) as count FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true AND u.status = \'active\'', [req.org.org_id])
     : query(`SELECT COUNT(*) as count FROM users WHERE status = 'active'`)
   const [users, roles, departments, auditToday, activeUsers] = await Promise.all([
@@ -891,7 +891,7 @@ router.get('/health', asyncHandler(async (req, res) => {
   const dbVersion = await query('SELECT version() as v')
   const dbSize = await query("SELECT pg_database_size(current_database()) as size")
 
-  const usersCount = req.user.role !== 'superadmin' && req.org
+  const usersCount = req.org
     ? await query('SELECT COUNT(*) as c FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true', [req.org.org_id])
     : await query('SELECT COUNT(*) as c FROM users')
   const modulesCountQuery = orgScopedQuery("SELECT COUNT(*) as c FROM modules WHERE is_enabled = true", [], req)
