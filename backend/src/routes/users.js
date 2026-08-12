@@ -10,9 +10,6 @@ const router = express.Router()
 async function checkProfileAccess(req, targetId) {
   const currentUser = req.user
   if (currentUser.id === targetId || currentUser.role === 'superadmin') return true
-  const isHrOrAdmin = currentUser.role === 'hr' || currentUser.role === 'admin' ||
-    (req.org && ['hr', 'admin'].includes(req.org.org_role))
-  if (!isHrOrAdmin) return false
   if (!req.org) return true
   const membership = await query(
     'SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2 AND is_active = true',
