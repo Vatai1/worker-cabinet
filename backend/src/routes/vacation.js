@@ -275,7 +275,7 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
-    const { text, values } = orgScopedQuery(
+    const result = await query(
       `SELECT vb.*,
               u.hire_date,
               CASE WHEN vb.travel_next_available_date IS NULL THEN u.hire_date + INTERVAL '2 years'
@@ -283,25 +283,46 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
               END as effective_travel_next
        FROM vacation_balances vb
        LEFT JOIN users u ON u.id = vb.user_id
-       WHERE vb.user_id = $1 AND vb.year = $2`,
-      [userId, targetYear], req
+       WHERE vb.user_id = $1 AND vb.year = $2${req.org ? ' AND vb.organization_id = $3' : ''}`,
+      req.org ? [userId, targetYear, req.org.org_id] : [userId, targetYear]
     )
-    const result = await query(text, values)
 
     if (result.rows.length === 0) {
       const newBalance = await query(
         `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days, year, organization_id)
          VALUES ($1, 47, 0, 0, $2, $3)
+         ON CONFLICT (user_id, year) DO UPDATE SET organization_id = EXCLUDED.organization_id
          RETURNING *`,
         [userId, targetYear, currentOrgId(req)]
+      ).catch(() => null)
+      if (newBalance && newBalance.rows.length > 0) {
+        const updtOrgClause = req.org ? ' AND vacation_balances.organization_id = $2' : ''
+        await query(
+          `UPDATE vacation_balances SET travel_next_available_date = users.hire_date + INTERVAL '2 years'
+           FROM users WHERE users.id = vacation_balances.user_id AND vacation_balances.user_id = $1${updtOrgClause}`,
+          req.org ? [userId, req.org.org_id] : [userId]
+        ).catch(() => {})
+        return res.json(newBalance.rows[0])
+      }
+      const fallback = await query(
+        `SELECT vb.*, u.hire_date,
+                CASE WHEN vb.travel_next_available_date IS NULL THEN u.hire_date + INTERVAL '2 years'
+                     ELSE vb.travel_next_available_date
+                END as effective_travel_next
+         FROM vacation_balances vb
+         LEFT JOIN users u ON u.id = vb.user_id
+         WHERE vb.user_id = $1 AND vb.year = $2`,
+        [userId, targetYear]
       )
-      const { text: updtSql, values: updtVals } = orgScopedQuery(
-        `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'
-         FROM users WHERE users.id = vacation_balances.user_id AND vacation_balances.user_id = $1`,
-        [userId], req
-      )
-      await query(updtSql, updtVals).catch(() => {})
-      return res.json(newBalance.rows[0])
+      if (fallback.rows.length > 0) {
+        const row = fallback.rows[0]
+        return res.json({
+          ...row,
+          travel_available: row.effective_travel_next ? new Date() >= new Date(row.effective_travel_next) : false,
+          travel_next_available_date: row.effective_travel_next,
+        })
+      }
+      return res.status(404).json({ error: 'Баланс отпуска не найден' })
     }
 
     const row = result.rows[0]
