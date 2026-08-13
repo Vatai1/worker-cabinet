@@ -33,11 +33,10 @@ async function getDeptManagerId(userId, req) {
 }
 
 async function isSubstitutionEnabled(req) {
-  const { text, values } = orgScopedQuery(
-    'SELECT is_enabled FROM modules WHERE code = $1', ['substitution'], req
+  const r = await query(
+    `SELECT is_enabled FROM modules WHERE code = 'substitution' AND is_enabled = true LIMIT 1`
   )
-  const r = await query(text, values)
-  return r.rows[0]?.is_enabled === true
+  return r.rows.length > 0
 }
 
 async function getDeptManagerIds(userId, req) {
