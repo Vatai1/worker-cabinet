@@ -212,6 +212,7 @@ export function Vacation() {
     travelDestination?: string
     travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
+    substitute_ids?: number[]
   }) => {
     if (!user || !selectedStartDate || !selectedEndDate) return
 
@@ -224,6 +225,7 @@ export function Vacation() {
         hasTravel: data.hasTravel,
         travelDestination: data.travelDestination,
         travelChildren: data.travelChildren,
+        substitute_ids: data.substitute_ids,
       })
       setSelectedStartDate(null)
       setSelectedEndDate(null)
@@ -683,6 +685,7 @@ export function Vacation() {
               userId={user?.id}
               restrictionWarnings={restrictionWarningsCalendar}
               onCheckRestrictions={handleCheckRestrictionsCalendar}
+              showSubstitutes={useModulesStore.getState().isModuleEnabled('substitution')}
             />
           )}
         </div>

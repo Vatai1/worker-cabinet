@@ -2,9 +2,11 @@
 import { VacationType, VACATION_TYPES } from '@/shared/types'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
-import { Upload, FileText, X, AlertTriangle, Plus, Trash2 } from 'lucide-react'
+import { Upload, FileText, X, AlertTriangle, Plus, Trash2, UserCheck } from 'lucide-react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
+import { getAuthHeaders } from '@/shared/lib/authHeaders'
+import { API_BASE_URL } from '@/shared/lib/api'
 
 interface CreateVacationModalProps {
   isOpen: boolean
@@ -18,6 +20,7 @@ interface CreateVacationModalProps {
     travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
     referenceDocument?: string
+    substitute_ids?: number[]
   }) => void
   loading?: boolean
   balance?: {
@@ -32,6 +35,7 @@ interface CreateVacationModalProps {
     details?: any
   }>
   onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
+  showSubstitutes?: boolean
 }
 
 export function CreateVacationModal({
@@ -45,6 +49,7 @@ export function CreateVacationModal({
   userId,
   restrictionWarnings = [],
   onCheckRestrictions,
+  showSubstitutes = false,
 }: CreateVacationModalProps) {
   useModalOpen(isOpen)
   const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
@@ -55,12 +60,29 @@ export function CreateVacationModal({
   const [travelError, setTravelError] = useState<string | null>(null)
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
+  const [substituteIds, setSubstituteIds] = useState<number[]>([])
+  const [employees, setEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
+  const [empSearch, setEmpSearch] = useState('')
 
   useEffect(() => {
     if (isOpen) {
       checkRestrictions()
     }
   }, [isOpen])
+
+  useEffect(() => {
+    if (isOpen && showSubstitutes) {
+      fetch(`${API_BASE_URL}/users`, { headers: getAuthHeaders() })
+        .then(r => r.ok ? r.json() : [])
+        .then((data) => {
+          const list = (Array.isArray(data) ? data : data.users || [])
+            .filter((u: any) => u.id !== Number(userId))
+            .map((u: any) => ({ id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || '' }))
+          setEmployees(list)
+        })
+        .catch(() => {})
+    }
+  }, [isOpen, showSubstitutes, userId])
 
   const checkRestrictions = () => {
     if (userId && startDate && endDate && onCheckRestrictions) {
@@ -116,6 +138,7 @@ export function CreateVacationModal({
       travelChildren: hasTravel ? travelChildren : [],
       comment,
       referenceDocument,
+      substitute_ids: showSubstitutes && substituteIds.length > 0 ? substituteIds : undefined,
     })
   }
 
@@ -286,6 +309,63 @@ export function CreateVacationModal({
               disabled={loading}
             />
           </div>
+
+          {showSubstitutes && (
+            <div>
+              <label className="block text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
+                <UserCheck className="h-3.5 w-3.5" />
+                Замещающие <span className="text-muted-foreground">(необязательно)</span>
+              </label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Выберите сотрудников, которые будут замещать вас на время отпуска
+              </p>
+              <input
+                type="text"
+                value={empSearch}
+                onChange={(e) => setEmpSearch(e.target.value)}
+                placeholder="Поиск сотрудника..."
+                className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm mb-2"
+                disabled={loading}
+              />
+              <div className="max-h-32 overflow-y-auto border border-input rounded-lg">
+                {employees
+                  .filter((e) => {
+                    const q = empSearch.toLowerCase()
+                    return !q || `${e.last_name} ${e.first_name} ${e.position}`.toLowerCase().includes(q)
+                  })
+                  .map((e) => (
+                    <label key={e.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted cursor-pointer text-sm">
+                      <input
+                        type="checkbox"
+                        checked={substituteIds.includes(e.id)}
+                        onChange={() => {
+                          setSubstituteIds(prev => prev.includes(e.id) ? prev.filter(x => x !== e.id) : [...prev, e.id])
+                        }}
+                        className="rounded"
+                      />
+                      <span>{e.last_name} {e.first_name}</span>
+                      {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
+                    </label>
+                  ))}
+              </div>
+              {substituteIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {substituteIds.map(id => {
+                    const emp = employees.find(e => e.id === id)
+                    if (!emp) return null
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs">
+                        {emp.last_name} {emp.first_name}
+                        <button type="button" onClick={() => setSubstituteIds(prev => prev.filter(x => x !== id))}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Справка для учебного отпуска */}
           {vacationType === VacationType.EDUCATIONAL && (
