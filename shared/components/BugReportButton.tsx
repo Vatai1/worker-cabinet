@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bug, X, Loader2, Camera, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -9,35 +9,34 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { cn } from '@/shared/lib/utils'
 
 export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) {
-  const [open, setOpen] = useState(false)
-  const [capturing, setCapturing] = useState(false)
+  const [phase, setPhase] = useState<'idle' | 'capturing' | 'open'>('idle')
   const [screenshotBlob, setScreenshotBlob] = useState<Blob | null>(null)
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (!open) return
-    setCapturing(true)
+  const handleClick = () => {
+    setPhase('capturing')
     setScreenshotBlob(null)
     setScreenshotUrl(null)
-    html2canvas(document.body, { logging: false, useCORS: true, scale: 0.75 })
-      .then((canvas) => {
-        canvas.toBlob((blob) => {
-          if (blob) {
-            setScreenshotBlob(blob)
-            setScreenshotUrl(canvas.toDataURL('image/png'))
-          }
-          setCapturing(false)
-        }, 'image/png')
-      })
-      .catch(() => setCapturing(false))
 
-    return () => {
-      if (screenshotUrl) URL.revokeObjectURL(screenshotUrl)
-    }
-  }, [open])
+    setTimeout(() => {
+      html2canvas(document.body, { logging: false, useCORS: true, scale: 0.75 })
+        .then((canvas) => {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              setScreenshotBlob(blob)
+              setScreenshotUrl(canvas.toDataURL('image/png'))
+            }
+            setPhase('open')
+          }, 'image/png')
+        })
+        .catch(() => {
+          setPhase('open')
+        })
+    }, 100)
+  }
 
   const handleSubmit = async () => {
     if (!title.trim()) return
@@ -57,11 +56,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
       })
       if (!res.ok) throw new Error('Ошибка отправки')
       toast.success('Баг-репорт отправлен')
-      setOpen(false)
-      setTitle('')
-      setDescription('')
-      setScreenshotBlob(null)
-      setScreenshotUrl(null)
+      handleClose()
     } catch {
       toast.error('Не удалось отправить баг-репорт')
     } finally {
@@ -70,7 +65,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   }
 
   const handleClose = () => {
-    setOpen(false)
+    setPhase('idle')
     setTitle('')
     setDescription('')
     setScreenshotBlob(null)
@@ -81,7 +76,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={handleClick}
         title="Баг-репорт"
         className={cn(
           'flex items-center gap-2 rounded-lg text-sm font-medium transition-colors interactive',
@@ -94,7 +89,17 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
         {!collapsed && <span>Баг-репорт</span>}
       </button>
 
-      {open && createPortal(
+      {phase === 'capturing' && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80">
+          <div className="flex items-center gap-3 text-white">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span className="text-sm">Создание скриншота...</span>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {phase === 'open' && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-lg mx-4 animate-scale-in max-h-[90vh] flex flex-col">
             <div className="p-5 border-b flex items-center justify-between">
@@ -136,12 +141,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
                   <Camera className="h-3.5 w-3.5" />
                   Скриншот
                 </label>
-                {capturing ? (
-                  <div className="flex items-center gap-2 p-4 rounded-lg border border-border bg-muted/30 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Создание скриншота...
-                  </div>
-                ) : screenshotUrl ? (
+                {screenshotUrl ? (
                   <div className="relative group">
                     <img src={screenshotUrl} alt="Скриншот" className="w-full rounded-lg border border-border max-h-40 object-cover" />
                     <button
@@ -166,7 +166,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
 
             <div className="p-5 border-t flex justify-end gap-3">
               <Button type="button" variant="outline" onClick={handleClose}>Отмена</Button>
-              <Button type="button" onClick={handleSubmit} disabled={!title.trim() || submitting || capturing}>
+              <Button type="button" onClick={handleSubmit} disabled={!title.trim() || submitting}>
                 {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                 Отправить
               </Button>
