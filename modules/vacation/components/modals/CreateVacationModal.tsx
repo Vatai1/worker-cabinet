@@ -1,12 +1,23 @@
 ﻿import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
-import { Upload, FileText, X, AlertTriangle, Plus, Trash2, UserCheck } from 'lucide-react'
+import { Upload, FileText, X, AlertTriangle, Plus, Trash2, UserCheck, Search } from 'lucide-react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { useAuthStore } from '@/core/auth/store/authStore'
+
+interface Employee {
+  id: number
+  first_name: string
+  last_name: string
+  position: string
+  department_id?: number
+  department_name?: string
+}
 
 interface CreateVacationModalProps {
   isOpen: boolean
@@ -52,6 +63,7 @@ export function CreateVacationModal({
   showSubstitutes = false,
 }: CreateVacationModalProps) {
   useModalOpen(isOpen)
+  const user = useAuthStore(s => s.user)
   const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
   const [hasTravel, setHasTravel] = useState(false)
   const [travelDestination, setTravelDestination] = useState('')
@@ -61,8 +73,10 @@ export function CreateVacationModal({
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
   const [substituteIds, setSubstituteIds] = useState<number[]>([])
-  const [employees, setEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
-  const [empSearch, setEmpSearch] = useState('')
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [showSubstituteModal, setShowSubstituteModal] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
+  const [pickerSelected, setPickerSelected] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     if (isOpen) {
@@ -77,7 +91,14 @@ export function CreateVacationModal({
         .then((data) => {
           const list = (Array.isArray(data) ? data : data.users || [])
             .filter((u: any) => u.id !== Number(userId))
-            .map((u: any) => ({ id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || '' }))
+            .map((u: any) => ({
+              id: u.id,
+              first_name: u.first_name,
+              last_name: u.last_name,
+              position: u.position || '',
+              department_id: u.department_id,
+              department_name: u.department_name,
+            }))
           setEmployees(list)
         })
         .catch(() => {})
@@ -91,7 +112,6 @@ export function CreateVacationModal({
       }
       setLastCheckedDates({ startDate, endDate })
       onCheckRestrictions(userId, { startDate, endDate })
-    } else {
     }
   }
 
@@ -130,7 +150,7 @@ export function CreateVacationModal({
     }
 
     const referenceDocument = referenceFile ? referenceFile.name : undefined
-    
+
     onSubmit({
       vacationType,
       hasTravel,
@@ -148,15 +168,60 @@ export function CreateVacationModal({
   const requiredDays = countsInCounter ? duration : 0
   const hasEnoughDays = !countsInCounter || (balance?.availableDays || 0) >= requiredDays
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 animate-scale-in">
+  const openSubstitutePicker = () => {
+    setPickerSelected(new Set(substituteIds))
+    setPickerSearch('')
+    setShowSubstituteModal(true)
+  }
+
+  const confirmSubstitutePicker = () => {
+    setSubstituteIds([...pickerSelected])
+    setShowSubstituteModal(false)
+  }
+
+  const togglePickerItem = (id: number) => {
+    setPickerSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const userDeptId = user?.departmentId ? Number(user.departmentId) : null
+  const filteredEmployees = employees.filter((e) => {
+    const q = pickerSearch.toLowerCase()
+    return !q || `${e.last_name} ${e.first_name} ${e.position}`.toLowerCase().includes(q)
+  })
+  const myDeptEmployees = filteredEmployees.filter(e => e.department_id != null && e.department_id === userDeptId)
+  const otherEmployees = filteredEmployees.filter(e => e.department_id !== userDeptId)
+
+  const renderEmployee = (e: Employee) => (
+    <label
+      key={e.id}
+      className="flex items-center gap-3 px-3 py-2 hover:bg-muted cursor-pointer text-sm rounded-lg"
+    >
+      <input
+        type="checkbox"
+        checked={pickerSelected.has(e.id)}
+        onChange={() => togglePickerItem(e.id)}
+        className="rounded h-4 w-4"
+      />
+      <div className="flex-1 min-w-0">
+        <div className="font-medium truncate">{e.last_name} {e.first_name}</div>
+        {e.position && <div className="text-xs text-muted-foreground truncate">{e.position}</div>}
+      </div>
+    </label>
+  )
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 animate-scale-in max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b">
           <h2 className="text-xl font-semibold">Создать заявку на отпуск</h2>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Даты отпуска */}
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">
               Период отпуска
@@ -169,7 +234,6 @@ export function CreateVacationModal({
             </div>
           </div>
 
-          {/* Тип отпуска */}
           <div>
             <label htmlFor="vacationType" className="block text-sm font-medium text-muted-foreground mb-1">
               Тип отпуска
@@ -195,7 +259,6 @@ export function CreateVacationModal({
             )}
           </div>
 
-          {/* Проезд к месту проведения отпуска */}
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -294,7 +357,6 @@ export function CreateVacationModal({
             </div>
           </div>
 
-          {/* Комментарий */}
           <div>
             <label htmlFor="comment" className="block text-sm font-medium text-muted-foreground mb-1">
               Комментарий <span className="text-muted-foreground">(необязательно)</span>
@@ -311,55 +373,39 @@ export function CreateVacationModal({
           </div>
 
           {showSubstitutes && (
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
-                <UserCheck className="h-3.5 w-3.5" />
-                Замещающие <span className="text-muted-foreground">(необязательно)</span>
-              </label>
-              <p className="text-xs text-muted-foreground mb-2">
-                Выберите сотрудников, которые будут замещать вас на время отпуска
-              </p>
-              <input
-                type="text"
-                value={empSearch}
-                onChange={(e) => setEmpSearch(e.target.value)}
-                placeholder="Поиск сотрудника..."
-                className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm mb-2"
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openSubstitutePicker}
                 disabled={loading}
-              />
-              <div className="max-h-32 overflow-y-auto border border-input rounded-lg">
-                {employees
-                  .filter((e) => {
-                    const q = empSearch.toLowerCase()
-                    return !q || `${e.last_name} ${e.first_name} ${e.position}`.toLowerCase().includes(q)
-                  })
-                  .map((e) => (
-                    <label key={e.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted cursor-pointer text-sm">
-                      <input
-                        type="checkbox"
-                        checked={substituteIds.includes(e.id)}
-                        onChange={() => {
-                          setSubstituteIds(prev => prev.includes(e.id) ? prev.filter(x => x !== e.id) : [...prev, e.id])
-                        }}
-                        className="rounded"
-                      />
-                      <span>{e.last_name} {e.first_name}</span>
-                      {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
-                    </label>
-                  ))}
-              </div>
+                className="gap-2"
+              >
+                <UserCheck className="h-4 w-4" />
+                {substituteIds.length > 0 ? `Замещающих: ${substituteIds.length}` : 'Добавить замещение'}
+              </Button>
               {substituteIds.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                <div className="flex flex-wrap gap-2">
                   {substituteIds.map(id => {
                     const emp = employees.find(e => e.id === id)
                     if (!emp) return null
                     return (
-                      <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs">
-                        {emp.last_name} {emp.first_name}
-                        <button type="button" onClick={() => setSubstituteIds(prev => prev.filter(x => x !== id))}>
-                          <X className="h-3 w-3" />
+                      <div key={id} className="group relative">
+                        <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-xs font-medium text-primary">
+                          {emp.last_name[0]}{emp.first_name[0]}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSubstituteIds(prev => prev.filter(x => x !== id))}
+                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-2.5 w-2.5" />
                         </button>
-                      </span>
+                        <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                          {emp.last_name}
+                        </span>
+                      </div>
                     )
                   })}
                 </div>
@@ -367,7 +413,6 @@ export function CreateVacationModal({
             </div>
           )}
 
-          {/* Справка для учебного отпуска */}
           {vacationType === VacationType.EDUCATIONAL && (
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">
@@ -421,7 +466,6 @@ export function CreateVacationModal({
             </div>
           )}
 
-          {/* Информация о днях */}
           {countsInCounter && (
             <div className={`p-3 rounded-lg ${
               hasEnoughDays
@@ -444,7 +488,6 @@ export function CreateVacationModal({
             </div>
           )}
 
-          {/* Предупреждения о нарушении ограничений */}
           {restrictionWarnings.length > 0 && (
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
               <div className="text-sm">
@@ -466,7 +509,6 @@ export function CreateVacationModal({
             </div>
           )}
 
-          {/* Кнопки */}
           <div className="flex gap-3 pt-4">
             <Button
               type="button"
@@ -492,6 +534,89 @@ export function CreateVacationModal({
           </div>
         </form>
       </div>
-    </div>
+
+      {showSubstituteModal && createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60">
+          <div className="bg-card rounded-xl shadow-2xl w-full max-w-md mx-4 animate-scale-in max-h-[80vh] flex flex-col">
+            <div className="p-5 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <UserCheck className="h-5 w-5 text-primary" />
+                Выберите замещающих
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSubstituteModal(false)}
+                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4 border-b">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  placeholder="Поиск сотрудника..."
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2">
+              {myDeptEmployees.length > 0 && (
+                <div className="mb-2">
+                  <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Мой отдел
+                  </div>
+                  {myDeptEmployees.map(renderEmployee)}
+                </div>
+              )}
+              {otherEmployees.length > 0 && (
+                <div>
+                  <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Другие сотрудники
+                  </div>
+                  {otherEmployees.map(renderEmployee)}
+                </div>
+              )}
+              {filteredEmployees.length === 0 && (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  Ничего не найдено
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                Выбрано: {pickerSelected.size}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSubstituteModal(false)}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={confirmSubstitutePicker}
+                  disabled={pickerSelected.size === 0}
+                >
+                  Добавить
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>,
+    document.body
   )
 }

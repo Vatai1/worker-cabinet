@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { FileText, X, Download, Loader2, Plus, ChevronUp, Trash2, UserCheck } from 'lucide-react'
+import { FileText, X, Download, Loader2, Plus, ChevronUp, Trash2 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
@@ -8,7 +8,6 @@ import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { formatDate } from '@/shared/lib/utils'
 import { useAuthStore } from '@/core/auth/store/authStore'
-import { useModulesStore } from '@/shared/store/modulesStore'
 
 interface Template {
   id: number
@@ -73,7 +72,6 @@ const emptyForm = (): AddForm => ({ vacationId: '', newStartDate: '', newDays: '
 
 export function VacationTransferApplicationModal({ open, onClose }: Props) {
   const user = useAuthStore(s => s.user)
-  const isSubstitutionEnabled = useModulesStore(s => s.isModuleEnabled('substitution'))
   const [templates, setTemplates] = useState<Template[]>([])
   const [templateId, setTemplateId] = useState<string>('')
   const [transferable, setTransferable] = useState<TransferableVacation[]>([])
@@ -89,9 +87,6 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const balanceFetchRef = useRef<string | null>(null)
-  const [substituteIds, setSubstituteIds] = useState<number[]>([])
-  const [employees, setEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
-  const [empSearch, setEmpSearch] = useState('')
 
   const load = () => {
     setDataLoading(true)
@@ -126,17 +121,6 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
       .catch(() => setTemplates([]))
       .finally(() => setTemplatesLoading(false))
     load()
-    if (isSubstitutionEnabled) {
-      fetch(`${API_BASE_URL}/users`, { headers: getAuthHeaders() })
-        .then(r => r.ok ? r.json() : [])
-        .then((data) => {
-          const list = (Array.isArray(data) ? data : data.users || [])
-            .filter((u: any) => u.id !== user?.id)
-            .map((u: any) => ({ id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || '' }))
-          setEmployees(list)
-        })
-        .catch(() => {})
-    }
   }, [open])
 
   const selectedVacation = transferable.find(v => String(v.id) === form.vacationId)
@@ -200,7 +184,6 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
           hasTravel: form.hasTravel,
           travelDestination: form.hasTravel ? form.travelDestination.trim() || undefined : undefined,
           travelChildren: form.hasTravel ? form.travelChildren : [],
-          substitute_ids: isSubstitutionEnabled && substituteIds.length > 0 ? substituteIds : undefined,
         }),
       })
       if (!res.ok) {
@@ -208,7 +191,6 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
         throw new Error(data.error || 'Ошибка')
       }
       setForm(emptyForm())
-      setSubstituteIds([])
       setShowAddForm(false)
       load()
     } catch (err: unknown) {
@@ -262,7 +244,6 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
 
   const handleClose = () => {
     setForm(emptyForm())
-    setSubstituteIds([])
     setShowAddForm(false)
     setError(null)
     setFormError(null)
@@ -427,60 +408,6 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
                     onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
                   />
                 </div>
-
-                {isSubstitutionEnabled && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs flex items-center gap-1.5">
-                      <UserCheck className="h-3.5 w-3.5" />
-                      Замещающие (необязательно)
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Выберите сотрудников, которые будут замещать вас на время отпуска
-                    </p>
-                    <Input
-                      placeholder="Поиск сотрудника..."
-                      value={empSearch}
-                      onChange={e => setEmpSearch(e.target.value)}
-                    />
-                    <div className="max-h-32 overflow-y-auto border border-input rounded-lg">
-                      {employees
-                        .filter((e) => {
-                          const q = empSearch.toLowerCase()
-                          return !q || `${e.last_name} ${e.first_name} ${e.position}`.toLowerCase().includes(q)
-                        })
-                        .map((e) => (
-                          <label key={e.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted cursor-pointer text-sm">
-                            <input
-                              type="checkbox"
-                              checked={substituteIds.includes(e.id)}
-                              onChange={() => {
-                                setSubstituteIds(prev => prev.includes(e.id) ? prev.filter(x => x !== e.id) : [...prev, e.id])
-                              }}
-                              className="rounded"
-                            />
-                            <span>{e.last_name} {e.first_name}</span>
-                            {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
-                          </label>
-                        ))}
-                    </div>
-                    {substituteIds.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {substituteIds.map(id => {
-                          const emp = employees.find(e => e.id === id)
-                          if (!emp) return null
-                          return (
-                            <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs">
-                              {emp.last_name} {emp.first_name}
-                              <button type="button" onClick={() => setSubstituteIds(prev => prev.filter(x => x !== id))}>
-                                <X className="h-3 w-3" />
-                              </button>
-                            </span>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 <div className="flex items-start gap-3 pt-1">
                   <input

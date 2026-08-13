@@ -1,12 +1,10 @@
 ﻿import { useState, useEffect } from 'react'
-import { FileText, X, Download, Loader2, UserCheck } from 'lucide-react'
+import { FileText, X, Download, Loader2 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Label } from '@/shared/components/ui/Label'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { useAuthStore } from '@/core/auth/store/authStore'
-import { useModulesStore } from '@/shared/store/modulesStore'
 
 interface Template {
   id: number
@@ -21,8 +19,6 @@ interface Props {
 }
 
 export function VacationApplicationModal({ open, onClose, defaultYear }: Props) {
-  const user = useAuthStore(s => s.user)
-  const isSubstitutionEnabled = useModulesStore(s => s.isModuleEnabled('substitution'))
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(defaultYear ?? currentYear)
   const [templates, setTemplates] = useState<Template[]>([])
@@ -30,9 +26,6 @@ export function VacationApplicationModal({ open, onClose, defaultYear }: Props) 
   const [loading, setLoading] = useState(false)
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [substituteIds, setSubstituteIds] = useState<number[]>([])
-  const [employees, setEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
-  const [empSearch, setEmpSearch] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -46,17 +39,6 @@ export function VacationApplicationModal({ open, onClose, defaultYear }: Props) 
       })
       .catch(() => setTemplates([]))
       .finally(() => setTemplatesLoading(false))
-    if (isSubstitutionEnabled) {
-      fetch(`${API_BASE_URL}/users`, { headers: getAuthHeaders() })
-        .then(r => r.ok ? r.json() : [])
-        .then((data) => {
-          const list = (Array.isArray(data) ? data : data.users || [])
-            .filter((u: any) => u.id !== user?.id)
-            .map((u: any) => ({ id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || '' }))
-          setEmployees(list)
-        })
-        .catch(() => {})
-    }
   }, [open])
 
   const handleGenerate = async () => {
@@ -67,7 +49,7 @@ export function VacationApplicationModal({ open, onClose, defaultYear }: Props) 
       const res = await fetch(`${API_BASE_URL}/vacation/generate-application`, {
         method: 'POST',
         headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ year, templateId: Number(templateId), substitute_ids: isSubstitutionEnabled && substituteIds.length > 0 ? substituteIds : undefined }),
+        body: JSON.stringify({ year, templateId: Number(templateId) }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -154,62 +136,6 @@ export function VacationApplicationModal({ open, onClose, defaultYear }: Props) 
                 </select>
               )}
             </div>
-
-            {isSubstitutionEnabled && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1.5">
-                  <UserCheck className="h-3.5 w-3.5" />
-                  Замещающие (необязательно)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Выберите сотрудников, которые будут замещать вас на время отпуска
-                </p>
-                <input
-                  type="text"
-                  value={empSearch}
-                  onChange={e => setEmpSearch(e.target.value)}
-                  placeholder="Поиск сотрудника..."
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-                <div className="max-h-32 overflow-y-auto border border-input rounded-lg">
-                  {employees
-                    .filter((e) => {
-                      const q = empSearch.toLowerCase()
-                      return !q || `${e.last_name} ${e.first_name} ${e.position}`.toLowerCase().includes(q)
-                    })
-                    .map((e) => (
-                      <label key={e.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted cursor-pointer text-sm">
-                        <input
-                          type="checkbox"
-                          checked={substituteIds.includes(e.id)}
-                          onChange={() => {
-                            setSubstituteIds(prev => prev.includes(e.id) ? prev.filter(x => x !== e.id) : [...prev, e.id])
-                          }}
-                          className="rounded"
-                        />
-                        <span>{e.last_name} {e.first_name}</span>
-                        {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
-                      </label>
-                    ))}
-                </div>
-                {substituteIds.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {substituteIds.map(id => {
-                      const emp = employees.find(e => e.id === id)
-                      if (!emp) return null
-                      return (
-                        <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs">
-                          {emp.last_name} {emp.first_name}
-                          <button type="button" onClick={() => setSubstituteIds(prev => prev.filter(x => x !== id))}>
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           <div className="flex justify-end gap-3 mt-6">
