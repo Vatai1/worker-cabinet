@@ -288,7 +288,7 @@ async function runMigrations() {
     ]
     for (const type of vacationTypesData) {
       await db.query(
-        `INSERT INTO vacation_types (code, name) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
+        `INSERT INTO vacation_types (code, name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
         [type.code, type.name]
       )
     }
