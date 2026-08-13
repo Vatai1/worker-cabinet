@@ -78,7 +78,7 @@ export function Vacation() {
 
       if (isManager) {
         fetchRestrictions(user.departmentId || '1')
-        if (hasAnyRoleSync('manager')) {
+        if (hasAnyRoleSync('manager', 'hr')) {
           fetchDepartmentRequests(user.departmentId || '1')
         } else {
           fetchAllRequests()
