@@ -17,25 +17,19 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   const [submitting, setSubmitting] = useState(false)
 
   const handleClick = () => {
-    setPhase('capturing')
-    setScreenshotBlob(null)
-    setScreenshotUrl(null)
-
-    setTimeout(() => {
-      html2canvas(document.body, { logging: false, useCORS: true, scale: 0.75 })
-        .then((canvas) => {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              setScreenshotBlob(blob)
-              setScreenshotUrl(canvas.toDataURL('image/png'))
-            }
-            setPhase('open')
-          }, 'image/png')
-        })
-        .catch(() => {
+    html2canvas(document.body, { logging: false, useCORS: true, scale: 0.75 })
+      .then((canvas) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            setScreenshotBlob(blob)
+            setScreenshotUrl(canvas.toDataURL('image/png'))
+          }
           setPhase('open')
-        })
-    }, 100)
+        }, 'image/png')
+      })
+      .catch(() => {
+        setPhase('open')
+      })
   }
 
   const handleSubmit = async () => {
@@ -88,16 +82,6 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
         <Bug className="h-4 w-4 shrink-0" />
         {!collapsed && <span>Баг-репорт</span>}
       </button>
-
-      {phase === 'capturing' && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80">
-          <div className="flex items-center gap-3 text-white">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <span className="text-sm">Создание скриншота...</span>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {phase === 'open' && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
