@@ -345,12 +345,13 @@ async function runMigrations() {
         vacation_request_id INTEGER NOT NULL REFERENCES vacation_requests(id) ON DELETE CASCADE,
         substitute_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         assigned_by INTEGER REFERENCES users(id),
-        organization_id INTEGER NOT NULL,
+        organization_id INTEGER,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(vacation_request_id, substitute_user_id)
       )
     `).catch(e => console.log('  - vacation_substitutions:', e.message))
     await db.query(`CREATE INDEX IF NOT EXISTS idx_vacation_substitutions_substitute ON vacation_substitutions(substitute_user_id)`).catch(() => {})
+    await db.query(`ALTER TABLE vacation_substitutions ALTER COLUMN organization_id DROP NOT NULL`).catch(() => {})
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS assistant_messages (
