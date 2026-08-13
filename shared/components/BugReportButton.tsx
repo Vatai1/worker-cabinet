@@ -17,19 +17,23 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   const [submitting, setSubmitting] = useState(false)
 
   const handleClick = () => {
-    html2canvas(document.body, { logging: false, useCORS: true, scale: 0.75 })
-      .then((canvas) => {
-        canvas.toBlob((blob) => {
-          if (blob) {
-            setScreenshotBlob(blob)
-            setScreenshotUrl(canvas.toDataURL('image/png'))
-          }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.fonts.ready.then(() => {
+          return html2canvas(document.body, { logging: false, useCORS: true, allowTaint: true, scale: 0.75 })
+        }).then((canvas) => {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              setScreenshotBlob(blob)
+              setScreenshotUrl(canvas.toDataURL('image/png'))
+            }
+            setPhase('open')
+          }, 'image/png')
+        }).catch(() => {
           setPhase('open')
-        }, 'image/png')
+        })
       })
-      .catch(() => {
-        setPhase('open')
-      })
+    })
   }
 
   const handleSubmit = async () => {
