@@ -8,7 +8,6 @@ import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { X, UserCheck } from 'lucide-react'
 import { formatDate } from '@/shared/lib/utils'
-import { useModulesStore } from '@/shared/store/modulesStore'
 
 interface VacationDetailModalProps {
   isOpen: boolean
@@ -25,7 +24,6 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
   useModalOpen(isOpen)
   const [showRejectInput, setShowRejectInput] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
-  const isSubstitutionEnabled = useModulesStore(s => s.isModuleEnabled('substitution'))
 
   if (!isOpen || !request) {
     return null
@@ -88,7 +86,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
             <div className="text-sm text-muted-foreground">{vacationTypeInfo?.description}</div>
           </div>
 
-          {isSubstitutionEnabled && request.substitutes && request.substitutes.length > 0 && (
+          {request.substitutes && request.substitutes.length > 0 && (
             <div className="p-3 rounded-lg bg-primary/5 border border-primary/15">
               <div className="flex items-center gap-2 mb-2">
                 <UserCheck className="h-4 w-4 text-primary" />
@@ -115,7 +113,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
             </div>
           )}
 
-          {isSubstitutionEnabled && request.delegated_to && (
+          {request.delegated_to && (
             <div className="p-3 rounded-lg bg-violet-500/5 border border-violet-500/15">
               <div className="flex items-center gap-2">
                 <UserCheck className="h-4 w-4 text-violet-600" />
