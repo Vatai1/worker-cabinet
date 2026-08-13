@@ -1,12 +1,14 @@
 ﻿import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { VacationRequest } from '@/shared/types'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { VACATION_TYPES } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { X } from 'lucide-react'
+import { X, UserCheck } from 'lucide-react'
 import { formatDate } from '@/shared/lib/utils'
+import { useModulesStore } from '@/shared/store/modulesStore'
 
 interface VacationDetailModalProps {
   isOpen: boolean
@@ -23,6 +25,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
   useModalOpen(isOpen)
   const [showRejectInput, setShowRejectInput] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
+  const isSubstitutionEnabled = useModulesStore(s => s.isModuleEnabled('substitution'))
 
   if (!isOpen || !request) {
     return null
@@ -84,6 +87,51 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
             <div className="font-semibold">{vacationTypeInfo?.name}</div>
             <div className="text-sm text-muted-foreground">{vacationTypeInfo?.description}</div>
           </div>
+
+          {isSubstitutionEnabled && request.substitutes && request.substitutes.length > 0 && (
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/15">
+              <div className="flex items-center gap-2 mb-2">
+                <UserCheck className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold">Замещающие</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {request.substitutes.map((s) => (
+                  <Link
+                    key={s.id}
+                    to={`/employees/${s.id}`}
+                    onClick={onClose}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-background border border-border hover:border-primary/30 transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-xs font-medium text-primary">
+                      {s.last_name[0]}{s.first_name[0]}
+                    </div>
+                    <div className="text-sm">
+                      <div className="font-medium leading-tight">{s.last_name} {s.first_name}</div>
+                      {s.position && <div className="text-xs text-muted-foreground leading-tight">{s.position}</div>}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isSubstitutionEnabled && request.delegated_to && (
+            <div className="p-3 rounded-lg bg-violet-500/5 border border-violet-500/15">
+              <div className="flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-violet-600" />
+                <span className="text-sm text-muted-foreground">
+                  Согласование делегировано:{' '}
+                  <Link
+                    to={`/employees/${request.delegated_to.id}`}
+                    onClick={onClose}
+                    className="font-medium text-foreground hover:underline"
+                  >
+                    {request.delegated_to.last_name} {request.delegated_to.first_name}
+                  </Link>
+                </span>
+              </div>
+            </div>
+          )}
 
           {request.hasTravel && (
             <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 space-y-1">
