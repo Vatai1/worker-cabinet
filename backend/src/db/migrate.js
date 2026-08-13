@@ -1176,8 +1176,9 @@ async function runMigrations() {
 
     await db.query(`ALTER TABLE vacation_balances DROP CONSTRAINT IF EXISTS vacation_balances_user_id_key`)
     await db.query(`ALTER TABLE vacation_balances DROP CONSTRAINT IF EXISTS vacation_balances_user_id_year_key`)
-    await db.query(`ALTER TABLE vacation_balances ADD CONSTRAINT vacation_balances_user_id_year_key UNIQUE (user_id, year)`)
-    console.log('  ✓ vacation_balances UNIQUE(user_id, year)')
+    await db.query(`ALTER TABLE vacation_balances DROP CONSTRAINT IF EXISTS vacation_balances_user_org_year_key`)
+    await db.query(`ALTER TABLE vacation_balances ADD CONSTRAINT vacation_balances_user_org_year_key UNIQUE (user_id, organization_id, year)`)
+    console.log('  ✓ vacation_balances UNIQUE(user_id, organization_id, year)')
 
     await db.query(`
   CREATE TABLE IF NOT EXISTS timesheets (
@@ -1644,6 +1645,23 @@ async function runMigrations() {
         .catch(e => console.log(`  - ${table}.organization_id:`, e.message))
     }
     console.log(`  ✓ organization_id added to ${orgScopedTables.length} tables`)
+
+    await db.query(`ALTER TABLE vacation_types DROP CONSTRAINT IF EXISTS vacation_types_code_key`).catch(() => {})
+    await db.query(`ALTER TABLE vacation_types ADD CONSTRAINT vacation_types_code_org_key UNIQUE (code, organization_id)`).catch(() => {})
+    await db.query(`
+      INSERT INTO vacation_types (code, name, organization_id)
+      SELECT vt.code, vt.name, o.id
+      FROM vacation_types vt
+      CROSS JOIN organizations o
+      WHERE o.is_active = true
+        AND NOT EXISTS (
+          SELECT 1 FROM vacation_types vt2
+          WHERE vt2.organization_id = o.id AND vt2.code = vt.code
+        )
+        AND (vt.organization_id = 1 OR vt.organization_id IS NULL)
+      ON CONFLICT DO NOTHING
+    `).catch(e => console.log('  - vacation_types per-org copy:', e.message))
+    console.log('  ✓ vacation_types copied to all active orgs')
 
     await db.query(`
       INSERT INTO organizations (name, slug, inn, is_active)

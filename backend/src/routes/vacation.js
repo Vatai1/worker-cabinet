@@ -246,7 +246,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       FROM vacation_requests vr
       JOIN users u ON vr.user_id = u.id
       JOIN request_statuses rs ON vr.status_id = rs.id
-      JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+      LEFT JOIN vacation_types vt ON vr.vacation_type_id = vt.id
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN vacation_request_status_history vrsh ON vr.id = vrsh.request_id
       LEFT JOIN request_statuses vrsh_rs ON vrsh.status_id = vrsh_rs.id
@@ -370,7 +370,7 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
       const newBalance = await query(
         `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days, year, organization_id)
          VALUES ($1, 47, 0, 0, $2, $3)
-         ON CONFLICT (user_id, year) DO UPDATE SET organization_id = EXCLUDED.organization_id
+         ON CONFLICT (user_id, organization_id, year) DO UPDATE SET organization_id = EXCLUDED.organization_id
          RETURNING *`,
         [userId, targetYear, currentOrgId(req)]
       ).catch(() => null)
@@ -1603,7 +1603,7 @@ router.get('/my-transferable', authenticateToken, async (req, res) => {
     const result = await query(
       `SELECT vr.id, vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name
        FROM vacation_requests vr
-       JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+       LEFT JOIN vacation_types vt ON vr.vacation_type_id = vt.id
        JOIN request_statuses rs ON vr.status_id = rs.id
        WHERE vr.user_id = $1${req.org ? ' AND vr.organization_id = $2' : ''}
          AND rs.code = 'approved'
@@ -1721,14 +1721,14 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       ? { text: `SELECT vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name, rs.code as status,
                 vr.has_travel, vr.travel_destination, vr.travel_children_count, vr.travel_children
          FROM vacation_requests vr
-         JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+         LEFT JOIN vacation_types vt ON vr.vacation_type_id = vt.id
          JOIN request_statuses rs ON vr.status_id = rs.id
          WHERE vr.user_id = $1 AND vr.organization_id = $3 AND EXTRACT(YEAR FROM vr.start_date) = $2 AND rs.code = 'approved'
          ORDER BY vr.start_date`, values: [userId, year, req.org.org_id] }
       : { text: `SELECT vr.start_date, vr.end_date, vr.duration, vt.name as vacation_type_name, rs.code as status,
                 vr.has_travel, vr.travel_destination, vr.travel_children_count, vr.travel_children
          FROM vacation_requests vr
-         JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+         LEFT JOIN vacation_types vt ON vr.vacation_type_id = vt.id
          JOIN request_statuses rs ON vr.status_id = rs.id
          WHERE vr.user_id = $1 AND EXTRACT(YEAR FROM vr.start_date) = $2 AND rs.code = 'approved'
          ORDER BY vr.start_date`, values: [userId, year] }
