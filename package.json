@@ -1,7 +1,7 @@
 {
   "name": "worker-cabinet",
   "private": true,
-  "version": "1.1.30",
+  "version": "1.1.31",
   "type": "module",
   "scripts": {
     "dev": "npm run dev:infra && npm run dev:setup && concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:mini-agent\"",
@@ -59,6 +59,7 @@
     "clsx": "^2.0.0",
     "date-fns": "^4.1.0",
     "dompurify": "^3.4.11",
+    "html2canvas": "^1.4.1",
     "lucide-react": "^0.300.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

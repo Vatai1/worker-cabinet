@@ -1571,6 +1571,26 @@ async function runMigrations() {
     }
     console.log('✅ Modules table created')
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS bug_reports (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(200) NOT NULL,
+        description TEXT,
+        screenshot_s3_key VARCHAR(500),
+        page_url TEXT,
+        browser_info TEXT,
+        status VARCHAR(20) DEFAULT 'new',
+        priority VARCHAR(20) DEFAULT 'medium',
+        admin_comment TEXT,
+        reviewed_at TIMESTAMP,
+        reviewed_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(e => console.log('  - bug_reports:', e.message))
+    console.log('  ✓ bug_reports')
+
     console.log('Creating notification tables...')
     await db.query(`
       CREATE TABLE IF NOT EXISTS notification_queue (

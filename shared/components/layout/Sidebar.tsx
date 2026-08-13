@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avat
 import { Logo } from '@/shared/components/brand/Logo'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
+import { BugReportButton } from '@/shared/components/BugReportButton'
 
 interface NavItem {
   name: string
@@ -365,6 +366,15 @@ export function Sidebar() {
             <Settings className="h-[18px] w-[18px]" />
             Настройки
           </NavLink>
+
+          <div className={cn('mt-2', isCrctSidebar ? 'border-t border-white/10 pt-2' : 'border-t border-border/50 pt-2')}>
+            <div className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-xs',
+              isCrctSidebar ? 'text-white/50 hover:bg-white/5 hover:text-white/80' : 'text-muted-foreground/60 hover:bg-muted/40 hover:text-muted-foreground'
+            )}>
+              <BugReportButton />
+            </div>
+          </div>
+
           <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 mt-1 hover:bg-white/5 transition-colors duration-200 group cursor-pointer">
             <Avatar className="h-10 w-10 ring-2 ring-white/10 shadow-sm transition-shadow duration-200 group-hover:ring-white/25">
               {user && (

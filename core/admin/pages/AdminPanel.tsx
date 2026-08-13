@@ -18,6 +18,7 @@ import { Badge } from '@/shared/components/ui/Badge'
 import { Switch } from '@/shared/components/ui/Switch'
 import { ModuleSettingsModal } from '@/core/admin/components/modules/ModuleSettingsModal'
 import { AppearanceSettings } from '@/core/admin/components/modules/AppearanceSettings'
+import { AdminBugReports } from '@/core/admin/pages/AdminBugReports'
 import { openModelsModal } from '@/core/admin/components/ModelsModal'
 import type { ModuleId } from '@/core/admin/components/modules/types'
 import {
@@ -32,10 +33,11 @@ import {
   Zap, Briefcase, Plane,
   Pencil, Save, Bot, Package,
   Palette, Tag, LogIn,
+  Bug,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
-type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills'
+type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports'
 
 interface TabItem {
   id: TabId
@@ -82,6 +84,7 @@ const TAB_GROUPS: TabGroup[] = [
       { id: 'security', name: 'Безопасность', icon: ShieldCheck, description: 'Блокировки, попытки входа', color: 'from-red-500 to-rose-600' },
       { id: 'audit', name: 'Аудит', icon: Activity, description: 'Лог действий', color: 'from-indigo-500 to-blue-600' },
       { id: 'errors', name: 'Ошибки', icon: AlertCircle, description: 'Лог ошибок системы', color: 'from-orange-500 to-red-600' },
+      { id: 'bug-reports', name: 'Баг-репорты', icon: Bug, description: 'Отчёты пользователей', color: 'from-amber-500 to-orange-600' },
       { id: 'health', name: 'Система', icon: Server, description: 'БД, память, подключения', color: 'from-teal-500 to-emerald-600' },
     ],
   },
@@ -293,7 +296,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
       .catch(() => {})
   }, [])
 
-  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'security', 'health', 'errors', 'organizations']
+  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'security', 'health', 'errors', 'organizations', 'bug-reports']
 
   const filteredGroups = TAB_GROUPS
     .map((group) => ({
@@ -448,6 +451,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
           {activeTab === 'dict_skills' && <DictionariesTab initialTab="skills" />}
           {activeTab === 'modules' && <ModulesTab mode={mode} />}
           {activeTab === 'appearance' && <AppearanceTab />}
+          {activeTab === 'bug-reports' && <AdminBugReports />}
         </div>
       </div>
     </div>
