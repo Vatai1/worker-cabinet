@@ -2,38 +2,63 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bug, X, Loader2, Camera, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import html2canvas from 'html2canvas'
 import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { cn } from '@/shared/lib/utils'
 
 export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) {
-  const [phase, setPhase] = useState<'idle' | 'capturing' | 'open'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'open'>('idle')
   const [screenshotBlob, setScreenshotBlob] = useState<Blob | null>(null)
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const handleClick = () => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        document.fonts.ready.then(() => {
-          return html2canvas(document.body, { logging: false, useCORS: true, allowTaint: true, scale: 0.75 })
-        }).then((canvas) => {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              setScreenshotBlob(blob)
-              setScreenshotUrl(canvas.toDataURL('image/png'))
-            }
-            setPhase('open')
-          }, 'image/png')
-        }).catch(() => {
-          setPhase('open')
-        })
+  const captureScreen = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'browser' } as MediaTrackConstraints,
+        audio: false,
       })
-    })
+      const track = stream.getVideoTracks()[0]
+      await new Promise((resolve) => {
+        if (track.readyState === 'live') return resolve(null)
+        track.addEventListener('live', resolve, { once: true })
+        setTimeout(resolve, 500)
+      })
+      const video = document.createElement('video')
+      video.srcObject = stream
+      video.muted = true
+      await video.play()
+
+      const w = video.videoWidth
+      const h = video.videoHeight
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(video, 0, 0)
+
+      track.stop()
+      stream.getTracks().forEach((t) => t.stop())
+
+      const blob: Blob = await new Promise((resolve) => {
+        canvas.toBlob((b) => resolve(b!), 'image/png')
+      })
+      return blob
+    } catch {
+      return null
+    }
+  }
+
+  const handleClick = async () => {
+    const blob = await captureScreen()
+    if (blob) {
+      setScreenshotBlob(blob)
+      setScreenshotUrl(URL.createObjectURL(blob))
+    }
+    setPhase('open')
   }
 
   const handleSubmit = async () => {
@@ -63,6 +88,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   }
 
   const handleClose = () => {
+    if (screenshotUrl) URL.revokeObjectURL(screenshotUrl)
     setPhase('idle')
     setTitle('')
     setDescription('')
@@ -134,7 +160,11 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
                     <img src={screenshotUrl} alt="Скриншот" className="w-full rounded-lg border border-border max-h-40 object-cover" />
                     <button
                       type="button"
-                      onClick={() => { setScreenshotBlob(null); setScreenshotUrl(null) }}
+                      onClick={() => {
+                        if (screenshotUrl) URL.revokeObjectURL(screenshotUrl)
+                        setScreenshotBlob(null)
+                        setScreenshotUrl(null)
+                      }}
                       className="absolute top-2 right-2 p-1.5 rounded-lg bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
