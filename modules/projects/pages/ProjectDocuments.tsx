@@ -80,7 +80,7 @@ function NewFolderModal({
       if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
       onCreated(await res.json())
       onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e) { setErr(e instanceof Error ? e.message : '') }
     finally { setSaving(false) }
   }
 
@@ -130,7 +130,7 @@ function RenameFolderModal({
     try {
       onRenamed(name.trim())
       onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e) { setErr(e instanceof Error ? e.message : '') }
     finally { setSaving(false) }
   }
 
@@ -180,7 +180,7 @@ function RenameDocModal({
     try {
       onRenamed(name.trim())
       onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e) { setErr(e instanceof Error ? e.message : '') }
     finally { setSaving(false) }
   }
 
@@ -236,6 +236,7 @@ function FolderInfoModal({
 
   useEffect(() => {
     getCreatorName().then(setCreatorName)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folder.created_by])
 
   return (
@@ -387,7 +388,7 @@ function UploadModal({
       if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
       onUploaded()
       onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e) { setErr(e instanceof Error ? e.message : '') }
     finally { setUploading(false) }
   }
 
@@ -594,11 +595,12 @@ export function ProjectDocuments() {
       .then((r) => r.json())
       .then((data) => setProject({
         ...data,
-        leads: data.members?.filter((m: any) => m.role === 'lead') ?? [],
+        leads: data.members?.filter((m: { role: string }) => m.role === 'lead') ?? [],
       }))
       .catch(() => {})
   }, [id])
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchContent(currentPath) }, [currentPath, id])
 
   // Close context menu on outside click
@@ -838,6 +840,7 @@ export function ProjectDocuments() {
     setDropUploading(false)
     setDropProgress(null)
     fetchContent(currentPath)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, currentPath])
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -1549,8 +1552,6 @@ export function ProjectDocuments() {
                   { headers: getAuthHeaders() }
                 )
                 if (!tokenRes.ok) {
-                  const errorData = await tokenRes.text()
-                  console.error('❌ Failed to get token:', errorData)
                   throw new Error('Не удалось получить токен')
                 }
 

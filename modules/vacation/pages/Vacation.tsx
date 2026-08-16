@@ -16,11 +16,12 @@ import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { RestrictionModal } from '@/modules/vacation/components/modals/RestrictionModal'
 import { VacationTransferModal } from '@/modules/vacation/components/modals/VacationTransferModal'
 import { VacationRequestStatus, VacationType } from '@/shared/types'
-import type { VacationRequest } from '@/shared/types'
+import type { VacationRequest, VacationBalance, VacationRestriction, VacationValidationError, VacationEmployee } from '@/shared/types'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
+import { getErrorMessage } from '@/shared/lib/utils'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
 import { hasAnyRole, hasAnyRoleSync } from '@/shared/lib/permissions'
 import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon, UserCheck } from 'lucide-react'
@@ -43,13 +44,13 @@ export function Vacation() {
     rejectRequest,
   } = useVacationStore()
 
-  const [balance, setBalance] = useState<any>(null)
+  const [balance, setBalance] = useState<VacationBalance | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null)
   const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null)
   const [showCreateFromCalendar, setShowCreateFromCalendar] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
-  const [detailRequest, setDetailRequest] = useState<any>(null)
+  const [detailRequest, setDetailRequest] = useState<VacationRequest | null>(null)
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null)
@@ -63,8 +64,8 @@ export function Vacation() {
   const [showApplicationModal, setShowApplicationModal] = useState(false)
   const [showTransferApplicationModal, setShowTransferApplicationModal] = useState(false)
   const [calendarView, setCalendarView] = useState<'department' | 'personal'>('department')
-  const [restrictionWarnings, setRestrictionWarnings] = useState<any[]>([])
-  const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<any[]>([])
+  const [restrictionWarnings, setRestrictionWarnings] = useState<VacationValidationError[]>([])
+  const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<VacationValidationError[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
   const [vacationBlocked, setVacationBlocked] = useState(false)
   const [year, setYear] = useState(new Date().getFullYear())
@@ -96,6 +97,7 @@ export function Vacation() {
           .catch(() => {})
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.departmentId, user?.role, year])
 
   const handleApprove = async (requestId: string) => {
@@ -150,7 +152,7 @@ export function Vacation() {
     setShowTransferModal(true)
   }
 
-  const findIntersections = (request: any) => {
+  const findIntersections = (request: VacationRequest) => {
     const warnings: {message: string; employeeName: string; dates: string}[] = []
     const requestStart = new Date(request.startDate)
     const requestEnd = new Date(request.endDate)
@@ -179,7 +181,7 @@ export function Vacation() {
     return warnings
   }
 
-  const handleOpenDetailModal = (request: any) => {
+  const handleOpenDetailModal = (request: VacationRequest) => {
     setDetailRequest(request)
     const intersections = findIntersections(request)
     setIntersectionWarnings(intersections)
@@ -296,10 +298,10 @@ export function Vacation() {
     }
   }
 
-  const handleCreateRestriction = async (restriction: Record<string, unknown>) => {
+  const handleCreateRestriction = async (restriction: Omit<VacationRestriction, 'id' | 'departmentId' | 'createdAt' | 'createdBy' | 'createdByName'>) => {
     if (!user) return
     try {
-      await useVacationStore.getState().createRestriction(user.departmentId || '1', restriction as any)
+      await useVacationStore.getState().createRestriction(user.departmentId || '1', restriction)
       await fetchRestrictions(user.departmentId || '1')
     } catch (err) {
     }
@@ -361,9 +363,10 @@ export function Vacation() {
     try {
       const res = await fetch(`${API_BASE_URL}/users`, { headers: getAuthHeaders() })
       const data = await (res.ok ? res.json() : [])
-      const list = (Array.isArray(data) ? data : data.users || [])
-        .filter((u: any) => u.id !== user?.id)
-        .map((u: any) => ({ id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || '' }))
+      const raw: VacationEmployee[] = Array.isArray(data) ? data : data.users || []
+      const list = raw
+        .filter((u) => u.id !== Number(user?.id))
+        .map((u) => ({ id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || '' }))
       setPickerEmployees(list)
       setShowSubstitutePicker(requestId)
     } catch {}
@@ -377,8 +380,8 @@ export function Vacation() {
         fetchUserRequests(user.id)
         fetchDepartmentRequests(user.departmentId || '1')
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Ошибка')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err))
     }
   }
 
@@ -390,8 +393,8 @@ export function Vacation() {
         fetchUserRequests(user.id)
         fetchDepartmentRequests(user.departmentId || '1')
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Ошибка')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err))
     }
   }
 
@@ -415,7 +418,7 @@ export function Vacation() {
 
   useEffect(() => {
     if (isMySubstitutions) fetchMySubstitutions()
-  }, [isMySubstitutions])
+  }, [isMySubstitutions, fetchMySubstitutions])
 
   const isManager = hasAnyRole('manager', 'hr', 'admin')
   const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
@@ -444,11 +447,11 @@ export function Vacation() {
           </Card>
         ) : (
           <div className="grid gap-4">
-            {mySubstitutions.map((sub: any) => (
+            {mySubstitutions.map((sub) => (
               <Card key={sub.id} className="p-4 hover-lift">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-12 w-12">
-                    <AvatarImage src={sub.avatar || generateAvatarUrl(sub.user_id, sub.gender)} alt="" />
+                    <AvatarImage src={sub.avatar || generateAvatarUrl(String(sub.user_id), sub.gender ?? undefined)} alt="" />
                     <AvatarFallback>{sub.last_name?.[0]}{sub.first_name?.[0]}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
@@ -681,7 +684,7 @@ export function Vacation() {
               onClose={handleCloseModal}
               onSubmit={handleCreateFromModal}
               loading={loading}
-              balance={balance}
+              balance={balance ?? undefined}
               userId={user?.id}
               restrictionWarnings={restrictionWarningsCalendar}
               onCheckRestrictions={handleCheckRestrictionsCalendar}
@@ -1046,7 +1049,7 @@ export function Vacation() {
           onClose={() => setShowCreateForm(false)}
           onSubmit={handleCreateFromForm}
           loading={loading}
-          balance={balance}
+          balance={balance ?? undefined}
           restrictionWarnings={restrictionWarnings}
           userId={user?.id}
           onCheckRestrictions={handleCheckRestrictions}

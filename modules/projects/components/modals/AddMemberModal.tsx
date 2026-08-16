@@ -43,6 +43,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
       } catch {}
     }
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const filtered = users.filter((u) => {
@@ -66,8 +67,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
       })
       onAdded()
       onClose()
-    } catch (err) {
-      console.error(err)
+    } catch {
     } finally {
       setSaving(false)
     }

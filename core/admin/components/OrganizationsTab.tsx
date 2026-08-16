@@ -522,16 +522,17 @@ function MembersTabContent({
   const [search, setSearch] = useState('')
   const [updatingId, setUpdatingId] = useState<number | null>(null)
 
-  const fetchMembers = async () => {
-    setLoading(true)
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${orgId}/members`, { headers: getAuthHeaders() })
-      if (res.ok) setMembers(await res.json())
-    } catch {}
-    finally { setLoading(false) }
-  }
-
-  useEffect(() => { fetchMembers() }, [orgId])
+  useEffect(() => {
+    const fetchMembers = async () => {
+      setLoading(true)
+      try {
+        const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${orgId}/members`, { headers: getAuthHeaders() })
+        if (res.ok) setMembers(await res.json())
+      } catch {}
+      finally { setLoading(false) }
+    }
+    fetchMembers()
+  }, [orgId])
 
   const changeRole = async (userId: number, newRole: string) => {
     setUpdatingId(userId)

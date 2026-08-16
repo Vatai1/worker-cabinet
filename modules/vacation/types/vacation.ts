@@ -120,6 +120,8 @@ interface VacationRequestStatusHistory {
   comment?: string
 }
 
+export type { VacationRequestStatusHistory }
+
 export interface VacationBalance {
   userId: string
   year: number
@@ -179,10 +181,42 @@ export interface VacationFormData {
   substitute_ids?: number[]
 }
 
+export interface VacationValidationErrorDetails {
+  available?: number
+  required?: number
+  requestId?: string
+  nextAvailableDate?: string
+  conflictingEmployee?: { dates: string; employeeName?: string }
+}
+
 export interface VacationValidationError {
   field: 'startDate' | 'endDate' | 'duration' | 'balance' | 'overlap' | 'travel' | 'referenceDocument' | 'restriction'
   message: string
-  details?: any
+  details?: VacationValidationErrorDetails
+}
+
+export interface VacationSubstitution {
+  id: number
+  start_date: string
+  end_date: string
+  duration: number
+  user_id: number
+  first_name: string
+  last_name: string
+  middle_name: string | null
+  position: string | null
+  avatar: string | null
+  gender: 'male' | 'female' | 'other' | null
+  status: string
+}
+
+export interface VacationEmployee {
+  id: number
+  first_name: string
+  last_name: string
+  position: string | null
+  department_id?: number | null
+  department_name?: string | null
 }
 
 

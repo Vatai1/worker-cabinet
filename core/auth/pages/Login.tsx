@@ -8,7 +8,7 @@ import { Label } from '@/shared/components/ui/Label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Logo } from '@/shared/components/brand/Logo'
 import { useSiteSettingsStore } from '@/shared/store/siteSettingsStore'
-import { API_BASE_URL } from '@/shared/lib/api'
+import { apiGet, apiPost } from '@/shared/lib/apiClient'
 
 interface AuthConfig {
   keycloak: boolean
@@ -124,8 +124,7 @@ export function Login() {
   }, [loaded, fetchPublicSettings])
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/auth/config`)
-      .then(res => res.json())
+    apiGet<AuthConfig>('/auth/config')
       .then(config => setAuthConfig(config))
       .catch(() => setAuthConfig({ keycloak: false }))
       .finally(() => setLoadingConfig(false))
@@ -157,16 +156,7 @@ export function Login() {
     setKcLoading(true)
     const redirectUri = `${window.location.origin}/login`
 
-    fetch(`${API_BASE_URL}/auth/callback`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ code, code_verifier: verifier, redirect_uri: redirectUri }),
-    })
-      .then(res => {
-        if (!res.ok) return res.json().then(d => { throw new Error(d.error || 'Ошибка авторизации') })
-        return res.json()
-      })
+    apiPost('/auth/callback', { code, code_verifier: verifier, redirect_uri: redirectUri })
       .then(() => {
         sessionStorage.removeItem('pkce_verifier')
         setKcHandled(true)
@@ -174,10 +164,10 @@ export function Login() {
       })
       .catch(err => {
         setKcHandled(true)
-        setError(err.message)
+        setError(err instanceof Error ? err.message : 'Ошибка авторизации')
       })
       .finally(() => setKcLoading(false))
-  }, [code, authConfig, navigate])
+  }, [code, authConfig, navigate, kcHandled])
 
   const handleKeycloakLogin = async () => {
     if (!authConfig?.authUrl) return

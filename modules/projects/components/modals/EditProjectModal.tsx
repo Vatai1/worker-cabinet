@@ -7,6 +7,7 @@ import { Pencil, X, Check } from 'lucide-react'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
+import type { ProjectMember } from '@/shared/types'
 
 function toDateInputValue(isoString?: string): string {
   if (!isoString) return ''
@@ -27,11 +28,17 @@ interface ProjectBase {
   end_date?: string
 }
 
+interface UpdatedProject extends ProjectBase {
+  created_by: string
+  created_at: string
+  members: ProjectMember[]
+}
+
 interface Props {
   project: ProjectBase
   open: boolean
   onClose: () => void
-  onUpdated: (project: any) => void
+  onUpdated: (project: UpdatedProject) => void
 }
 
 const STATUS_OPTIONS = [
@@ -145,7 +152,7 @@ export function EditProjectModal({ project, open, onClose, onUpdated }: Props) {
               <select
                 className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as any })}
+                onChange={(e) => setForm({ ...form, status: e.target.value as ProjectBase['status'] })}
               >
                 {STATUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>

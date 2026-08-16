@@ -135,6 +135,7 @@ export function VacationTransferApplicationModal({ open, onClose }: Props) {
       .then(r => r.ok ? r.json() : null)
       .then(data => setBalance(data))
       .catch(() => setBalance(null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVacation?.id, user?.id])
 
   const computedNewDays = () => {

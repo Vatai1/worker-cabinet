@@ -67,6 +67,7 @@ export function Onboarding() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchOnboarding() }, [])
 
   const handleAcknowledge = async () => {
@@ -280,25 +281,21 @@ export function Onboarding() {
           editable={false}
           acknowledged={onlyOfficeDoc.acknowledged}
           onAcknowledge={async () => {
-            try {
-              const res = await fetch(`${API_BASE_URL}/onboarding/me/documents/${onlyOfficeDoc.id}/acknowledge`, {
-                method: 'POST',
-                headers: getAuthHeaders(),
-              })
-              if (!res.ok) {
-                const data = await res.json()
-                throw new Error(data.error || 'Ошибка')
-              }
-              await checkAuth()
-              const updatedUser = useAuthStore.getState().user
-              if (updatedUser?.role === 'employee') {
-                navigate('/dashboard', { replace: true })
-                return
-              }
-              await fetchOnboarding()
-            } catch (err) {
-              throw err
+            const res = await fetch(`${API_BASE_URL}/onboarding/me/documents/${onlyOfficeDoc.id}/acknowledge`, {
+              method: 'POST',
+              headers: getAuthHeaders(),
+            })
+            if (!res.ok) {
+              const data = await res.json()
+              throw new Error(data.error || 'Ошибка')
             }
+            await checkAuth()
+            const updatedUser = useAuthStore.getState().user
+            if (updatedUser?.role === 'employee') {
+              navigate('/dashboard', { replace: true })
+              return
+            }
+            await fetchOnboarding()
           }}
         />
       )}

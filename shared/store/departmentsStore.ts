@@ -3,8 +3,16 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 
+export interface Department {
+  id: number
+  name: string
+  manager_name?: string | null
+  employee_count?: string | number
+  vacation_requests_blocked?: boolean
+}
+
 interface DepartmentsState {
-  departments: any[]
+  departments: Department[]
   loaded: boolean
   fetchDepartments: () => Promise<void>
   invalidateDepartments: () => void

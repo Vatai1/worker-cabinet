@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
@@ -487,9 +487,7 @@ function UsersTab() {
       .then(r => r.json())
       .then(data => setPositions(Array.isArray(data) ? data : data.positions || []))
       .catch(() => {})
-  }, [])
-
-  useEffect(() => { fetchUsers() }, [page, debouncedSearch, filterRole, filterDepartment, filterPosition])
+  }, [fetchDepartments])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
@@ -503,7 +501,7 @@ function UsersTab() {
     } catch {}
   }
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true); setError(null)
     try {
       const params = new URLSearchParams({ page: String(page), limit: '25' })
@@ -518,7 +516,9 @@ function UsersTab() {
       }
     } catch (err) { setError(getErrorMessage(err)) }
     finally { setLoading(false) }
-  }
+  }, [page, debouncedSearch, filterRole, filterDepartment, filterPosition])
+
+  useEffect(() => { fetchUsers() }, [fetchUsers])
 
   const changeRole = async (userId: number, role: string) => {
     const user = users.find(u => u.id === userId)
@@ -826,7 +826,7 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
       .then(r => r.json())
       .then(data => setPositions((Array.isArray(data) ? data : data.positions || []).map((p: { name: string }) => p.name)))
       .catch(() => {})
-  }, [])
+  }, [fetchDepartments])
 
   const saveEdit = async () => {
     const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Обновить данные ${user.first_name} ${user.last_name}?`, confirmText: 'Сохранить' })
@@ -1939,9 +1939,7 @@ function AuditTab() {
   const [dateTo, setDateTo] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
 
-  useEffect(() => { fetchLogs() }, [page, filterAction, dateFrom, dateTo])
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({ page: String(page), limit: '25' })
@@ -1955,7 +1953,9 @@ function AuditTab() {
         setTotal(data.total)
       }
     } catch {} finally { setLoading(false) }
-  }
+  }, [page, filterAction, dateFrom, dateTo])
+
+  useEffect(() => { fetchLogs() }, [fetchLogs])
 
   const totalPages = Math.ceil(total / 25)
   const now = Date.now()
@@ -2332,9 +2332,7 @@ function ErrorsTab() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [filterModule, setFilterModule] = useState('')
 
-  useEffect(() => { fetchErrors() }, [page])
-
-  const fetchErrors = async () => {
+  const fetchErrors = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetchWithRetry(`${API_BASE_URL}/admin/error-log?page=${page}&limit=25`, { headers: getAuthHeaders() })
@@ -2344,7 +2342,9 @@ function ErrorsTab() {
         setTotal(data.total)
       }
     } catch {} finally { setLoading(false) }
-  }
+  }, [page])
+
+  useEffect(() => { fetchErrors() }, [fetchErrors])
 
   const totalPages = Math.ceil(total / 25)
   const statusColor = (code: number) => {
@@ -2468,9 +2468,7 @@ function SecurityTab() {
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(30)
 
-  useEffect(() => { fetchData() }, [days])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const [flRes, lockedRes] = await Promise.all([
@@ -2480,7 +2478,9 @@ function SecurityTab() {
       if (flRes.ok) setFailedLogins(await flRes.json())
       if (lockedRes.ok) setLockedAccounts(await lockedRes.json())
     } catch {} finally { setLoading(false) }
-  }
+  }, [days])
+
+  useEffect(() => { fetchData() }, [fetchData])
 
   const unlockAccount = async (id: number) => {
     try {

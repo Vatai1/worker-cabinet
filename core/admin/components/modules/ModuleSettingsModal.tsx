@@ -111,14 +111,6 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
     setMobileTabOpen(false)
   }, [moduleId, tabs, activeTab])
 
-  const handleClose = useCallback(() => {
-    if (isDirty) {
-      setShowDirtyWarning(true)
-      return
-    }
-    close()
-  }, [isDirty])
-
   const close = useCallback(() => {
     setClosing(true)
     setTimeout(() => {
@@ -127,6 +119,14 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
       setShowDirtyWarning(false)
     }, 200)
   }, [onClose])
+
+  const handleClose = useCallback(() => {
+    if (isDirty) {
+      setShowDirtyWarning(true)
+      return
+    }
+    close()
+  }, [isDirty, close])
 
   const handleSave = async () => {
     await saveSettings(moduleId)

@@ -17,6 +17,15 @@ interface PlaceholderGroup {
   items: Placeholder[]
 }
 
+interface DocsEditorInstance {
+  destroyEditor(): void
+  downloadAs(fileType: string): void
+}
+
+interface DocsAPIGlobal {
+  DocEditor: new (id: string, config: Record<string, unknown>) => DocsEditorInstance
+}
+
 interface OnlyOfficePreviewModalProps {
   open: boolean
   onClose: () => void
@@ -62,7 +71,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
     })
   }
   const [editorId] = useState(() => `onlyoffice-editor-${++editorCounter}`)
-  const editorRef = useRef<any>(null)
+  const editorRef = useRef<DocsEditorInstance | null>(null)
   const isInitializedRef = useRef(false)
   const keyRef = useRef<string>('')
   const fileTypeRef = useRef<string>('docx')
@@ -77,6 +86,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
     setShowSaveConfirm(false)
     setSaveError(null)
     if (!onSave || !editorRef.current) return
+    const editor = editorRef.current
     setSaving(true)
     try {
       const downloadUrl = await new Promise<string>((resolve, reject) => {
@@ -87,7 +97,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
             reject(new Error('Timeout'))
           }
         }, 15000)
-        editorRef.current.downloadAs(fileTypeRef.current)
+        editor.downloadAs(fileTypeRef.current)
       })
       await onSave(downloadUrl, fileTypeRef.current)
       onClose()
@@ -102,8 +112,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
     if (editorRef.current) {
       try {
         editorRef.current.destroyEditor()
-      } catch (e) {
-        console.error('Error destroying editor:', e)
+      } catch {
       }
       editorRef.current = null
     }
@@ -117,8 +126,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
       await onAcknowledge()
       setShowConfirmModal(false)
       onClose()
-    } catch (err) {
-      console.error('Error acknowledging:', err)
+    } catch {
     } finally {
       setAcknowledging(false)
     }
@@ -149,7 +157,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
       setError(null)
 
       try {
-        if (!(window as any).DocsAPI) {
+        if (!(window as { DocsAPI?: DocsAPIGlobal }).DocsAPI) {
           const ooUrl = await resolveOnlyOfficeUrl()
           await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script')
@@ -184,13 +192,13 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           fileUrl = window.location.origin + fileUrl
         }
 
-        const DocsAPI = (window as any).DocsAPI
+        const DocsAPI = (window as { DocsAPI?: DocsAPIGlobal }).DocsAPI!
         const fileType = getFileType(doc.mimeType, doc.name)
         const key = `${doc.id}-${Date.now()}`
         keyRef.current = key
         fileTypeRef.current = fileType
         const ooCallbackUrl = `${fileUrl.match(/^https?:\/\/[^/]+/)?.[0] || ''}/api/onlyoffice/callback`
-        const config = {
+        const config: Record<string, unknown> = {
           document: {
             fileType: fileType,
             key: key,
@@ -215,7 +223,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
           width: '100%',
           type: 'desktop',
           events: {
-            onDownloadAs: (event: any) => {
+            onDownloadAs: (event: { data: { url: string } }) => {
               if (downloadResolveRef.current) {
                 downloadResolveRef.current(event.data.url)
                 downloadResolveRef.current = null
@@ -231,14 +239,13 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
         }
 
         const tokenRes = await apiPost<{ token: string }>('/onlyoffice/sign', config)
-        ;(config as any).token = tokenRes.token
+        config.token = tokenRes.token
 
         editorRef.current = new DocsAPI.DocEditor(editorId, config)
         isInitializedRef.current = true
         setLoading(false)
-      } catch (e: any) {
-        console.error('❌ Error:', e)
-        setError(e.message || 'Не удалось загрузить документ')
+      } catch (e) {
+        setError(e instanceof Error && e.message ? e.message : 'Не удалось загрузить документ')
         setLoading(false)
       }
     }
@@ -248,6 +255,7 @@ export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable,
     return () => {
       clearTimeout(timeoutId)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, doc.id, doc.name, doc.mimeType, editorId, destroyEditor])
 
   useEffect(() => {

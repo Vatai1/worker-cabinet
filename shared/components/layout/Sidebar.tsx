@@ -136,28 +136,30 @@ export function Sidebar() {
   const isSuper = isSuperAdmin()
   const isAdminRole = hasAnyRole('admin')
 
-  const rawNavigation =
-    user?.role === 'onboarding' ? getOnboardingNavigation() :
-    isSuper ? getAdminNavigation(user?.id) :
-    isAdminRole ? getAdminNavigation(user?.id) :
-    hasAnyRole('hr') ? getHRNavigation(user?.id) :
-    user?.role === 'manager' || hasAnyRole('manager') ? getManagerNavigation(user?.id) :
-    getEmployeeNavigation(user?.id)
+  const navigation = useMemo(() => {
+    const rawNavigation =
+      user?.role === 'onboarding' ? getOnboardingNavigation() :
+      isSuper ? getAdminNavigation(user?.id) :
+      isAdminRole ? getAdminNavigation(user?.id) :
+      hasAnyRole('hr') ? getHRNavigation(user?.id) :
+      user?.role === 'manager' || hasAnyRole('manager') ? getManagerNavigation(user?.id) :
+      getEmployeeNavigation(user?.id)
 
-  const navigation = !modulesLoaded ? [] : rawNavigation
-    .filter((item) => {
-      if (item.superAdminOnly && !isSuper) return false
-      if (item.orgAdminOnly && !isAdminRole) return false
-      return true
-    })
-    .filter((item) => !item.module || isModuleEnabled(item.module))
-    .map((item) => {
-      if (!item.children) return item
-      const filteredChildren = item.children.filter((child) => !child.module || isModuleEnabled(child.module))
-      if (filteredChildren.length === 0) return null
-      return { ...item, children: filteredChildren }
-    })
-    .filter(Boolean) as NavItem[]
+    return (!modulesLoaded ? [] : rawNavigation)
+      .filter((item) => {
+        if (item.superAdminOnly && !isSuper) return false
+        if (item.orgAdminOnly && !isAdminRole) return false
+        return true
+      })
+      .filter((item) => !item.module || isModuleEnabled(item.module))
+      .map((item) => {
+        if (!item.children) return item
+        const filteredChildren = item.children.filter((child) => !child.module || isModuleEnabled(child.module))
+        if (filteredChildren.length === 0) return null
+        return { ...item, children: filteredChildren }
+      })
+      .filter(Boolean) as NavItem[]
+  }, [modulesLoaded, isSuper, isAdminRole, isModuleEnabled, user?.role, user?.id])
 
   const sections = useMemo(() => {
     const map = new Map<string, NavItem[]>()

@@ -5,7 +5,7 @@ import httpntlm from 'httpntlm'
 import { URL } from 'url'
 
 const ALGO = 'aes-256-gcm'
-const KEY = crypto.scryptSync(process.env.JWT_SECRET || 'fallback-secret-key', 'exchange-salt', 32)
+const KEY = crypto.scryptSync(process.env.JWT_SECRET, 'exchange-salt', 32)
 
 export function encrypt(text) {
   const iv = crypto.randomBytes(16)

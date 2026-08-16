@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
@@ -51,9 +51,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   const [error, setError] = useState<string | null>(null)
   const [showPositionUsers, setShowPositionUsers] = useState<string | null>(null)
 
-  useEffect(() => { fetchData() }, [])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       if (isAdmin) {
@@ -71,7 +69,9 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
         setData({ positions, vacationTypes, skills })
       }
     } catch {} finally { setLoading(false) }
-  }
+  }, [isAdmin])
+
+  useEffect(() => { fetchData() }, [fetchData])
 
   const addSkill = async () => {
     if (!newSkill.trim()) return

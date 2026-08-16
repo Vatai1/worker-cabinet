@@ -60,6 +60,30 @@ interface Department {
   name: string
 }
 
+interface OnboardingRecordRaw {
+  id: number
+  user_id: string
+  first_name: string
+  last_name: string
+  position: string
+  department: string
+  started_at: string
+  completed_at: string | null
+  total_docs: string
+  acknowledged_docs: string
+}
+
+interface OnboardingTemplateRaw {
+  id: number
+  title: string
+  content_text: string
+  file_key: string | null
+  department_id: number | null
+  department_name: string | null
+  position: string | null
+  created_at: string
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function HROnboarding() {
@@ -81,7 +105,6 @@ export function HROnboarding() {
   const [deleteTemplateTarget, setDeleteTemplateTarget] = useState<OnboardingTemplate | null>(null)
 
   const departments = useDepartmentsStore((s) => s.departments) as Department[]
-  const fetchDepartments = useDepartmentsStore((s) => s.fetchDepartments)
   const [positions, setPositions] = useState<string[]>([])
   const [templateFilterDept, setTemplateFilterDept] = useState('')
   const [templateFilterPos, setTemplateFilterPos] = useState('')
@@ -95,13 +118,12 @@ export function HROnboarding() {
 
   useEffect(() => {
     fetchRecords()
-    fetchDepartments()
+    useDepartmentsStore.getState().fetchDepartments()
     fetchPositions()
   }, [])
 
   useEffect(() => {
     if (urlId) openDetail(parseInt(urlId))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlId])
 
   const fetchRecords = async () => {
@@ -110,7 +132,7 @@ export function HROnboarding() {
       const res = await fetch(`${API_BASE_URL}/onboarding`, { headers: getAuthHeaders() })
       if (!res.ok) throw new Error((await res.json()).error || 'Ошибка загрузки')
       const data = await res.json()
-      setRecords(data.map((r: any) => ({
+      setRecords(data.map((r: OnboardingRecordRaw) => ({
         id: r.id,
         userId: r.user_id,
         firstName: r.first_name,
@@ -139,7 +161,7 @@ export function HROnboarding() {
       const res = await fetch(`${API_BASE_URL}/onboarding/templates${query}`, { headers: getAuthHeaders() })
       if (!res.ok) throw new Error((await res.json()).error || 'Ошибка загрузки')
       const data = await res.json()
-      setTemplates(data.map((t: any) => ({
+      setTemplates(data.map((t: OnboardingTemplateRaw) => ({
         id: t.id,
         title: t.title,
         contentText: t.content_text,
@@ -184,7 +206,7 @@ export function HROnboarding() {
         startedAt: data.startedAt,
         completedAt: data.completedAt,
         totalDocs: data.documents.length,
-        acknowledgedDocs: data.documents.filter((d: any) => d.acknowledgedAt).length,
+        acknowledgedDocs: data.documents.filter((d: { acknowledgedAt?: string | null }) => d.acknowledgedAt).length,
         documents: data.documents,
       })
     } catch {

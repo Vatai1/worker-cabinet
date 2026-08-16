@@ -52,6 +52,8 @@ interface OutlookEvent {
   isResponseRequested?: boolean
 }
 
+type DetailEvent = { type: 'event'; data: OutlookEvent } | { type: 'vacation'; data: VacationRequest }
+
 type ViewMode = 'month' | 'week' | 'day'
 
 const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
@@ -115,13 +117,13 @@ export function CalendarPage() {
   const [animKey, setAnimKey] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [ctxMenu, setCtxMenu] = useState<{x:number,y:number,event:OutlookEvent|{key:string,label:string,bg:string,vacation?:VacationRequest}}|null>(null)
-  const [detailEvent, setDetailEvent] = useState<{type:'event'|'vacation',data:any}|null>(null)
+  const [detailEvent, setDetailEvent] = useState<DetailEvent | null>(null)
   const [ewsBodyLoading, setEwsBodyLoading] = useState(false)
   const [showMeta, setShowMeta] = useState(false)
 
   useEffect(() => {
     if (!detailEvent || detailEvent.type !== 'event') return
-    const ev = detailEvent.data as OutlookEvent
+    const ev = detailEvent.data
     if (ev.source !== 'ews' || !ev.id) return
     if (ev.body?.content) return
     setEwsBodyLoading(true)
@@ -129,12 +131,17 @@ export function CalendarPage() {
       .then(r => r.ok ? r.json() : ({} as Record<string, unknown>))
       .then((data: Record<string, unknown>) => {
         if (data.body || data.attendees) {
-          setDetailEvent(prev => prev ? { ...prev, data: { ...prev.data, body: data.body || prev.data.body, attendees: data.attendees || prev.data.attendees } } : null)
+          setDetailEvent(prev => {
+            if (!prev || prev.type !== 'event') return prev
+            const cur = prev.data
+            return { type: 'event', data: { ...cur, body: (data.body || cur.body) as OutlookEvent['body'], attendees: (data.attendees || cur.attendees) as OutlookEvent['attendees'] } }
+          })
         }
       })
       .catch(() => {})
       .finally(() => setEwsBodyLoading(false))
-  }, [detailEvent?.type, (detailEvent?.data as OutlookEvent | undefined)?.id, (detailEvent?.data as OutlookEvent | undefined)?.source])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailEvent?.type, detailEvent?.data.id, (detailEvent?.data as OutlookEvent | undefined)?.source])
 
   const activeVac = useMemo(() => vacations.filter(v => v.status===VacationRequestStatus.APPROVED||v.status===VacationRequestStatus.ON_APPROVAL), [vacations])
 

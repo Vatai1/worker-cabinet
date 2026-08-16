@@ -55,6 +55,7 @@ export function ManagerTimesheet() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadTimesheet() }, [year, month])
 
   async function handleCreate() {

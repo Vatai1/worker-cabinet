@@ -33,6 +33,7 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
     if (open) {
       fetchSkills()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const fetchSkills = async () => {
@@ -45,15 +46,14 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
       
       if (allSkillsRes.ok) {
         const allSkillsData = await allSkillsRes.json()
-        setAllSkills(allSkillsData.map((s: any) => s.name))
+        setAllSkills(allSkillsData.map((s: { name: string }) => s.name))
       }
       
       if (userRes.ok) {
         const userData = await userRes.json()
         setUserSkills(userData.skills || [])
       }
-    } catch (err) {
-      console.error('Failed to fetch skills:', err)
+    } catch {
     } finally {
       setLoading(false)
     }

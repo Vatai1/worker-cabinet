@@ -39,8 +39,8 @@ export const useOrgStore = create<OrgStore>((set, get) => ({
       } else {
         set({ organizations: orgs, loading: false })
       }
-    } catch (e: any) {
-      set({ error: e.message || 'Ошибка загрузки организаций', loading: false })
+    } catch (e) {
+      set({ error: e instanceof Error && e.message ? e.message : 'Ошибка загрузки организаций', loading: false })
     }
   },
 

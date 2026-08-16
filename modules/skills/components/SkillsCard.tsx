@@ -40,8 +40,7 @@ export function SkillsCard({ skills, userId, isOwnProfile, onSkillsChange }: Pro
         headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ skill }),
       })
-    } catch (err) {
-      console.error('Failed to add skill:', err)
+    } catch {
       onSkillsChange(skills)
     } finally {
       setAddingSkill(false)
@@ -60,8 +59,7 @@ export function SkillsCard({ skills, userId, isOwnProfile, onSkillsChange }: Pro
         headers: getAuthHeadersWithContentType(),
         body: JSON.stringify({ skill }),
       })
-    } catch (err) {
-      console.error('Failed to remove skill:', err)
+    } catch {
       onSkillsChange(skills)
     } finally {
       setRemovingSkill(null)

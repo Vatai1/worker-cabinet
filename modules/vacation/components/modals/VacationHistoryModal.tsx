@@ -2,11 +2,12 @@
 import { getVacationRequestStatusBadge } from '@/modules/vacation/data/mockVacationData'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
+import type { VacationRequest } from '@/shared/types'
 import { X, Calendar, FileText, Filter, RotateCcw } from 'lucide-react'
 
 interface VacationHistoryModalProps {
   isOpen: boolean
-  requests: any[]
+  requests: VacationRequest[]
   onClose: () => void
 }
 
@@ -208,7 +209,7 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
                         <div className="text-xs text-muted-foreground mt-2 pt-2 border-t">
                           <div className="font-medium mb-1">История изменений:</div>
                           <div className="space-y-1">
-                            {request.statusHistory.map((history: any, index: number) => (
+                            {request.statusHistory.map((history, index) => (
                               <div key={index} className="flex flex-col">
                                 <div className="flex justify-between">
                                   <span>

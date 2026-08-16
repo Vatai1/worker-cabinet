@@ -4,12 +4,57 @@
   VacationRestriction,
   VacationFormData,
   VacationValidationError,
+  VacationSubstitution,
 } from '@/shared/types'
+import { VacationType, VacationRequestStatus } from '@/shared/types'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { fetchWithRetry, ApiError } from '@/shared/lib/apiClient'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 
 export { ApiError as VacationApiError }
+
+interface DbTravelChild {
+  fullName?: string
+  full_name?: string
+  birthDate?: string
+  birth_date?: string
+}
+
+interface DbVacationRequest {
+  id?: number | string
+  user_id?: number | string
+  first_name?: string | null
+  last_name?: string | null
+  middle_name?: string | null
+  position?: string | null
+  department_name?: string | null
+  avatar?: string | null
+  gender?: 'male' | 'female' | 'other' | null
+  start_date?: string | null
+  end_date?: string | null
+  duration?: number | null
+  vacation_type?: string | null
+  status?: string | null
+  comment?: string | null
+  has_travel?: boolean | null
+  travel_destination?: string | null
+  travel_children_count?: number | null
+  travel_children?: DbTravelChild[] | null
+  rejection_reason?: string | null
+  cancellation_reason?: string | null
+  reference_document?: string | null
+  transfer_requested_at?: string | null
+  transfer_reason?: string | null
+  transferred_from_id?: number | string | null
+  reviewed_at?: string | null
+  reviewed_by?: number | string | null
+  created_at?: string | null
+  statusHistory?: VacationRequest['statusHistory']
+  department_manager_id?: number | string | null
+  departmentManagerId?: number | string | null
+  substitutes?: VacationRequest['substitutes']
+  delegated_to?: VacationRequest['delegated_to']
+}
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -23,26 +68,26 @@ const handleResponse = async (response: Response) => {
   return response.json()
 }
 
-const formatLocalDate = (date: any): string => {
+const formatLocalDate = (date: unknown): string => {
   if (!date) return ''
 
   if (typeof date === 'string' && !date.includes('T')) {
     return date
   }
 
-  const d = new Date(date)
+  const d = new Date(date as string | Date)
   const year = d.getFullYear()
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
 
-const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
-  id: dbRequest.id?.toString(),
-  userId: dbRequest.user_id?.toString(),
+const mapDbRequestToApi = (dbRequest: DbVacationRequest): VacationRequest => ({
+  id: dbRequest.id?.toString() ?? '',
+  userId: dbRequest.user_id?.toString() ?? '',
   userFirstName: dbRequest.first_name || '',
   userLastName: dbRequest.last_name || '',
-  userMiddleName: dbRequest.middle_name,
+  userMiddleName: dbRequest.middle_name ?? undefined,
   userPosition: dbRequest.position || '',
   userDepartment: dbRequest.department_name || '',
   userAvatar: dbRequest.avatar || undefined,
@@ -50,22 +95,22 @@ const mapDbRequestToApi = (dbRequest: any): VacationRequest => ({
   startDate: formatLocalDate(dbRequest.start_date),
   endDate: formatLocalDate(dbRequest.end_date),
   duration: dbRequest.duration || 0,
-  vacationType: dbRequest.vacation_type || 'annual_paid',
-  status: dbRequest.status || 'pending',
-  comment: dbRequest.comment,
+  vacationType: (dbRequest.vacation_type || 'annual_paid') as VacationType,
+  status: (dbRequest.status || 'pending') as VacationRequestStatus,
+  comment: dbRequest.comment ?? undefined,
   hasTravel: dbRequest.has_travel || false,
   travelDestination: dbRequest.travel_destination || undefined,
   travelChildrenCount: dbRequest.travel_children_count || 0,
-  travelChildren: Array.isArray(dbRequest.travel_children) ? dbRequest.travel_children.map((c: any) => ({ fullName: c.fullName || c.full_name || '', birthDate: c.birthDate || c.birth_date || '' })) : [],
-  rejectionReason: dbRequest.rejection_reason,
-  cancellationReason: dbRequest.cancellation_reason,
-  referenceDocument: dbRequest.reference_document,
-  transferRequestedAt: dbRequest.transfer_requested_at,
-  transferReason: dbRequest.transfer_reason,
+  travelChildren: Array.isArray(dbRequest.travel_children) ? dbRequest.travel_children.map((c) => ({ fullName: c.fullName || c.full_name || '', birthDate: c.birthDate || c.birth_date || '' })) : [],
+  rejectionReason: dbRequest.rejection_reason ?? undefined,
+  cancellationReason: dbRequest.cancellation_reason ?? undefined,
+  referenceDocument: dbRequest.reference_document ?? undefined,
+  transferRequestedAt: dbRequest.transfer_requested_at ?? undefined,
+  transferReason: dbRequest.transfer_reason ?? undefined,
   transferredFromId: dbRequest.transferred_from_id?.toString(),
-  reviewedAt: dbRequest.reviewed_at,
+  reviewedAt: dbRequest.reviewed_at ?? undefined,
   reviewedBy: dbRequest.reviewed_by?.toString(),
-  createdAt: dbRequest.created_at,
+  createdAt: dbRequest.created_at ?? '',
   statusHistory: dbRequest.statusHistory || [],
   departmentManagerId: (dbRequest.department_manager_id ?? dbRequest.departmentManagerId)?.toString(),
   substitutes: dbRequest.substitutes || [],
@@ -261,7 +306,7 @@ export const vacationApi = {
     })
   },
 
-  async getMySubstitutions(): Promise<any[]> {
+  async getMySubstitutions(): Promise<VacationSubstitution[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/my-substitutions`, {
       headers: getAuthHeadersWithContentType(),
     })

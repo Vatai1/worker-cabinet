@@ -22,11 +22,9 @@ export const useModulesStore = create<ModulesState>((set, get) => ({
         const data = await res.json()
         set({ enabledModules: new Set(data.enabled as string[]), loaded: true, modulesLoaded: true })
       } else {
-        console.error('[ModulesStore] fetch failed:', res.status)
         set({ loaded: true, modulesLoaded: true })
       }
     } catch (err) {
-      console.error('[ModulesStore] fetch error:', err)
       set({ loaded: true, modulesLoaded: true })
     }
   },

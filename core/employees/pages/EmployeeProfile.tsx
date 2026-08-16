@@ -18,10 +18,19 @@ import {
 } from 'lucide-react'
 
 import { API_BASE_URL } from '@/shared/lib/api'
+import { apiGet } from '@/shared/lib/apiClient'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getAvatarColor as getAvatarGradient } from '@/shared/lib/constants'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
+
+interface SubstituteInfo {
+  id: number
+  first_name: string
+  last_name: string
+  position: string
+  avatar?: string
+}
 
 interface EmployeeData {
   id: string
@@ -95,7 +104,7 @@ export function EmployeeProfile() {
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false)
   const [editingResponsibility, setEditingResponsibility] = useState(false)
   const [responsibilityText, setResponsibilityText] = useState('')
-  const [substitutes, setSubstitutes] = useState<Array<{ id: number; first_name: string; last_name: string; position: string; avatar?: string }>>([])
+  const [substitutes, setSubstitutes] = useState<SubstituteInfo[]>([])
 
   const isOwnProfile = currentUser?.id === id
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
@@ -136,14 +145,11 @@ export function EmployeeProfile() {
   }, [id])
 
   useEffect(() => {
-    if (!id || !employee || employee.status !== 'on_leave') return
+    if (!id || employee?.status !== 'on_leave') return
     if (!isModuleEnabled('substitution')) return
-    fetch(`${API_BASE_URL}/vacation/requests?userId=${id}&status=approved`, {
-      headers: getAuthHeadersWithContentType(),
-    })
-      .then((res) => (res.ok ? res.json() : []))
+    apiGet<{ substitutes?: SubstituteInfo[] }[]>(`/vacation/requests?userId=${id}&status=approved`)
       .then((data) => {
-        const subs = (data || []).flatMap((r: any) => r.substitutes || [])
+        const subs = (data || []).flatMap((r) => r.substitutes || [])
         setSubstitutes(subs)
       })
       .catch(() => {})

@@ -28,18 +28,6 @@ function killPortPlugin(port: number) {
   }
 }
 
-function hmrFullReloadPlugin() {
-  let server
-  return {
-    name: 'hmr-full-reload',
-    configureServer(s) { server = s },
-    handleHotUpdate() {
-      server.ws.send({ type: 'full-reload' })
-      return []
-    },
-  }
-}
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 

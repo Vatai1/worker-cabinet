@@ -1,4 +1,4 @@
-import type { Page, APIRequestContext } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
 type Role = 'employee' | 'manager' | 'hr' | 'admin'
 

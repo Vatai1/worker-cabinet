@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
+import type { VacationEmployee, VacationValidationErrorDetails } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
 import { X, FileText, Upload, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 
@@ -27,7 +28,7 @@ interface CreateVacationFormModalProps {
   }
   restrictionWarnings?: Array<{
     message: string
-    details?: any
+    details?: VacationValidationErrorDetails
   }>
   userId?: string
   onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
@@ -56,7 +57,7 @@ export function CreateVacationFormModal({
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
-  const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null)
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const [selectedSubstitutes, setSelectedSubstitutes] = useState<number[]>([])
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [employees, setEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
@@ -68,9 +69,10 @@ export function CreateVacationFormModal({
           fetch(`${API_BASE_URL}/users`, { headers: getAuthHeaders() })
             .then((r) => (r.ok ? r.json() : []))
             .then((data) => {
-              const list = (Array.isArray(data) ? data : data.users || []).map((u: any) => ({
+              const raw: VacationEmployee[] = Array.isArray(data) ? data : data.users || []
+              const list = raw.map((u) => ({
                 id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || ''
-              })).filter((u: any) => u.id !== parseInt(userId || '0'))
+              })).filter((u) => u.id !== parseInt(userId || '0'))
               setEmployees(list)
             })
             .catch(() => {})
@@ -79,16 +81,9 @@ export function CreateVacationFormModal({
     }
   }, [isOpen, showSubstitutes, userId])
 
-  if (!isOpen) return null
-
   useEffect(() => {
-    if (isOpen) {
-    }
-  }, [isOpen])
-
-  useEffect(() => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer)
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
     }
 
     if (userId && startDate && endDate && onCheckRestrictions) {
@@ -97,26 +92,21 @@ export function CreateVacationFormModal({
       }
 
       const timer = setTimeout(() => {
-        checkRestrictions()
+        setLastCheckedDates({ startDate, endDate })
+        onCheckRestrictions(userId, { startDate, endDate })
       }, 500)
 
-      setDebounceTimer(timer)
+      debounceTimerRef.current = timer
     }
 
     return () => {
-      if (debounceTimer) {
-        clearTimeout(debounceTimer)
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
       }
     }
   }, [startDate, endDate, userId, onCheckRestrictions, lastCheckedDates])
 
-  const checkRestrictions = () => {
-    if (userId && startDate && endDate && onCheckRestrictions) {
-      setLastCheckedDates({ startDate, endDate })
-      onCheckRestrictions(userId, { startDate, endDate })
-    } else {
-    }
-  }
+  if (!isOpen) return null
 
   const calculateDuration = () => {
     if (!startDate || !endDate) return 0

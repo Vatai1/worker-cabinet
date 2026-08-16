@@ -140,6 +140,7 @@ export function ProjectDetail() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (id) fetchProject() }, [id])
 
   const isLead = project?.leads.some((m) => String(m.id) === String(user?.id))
@@ -155,8 +156,7 @@ export function ProjectDetail() {
         headers: getAuthHeadersWithContentType(),
       })
       fetchProject()
-    } catch (err) {
-      console.error('Error removing member:', err)
+    } catch {
     } finally {
       setRemovingMemberId(null)
     }
@@ -190,8 +190,7 @@ export function ProjectDetail() {
     try {
       await fetch(`${API_BASE_URL}/projects/${id}`, { method: 'DELETE', headers: getAuthHeadersWithContentType() })
       navigate('/projects')
-    } catch (err) {
-      console.error('Error deleting project:', err)
+    } catch {
     } finally {
       setDeleting(false)
     }

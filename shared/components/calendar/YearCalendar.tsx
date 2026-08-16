@@ -266,7 +266,7 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                       handleDateClick(day)
                     }}
                     onContextMenu={(e) => {
-                      handleContextMenu(e as any, day)
+                      handleContextMenu(e, day)
                     }}
                     onMouseEnter={() => setHoverDate(dateStr)}
                     onMouseLeave={() => setHoverDate(null)}

@@ -49,8 +49,8 @@ export function HRVacationCalendar() {
           year,
         })
         setRequests(data)
-      } catch (err: any) {
-        setError(err.message || 'Ошибка при загрузке данных')
+      } catch (err) {
+        setError(err instanceof Error && err.message ? err.message : 'Ошибка при загрузке данных')
       } finally {
         setLoading(false)
       }
@@ -75,8 +75,7 @@ export function HRVacationCalendar() {
           d.id === deptId ? { ...d, vacation_requests_blocked: blocked } : d
         )
       )
-    } catch (err: any) {
-      console.error('Error toggling block:', err)
+    } catch {
     } finally {
       setTogglingBlock(null)
     }
@@ -99,8 +98,7 @@ export function HRVacationCalendar() {
       setDepartments((prev) =>
         prev.map((d) => ({ ...d, vacation_requests_blocked: !allBlocked }))
       )
-    } catch (err: any) {
-      console.error('Error toggling block all:', err)
+    } catch {
     } finally {
       setTogglingAll(false)
     }

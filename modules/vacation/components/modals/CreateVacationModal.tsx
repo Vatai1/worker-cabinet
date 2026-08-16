@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
+import type { VacationEmployee, VacationValidationErrorDetails } from '@/shared/types'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
 import { Upload, FileText, X, AlertTriangle, Plus, Trash2, UserCheck, Search } from 'lucide-react'
@@ -15,8 +16,8 @@ interface Employee {
   first_name: string
   last_name: string
   position: string
-  department_id?: number
-  department_name?: string
+  department_id?: number | null
+  department_name?: string | null
 }
 
 interface CreateVacationModalProps {
@@ -43,7 +44,7 @@ interface CreateVacationModalProps {
   userId?: string
   restrictionWarnings?: Array<{
     message: string
-    details?: any
+    details?: VacationValidationErrorDetails
   }>
   onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
   showSubstitutes?: boolean
@@ -79,19 +80,25 @@ export function CreateVacationModal({
   const [pickerSelected, setPickerSelected] = useState<Set<number>>(new Set())
 
   useEffect(() => {
-    if (isOpen) {
-      checkRestrictions()
+    if (!isOpen) return
+    if (userId && startDate && endDate && onCheckRestrictions) {
+      if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
+        return
+      }
+      setLastCheckedDates({ startDate, endDate })
+      onCheckRestrictions(userId, { startDate, endDate })
     }
-  }, [isOpen])
+  }, [isOpen, userId, startDate, endDate, onCheckRestrictions, lastCheckedDates])
 
   useEffect(() => {
     if (isOpen && showSubstitutes) {
       fetch(`${API_BASE_URL}/users`, { headers: getAuthHeaders() })
         .then(r => r.ok ? r.json() : [])
         .then((data) => {
-          const list = (Array.isArray(data) ? data : data.users || [])
-            .filter((u: any) => u.id !== Number(userId))
-            .map((u: any) => ({
+          const raw: VacationEmployee[] = Array.isArray(data) ? data : data.users || []
+          const list = raw
+            .filter((u) => u.id !== Number(userId))
+            .map((u) => ({
               id: u.id,
               first_name: u.first_name,
               last_name: u.last_name,
@@ -104,16 +111,6 @@ export function CreateVacationModal({
         .catch(() => {})
     }
   }, [isOpen, showSubstitutes, userId])
-
-  const checkRestrictions = () => {
-    if (userId && startDate && endDate && onCheckRestrictions) {
-      if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
-        return
-      }
-      setLastCheckedDates({ startDate, endDate })
-      onCheckRestrictions(userId, { startDate, endDate })
-    }
-  }
 
   if (!isOpen || !startDate || !endDate) {
     return null

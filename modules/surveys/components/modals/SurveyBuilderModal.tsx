@@ -56,8 +56,7 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
   const [anonymous, setAnonymous] = useState(false)
   const [questions, setQuestions] = useState<LocalQuestion[]>([])
   const rawDepartments = useDepartmentsStore((s) => s.departments)
-  const fetchDepartments = useDepartmentsStore((s) => s.fetchDepartments)
-  const departments = rawDepartments.map((d: any) => ({ id: String(d.id), name: d.name }))
+  const departments = rawDepartments.map((d) => ({ id: String(d.id), name: d.name }))
   const [employees, setEmployees] = useState<{ id: string; firstName: string; lastName: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -93,11 +92,11 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
 
   useEffect(() => {
     const headers = getAuthHeaders()
-    fetchDepartments()
+    useDepartmentsStore.getState().fetchDepartments()
     fetch(`${API_BASE_URL}/users`, { headers })
       .then((r) => r.json())
       .then((data) => setEmployees(Array.isArray(data) ? data.map((e: { id: number; firstName: string; lastName: string }) => ({ id: String(e.id), firstName: e.firstName, lastName: e.lastName })) : []))
-      .catch((err) => console.error('Failed to load employees:', err))
+      .catch(() => {})
   }, [])
 
   const moveQuestion = (idx: number, dir: -1 | 1) => {

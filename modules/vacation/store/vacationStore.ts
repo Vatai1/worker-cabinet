@@ -5,6 +5,7 @@ import type {
   VacationRestriction,
   VacationFormData,
   VacationValidationError,
+  VacationSubstitution,
 } from '@/shared/types'
 import { VacationRequestStatus, VacationType } from '@/shared/types'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
@@ -12,6 +13,9 @@ import {
   calculateVacationDuration,
   checkDateOverlap,
 } from '@/modules/vacation/data/mockVacationData'
+
+const errorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message ? error.message : fallback
 
 interface VacationStore {
   requests: VacationRequest[]
@@ -57,7 +61,7 @@ interface VacationStore {
 
   addSubstitutes: (requestId: string, userIds: number[]) => Promise<void>
   removeSubstitute: (requestId: string, userId: number) => Promise<void>
-  mySubstitutions: any[]
+  mySubstitutions: VacationSubstitution[]
   fetchMySubstitutions: () => Promise<void>
 }
 
@@ -78,8 +82,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         try {
           const data = await vacationApi.getAllRequests()
           set({ departmentRequests: data, loading: false })
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при загрузке заявок', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при загрузке заявок'), loading: false })
         }
       },
 
@@ -88,8 +92,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         try {
           const data = await vacationApi.getUserRequests(userId)
           set({ currentUserRequests: data, loading: false })
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при загрузке заявок', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при загрузке заявок'), loading: false })
         }
       },
       
@@ -98,8 +102,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         try {
           const data = await vacationApi.getDepartmentRequests(departmentId)
           set({ departmentRequests: data, loading: false })
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при загрузке заявок отдела', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при загрузке заявок отдела'), loading: false })
         }
       },
       
@@ -113,8 +117,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             },
           }))
           return balance
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при загрузке баланса' })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при загрузке баланса') })
           throw error
         }
       },
@@ -124,8 +128,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         try {
           const data = await vacationApi.getRestrictions(departmentId)
           set({ restrictions: data, loading: false })
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при загрузке ограничений', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при загрузке ограничений'), loading: false })
         }
       },
       
@@ -213,8 +217,7 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             endDate: data.endDate,
           })
           return warnings
-        } catch (error: any) {
-          console.error('Error checking restrictions:', error)
+        } catch {
           return []
         }
       },
@@ -238,8 +241,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
           }))
 
           return newRequest
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при создании заявки', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при создании заявки'), loading: false })
           return null
         }
       },
@@ -261,8 +264,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             ),
             loading: false,
           }))
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при отмене заявки', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при отмене заявки'), loading: false })
           throw error
         }
       },
@@ -284,8 +287,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             ),
             loading: false,
           }))
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при согласовании заявки', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при согласовании заявки'), loading: false })
           throw error
         }
       },
@@ -307,8 +310,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             ),
             loading: false,
           }))
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при отклонении заявки', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при отклонении заявки'), loading: false })
           throw error
         }
       },
@@ -330,8 +333,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             ),
             loading: false,
           }))
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при добавлении комментария', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при добавлении комментария'), loading: false })
           throw error
         }
       },
@@ -348,8 +351,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             restrictions: [...state.restrictions, newRestriction],
             loading: false,
           }))
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при создании ограничения', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при создании ограничения'), loading: false })
           throw error
         }
       },
@@ -363,8 +366,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             restrictions: state.restrictions.filter((r) => r.id !== restrictionId),
             loading: false,
           }))
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при удалении ограничения', loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при удалении ограничения'), loading: false })
           throw error
         }
       },
@@ -372,8 +375,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
       addSubstitutes: async (requestId: string, userIds: number[]) => {
         try {
           await vacationApi.addSubstitutes(requestId, userIds)
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при добавлении замещающих' })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при добавлении замещающих') })
           throw error
         }
       },
@@ -381,8 +384,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
       removeSubstitute: async (requestId: string, userId: number) => {
         try {
           await vacationApi.removeSubstitute(requestId, userId)
-        } catch (error: any) {
-          set({ error: error.message || 'Ошибка при удалении замещающего' })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при удалении замещающего') })
           throw error
         }
       },
@@ -391,8 +394,7 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         try {
           const data = await vacationApi.getMySubstitutions()
           set({ mySubstitutions: data })
-        } catch (error: any) {
-          console.error('Error fetching my substitutions:', error)
+        } catch {
         }
       },
 

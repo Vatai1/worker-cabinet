@@ -54,8 +54,8 @@ export function DocumentPreviewModal({ open, onClose, document: doc }: DocumentP
         }
 
         setPreviewUrl(url)
-      } catch (e: any) {
-        setError(e.message || 'Не удалось загрузить файл')
+      } catch (e) {
+        setError(e instanceof Error && e.message ? e.message : 'Не удалось загрузить файл')
       } finally {
         setLoading(false)
       }
@@ -93,8 +93,8 @@ export function DocumentPreviewModal({ open, onClose, document: doc }: DocumentP
         link.click()
         document.body.removeChild(link)
       }
-    } catch (e: any) {
-      alert(e.message || 'Не удалось скачать документ')
+    } catch (e) {
+      alert(e instanceof Error && e.message ? e.message : 'Не удалось скачать документ')
     }
   }
 

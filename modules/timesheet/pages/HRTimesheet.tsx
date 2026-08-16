@@ -25,7 +25,6 @@ export function HRTimesheet() {
   const user = useAuthStore(s => s.user)
   const now = new Date()
   const departments = useDepartmentsStore(s => s.departments) as Department[]
-  const fetchDepartments = useDepartmentsStore(s => s.fetchDepartments)
   const [selectedDept, setSelectedDept] = useState<number | null>(null)
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -35,7 +34,7 @@ export function HRTimesheet() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchDepartments().then(() => {
+    useDepartmentsStore.getState().fetchDepartments().then(() => {
       const deps = useDepartmentsStore.getState().departments as Department[]
       if (deps.length > 0) setSelectedDept(deps[0].id)
     }).catch(err => setError(getErrorMessage(err)))
@@ -83,6 +82,7 @@ export function HRTimesheet() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadTimesheet() }, [selectedDept, year, month])
 
   return (

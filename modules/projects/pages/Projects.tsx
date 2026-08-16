@@ -101,6 +101,7 @@ export function Projects() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchProjects() }, [statusFilter])
 
   const filtered = search
