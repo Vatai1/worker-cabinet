@@ -22,7 +22,7 @@ describe('Surveys API', () => {
     const res = await fetch(`${BASE}/surveys`, { headers: headers(hrToken) })
     assert.strictEqual(res.status, 200)
     const data = await res.json()
-    assert.ok(Array.isArray(data))
+    assert.ok(Array.isArray(data.data))
   })
 
   it('GET /surveys denied for employee', async () => {

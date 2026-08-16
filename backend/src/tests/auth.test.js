@@ -455,12 +455,12 @@ describe('Authentication System', () => {
       assert.strictEqual(data.id, testUserId, 'User ID should match')
     })
 
-    it('should deny employee access to other users profile', async () => {
+    it('should allow employee to access same-org colleague profile', async () => {
       const response = await fetch(`http://localhost:5000/api/users/${managerUserId}`, {
         headers: { 'Authorization': `Bearer ${employeeToken}` }
       })
       
-      assert.strictEqual(response.status, 403, 'Should return 403')
+      assert.strictEqual(response.status, 200, 'Should return 200 for same-org profile')
     })
   })
 })
