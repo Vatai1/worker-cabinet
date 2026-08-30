@@ -408,9 +408,9 @@ export function EmployeeProfile() {
                     <div key={o.id} className="flex items-center gap-2 text-sm">
                       <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
                       <span className="font-medium truncate">{o.name}</span>
-                      {o.org_role && (
-                        <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                          {roleLabels[o.org_role] || o.org_role}
+                      {employee.position && (
+                        <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground truncate">
+                          {employee.position}
                         </span>
                       )}
                       {o.department_name && (
