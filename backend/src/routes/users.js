@@ -332,6 +332,17 @@ router.post('/me/avatar', authenticateToken, uploadAvatar.single('avatar'), asyn
  *                     subordinates: { type: array, items: { $ref: '#/components/schemas/User' } }
  *                     skills: { type: array, items: { type: string } }
  *                     projects: { type: array, items: { $ref: '#/components/schemas/Project' } }
+ *                     organizations:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: integer }
+ *                           name: { type: string }
+ *                           org_role: { type: string }
+ *                           department_name: { type: string }
+ *                           is_primary: { type: boolean }
+ *                           is_active: { type: boolean }
  *       403:
  *         description: Доступ запрещён (сотрудник видит только свой профиль)
  *         content:
@@ -383,7 +394,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         vb.travel_next_available_date
       FROM users u
       LEFT JOIN departments d ON u.department_id = d.id
-      LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.is_active = true
+      LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.is_active = true AND uo.is_primary = true
       LEFT JOIN organizations o ON uo.org_id = o.id
       LEFT JOIN users m ON u.manager_id = m.id
       LEFT JOIN vacation_balances vb ON vb.user_id = u.id
@@ -443,8 +454,25 @@ router.get('/:id', authenticateToken, async (req, res) => {
       joined_at: row.joined_at,
     }))
 
+    const orgsResult = await query(
+      `SELECT
+        uo.org_id as id,
+        o.name,
+        uo.org_role,
+        d.name as department_name,
+        uo.is_primary,
+        uo.is_active
+      FROM user_organizations uo
+      JOIN organizations o ON uo.org_id = o.id
+      LEFT JOIN departments d ON uo.department_id = d.id
+      WHERE uo.user_id = $1 AND uo.is_active = true
+      ORDER BY uo.is_primary DESC, o.name`,
+      [id]
+    )
+
     res.json({
       ...user,
+      organizations: orgsResult.rows,
       subordinates,
       skills,
       projects,
@@ -452,6 +480,82 @@ router.get('/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching user:', error)
     res.status(500).json({ error: 'Failed to fetch user' })
+  }
+})
+
+/**
+ * @swagger
+ * /users/{id}/primary-org:
+ *   patch:
+ *     tags: [Users]
+ *     summary: Изменить основную организацию сотрудника
+ *     description: 'Доступно для ролей: admin, hr'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orgId]
+ *             properties:
+ *               orgId: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Основная организация обновлена
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok: { type: boolean }
+ *       400:
+ *         description: orgId обязателен
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: 'Организация не найдена или не привязана к сотруднику'
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+router.patch('/:id/primary-org', authenticateToken, authorizeRoles('admin', 'hr'), async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id)
+    const orgId = parseInt(req.body.orgId)
+
+    if (!orgId) {
+      return res.status(400).json({ error: 'orgId обязателен' })
+    }
+
+    const membership = await query(
+      'SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2 AND is_active = true',
+      [userId, orgId]
+    )
+    if (membership.rows.length === 0) {
+      return res.status(404).json({ error: 'Организация не найдена или не привязана к сотруднику' })
+    }
+
+    await query(
+      'UPDATE user_organizations SET is_primary = false WHERE user_id = $1 AND is_primary = true',
+      [userId]
+    )
+    await query(
+      'UPDATE user_organizations SET is_primary = true WHERE user_id = $1 AND org_id = $2 AND is_active = true',
+      [userId, orgId]
+    )
+
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('Error setting primary organization:', error)
+    res.status(500).json({ error: 'Не удалось изменить основную организацию' })
   }
 })
 

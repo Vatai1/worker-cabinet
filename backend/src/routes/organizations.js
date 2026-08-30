@@ -328,10 +328,15 @@ router.post('/:id/members', authenticateToken, authorizeRoles('admin', 'hr'), as
   )
   if (existing.rows.length > 0) throw new ConflictError('Пользователь уже состоит в организации')
 
+  const primaryResult = await query(
+    'SELECT 1 FROM user_organizations WHERE user_id = $1 AND is_primary = true',
+    [userId]
+  )
+
   const result = await query(
-    `INSERT INTO user_organizations (user_id, org_id, org_role, department_id, is_active)
-     VALUES ($1, $2, $3, $4, true) RETURNING *`,
-    [userId, orgId, org_role || 'employee', department_id || null]
+    `INSERT INTO user_organizations (user_id, org_id, org_role, department_id, is_active, is_primary)
+     VALUES ($1, $2, $3, $4, true, $5) RETURNING *`,
+    [userId, orgId, org_role || 'employee', department_id || null, primaryResult.rows.length === 0]
   )
   res.status(201).json(result.rows[0])
 }))

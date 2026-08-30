@@ -1717,6 +1717,23 @@ async function runMigrations() {
     `).catch(e => console.log('  - user_organizations backfill:', e.message))
     console.log('  ✓ user_organizations populated')
 
+    await db.query(`
+      ALTER TABLE user_organizations ADD COLUMN IF NOT EXISTS is_primary BOOLEAN DEFAULT false
+    `).catch(e => console.log('  - user_organizations is_primary:', e.message))
+
+    await db.query(`
+      UPDATE user_organizations SET is_primary = true
+      WHERE id IN (
+        SELECT DISTINCT ON (user_id) id
+        FROM user_organizations
+        WHERE is_active = true AND user_id NOT IN (
+          SELECT user_id FROM user_organizations WHERE is_primary = true
+        )
+        ORDER BY user_id, created_at ASC
+      )
+    `).catch(e => console.log('  - user_organizations primary backfill:', e.message))
+    console.log('  ✓ user_organizations is_primary backfilled')
+
     for (const table of orgScopedTables) {
       await db.query(`ALTER TABLE ${table} ALTER COLUMN organization_id SET DEFAULT 1`).catch(() => {})
       await db.query(`ALTER TABLE ${table} ALTER COLUMN organization_id SET NOT NULL`)

@@ -14,11 +14,11 @@ import { hasAnyRole } from '@/shared/lib/permissions'
 import {
   Mail, Phone, Building2, Briefcase,
   User, Target, ChevronLeft, Sparkles,
-  Clock, FolderKanban, Plus, MapPin, UserCheck,
+  Clock, FolderKanban, Plus, MapPin, UserCheck, Star,
 } from 'lucide-react'
 
 import { API_BASE_URL } from '@/shared/lib/api'
-import { apiGet } from '@/shared/lib/apiClient'
+import { apiGet, apiPatch } from '@/shared/lib/apiClient'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getAvatarColor as getAvatarGradient } from '@/shared/lib/constants'
@@ -60,6 +60,13 @@ interface EmployeeData {
   avatar?: string
   office?: string
   cabinet?: string
+  organizations?: Array<{
+    id: number
+    name: string
+    org_role?: string
+    department_name?: string
+    is_primary: boolean
+  }>
 }
 
 const statusConfig = {
@@ -105,10 +112,12 @@ export function EmployeeProfile() {
   const [editingResponsibility, setEditingResponsibility] = useState(false)
   const [responsibilityText, setResponsibilityText] = useState('')
   const [substitutes, setSubstitutes] = useState<SubstituteInfo[]>([])
+  const [settingPrimaryOrg, setSettingPrimaryOrg] = useState(false)
 
   const isOwnProfile = currentUser?.id === id
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const canEditProfile = isOwnProfile || hasAnyRole('hr', 'admin')
+  const canManageOrganizations = hasAnyRole('hr', 'admin')
 
   useEffect(() => {
     if (!id) return
@@ -131,6 +140,7 @@ export function EmployeeProfile() {
           role:       data.role       || 'employee',
           skills:     data.skills     || [],
           projects:   data.projects   || [],
+          organizations: data.organizations || [],
           responsibilityArea: data.responsibilityArea || data.responsibility_area,
           office:  data.office,
           cabinet: data.cabinet,
@@ -203,6 +213,24 @@ export function EmployeeProfile() {
   const handleCancelResponsibility = () => {
     setResponsibilityText(employee?.responsibilityArea || '')
     setEditingResponsibility(false)
+  }
+
+  const handleSetPrimaryOrg = async (orgId: number, orgName: string) => {
+    if (!id) return
+    setSettingPrimaryOrg(true)
+    try {
+      await apiPatch(`/users/${id}/primary-org`, { orgId })
+      setEmployee(prev => prev ? {
+        ...prev,
+        organizationName: orgName,
+        organizations: (prev.organizations || []).map(o => ({ ...o, is_primary: o.id === orgId })),
+      } : prev)
+      toast.success('Основная организация обновлена')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSettingPrimaryOrg(false)
+    }
   }
 
   if (loading) {
@@ -372,6 +400,39 @@ export function EmployeeProfile() {
             <InfoRow label="Стаж" value={calculateWorkExperience(employee.hireDate)} />
             <InfoRow label="Офис" value={employee.office} />
             <InfoRow label="Кабинет" value={employee.cabinet} />
+            {(employee.organizations?.length ?? 0) > 1 && (
+              <div className="pt-3 mt-1 border-t border-border/40">
+                <p className="text-xs text-muted-foreground">Другие организации</p>
+                <div className="mt-1.5 space-y-1.5">
+                  {employee.organizations!.filter(o => !o.is_primary).map(o => (
+                    <div key={o.id} className="flex items-center gap-2 text-sm">
+                      <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="font-medium truncate">{o.name}</span>
+                      {o.org_role && (
+                        <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                          {roleLabels[o.org_role] || o.org_role}
+                        </span>
+                      )}
+                      {o.department_name && (
+                        <span className="text-xs text-muted-foreground truncate">{o.department_name}</span>
+                      )}
+                      {canManageOrganizations && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 shrink-0 ml-auto gap-1.5 px-2.5 text-xs interactive"
+                          disabled={settingPrimaryOrg}
+                          onClick={() => handleSetPrimaryOrg(o.id, o.name)}
+                        >
+                          <Star className="h-3.5 w-3.5" />
+                          Сделать основной
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
