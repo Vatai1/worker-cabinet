@@ -20,6 +20,8 @@ const COMPOSE_ROOT = path.resolve(__dirname, '../../..')
 
 const router = express.Router()
 
+const VALID_MAPPING_ROLES = ['employee', 'manager', 'hr', 'admin']
+
 router.use(authenticateToken)
 router.use(authorizeRoles('admin'))
 
@@ -2086,6 +2088,153 @@ router.post('/assistant/models/pull', asyncHandler(async (req, res) => {
   }
 
   res.end()
+}))
+
+// ===================== ROLE MAPPINGS =====================
+
+/**
+ * @swagger
+ * /admin/role-mappings:
+ *   get:
+ *     tags: [Admin]
+ *     summary: 'Получить правила маппинга должность → org_role (доступно для ролей: admin, superadmin)'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: 'Список активных правил, отсортирован по position_pattern, org_role'
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: integer }
+ *                   position_pattern: { type: string }
+ *                   org_role: { type: string, enum: [employee, manager, hr, admin] }
+ *                   is_active: { type: boolean }
+ *                   created_at: { type: string, format: date-time }
+ *                   updated_at: { type: string, format: date-time }
+ */
+router.get('/role-mappings', authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+  const result = await query(
+    'SELECT * FROM role_mapping_rules WHERE is_active = true ORDER BY position_pattern, org_role'
+  )
+  res.json(result.rows)
+}))
+
+/**
+ * @swagger
+ * /admin/role-mappings:
+ *   post:
+ *     tags: [Admin]
+ *     summary: 'Создать правило маппинга (доступно для ролей: admin, superadmin)'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [position_pattern, org_role]
+ *             properties:
+ *               position_pattern: { type: string, description: 'Подстрока для сопоставления с users.position' }
+ *               org_role: { type: string, enum: [employee, manager, hr, admin] }
+ *     responses:
+ *       201:
+ *         description: Правило создано
+ *       400:
+ *         description: Ошибка валидации
+ */
+router.post('/role-mappings', authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+  const { position_pattern, org_role } = req.body
+  if (!position_pattern?.trim()) throw new ValidationError('Должность (шаблон) обязательна')
+  if (!VALID_MAPPING_ROLES.includes(org_role)) throw new ValidationError('Недопустимая роль')
+  const result = await query(
+    'INSERT INTO role_mapping_rules (position_pattern, org_role) VALUES ($1, $2) RETURNING *',
+    [position_pattern.trim(), org_role]
+  )
+  res.status(201).json(result.rows[0])
+}))
+
+/**
+ * @swagger
+ * /admin/role-mappings/{id}:
+ *   put:
+ *     tags: [Admin]
+ *     summary: 'Обновить правило маппинга (доступно для ролей: admin, superadmin)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: integer } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               position_pattern: { type: string }
+ *               org_role: { type: string, enum: [employee, manager, hr, admin] }
+ *               is_active: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Правило обновлено
+ *       404:
+ *         description: Правило не найдено
+ */
+router.put('/role-mappings/:id', authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+  const id = parseInt(req.params.id)
+  if (Number.isNaN(id)) throw new ValidationError('Некорректный идентификатор правила')
+  const { position_pattern, org_role, is_active } = req.body
+  const updates = []
+  const values = []
+  let paramIndex = 1
+  if (position_pattern !== undefined) {
+    if (!String(position_pattern).trim()) throw new ValidationError('Должность (шаблон) обязательна')
+    updates.push(`position_pattern = $${paramIndex++}`)
+    values.push(String(position_pattern).trim())
+  }
+  if (org_role !== undefined) {
+    if (!VALID_MAPPING_ROLES.includes(org_role)) throw new ValidationError('Недопустимая роль')
+    updates.push(`org_role = $${paramIndex++}`)
+    values.push(org_role)
+  }
+  if (is_active !== undefined) {
+    updates.push(`is_active = $${paramIndex++}`)
+    values.push(Boolean(is_active))
+  }
+  if (updates.length === 0) throw new ValidationError('Нет данных для обновления')
+  updates.push('updated_at = NOW()')
+  values.push(id)
+  const result = await query(
+    `UPDATE role_mapping_rules SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  )
+  if (result.rows.length === 0) throw new NotFoundError('Правило не найдено')
+  res.json(result.rows[0])
+}))
+
+/**
+ * @swagger
+ * /admin/role-mappings/{id}:
+ *   delete:
+ *     tags: [Admin]
+ *     summary: 'Удалить правило маппинга (доступно для ролей: admin, superadmin)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Правило удалено
+ *       404:
+ *         description: Правило не найдено
+ */
+router.delete('/role-mappings/:id', authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+  const id = parseInt(req.params.id)
+  if (Number.isNaN(id)) throw new ValidationError('Некорректный идентификатор правила')
+  const result = await query('DELETE FROM role_mapping_rules WHERE id = $1 RETURNING id', [id])
+  if (result.rows.length === 0) throw new NotFoundError('Правило не найдено')
+  res.json({ success: true })
 }))
 
 export default router

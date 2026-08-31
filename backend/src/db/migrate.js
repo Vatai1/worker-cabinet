@@ -226,6 +226,23 @@ async function runMigrations() {
     console.log('  ✓ user_organizations')
 
     await db.query(`
+      CREATE TABLE IF NOT EXISTS role_mapping_rules (
+        id SERIAL PRIMARY KEY,
+        position_pattern VARCHAR(200) NOT NULL,
+        org_role VARCHAR(50) NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(e => console.log('  - role_mapping_rules:', e.message))
+    console.log('  ✓ role_mapping_rules')
+
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_role_mapping_position ON role_mapping_rules(position_pattern)
+    `).catch(e => console.log('  - idx_role_mapping_position:', e.message))
+    console.log('  ✓ idx_role_mapping_position')
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS vacation_balances (
         id SERIAL PRIMARY KEY,
         user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,

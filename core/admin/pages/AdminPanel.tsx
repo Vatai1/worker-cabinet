@@ -19,6 +19,7 @@ import { Switch } from '@/shared/components/ui/Switch'
 import { ModuleSettingsModal } from '@/core/admin/components/modules/ModuleSettingsModal'
 import { AppearanceSettings } from '@/core/admin/components/modules/AppearanceSettings'
 import { AdminBugReports } from '@/core/admin/pages/AdminBugReports'
+import { AdminRoleMappings } from '@/core/admin/pages/AdminRoleMappings'
 import { openModelsModal } from '@/core/admin/components/ModelsModal'
 import type { ModuleId } from '@/core/admin/components/modules/types'
 import {
@@ -37,7 +38,7 @@ import {
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
-type TabId = 'users' | 'roles' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports'
+type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports'
 
 interface TabItem {
   id: TabId
@@ -59,6 +60,7 @@ const TAB_GROUPS: TabGroup[] = [
     tabs: [
       { id: 'users', name: 'Пользователи', icon: Users, description: 'Сотрудники, роли, статусы', color: 'from-blue-500 to-indigo-600' },
       { id: 'roles', name: 'Роли и доступы', icon: Key, description: 'Динамические роли, пермишены', color: 'from-violet-500 to-purple-600' },
+      { id: 'role-mappings', name: 'Роли по должности', icon: ShieldCheck, description: 'Автоназначение org_role при первом входе', color: 'from-rose-500 to-red-600' },
       { id: 'departments', name: 'Отделы', icon: Building2, description: 'Структура организации', color: 'from-emerald-500 to-teal-600' },
       { id: 'organizations', name: 'Учреждения', icon: Building2, description: 'Все учреждения системы', color: 'from-indigo-500 to-blue-600' },
     ],
@@ -296,7 +298,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
       .catch(() => {})
   }, [])
 
-  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'security', 'health', 'errors', 'organizations', 'bug-reports']
+  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'bug-reports']
 
   const filteredGroups = TAB_GROUPS
     .map((group) => ({
@@ -439,6 +441,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
           )}
           {activeTab === 'users' && <UsersTab />}
           {activeTab === 'roles' && <RolesTab />}
+          {activeTab === 'role-mappings' && <AdminRoleMappings />}
           {activeTab === 'departments' && <DepartmentsTab />}
           {activeTab === 'settings' && <SettingsTab />}
           {activeTab === 'audit' && <AuditTab />}

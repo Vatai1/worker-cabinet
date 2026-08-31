@@ -110,15 +110,20 @@ async function syncUserOrganizations(userId, kcPayload) {
     .map(g => g.replace(/^\//, '').replace(/^org-/, '').toLowerCase())
     .filter(g => g && !g.startsWith('default-roles'))
 
+  const existing = await query('SELECT COUNT(*)::int AS cnt FROM user_organizations WHERE user_id = $1', [userId])
+  const isFirstOrgEntry = existing.rows[0].cnt === 0
+
   let firstOrgId = 1
+  const joinedOrgIds = []
 
   if (orgSlugs.length === 0) {
     await query(
       `INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
        VALUES ($1, 1, $2, true)
-       ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true, org_role = EXCLUDED.org_role`,
+       ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true`,
       [userId, mapRealmRoleToOrgRole(realmRoles)]
     )
+    joinedOrgIds.push(1)
   } else {
     for (const slug of orgSlugs) {
       let orgResult = await query('SELECT id FROM organizations WHERE slug = $1', [slug])
@@ -131,11 +136,12 @@ async function syncUserOrganizations(userId, kcPayload) {
       }
       const orgId = orgResult.rows[0].id
       if (slug === orgSlugs[0]) firstOrgId = orgId
+      joinedOrgIds.push(orgId)
       const orgRole = mapRealmRoleToOrgRole(realmRoles)
       await query(
         `INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
          VALUES ($1, $2, $3, true)
-         ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true, org_role = EXCLUDED.org_role`,
+         ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true`,
         [userId, orgId, orgRole]
       )
     }
@@ -150,6 +156,25 @@ async function syncUserOrganizations(userId, kcPayload) {
          WHERE user_id = $1 AND org_id NOT IN (SELECT unnest($2::int[]))`,
         [userId, orgIds]
       )
+    }
+  }
+
+  if (isFirstOrgEntry) {
+    const position = String(kcPayload.position || '').trim()
+    if (position) {
+      const rules = await query(
+        `SELECT org_role FROM role_mapping_rules
+         WHERE is_active = true AND $1 ILIKE '%' || position_pattern || '%'`,
+        [position]
+      )
+      for (const rule of rules.rows) {
+        for (const orgId of joinedOrgIds) {
+          await query(
+            'UPDATE user_organizations SET org_role = $1 WHERE user_id = $2 AND org_id = $3',
+            [rule.org_role, userId, orgId]
+          )
+        }
+      }
     }
   }
 
