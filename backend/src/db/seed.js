@@ -260,6 +260,19 @@ async function seed() {
     }
     console.log(`  ✓ ${ORG_USERS.length} org-scoped users (crct + mindit)`)
 
+    await query(`
+      UPDATE user_organizations SET is_primary = true
+      WHERE id IN (
+        SELECT DISTINCT ON (user_id) id
+        FROM user_organizations
+        WHERE is_active = true AND user_id NOT IN (
+          SELECT user_id FROM user_organizations WHERE is_primary = true
+        )
+        ORDER BY user_id, created_at ASC
+      )
+    `)
+    console.log('  ✓ user_organizations is_primary set')
+
     console.log('Creating vacation balances...')
     const allUsers = await query('SELECT id, hire_date FROM users ORDER BY id')
     let balancesCreated = 0

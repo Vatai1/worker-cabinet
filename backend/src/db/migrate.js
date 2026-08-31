@@ -145,37 +145,6 @@ async function runMigrations() {
 
     console.log('✅ Enum types created')
 
-    console.log('Creating organizations table...')
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS organizations (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        slug VARCHAR(100) UNIQUE NOT NULL,
-        inn VARCHAR(20),
-        address TEXT,
-        logo_s3_key VARCHAR(500),
-        settings JSONB DEFAULT '{}',
-        is_active BOOLEAN DEFAULT true,
-        head_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `).catch(e => console.log('  - organizations:', e.message))
-    console.log('  ✓ organizations')
-
-    await db.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS head_id INTEGER REFERENCES users(id) ON DELETE SET NULL`).catch(() => {})
-
-    try {
-      await db.query(`CREATE TYPE org_role_enum AS ENUM ('employee', 'manager', 'hr', 'admin')`)
-      console.log('  ✓ org_role_enum')
-    } catch (e) {
-      if (e.message.includes('already exists')) {
-        console.log('  ✓ org_role_enum (already exists)')
-      } else {
-        throw e
-      }
-    }
-    console.log('✅ Organizations table + org_role_enum created')
-
     // Step 2: Create tables
     console.log('Creating tables...')
     
@@ -211,6 +180,37 @@ async function runMigrations() {
       )
     `).catch(e => console.log('  - users:', e.message))
 
+    console.log('Creating organizations table...')
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(100) UNIQUE NOT NULL,
+        inn VARCHAR(20),
+        address TEXT,
+        logo_s3_key VARCHAR(500),
+        settings JSONB DEFAULT '{}',
+        is_active BOOLEAN DEFAULT true,
+        head_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(e => console.log('  - organizations:', e.message))
+    console.log('  ✓ organizations')
+
+    await db.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS head_id INTEGER REFERENCES users(id) ON DELETE SET NULL`).catch(() => {})
+
+    try {
+      await db.query(`CREATE TYPE org_role_enum AS ENUM ('employee', 'manager', 'hr', 'admin')`)
+      console.log('  ✓ org_role_enum')
+    } catch (e) {
+      if (e.message.includes('already exists')) {
+        console.log('  ✓ org_role_enum (already exists)')
+      } else {
+        throw e
+      }
+    }
+    console.log('✅ Organizations table + org_role_enum created')
+
     await db.query(`
       CREATE TABLE IF NOT EXISTS user_organizations (
         id SERIAL PRIMARY KEY,
@@ -233,6 +233,7 @@ async function runMigrations() {
         used_days INTEGER DEFAULT 0 NOT NULL,
         available_days INTEGER DEFAULT 28 NOT NULL,
         reserved_days INTEGER DEFAULT 0 NOT NULL,
+        organization_id INTEGER,
         last_accrual_date DATE,
         travel_available BOOLEAN DEFAULT false,
         travel_last_used_date DATE,
@@ -1099,14 +1100,15 @@ async function runMigrations() {
 
     
     try {
-      await db.query(`ALTER TABLE departments ADD CONSTRAINT IF NOT EXISTS departments_manager_id_fkey FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL`)
-      console.log('  ✓ departments.manager_id FK to users added')
-    } catch (e) {
-      if (e.message.includes('already exists')) {
-        console.log('  ✓ departments.manager_id FK (already exists)')
+      const fkExists = await db.query(`SELECT 1 FROM pg_constraint WHERE conname = 'departments_manager_id_fkey'`)
+      if (fkExists.rows.length === 0) {
+        await db.query(`ALTER TABLE departments ADD CONSTRAINT departments_manager_id_fkey FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL`)
+        console.log('  ✓ departments.manager_id FK to users added')
       } else {
-        console.log('  - departments.manager_id FK:', e.message)
+        console.log('  ✓ departments.manager_id FK (already exists)')
       }
+    } catch (e) {
+      console.log('  - departments.manager_id FK:', e.message)
     }
 
     try {
