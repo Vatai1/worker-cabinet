@@ -20,7 +20,7 @@ interface RoleMappingRule {
 const ROLE_CONFIG: Record<string, { label: string; className: string }> = {
   admin: { label: 'Администратор', className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
   hr: { label: 'HR', className: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
-  manager: { label: 'Менеджер', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+  manager: { label: 'Начальник подразделения', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
   employee: { label: 'Сотрудник', className: 'bg-slate-100 text-slate-600 dark:bg-slate-900/30 dark:text-slate-400' },
 }
 
@@ -169,7 +169,7 @@ export function AdminRoleMappings() {
                 className="h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="employee">Сотрудник</option>
-                <option value="manager">Менеджер</option>
+                <option value="manager">Начальник подразделения</option>
                 <option value="hr">HR</option>
                 <option value="admin">Администратор</option>
               </select>
