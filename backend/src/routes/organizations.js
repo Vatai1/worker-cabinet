@@ -57,9 +57,13 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   if (req.user.role === 'superadmin') {
     const result = await query(`
       SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
-             o.is_active, o.created_at,
+             o.is_active, o.created_at, o.head_id, o.parent_id,
+             po.name as parent_name,
+             h.first_name as head_first_name, h.last_name as head_last_name,
              (SELECT COUNT(*) FROM user_organizations WHERE org_id = o.id AND is_active = true) as member_count
       FROM organizations o
+      LEFT JOIN organizations po ON o.parent_id = po.id
+      LEFT JOIN users h ON o.head_id = h.id
       WHERE o.is_active = true
       ORDER BY o.name
     `)
@@ -68,14 +72,32 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 
   const result = await query(`
     SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
-           o.is_active, uo.org_role, uo.is_active as membership_active
+           o.is_active, o.head_id, o.parent_id, uo.org_role, uo.is_active as membership_active,
+           po.name as parent_name,
+           h.first_name as head_first_name, h.last_name as head_last_name
     FROM user_organizations uo
     JOIN organizations o ON uo.org_id = o.id
+    LEFT JOIN organizations po ON o.parent_id = po.id
+    LEFT JOIN users h ON o.head_id = h.id
     WHERE uo.user_id = $1 AND uo.is_active = true AND o.is_active = true
     ORDER BY o.name
   `, [req.user.id])
   res.json(result.rows)
 }))
+
+async function validateOrgParent(parentId, orgId) {
+  if (parentId === null || parentId === undefined) return
+  const parentResult = await query('SELECT id FROM organizations WHERE id = $1', [parentId])
+  if (parentResult.rows.length === 0) throw new NotFoundError('Вышестоящая организация не найдена')
+  const visited = new Set()
+  let currentId = parentId
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId)
+    if (orgId !== null && currentId === orgId) throw new ValidationError('Цикл в иерархии организаций')
+    const r = await query('SELECT parent_id FROM organizations WHERE id = $1', [currentId])
+    currentId = r.rows[0]?.parent_id || null
+  }
+}
 
 /**
  * @swagger
@@ -97,6 +119,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
  *               slug: { type: string, description: 'Уникальный, [a-z0-9-]' }
  *               inn: { type: string }
  *               address: { type: string }
+ *               parent_id: { type: integer, nullable: true, description: 'Вышестоящая организация' }
  *     responses:
  *       201:
  *         description: Созданная организация
@@ -104,7 +127,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
  *         description: Нет прав
  */
 router.post('/', authenticateToken, authorizeGlobalRoles('superadmin'), asyncHandler(async (req, res) => {
-  const { name, slug, inn, address } = req.body
+  const { name, slug, inn, address, parent_id } = req.body
 
   if (!name?.trim()) throw new ValidationError('Название обязательно')
   if (!slug?.trim()) throw new ValidationError('Slug обязателен')
@@ -117,10 +140,12 @@ router.post('/', authenticateToken, authorizeGlobalRoles('superadmin'), asyncHan
   const existing = await query('SELECT 1 FROM organizations WHERE slug = $1', [cleanSlug])
   if (existing.rows.length > 0) throw new ConflictError('Организация с таким slug уже существует')
 
+  await validateOrgParent(parent_id ?? null, null)
+
   const result = await query(
-    `INSERT INTO organizations (name, slug, inn, address, is_active)
-     VALUES ($1, $2, $3, $4, true) RETURNING *`,
-    [name.trim(), cleanSlug, inn?.trim() || null, address?.trim() || null]
+    `INSERT INTO organizations (name, slug, inn, address, is_active, parent_id)
+     VALUES ($1, $2, $3, $4, true, $5) RETURNING *`,
+    [name.trim(), cleanSlug, inn?.trim() || null, address?.trim() || null, parent_id ?? null]
   )
   res.status(201).json(result.rows[0])
 }))
@@ -151,6 +176,8 @@ router.post('/', authenticateToken, authorizeGlobalRoles('superadmin'), asyncHan
  *               logo_s3_key: { type: string }
  *               settings: { type: object }
  *               is_active: { type: boolean }
+ *               head_id: { type: integer, nullable: true, description: 'Руководитель учреждения (из участников)' }
+ *               parent_id: { type: integer, nullable: true, description: 'Вышестоящая организация' }
  *     responses:
  *       200:
  *         description: Обновлённая организация
@@ -161,7 +188,7 @@ router.post('/', authenticateToken, authorizeGlobalRoles('superadmin'), asyncHan
  */
 router.put('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const orgId = parseInt(req.params.id)
-  const { name, inn, address, logo_s3_key, settings, is_active, head_id } = req.body
+  const { name, inn, address, logo_s3_key, settings, is_active, head_id, parent_id } = req.body
 
   const orgResult = await query('SELECT * FROM organizations WHERE id = $1', [orgId])
   if (orgResult.rows.length === 0) throw new NotFoundError('Организация не найдена')
@@ -193,6 +220,12 @@ router.put('/:id', authenticateToken, asyncHandler(async (req, res) => {
     }
     updates.push(`head_id = $${paramIndex++}`)
     values.push(head_id)
+  }
+
+  if (parent_id !== undefined) {
+    await validateOrgParent(parent_id ?? null, orgId)
+    updates.push(`parent_id = $${paramIndex++}`)
+    values.push(parent_id ?? null)
   }
 
   if (updates.length === 0) {

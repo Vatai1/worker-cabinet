@@ -171,7 +171,17 @@ export function CalendarPage() {
     return m
   }, [outlookEvents])
 
-  const fetchVac = useCallback(async () => { if(!user) return; try { setVacations(await vacationApi.getUserRequests(user.id)) } catch(e:unknown) { setError(getErrorMessage(e)) } }, [user])
+  const fetchVac = useCallback(async () => {
+    if (!user) return
+    try {
+      const [own, head] = await Promise.all([
+        vacationApi.getUserRequests(user.id),
+        vacationApi.getDepartmentHeadRequests().catch(() => [] as VacationRequest[]),
+      ])
+      const seen = new Set(own.map(v => v.id))
+      setVacations([...own, ...head.filter(v => !seen.has(v.id))])
+    } catch (e: unknown) { setError(getErrorMessage(e)) }
+  }, [user])
   const fetchOLStatus = useCallback(async () => {
     try {
       const r = await fetch(API_BASE_URL+'/calendar/status',{headers:getAuthHeaders()})
@@ -246,9 +256,13 @@ export function CalendarPage() {
         })()
       : focus.getDate()+' '+MONTHS_GEN[focus.getMonth()]+' '+focus.getFullYear()+', '+WD_FULL[(focus.getDay()+6)%7]
 
+  const vacLabel = (v: VacationRequest) => v.userId === String(user?.id)
+    ? (VACATION_TYPES[v.vacationType]?.name?.split(' ').slice(0, 2).join(' ') || 'Отпуск')
+    : `Отпуск: ${v.userLastName} ${v.userFirstName}`
+
   const items = (dk:string) => [
-    ...(showVac ? (vacByDate[dk]||[]).filter(v=>v.status===VacationRequestStatus.APPROVED).map(v=>({key:v.id,label:VACATION_TYPES[v.vacationType]?.name?.split(' ').slice(0,2).join(' ')||'Отпуск',bg:GREEN,vacation:v})) : []),
-    ...(showPend ? (vacByDate[dk]||[]).filter(v=>v.status===VacationRequestStatus.ON_APPROVAL).map(v=>({key:v.id,label:VACATION_TYPES[v.vacationType]?.name?.split(' ').slice(0,2).join(' ')||'Отпуск',bg:AMBER,vacation:v})) : []),
+    ...(showVac ? (vacByDate[dk]||[]).filter(v=>v.status===VacationRequestStatus.APPROVED).map(v=>({key:v.id,label:vacLabel(v),bg:GREEN,vacation:v})) : []),
+    ...(showPend ? (vacByDate[dk]||[]).filter(v=>v.status===VacationRequestStatus.ON_APPROVAL).map(v=>({key:v.id,label:vacLabel(v),bg:AMBER,vacation:v})) : []),
     ...(showOL ? (olByDate[dk]||[]).filter(e=>e.isAllDay).map(ev=>({key:ev.id,label:ev.subject,bg:BLUE})) : []),
   ]
 

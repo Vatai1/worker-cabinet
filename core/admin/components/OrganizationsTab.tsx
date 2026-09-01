@@ -24,6 +24,11 @@ interface Organization {
   created_at: string
   settings?: Record<string, unknown>
   member_count?: number
+  head_id?: number | null
+  head_first_name?: string | null
+  head_last_name?: string | null
+  parent_id?: number | null
+  parent_name?: string | null
 }
 
 interface OrgMember {
@@ -139,6 +144,18 @@ export function OrganizationsTab() {
                         <span className="font-mono">{org.inn}</span>
                       </div>
                     )}
+                    {(org.head_first_name || org.head_last_name) && (
+                      <div className="flex items-center gap-2 text-muted-foreground truncate">
+                        <span className="text-xs shrink-0">Руководитель:</span>
+                        <span className="truncate">{org.head_last_name} {org.head_first_name}</span>
+                      </div>
+                    )}
+                    {org.parent_name && (
+                      <div className="flex items-center gap-2 text-muted-foreground truncate">
+                        <span className="text-xs shrink-0">Вышестоящая:</span>
+                        <span className="truncate">{org.parent_name}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <Badge className={cn('text-[10px] border-transparent', org.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400')}>
                         {org.is_active ? 'Активна' : 'Неактивна'}
@@ -167,6 +184,7 @@ export function OrganizationsTab() {
       {selectedOrg && (
         <OrganizationDetailModal
           org={selectedOrg}
+          orgs={orgs}
           onClose={() => setSelectedOrg(null)}
           onUpdated={(updated) => {
             setOrgs((prev) => prev.map((o) => o.id === updated.id ? { ...o, ...updated } : o))
@@ -245,9 +263,10 @@ function CreateOrgModal({ onClose, onCreated }: { onClose: () => void; onCreated
 }
 
 function OrganizationDetailModal({
-  org, onClose, onUpdated,
+  org, orgs, onClose, onUpdated,
 }: {
   org: Organization
+  orgs: Organization[]
   onClose: () => void
   onUpdated: (updated: Partial<Organization>) => void
 }) {
@@ -350,7 +369,7 @@ function OrganizationDetailModal({
 
         <div className="flex-1 overflow-y-auto p-5">
           <div key={activeDetailTab} className="animate-fade-in">
-            {activeDetailTab === 'info' && <InfoTab org={org} onToggleActive={handleToggleActive} />}
+            {activeDetailTab === 'info' && <InfoTab org={org} orgs={orgs} onToggleActive={handleToggleActive} onUpdated={onUpdated} />}
             {activeDetailTab === 'departments' && <DepartmentsTabContent orgId={org.id} onSelectDept={handleSelectDept} />}
             {activeDetailTab === 'members' && (
               <MembersTabContent
@@ -370,8 +389,11 @@ function OrganizationDetailModal({
   )
 }
 
-function InfoTab({ org, onToggleActive }: { org: Organization; onToggleActive: () => void }) {
+function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; orgs: Organization[]; onToggleActive: () => void; onUpdated: (updated: Partial<Organization>) => void }) {
   const [stats, setStats] = useState<{ members: number; departments: number; modulesEnabled: number } | null>(null)
+  const [members, setMembers] = useState<OrgMember[]>([])
+  const [savingField, setSavingField] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -381,11 +403,12 @@ function InfoTab({ org, onToggleActive }: { org: Organization; onToggleActive: (
           fetchWithRetry(`${API_BASE_URL}/departments`, { headers: { ...getAuthHeaders(), 'X-Organization-Id': String(org.id) } }),
           fetchWithRetry(`${API_BASE_URL}/modules`, { headers: { ...getAuthHeaders(), 'X-Organization-Id': String(org.id) } }),
         ])
-        const members = membersRes.ok ? await membersRes.json() : []
+        const membersData = membersRes.ok ? await membersRes.json() : []
         const depts = deptsRes.ok ? await deptsRes.json() : []
         const modules = modulesRes.ok ? await modulesRes.json() : { enabled: [] }
+        setMembers(Array.isArray(membersData) ? membersData : [])
         setStats({
-          members: Array.isArray(members) ? members.length : 0,
+          members: Array.isArray(membersData) ? membersData.length : 0,
           departments: Array.isArray(depts) ? depts.length : 0,
           modulesEnabled: modules.enabled?.length ?? 0,
         })
@@ -394,11 +417,47 @@ function InfoTab({ org, onToggleActive }: { org: Organization; onToggleActive: (
     fetchStats()
   }, [org.id])
 
+  const saveOrgField = async (field: 'head_id' | 'parent_id', value: number | null) => {
+    setSavingField(true)
+    setSaveError(null)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${org.id}`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ [field]: value }),
+      })
+      if (res.ok) {
+        const head = field === 'head_id' && value !== null ? members.find((m) => m.id === value) : undefined
+        const parent = field === 'parent_id' && value !== null ? orgs.find((o) => o.id === value) : undefined
+        onUpdated({
+          [field]: value,
+          ...(field === 'head_id'
+            ? { head_id: value, head_first_name: head?.first_name ?? null, head_last_name: head?.last_name ?? null }
+            : { parent_id: value, parent_name: parent?.name ?? null }),
+        } as Partial<Organization>)
+      } else {
+        const data = await res.json()
+        setSaveError(data.error || 'Ошибка')
+      }
+    } catch (err) { setSaveError(getErrorMessage(err)) }
+    finally { setSavingField(false) }
+  }
+
+  const headName = org.head_id
+    ? (members.find((m) => m.id === org.head_id)
+        ? `${members.find((m) => m.id === org.head_id)!.last_name} ${members.find((m) => m.id === org.head_id)!.first_name}`
+        : [org.head_last_name, org.head_first_name].filter(Boolean).join(' '))
+    : null
+  const parentName = org.parent_id
+    ? (orgs.find((o) => o.id === org.parent_id)?.name ?? org.parent_name ?? null)
+    : null
+
   const rows: { label: string; value: string | null }[] = [
     { label: 'Название', value: org.name },
     { label: 'Slug', value: org.slug },
     { label: 'ИНН', value: org.inn },
     { label: 'Адрес', value: org.address },
+    { label: 'Руководитель учреждения', value: headName },
+    { label: 'Вышестоящая организация', value: parentName },
     { label: 'Статус', value: org.is_active ? 'Активна' : 'Неактивна' },
     { label: 'Дата создания', value: formatDateTime(org.created_at) },
   ]
@@ -429,6 +488,12 @@ function InfoTab({ org, onToggleActive }: { org: Organization; onToggleActive: (
         </div>
       </div>
 
+      {saveError && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {saveError}
+        </div>
+      )}
+
       <div className="rounded-xl border border-border/50 divide-y divide-border/40">
         {rows.map((row) => (
           <div key={row.label} className="flex items-center justify-between px-4 py-2.5">
@@ -438,6 +503,41 @@ function InfoTab({ org, onToggleActive }: { org: Organization; onToggleActive: (
             </span>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-xl border border-border/50 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <SettingsIcon className="h-4 w-4 text-muted-foreground" />
+          Руководство и иерархия
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">Руководитель учреждения</label>
+          <select
+            value={org.head_id ?? ''}
+            disabled={savingField}
+            onChange={(e) => saveOrgField('head_id', e.target.value ? Number(e.target.value) : null)}
+            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+          >
+            <option value="">—</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>{m.last_name} {m.first_name} {m.middle_name || ''}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">Вышестоящая организация</label>
+          <select
+            value={org.parent_id ?? ''}
+            disabled={savingField}
+            onChange={(e) => saveOrgField('parent_id', e.target.value ? Number(e.target.value) : null)}
+            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+          >
+            <option value="">—</option>
+            {orgs.filter((o) => o.id !== org.id).map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="flex justify-end">

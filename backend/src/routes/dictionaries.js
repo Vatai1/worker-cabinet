@@ -84,6 +84,23 @@ router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asy
   res.json(result.rows)
 }))
 
+async function validateDepartmentParent(parentId, deptId, orgId, req) {
+  if (parentId === null || parentId === undefined) return
+  const parentResult = await query(...orgScopedQuery('SELECT id, organization_id FROM departments WHERE id = $1', [parentId], req))
+  if (parentResult.rows.length === 0) throw new NotFoundError('Родительское подразделение не найдено')
+  if (parentResult.rows[0].organization_id !== orgId) {
+    throw new ValidationError('Родительское подразделение должно принадлежать той же организации')
+  }
+  const visited = new Set()
+  let currentId = parentId
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId)
+    if (deptId !== null && currentId === deptId) throw new ValidationError('Цикл в иерархии отделов')
+    const r = await query('SELECT parent_id FROM departments WHERE id = $1', [currentId])
+    currentId = r.rows[0]?.parent_id || null
+  }
+}
+
 /**
  * @swagger
  * /dictionaries/departments:
@@ -102,6 +119,7 @@ router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asy
  *             properties:
  *               name: { type: string }
  *               manager_id: { type: integer }
+ *               parent_id: { type: integer, nullable: true, description: 'Родительское подразделение той же организации' }
  *               description: { type: string }
  *     responses:
  *       201:
@@ -113,7 +131,7 @@ router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asy
  *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
-  const { name, manager_id, description } = req.body
+  const { name, manager_id, description, parent_id } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
 
   const existing = await query(
@@ -131,9 +149,11 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
     }
   }
 
+  await validateDepartmentParent(parent_id ?? null, null, currentOrgId(req), req)
+
   const result = await query(
-    'INSERT INTO departments (name, manager_id, description, organization_id) VALUES ($1, $2, $3, $4) RETURNING id, name, manager_id, description',
-    [name.trim(), manager_id || null, description?.trim() || null, currentOrgId(req)]
+    'INSERT INTO departments (name, manager_id, description, parent_id, organization_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, manager_id, description, parent_id',
+    [name.trim(), manager_id || null, description?.trim() || null, parent_id ?? null, currentOrgId(req)]
   )
   res.status(201).json(result.rows[0])
 }))
@@ -161,6 +181,7 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
  *             properties:
  *               name: { type: string }
  *               manager_id: { type: integer }
+ *               parent_id: { type: integer, nullable: true, description: 'Родительское подразделение той же организации' }
  *               description: { type: string }
  *     responses:
  *       200:
@@ -168,10 +189,10 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
  */
 router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
-  const { name, manager_id, description } = req.body
+  const { name, manager_id, description, parent_id } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
 
-  const existing = await query(...orgScopedQuery('SELECT id FROM departments WHERE id = $1', [id], req))
+  const existing = await query(...orgScopedQuery('SELECT id, organization_id FROM departments WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Отдел не найден')
 
   const duplicate = await query(...orgScopedQuery('SELECT id FROM departments WHERE name = $1 AND id != $2', [name.trim(), id], req))
@@ -185,10 +206,12 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
     }
   }
 
+  await validateDepartmentParent(parent_id ?? null, parseInt(id), existing.rows[0].organization_id, req)
+
   const result = await query(
     ...orgScopedQuery(
-      'UPDATE departments SET name = $1, manager_id = $2, description = $3 WHERE id = $4 RETURNING id, name, manager_id, description',
-      [name.trim(), manager_id || null, description?.trim() || null, id],
+      'UPDATE departments SET name = $1, manager_id = $2, description = $3, parent_id = $4 WHERE id = $5 RETURNING id, name, manager_id, description, parent_id',
+      [name.trim(), manager_id || null, description?.trim() || null, parent_id ?? null, id],
       req
     )
   )

@@ -138,6 +138,14 @@ export const vacationApi = {
     return data.map(mapDbRequestToApi)
   },
 
+  async getDepartmentHeadRequests(): Promise<VacationRequest[]> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/department-head-requests`, {
+      headers: getAuthHeadersWithContentType(),
+    })
+    const data = await handleResponse(response)
+    return data.map(mapDbRequestToApi)
+  },
+
   async getDepartmentRequests(departmentId: string): Promise<VacationRequest[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests?departmentId=${departmentId}`, {
       headers: getAuthHeadersWithContentType(),

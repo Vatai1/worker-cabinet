@@ -25,7 +25,7 @@ const DEPT_GRADIENTS = [
 ]
 
 export function DepartmentsTab() {
-  const [departments, setDepartments] = useState<{ id: number; name: string; manager_id: number | null; manager_name: string | null; manager_position: string | null; employee_count: string; vacation_requests_blocked: boolean; description: string | null }[]>([])
+  const [departments, setDepartments] = useState<{ id: number; name: string; manager_id: number | null; manager_name: string | null; manager_position: string | null; employee_count: string; vacation_requests_blocked: boolean; description: string | null; parent_id: number | null; parent_name: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,12 +43,32 @@ export function DepartmentsTab() {
   const [newName, setNewName] = useState('')
   const [newManagerId, setNewManagerId] = useState<number | null>(null)
   const [newManagerName, setNewManagerName] = useState('')
+  const [newParentId, setNewParentId] = useState<number | null>(null)
   const [showPicker, setShowPicker] = useState<'create' | number | null>(null)
   const [editName, setEditName] = useState('')
   const [editManagerId, setEditManagerId] = useState<number | null>(null)
   const [editManagerName, setEditManagerName] = useState('')
+  const [editParentId, setEditParentId] = useState<number | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [search, setSearch] = useState('')
+
+  const descendantsOf = (rootId: number) => {
+    const children = new Map<number, number[]>()
+    for (const d of departments) {
+      if (d.parent_id !== null) {
+        children.set(d.parent_id, [...(children.get(d.parent_id) || []), d.id])
+      }
+    }
+    const result = new Set<number>()
+    const stack = [rootId]
+    while (stack.length > 0) {
+      const cur = stack.pop()!
+      for (const child of children.get(cur) || []) {
+        if (!result.has(child)) { result.add(child); stack.push(child) }
+      }
+    }
+    return result
+  }
 
   const createDept = async () => {
     if (!newName.trim()) { setError('Название обязательно'); return }
@@ -57,9 +77,9 @@ export function DepartmentsTab() {
     try {
       const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments`, {
         method: 'POST', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ name: newName.trim(), manager_id: newManagerId }),
+        body: JSON.stringify({ name: newName.trim(), manager_id: newManagerId, parent_id: newParentId }),
       })
-      if (res.ok) { setShowCreate(false); setNewName(''); setNewManagerId(null); setNewManagerName(''); fetchDepartments() }
+      if (res.ok) { setShowCreate(false); setNewName(''); setNewManagerId(null); setNewManagerName(''); setNewParentId(null); fetchDepartments() }
       else { const data = await res.json(); setError(data.error || 'Ошибка') }
     } catch (err) { setError(getErrorMessage(err)) }
   }
@@ -68,7 +88,7 @@ export function DepartmentsTab() {
     const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Сохранить изменения для отдела «${editName.trim()}»?`, confirmText: 'Сохранить' })
     if (!confirmed) return
     try {
-      const body: Record<string, unknown> = { name: editName.trim() }
+      const body: Record<string, unknown> = { name: editName.trim(), parent_id: editParentId }
       if (editManagerId) body.manager_id = editManagerId
       else body.manager_id = null
       const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${id}`, {
@@ -96,6 +116,7 @@ export function DepartmentsTab() {
     setEditName(dept.name)
     setEditManagerId(dept.manager_id)
     setEditManagerName(dept.manager_name || '')
+    setEditParentId(dept.parent_id)
   }
 
   const pickUser = (userId: number, userName: string) => {
@@ -157,9 +178,22 @@ export function DepartmentsTab() {
                 )}
               </button>
             </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground shrink-0">Подразделение (родитель):</span>
+              <select
+                value={newParentId ?? ''}
+                onChange={e => setNewParentId(e.target.value ? Number(e.target.value) : null)}
+                className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">—</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="flex gap-2">
               <Button onClick={createDept} disabled={!newName.trim()}>Создать</Button>
-              <Button variant="outline" onClick={() => { setShowCreate(false); setNewName(''); setNewManagerId(null); setNewManagerName('') }}>Отмена</Button>
+              <Button variant="outline" onClick={() => { setShowCreate(false); setNewName(''); setNewManagerId(null); setNewManagerName(''); setNewParentId(null) }}>Отмена</Button>
             </div>
           </CardContent>
         </Card>
@@ -168,6 +202,7 @@ export function DepartmentsTab() {
       <div className="space-y-3">
         {filteredDepartments.map((dept) => {
           const gradient = DEPT_GRADIENTS[dept.id % DEPT_GRADIENTS.length]
+          const excludedParents = new Set([dept.id, ...descendantsOf(dept.id)])
           return (
           <Card key={dept.id} className="group relative overflow-hidden">
             <CardContent className="pt-5">
@@ -190,6 +225,19 @@ export function DepartmentsTab() {
                       )}
                     </button>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Родитель:</span>
+                    <select
+                      value={editParentId ?? ''}
+                      onChange={e => setEditParentId(e.target.value ? Number(e.target.value) : null)}
+                      className="flex-1 px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    >
+                      <option value="">—</option>
+                      {departments.filter(d => !excludedParents.has(d.id)).map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => updateDept(dept.id)}><Check className="h-3.5 w-3.5 mr-1" />Сохранить</Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Отмена</Button>
@@ -201,7 +249,12 @@ export function DepartmentsTab() {
                     <Building2 className="h-6 w-6" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-foreground text-base">{dept.name}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-semibold text-foreground text-base">{dept.name}</h3>
+                      {dept.parent_name && (
+                        <Badge className="text-[10px] bg-muted text-muted-foreground border-transparent">в составе: {dept.parent_name}</Badge>
+                      )}
+                    </div>
                     {dept.manager_name ? (
                       <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
                         <Users className="h-3.5 w-3.5 shrink-0" />

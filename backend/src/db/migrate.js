@@ -1668,6 +1668,7 @@ async function runMigrations() {
     await migrateTravelChildren(db)
     await migrateTravelBalance(db)
     await migrateMailingTables(db)
+    await migrateApprovalHierarchy(db)
 
     console.log('Adding multi-tenancy organization_id columns...')
     const orgScopedTables = [
@@ -1886,6 +1887,21 @@ async function migrateMailingTables(db) {
     )
   `).catch(e => console.log('  - mailing_campaign_recipients:', e.message))
   console.log('  ✓ mailing tables ready')
+}
+
+async function migrateApprovalHierarchy(db) {
+  console.log('Checking approval hierarchy columns...')
+  try {
+    await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES departments(id) ON DELETE SET NULL')
+    await db.query('CREATE INDEX IF NOT EXISTS idx_departments_parent ON departments(parent_id)')
+    await db.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL')
+    await db.query('CREATE INDEX IF NOT EXISTS idx_organizations_parent ON organizations(parent_id)')
+    await db.query('ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS approver_id INTEGER REFERENCES users(id) ON DELETE SET NULL')
+    await db.query('CREATE INDEX IF NOT EXISTS idx_vacation_requests_approver ON vacation_requests(approver_id)')
+    console.log('  ✓ approval hierarchy (departments.parent_id, organizations.parent_id, vacation_requests.approver_id)')
+  } catch (e) {
+    console.log('  - approval hierarchy:', e.message)
+  }
 }
 
 async function migrateTravelChildren(db) {

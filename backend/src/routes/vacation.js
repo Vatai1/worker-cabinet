@@ -23,13 +23,31 @@ async function getEmpName(userId) {
   return row ? `${row.last_name} ${row.first_name}` : ''
 }
 
-async function getDeptManagerId(userId, req) {
-  const { text, values } = orgScopedQuery(
-    'SELECT d.manager_id FROM users u JOIN departments d ON u.department_id = d.id WHERE u.id = $1',
-    [userId], req
-  )
-  const r = await query(text, values)
-  return r.rows[0]?.manager_id || null
+async function resolveApproverId(userId, orgId, req) {
+  const userResult = await query('SELECT department_id FROM users WHERE id = $1', [userId])
+  let deptId = userResult.rows[0]?.department_id || null
+  const visitedDepts = new Set()
+  while (deptId && !visitedDepts.has(deptId)) {
+    visitedDepts.add(deptId)
+    const deptResult = await query('SELECT manager_id, parent_id FROM departments WHERE id = $1', [deptId])
+    const dept = deptResult.rows[0]
+    if (!dept) break
+    if (dept.manager_id !== null && dept.manager_id !== userId) return dept.manager_id
+    deptId = dept.parent_id
+  }
+
+  const visitedOrgs = new Set()
+  let currentOrgId = orgId
+  while (currentOrgId && !visitedOrgs.has(currentOrgId)) {
+    visitedOrgs.add(currentOrgId)
+    const orgResult = await query('SELECT head_id, parent_id FROM organizations WHERE id = $1', [currentOrgId])
+    const org = orgResult.rows[0]
+    if (!org) break
+    if (org.head_id !== null && org.head_id !== userId) return org.head_id
+    currentOrgId = org.parent_id
+  }
+
+  return null
 }
 
 async function isSubstitutionEnabled(req) {
@@ -39,22 +57,59 @@ async function isSubstitutionEnabled(req) {
   return r.rows.length > 0
 }
 
-async function getDeptManagerIds(userId, req) {
-  const managerId = await getDeptManagerId(userId, req)
-  if (!managerId) return []
-  if (!(await isSubstitutionEnabled(req))) return [managerId]
-  const { text, values } = orgScopedQuery(
+async function getApproverIds(approverId, req) {
+  if (!approverId) return []
+  if (!(await isSubstitutionEnabled(req))) return [approverId]
+  const orgClause = req.org ? ' AND vs.organization_id = $2' : ''
+  const r = await query(
     `SELECT vs.substitute_user_id
      FROM vacation_substitutions vs
      JOIN vacation_requests vr ON vs.vacation_request_id = vr.id
      JOIN request_statuses rs ON vr.status_id = rs.id
      WHERE vr.user_id = $1 AND rs.code = 'approved'
-       AND vr.start_date <= CURRENT_DATE AND vr.end_date >= CURRENT_DATE`,
-    [managerId], req
+       AND vr.start_date <= CURRENT_DATE AND vr.end_date >= CURRENT_DATE${orgClause}`,
+    req.org ? [approverId, req.org.org_id] : [approverId]
   )
-  const r = await query(text, values)
-  if (r.rows.length > 0) return r.rows.map((row) => row.substitute_user_id)
-  return [managerId]
+  if (r.rows.length > 0) return [approverId, ...r.rows.map((row) => row.substitute_user_id)]
+  return [approverId]
+}
+
+async function canReviewVacation(vacationRequest, req) {
+  if (['hr', 'admin', 'superadmin'].includes(req.user.role)) return true
+  if (!vacationRequest.approver_id) return false
+  if (vacationRequest.approver_id === req.user.id) return true
+  const approverIds = await getApproverIds(vacationRequest.approver_id, req)
+  return approverIds.includes(req.user.id)
+}
+
+async function notifyVacationCreated(request, employeeId, req) {
+  const empName = await getEmpName(employeeId)
+  const payload = {
+    employeeName: empName,
+    startDate: fmtDate(request.start_date),
+    endDate: fmtDate(request.end_date),
+    days: request.duration,
+    link: '/leader'
+  }
+  if (request.approver_id) {
+    const approverIds = await getApproverIds(request.approver_id, req)
+    for (const mid of approverIds) {
+      notify({ userId: mid, type: 'vacation_created', data: payload })
+        .catch((err) => console.warn(`[NOTIFY] vacation create #${request.id}: ${err.message}`))
+    }
+    return
+  }
+  const orgClause = req.org ? ' AND uo.org_id = $1' : ''
+  const hrResult = await query(
+    `SELECT u.id FROM users u
+     JOIN user_organizations uo ON uo.user_id = u.id
+     WHERE u.role = 'hr' AND uo.is_active = true${orgClause}`,
+    req.org ? [req.org.org_id] : []
+  )
+  for (const row of hrResult.rows) {
+    notify({ userId: row.id, type: 'vacation_created', data: payload })
+      .catch((err) => console.warn(`[NOTIFY] vacation create #${request.id} hr: ${err.message}`))
+  }
 }
 
 async function vacationDatesByMonth(startDate, endDate) {
@@ -195,10 +250,20 @@ router.get('/requests', authenticateToken, async (req, res) => {
         whereClause += ' AND vr.user_id = $' + (params.length + 1)
         params.push(user.id)
       } else if (user.role === 'manager') {
-        const mgrOrgCond = req.org ? ` AND organization_id = $${params.length + 2}` : ''
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR u.manager_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE manager_id = $${params.length + 1}${mgrOrgCond}))`
+        const substExists = await isSubstitutionEnabled(req)
+          ? ` OR EXISTS (
+              SELECT 1
+              FROM vacation_substitutions vs
+              JOIN vacation_requests mvr ON vs.vacation_request_id = mvr.id
+              JOIN request_statuses mrs ON mvr.status_id = mrs.id
+              WHERE vr.approver_id = mvr.user_id
+                AND vs.substitute_user_id = $${params.length + 1}
+                AND mrs.code = 'approved'
+                AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
+            )`
+          : ''
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR vr.approver_id = $${params.length + 1}${substExists})`
         params.push(user.id)
-        if (req.org) params.push(req.org.org_id)
       }
     }
 
@@ -316,6 +381,73 @@ router.get('/requests', authenticateToken, async (req, res) => {
     res.json(requests)
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch vacation requests' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/department-head-requests:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Отпуска начальника отдела текущего сотрудника
+ *     description: 'Заявки руководителя отдела сотрудника (все статусы кроме rejected и cancelled_by_employee)'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список заявок начальника отдела
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/VacationRequest' }
+ */
+router.get('/department-head-requests', authenticateToken, async (req, res) => {
+  try {
+    const userResult = await query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
+    const deptId = userResult.rows[0]?.department_id
+    if (!deptId) return res.json([])
+
+    const deptResult = await query('SELECT manager_id FROM departments WHERE id = $1', [deptId])
+    const managerId = deptResult.rows[0]?.manager_id
+    if (!managerId || managerId === req.user.id) return res.json([])
+
+    const params = [managerId]
+    let orgClause = ''
+    if (req.org) {
+      orgClause = ' AND vr.organization_id = $2'
+      params.push(req.org.org_id)
+    }
+
+    const result = await query(
+      `SELECT
+        vr.*,
+        rs.code as status,
+        rs.name as status_name,
+        vt.code as vacation_type,
+        vt.name as vacation_type_name,
+        u.first_name,
+        u.last_name,
+        u.middle_name,
+        u.position,
+        u.avatar,
+        u.gender,
+        u.department_id,
+        d.name as department_name,
+        d.manager_id as department_manager_id
+      FROM vacation_requests vr
+      JOIN users u ON vr.user_id = u.id
+      JOIN request_statuses rs ON vr.status_id = rs.id
+      LEFT JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+      LEFT JOIN departments d ON u.department_id = d.id
+      WHERE vr.user_id = $1 AND rs.code NOT IN ('rejected', 'cancelled_by_employee')${orgClause}
+      ORDER BY vr.start_date ASC`,
+      params
+    )
+
+    res.json(result.rows)
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch department head requests' })
   }
 })
 
@@ -595,10 +727,12 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const travelChildrenJson = JSON.stringify(travelChildrenParsed)
     const travelChildrenCount = travelChildrenParsed.length
 
+    const approverId = await resolveApproverId(userId, currentOrgId(req), req)
+
     const result = await client.query(
       `INSERT INTO vacation_requests
-        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, travel_children, travel_children_count, reference_document, status_id, organization_id)
-        VALUES ($1, $2, $3, $4, (SELECT id FROM vacation_types WHERE code = $5 AND organization_id = $12), $6, $7, $8, $9, $10, $11, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $12)
+        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, travel_children, travel_children_count, reference_document, status_id, organization_id, approver_id)
+        VALUES ($1, $2, $3, $4, (SELECT id FROM vacation_types WHERE code = $5 AND organization_id = $12), $6, $7, $8, $9, $10, $11, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $12, $13)
         RETURNING *`,
       [
         userId,
@@ -612,7 +746,8 @@ router.post('/requests', authenticateToken, async (req, res) => {
         travelChildrenJson,
         travelChildrenCount,
         referenceDocument || null,
-        currentOrgId(req)
+        currentOrgId(req),
+        approverId
       ]
     )
 
@@ -647,20 +782,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
 
-    const managerIds = await getDeptManagerIds(userId, req)
-    for (const mid of managerIds) {
-      notify({
-        userId: mid,
-        type: 'vacation_created',
-        data: {
-          employeeName: await getEmpName(userId),
-          startDate: fmtDate(request.start_date),
-          endDate: fmtDate(request.end_date),
-          days: request.duration,
-          link: '/leader'
-        }
-      }).catch((err) => console.warn(`[NOTIFY] vacation create #${request.id}: ${err.message}`))
-    }
+    await notifyVacationCreated(request, userId, req)
 
     if (Array.isArray(substitute_ids) && substitute_ids.length > 0 && await isSubstitutionEnabled(req)) {
       const empName = await getEmpName(userId)
@@ -819,23 +941,18 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 })
 
 
-router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
   const { id } = req.params
   const client = await getClient()
   try {
     await client.query('BEGIN')
-    const { text: reqText, values: reqValues } = orgScopedQuery(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id], req)
-    const request = await client.query(reqText, reqValues)
+    const request = await client.query(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id])
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
-    if (req.user.role === 'manager') {
-      const empUserId = request.rows[0].user_id
-      const managerIds = await getDeptManagerIds(empUserId, req)
-      if (!managerIds.includes(req.user.id)) {
-        await client.query('ROLLBACK')
-        return res.status(403).json({ error: 'Нет прав на этот отдел' })
-      }
+    if (!(await canReviewVacation(request.rows[0], req))) {
+      await client.query('ROLLBACK')
+      return res.status(403).json({ error: 'Нет прав на согласование этой заявки' })
     }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
@@ -888,7 +1005,7 @@ router.post('/requests/:id/approve', authenticateToken, authorizeRoles('manager'
   }
 })
 
-router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
   const { id } = req.params
   const { reason } = req.body
   if (!reason?.trim()) return res.status(400).json({ error: 'Укажите причину отклонения' })
@@ -896,18 +1013,13 @@ router.post('/requests/:id/reject', authenticateToken, authorizeRoles('manager',
   const client = await getClient()
   try {
     await client.query('BEGIN')
-    const { text: reqText, values: reqValues } = orgScopedQuery(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id], req)
-    const request = await client.query(reqText, reqValues)
+    const request = await client.query(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id])
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
-    if (req.user.role === 'manager') {
-      const empUserId = request.rows[0].user_id
-      const managerIds = await getDeptManagerIds(empUserId, req)
-      if (!managerIds.includes(req.user.id)) {
-        await client.query('ROLLBACK')
-        return res.status(403).json({ error: 'Нет прав на этот отдел' })
-      }
+    if (!(await canReviewVacation(request.rows[0], req))) {
+      await client.query('ROLLBACK')
+      return res.status(403).json({ error: 'Нет прав на согласование этой заявки' })
     }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
@@ -1104,15 +1216,17 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     const travelChildrenJson = JSON.stringify(travelChildrenParsed)
     const travelChildrenCount = travelChildrenParsed.length
 
+    const approverId = await resolveApproverId(original.user_id, currentOrgId(req), req)
+
     const insertResult = await client.query(
       `INSERT INTO vacation_requests
         (user_id, vacation_type_id, start_date, end_date, duration, status_id, transfer_reason, transferred_from_id, transfer_requested_at,
-         has_travel, travel_destination, travel_children, travel_children_count, organization_id)
+         has_travel, travel_destination, travel_children, travel_children_count, organization_id, approver_id)
        VALUES ($1, $2, $3::date, $4::date, $5, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $6, $7, CURRENT_TIMESTAMP,
-         $8, $9, $10, $11, $12)
+         $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [original.user_id, original.vacation_type_id, newStartDate, newEndDate, newDuration, reason, id,
-       hasTravel || false, hasTravel ? (travelDestination || null) : null, travelChildrenJson, travelChildrenCount, currentOrgId(req)]
+       hasTravel || false, hasTravel ? (travelDestination || null) : null, travelChildrenJson, travelChildrenCount, currentOrgId(req), approverId]
     )
 
     await client.query(
@@ -1145,20 +1259,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     )
 
     const newReq = fullResult.rows[0]
-    const managerIds = await getDeptManagerIds(userId, req)
-    for (const mid of managerIds) {
-      notify({
-        userId: mid,
-        type: 'vacation_created',
-        data: {
-          employeeName: await getEmpName(userId),
-          startDate: fmtDate(newReq.start_date),
-          endDate: fmtDate(newReq.end_date),
-          days: newReq.duration,
-          link: '/leader'
-        }
-      }).catch((err) => console.warn(`[NOTIFY] vacation transfer create #${newReq.id}: ${err.message}`))
-    }
+    await notifyVacationCreated(newReq, userId, req)
 
     res.status(201).json(newReq)
   } catch (error) {
@@ -1187,7 +1288,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
  *       200:
  *         description: Перенос одобрен
  */
-router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res) => {
   const client = await getClient()
 
   try {
@@ -1202,8 +1303,8 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
        JOIN request_statuses rs ON vr.status_id = rs.id
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL${req.org ? ' AND vr.organization_id = $2' : ''}`,
-      req.org ? [id, req.org.org_id] : [id]
+       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
+      [id]
     )
 
     if (newRequestResult.rows.length === 0) {
@@ -1218,9 +1319,9 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
       return res.status(400).json({ error: 'Можно одобрить только заявку на согласовании' })
     }
 
-    if (newRequest.manager_id !== managerId) {
+    if (!(await canReviewVacation(newRequest, req))) {
       await client.query('ROLLBACK')
-      return res.status(403).json({ error: 'Только руководитель отдела может согласовывать заявки' })
+      return res.status(403).json({ error: 'Нет прав на согласование этой заявки' })
     }
 
     const { text: tAppOrigText, values: tAppOrigValues } = orgScopedQuery(
@@ -1239,7 +1340,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
     const { text: tAppCancelText, values: tAppCancelValues } = orgScopedQuery(
       `UPDATE vacation_requests
        SET status_id = (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'),
-           cancellation_reason = 'Перенесён на другие даты (заявка #' + $1 + ')'
+           cancellation_reason = 'Перенесён на другие даты (заявка #' || $1 || ')'
        WHERE id = $2`,
       [id, originalRequest.id], req
     )
@@ -1340,7 +1441,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, authorizeRoles(
  *       200:
  *         description: Перенос отклонён
  */
-router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res) => {
   const client = await getClient()
 
   try {
@@ -1360,8 +1461,8 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
        JOIN request_statuses rs ON vr.status_id = rs.id
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL${req.org ? ' AND vr.organization_id = $2' : ''}`,
-      req.org ? [id, req.org.org_id] : [id]
+       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
+      [id]
     )
 
     if (newRequestResult.rows.length === 0) {
@@ -1376,9 +1477,9 @@ router.post('/requests/:id/transfer/reject', authenticateToken, authorizeRoles('
       return res.status(400).json({ error: 'Можно отклонить только заявку на согласовании' })
     }
 
-    if (newRequest.manager_id !== managerId) {
+    if (!(await canReviewVacation(newRequest, req))) {
       await client.query('ROLLBACK')
-      return res.status(403).json({ error: 'Только руководитель отдела может отклонять заявки' })
+      return res.status(403).json({ error: 'Нет прав на согласование этой заявки' })
     }
 
     const { text: tRejOrigText, values: tRejOrigValues } = orgScopedQuery(
@@ -2367,13 +2468,8 @@ router.post('/requests/:id/substitutes', authenticateToken, async (req, res) => 
     const isOwner = vacation.user_id === req.user.id
     const isPrivileged = ['hr', 'admin'].includes(req.user.role)
     if (!isOwner && !isPrivileged) {
-      if (req.user.role === 'manager') {
-        const empUserId = vacation.user_id
-        const managerIds = await getDeptManagerIds(empUserId, req)
-        if (!managerIds.includes(req.user.id)) {
-          return res.status(403).json({ error: 'Нет прав' })
-        }
-      } else {
+      const approverIds = await getApproverIds(vacation.approver_id, req)
+      if (!approverIds.includes(req.user.id)) {
         return res.status(403).json({ error: 'Нет прав' })
       }
     }
@@ -2432,13 +2528,8 @@ router.delete('/requests/:id/substitutes/:userId', authenticateToken, async (req
     const isOwner = vacation.user_id === req.user.id
     const isPrivileged = ['hr', 'admin'].includes(req.user.role)
     if (!isOwner && !isPrivileged) {
-      if (req.user.role === 'manager') {
-        const empUserId = vacation.user_id
-        const managerIds = await getDeptManagerIds(empUserId, req)
-        if (!managerIds.includes(req.user.id)) {
-          return res.status(403).json({ error: 'Нет прав' })
-        }
-      } else {
+      const approverIds = await getApproverIds(vacation.approver_id, req)
+      if (!approverIds.includes(req.user.id)) {
         return res.status(403).json({ error: 'Нет прав' })
       }
     }
