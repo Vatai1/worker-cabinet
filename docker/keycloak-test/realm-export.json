@@ -457,8 +457,8 @@
       }
     },
     {
-      "username": "артeм.лебедев@example.com",
-      "email": "артeм.лебедев@example.com",
+      "username": "artem.lebedev@example.com",
+      "email": "artem.lebedev@example.com",
       "firstName": "Артём",
       "lastName": "Лебедев",
       "enabled": true,
@@ -480,8 +480,8 @@
       }
     },
     {
-      "username": "ирина.соколова@example.com",
-      "email": "ирина.соколова@example.com",
+      "username": "irina.sokolova@example.com",
+      "email": "irina.sokolova@example.com",
       "firstName": "Ирина",
       "lastName": "Соколова",
       "enabled": true,
@@ -503,8 +503,8 @@
       }
     },
     {
-      "username": "максим.козлов@example.com",
-      "email": "максим.козлов@example.com",
+      "username": "maksim.kozlov@example.com",
+      "email": "maksim.kozlov@example.com",
       "firstName": "Максим",
       "lastName": "Козлов",
       "enabled": true,
@@ -526,8 +526,8 @@
       }
     },
     {
-      "username": "наталья.новикова@example.com",
-      "email": "наталья.новикова@example.com",
+      "username": "natalya.novikova@example.com",
+      "email": "natalya.novikova@example.com",
       "firstName": "Наталья",
       "lastName": "Новикова",
       "enabled": true,
@@ -549,8 +549,8 @@
       }
     },
     {
-      "username": "виктор.орлов@example.com",
-      "email": "виктор.орлов@example.com",
+      "username": "viktor.orlov@example.com",
+      "email": "viktor.orlov@example.com",
       "firstName": "Виктор",
       "lastName": "Орлов",
       "enabled": true,
@@ -572,8 +572,8 @@
       }
     },
     {
-      "username": "елена.киселeва@example.com",
-      "email": "елена.киселeва@example.com",
+      "username": "elena.kiseleva@example.com",
+      "email": "elena.kiseleva@example.com",
       "firstName": "Елена",
       "lastName": "Киселёва",
       "enabled": true,
@@ -595,8 +595,8 @@
       }
     },
     {
-      "username": "александр.макаров@example.com",
-      "email": "александр.макаров@example.com",
+      "username": "aleksandr.makarov@example.com",
+      "email": "aleksandr.makarov@example.com",
       "firstName": "Александр",
       "lastName": "Макаров",
       "enabled": true,
@@ -618,8 +618,8 @@
       }
     },
     {
-      "username": "дарья.зайцева@example.com",
-      "email": "дарья.зайцева@example.com",
+      "username": "darya.zaytseva@example.com",
+      "email": "darya.zaytseva@example.com",
       "firstName": "Дарья",
       "lastName": "Зайцева",
       "enabled": true,
@@ -641,8 +641,8 @@
       }
     },
     {
-      "username": "денис.соловьeв@example.com",
-      "email": "денис.соловьeв@example.com",
+      "username": "denis.solovev@example.com",
+      "email": "denis.solovev@example.com",
       "firstName": "Денис",
       "lastName": "Соловьёв",
       "enabled": true,
@@ -664,8 +664,8 @@
       }
     },
     {
-      "username": "вероника.борисова@example.com",
-      "email": "вероника.борисова@example.com",
+      "username": "veronika.borisova@example.com",
+      "email": "veronika.borisova@example.com",
       "firstName": "Вероника",
       "lastName": "Борисова",
       "enabled": true,
@@ -687,8 +687,8 @@
       }
     },
     {
-      "username": "игорь.яковлев@example.com",
-      "email": "игорь.яковлев@example.com",
+      "username": "igor.yakovlev@example.com",
+      "email": "igor.yakovlev@example.com",
       "firstName": "Игорь",
       "lastName": "Яковлев",
       "enabled": true,
@@ -710,8 +710,8 @@
       }
     },
     {
-      "username": "тамара.григорьева@example.com",
-      "email": "тамара.григорьева@example.com",
+      "username": "tamara.grigoreva@example.com",
+      "email": "tamara.grigoreva@example.com",
       "firstName": "Тамара",
       "lastName": "Григорьева",
       "enabled": true,
@@ -733,8 +733,8 @@
       }
     },
     {
-      "username": "олег.романов@example.com",
-      "email": "олег.романов@example.com",
+      "username": "oleg.romanov@example.com",
+      "email": "oleg.romanov@example.com",
       "firstName": "Олег",
       "lastName": "Романов",
       "enabled": true,
@@ -756,8 +756,8 @@
       }
     },
     {
-      "username": "марина.воробьeва@example.com",
-      "email": "марина.воробьeва@example.com",
+      "username": "marina.vorobeva@example.com",
+      "email": "marina.vorobeva@example.com",
       "firstName": "Марина",
       "lastName": "Воробьёва",
       "enabled": true,
@@ -779,8 +779,8 @@
       }
     },
     {
-      "username": "антон.сергеев@example.com",
-      "email": "антон.сергеев@example.com",
+      "username": "anton.sergeev@example.com",
+      "email": "anton.sergeev@example.com",
       "firstName": "Антон",
       "lastName": "Сергеев",
       "enabled": true,
@@ -802,8 +802,8 @@
       }
     },
     {
-      "username": "людмила.кузьмина@example.com",
-      "email": "людмила.кузьмина@example.com",
+      "username": "lyudmila.kuzmina@example.com",
+      "email": "lyudmila.kuzmina@example.com",
       "firstName": "Людмила",
       "lastName": "Кузьмина",
       "enabled": true,
@@ -825,8 +825,8 @@
       }
     },
     {
-      "username": "владимир.фролов@example.com",
-      "email": "владимир.фролов@example.com",
+      "username": "vladimir.frolov@example.com",
+      "email": "vladimir.frolov@example.com",
       "firstName": "Владимир",
       "lastName": "Фролов",
       "enabled": true,
@@ -848,8 +848,8 @@
       }
     },
     {
-      "username": "алина.александрова@example.com",
-      "email": "алина.александрова@example.com",
+      "username": "alina.aleksandrova@example.com",
+      "email": "alina.aleksandrova@example.com",
       "firstName": "Алина",
       "lastName": "Александрова",
       "enabled": true,
@@ -871,8 +871,8 @@
       }
     },
     {
-      "username": "геннадий.дмитриев@example.com",
-      "email": "геннадий.дмитриев@example.com",
+      "username": "gennadiy.dmitriev@example.com",
+      "email": "gennadiy.dmitriev@example.com",
       "firstName": "Геннадий",
       "lastName": "Дмитриев",
       "enabled": true,
@@ -894,8 +894,8 @@
       }
     },
     {
-      "username": "полина.королeва@example.com",
-      "email": "полина.королeва@example.com",
+      "username": "polina.koroleva@example.com",
+      "email": "polina.koroleva@example.com",
       "firstName": "Полина",
       "lastName": "Королёва",
       "enabled": true,
@@ -917,8 +917,8 @@
       }
     },
     {
-      "username": "роман.гусев@example.com",
-      "email": "роман.гусев@example.com",
+      "username": "roman.gusev@example.com",
+      "email": "roman.gusev@example.com",
       "firstName": "Роман",
       "lastName": "Гусев",
       "enabled": true,
@@ -940,8 +940,8 @@
       }
     },
     {
-      "username": "ксения.кириллова@example.com",
-      "email": "ксения.кириллова@example.com",
+      "username": "kseniya.kirillova@example.com",
+      "email": "kseniya.kirillova@example.com",
       "firstName": "Ксения",
       "lastName": "Кириллова",
       "enabled": true,
@@ -963,8 +963,8 @@
       }
     },
     {
-      "username": "тимур.рашидов@example.com",
-      "email": "тимур.рашидов@example.com",
+      "username": "timur.rashidov@example.com",
+      "email": "timur.rashidov@example.com",
       "firstName": "Тимур",
       "lastName": "Рашидов",
       "enabled": true,
@@ -986,8 +986,8 @@
       }
     },
     {
-      "username": "софья.максимова@example.com",
-      "email": "софья.максимова@example.com",
+      "username": "sofya.maksimova@example.com",
+      "email": "sofya.maksimova@example.com",
       "firstName": "Софья",
       "lastName": "Максимова",
       "enabled": true,
@@ -1009,8 +1009,8 @@
       }
     },
     {
-      "username": "вадим.захаров@example.com",
-      "email": "вадим.захаров@example.com",
+      "username": "vadim.zaharov@example.com",
+      "email": "vadim.zaharov@example.com",
       "firstName": "Вадим",
       "lastName": "Захаров",
       "enabled": true,
@@ -1032,8 +1032,8 @@
       }
     },
     {
-      "username": "елизавета.степанова@example.com",
-      "email": "елизавета.степанова@example.com",
+      "username": "elizaveta.stepanova@example.com",
+      "email": "elizaveta.stepanova@example.com",
       "firstName": "Елизавета",
       "lastName": "Степанова",
       "enabled": true,
@@ -1055,8 +1055,8 @@
       }
     },
     {
-      "username": "фeдор.николаев@example.com",
-      "email": "фeдор.николаев@example.com",
+      "username": "fedor.nikolaev@example.com",
+      "email": "fedor.nikolaev@example.com",
       "firstName": "Фёдор",
       "lastName": "Николаев",
       "enabled": true,
@@ -1078,8 +1078,8 @@
       }
     },
     {
-      "username": "виктория.ефимова@example.com",
-      "email": "виктория.ефимова@example.com",
+      "username": "viktoriya.efimova@example.com",
+      "email": "viktoriya.efimova@example.com",
       "firstName": "Виктория",
       "lastName": "Ефимова",
       "enabled": true,
@@ -1101,8 +1101,8 @@
       }
     },
     {
-      "username": "борис.павлов@example.com",
-      "email": "борис.павлов@example.com",
+      "username": "boris.pavlov@example.com",
+      "email": "boris.pavlov@example.com",
       "firstName": "Борис",
       "lastName": "Павлов",
       "enabled": true,
@@ -1124,8 +1124,8 @@
       }
     },
     {
-      "username": "диана.семeнова@example.com",
-      "email": "диана.семeнова@example.com",
+      "username": "diana.semenova@example.com",
+      "email": "diana.semenova@example.com",
       "firstName": "Диана",
       "lastName": "Семёнова",
       "enabled": true,
