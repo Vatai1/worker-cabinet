@@ -63,6 +63,18 @@ function randomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
+const TRANSLIT_MAP = {
+  'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+  'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+  'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+  'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
+  'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+}
+
+function translit(str) {
+  return [...str].map(ch => TRANSLIT_MAP[ch] ?? ch).join('')
+}
+
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min
 }
@@ -177,7 +189,7 @@ async function seed() {
       const position = randomItem(deptPositions)
       const deptId = deptMap[deptName] || depts.rows[0]?.id
 
-      const emailBase = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '')
+      const emailBase = translit(`${firstName.toLowerCase()}.${lastName.toLowerCase()}`).replace(/\s+/g, '')
       let email = `${emailBase}@example.com`
       let suffix = 2
       while (existingEmails.has(email)) {
