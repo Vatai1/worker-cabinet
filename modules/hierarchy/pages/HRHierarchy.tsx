@@ -1,4 +1,5 @@
 ﻿import { useState, useCallback, useEffect, useRef, createContext, useContext } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ReactFlow,
   addEdge,
@@ -37,7 +38,7 @@ import { DepartmentHierarchyOverlay } from '@/modules/hierarchy/components/Depar
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { useUIStore } from '@/shared/store/uiStore'
 
 const SaveSnapshotContext = createContext<() => void>(() => {})
@@ -547,7 +548,12 @@ type PendingDrop = { type: 'department' | 'employee' | 'text'; position: { x: nu
 type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text'; x: number; y: number }
 type EdgeContextMenu = { edgeId: string; x: number; y: number }
 
-export function HRHierarchy() {
+interface Props {
+  fullscreen?: boolean
+  onClose?: () => void
+}
+
+export function HRHierarchy({ fullscreen = false, onClose }: Props) {
   const { darkMode } = useUIStore()
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)
@@ -860,10 +866,20 @@ export function HRHierarchy() {
     }
   }
 
-  return (
+  useEffect(() => {
+    if (!fullscreen || !onClose) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreen, onClose])
+
+  const content = (
     <div
-      className="flex flex-col overflow-hidden rounded-2xl border border-border shadow-sm bg-card"
-      style={{ height: 'calc(100vh - 140px)', minHeight: '500px' }}
+      className={cn(
+        'flex flex-col overflow-hidden rounded-2xl border border-border shadow-sm bg-card',
+        fullscreen && 'fixed inset-0 z-50 rounded-none border-0',
+      )}
+      style={fullscreen ? undefined : { height: 'calc(100vh - 140px)', minHeight: '500px' }}
     >
       {/* Header */}
       <div className="px-6 py-4 border-b border-border flex-shrink-0 flex items-center justify-between">
@@ -882,6 +898,11 @@ export function HRHierarchy() {
             <Save className="h-4 w-4 mr-1.5" />
             {saving ? 'Сохранение...' : 'Сохранить'}
           </Button>
+          {fullscreen && onClose && (
+            <Button size="sm" variant="outline" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1148,6 +1169,8 @@ export function HRHierarchy() {
       )}
     </div>
   )
+
+  return fullscreen ? createPortal(content, document.body) : content
 }
 
 export { DepartmentNode, EmployeeNode, TextNode, nodeTypes, EditableEdge, edgeTypes }

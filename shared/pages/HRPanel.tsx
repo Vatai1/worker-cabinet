@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { cn } from '@/shared/lib/utils'
 import {
   Users, ClipboardList, UserPlus, Plane, Network,
@@ -63,6 +63,12 @@ const TOP_NAV_TABS = ['mailing', 'timesheet', 'hierarchy', 'doc-templates'] as c
 export function HRPanel() {
   const [activeTab, setActiveTab] = useState<TabId>('surveys')
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+  const prevTabRef = useRef<TabId>('surveys')
+
+  const switchTab = (tab: TabId) => {
+    if (tab !== 'hierarchy') prevTabRef.current = tab
+    setActiveTab(tab)
+  }
 
   const filteredGroups = useMemo(() =>
     TAB_GROUPS
@@ -138,7 +144,7 @@ export function HRPanel() {
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => switchTab(tab.id)}
                       className={cn(
                         'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
                         isActive
@@ -155,7 +161,7 @@ export function HRPanel() {
               {safeActiveTab === 'timesheet' && <HRTimesheet />}
               {safeActiveTab === 'hierarchy' && isModuleEnabled('hierarchy') && (
                 <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-                  <HRHierarchy />
+                  <HRHierarchy fullscreen onClose={() => switchTab(prevTabRef.current)} />
                 </Suspense>
               )}
               {safeActiveTab === 'doc-templates' && isModuleEnabled('documents') && (
@@ -182,7 +188,7 @@ export function HRPanel() {
                         return (
                           <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => switchTab(tab.id)}
                             className={cn(
                               'group flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200',
                               isActive
