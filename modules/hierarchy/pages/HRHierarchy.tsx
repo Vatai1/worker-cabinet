@@ -16,6 +16,7 @@ import {
   Position,
   MarkerType,
   useReactFlow,
+  getBezierPath,
   getSmoothStepPath,
   type Connection,
   type NodeTypes,
@@ -191,7 +192,8 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
   const waypoints: Waypoint[] = (data as { waypoints?: Waypoint[] })?.waypoints ?? []
   const hasWaypoints = waypoints.length > 0
 
-  const [smoothPath, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
+  const [smoothPath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
+  const stepPath = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })[0]
 
   const allPoints = [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }]
   const polyPath = allPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ')
@@ -234,7 +236,7 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
       if (ed.id !== id) return ed
       const wps = [...((ed.data as { waypoints?: Waypoint[] })?.waypoints ?? [])]
       if (wps.length === 0) {
-        const corners = extractSmoothStepCorners(smoothPath, sourceX, sourceY, targetX, targetY)
+        const corners = extractSmoothStepCorners(stepPath, sourceX, sourceY, targetX, targetY)
         if (corners.length > 0) {
           return { ...ed, data: { ...ed.data, waypoints: corners } }
         }
@@ -576,6 +578,8 @@ type EdgeDraft = {
   edgeId?: string
   source: string
   target: string
+  sourceHandle: string | null
+  targetHandle: string | null
   sourceName: string
   targetName: string
   relation: EdgeRelation
@@ -825,6 +829,8 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       mode: 'create',
       source: params.source!,
       target: params.target!,
+      sourceHandle: params.sourceHandle ?? null,
+      targetHandle: params.targetHandle ?? null,
       sourceName: nodeName(s),
       targetName: nodeName(t),
       relation: 'parent',
@@ -846,6 +852,8 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       edgeId: edge.id,
       source: edge.source,
       target: edge.target,
+      sourceHandle: edge.sourceHandle ?? null,
+      targetHandle: edge.targetHandle ?? null,
       sourceName: nodeName(s),
       targetName: nodeName(t),
       relation: data?.relation === 'plain' ? 'plain' : 'parent',
@@ -861,6 +869,8 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     const flip = relation === 'parent' && !parentIsSource
     const source = flip ? d.target : d.source
     const target = flip ? d.source : d.target
+    const sourceHandle = flip ? d.targetHandle : d.sourceHandle
+    const targetHandle = flip ? d.sourceHandle : d.targetHandle
     const style = relation === 'plain' ? { ...EDGE_STYLE, strokeDasharray: '6 4' } : EDGE_STYLE
     setEdges(eds => {
       if (d.mode === 'create') {
@@ -868,6 +878,8 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
           id: `e-${source}-${target}-${Date.now()}`,
           source,
           target,
+          sourceHandle: sourceHandle ?? undefined,
+          targetHandle: targetHandle ?? undefined,
           type: 'editable',
           style,
           markerEnd: relation === 'parent' ? EDGE_MARKER : undefined,
@@ -878,6 +890,8 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
         ...e,
         source,
         target,
+        sourceHandle: sourceHandle ?? undefined,
+        targetHandle: targetHandle ?? undefined,
         style,
         markerEnd: relation === 'parent' ? EDGE_MARKER : undefined,
         markerStart: undefined,
@@ -985,6 +999,8 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
         ...e,
         source: e.target,
         target: e.source,
+        sourceHandle: e.targetHandle,
+        targetHandle: e.sourceHandle,
         markerEnd: EDGE_MARKER,
         markerStart: undefined,
       } as Edge
