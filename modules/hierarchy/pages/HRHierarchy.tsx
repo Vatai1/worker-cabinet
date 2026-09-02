@@ -60,6 +60,14 @@ interface Department {
   employees?: DeptEmployee[]
 }
 
+function nodeName(n: Node): string {
+  const d = n.data as { name?: string; firstName?: string; lastName?: string; text?: string } | undefined
+  if (d?.name) return d.name
+  if (d?.lastName || d?.firstName) return `${d.lastName || ''} ${d.firstName || ''}`.trim()
+  if (d?.text) return d.text.slice(0, 30)
+  return 'Блок'
+}
+
 const NODE_COLORS = [
   '#6b7280', // серый (по умолчанию)
   '#3b82f6', // синий
@@ -240,6 +248,21 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
     <>
       <path d={pathD} fill="none" stroke="transparent" strokeWidth={20} />
       <BaseEdge path={pathD} markerEnd={markerEnd} markerStart={markerStart} style={style} />
+      {(data as { note?: string } | undefined)?.note && (
+        <EdgeLabelRenderer>
+          <div
+            style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 16}px)`, pointerEvents: 'none' }}
+            className="nodrag nopan"
+          >
+            <div
+              className="px-2 py-0.5 rounded-md bg-card border border-border text-[10px] text-muted-foreground max-w-[200px] truncate shadow-sm"
+              title={(data as { note?: string }).note}
+            >
+              {(data as { note?: string }).note}
+            </div>
+          </div>
+        </EdgeLabelRenderer>
+      )}
       {selected && (
         <EdgeLabelRenderer>
           {hasWaypoints && waypoints.map((wp, i) => (
@@ -546,6 +569,126 @@ function TextInputModal({
   )
 }
 
+type EdgeRelation = 'plain' | 'parent'
+
+type EdgeDraft = {
+  mode: 'create' | 'edit'
+  edgeId?: string
+  source: string
+  target: string
+  sourceName: string
+  targetName: string
+  relation: EdgeRelation
+  parentIsSource: boolean
+  note: string
+}
+
+function EdgeSettingsModal({
+  draft,
+  onConfirm,
+  onDelete,
+  onClose,
+}: {
+  draft: EdgeDraft
+  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string) => void
+  onDelete?: () => void
+  onClose: () => void
+}) {
+  const [relation, setRelation] = useState<EdgeRelation>(draft.relation)
+  const [parentIsSource, setParentIsSource] = useState(draft.parentIsSource)
+  const [note, setNote] = useState(draft.note)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <ArrowLeftRight className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">{draft.mode === 'create' ? 'Новая связь' : 'Связь'}</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="px-6 py-4 space-y-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+            <span className="font-medium text-foreground truncate">{draft.sourceName}</span>
+            <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-medium text-foreground truncate">{draft.targetName}</span>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Тип связи</p>
+            {([
+              ['parent', 'Родительская (родитель → ребёнок)'],
+              ['plain', 'Простая (без направления)'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setRelation(value)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm text-left transition-colors ${
+                  relation === value
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border hover:bg-muted/50 text-muted-foreground'
+                }`}
+              >
+                <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${relation === value ? 'border-primary' : 'border-muted-foreground/40'}`}>
+                  {relation === value && <span className="w-2 h-2 rounded-full bg-primary" />}
+                </span>
+                {label}
+              </button>
+            ))}
+          </div>
+          {relation === 'parent' && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Кто родитель</p>
+              {([
+                [true, `${draft.sourceName} — родитель, ${draft.targetName} — ребёнок`],
+                [false, `${draft.targetName} — родитель, ${draft.sourceName} — ребёнок`],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={String(value)}
+                  onClick={() => setParentIsSource(value)}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm text-left transition-colors ${
+                    parentIsSource === value
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border hover:bg-muted/50 text-muted-foreground'
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${parentIsSource === value ? 'border-primary' : 'border-muted-foreground/40'}`}>
+                    {parentIsSource === value && <span className="w-2 h-2 rounded-full bg-primary" />}
+                  </span>
+                  <span className="truncate">{label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Примечание</p>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Примечание к связи (необязательно)..."
+              rows={2}
+              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors resize-none"
+            />
+          </div>
+        </div>
+        <div className="px-6 py-3 border-t border-border flex gap-2">
+          {draft.mode === 'edit' && onDelete && (
+            <Button variant="outline" className="text-destructive hover:text-destructive" onClick={onDelete}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+          <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
+          <Button className="flex-1" onClick={() => onConfirm(relation, parentIsSource, note)}>
+            Сохранить
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 type PendingDrop = { type: 'department' | 'employee' | 'text'; position: { x: number; y: number } }
@@ -570,6 +713,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
   const [edgeContextMenu, setEdgeContextMenu] = useState<EdgeContextMenu | null>(null)
   const [editingNode, setEditingNode] = useState<{ id: string; type: 'department' | 'employee' | 'text' } | null>(null)
   const [activeDepartment, setActiveDepartment] = useState<{ id: number; name: string } | null>(null)
+  const [edgeDraft, setEdgeDraft] = useState<EdgeDraft | null>(null)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -657,28 +801,99 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
 
   const onConnect = useCallback((params: Connection) => {
     const inst = rfInstanceRef.current
-    if (inst) {
-      const deptIdOf = (nodeId?: string | null) => {
-        const n = inst.getNodes().find(x => x.id === nodeId)
-        return n?.type === 'department' && n?.data?.id != null ? Number((n.data as { id?: number }).id) : null
-      }
-      const sourceDept = deptIdOf(params.source)
-      const targetDept = deptIdOf(params.target)
-      if (sourceDept !== null && targetDept !== null && sourceDept !== targetDept) {
-        const hasOtherParent = inst.getEdges().some(e => {
-          const s = deptIdOf(e.source)
-          const t = deptIdOf(e.target)
-          return t === targetDept && s !== null && s !== sourceDept
-        })
-        if (hasOtherParent) {
-          toast('У отдела может быть только один родитель')
-          return
-        }
+    if (!inst) return
+    const nodeOf = (nodeId?: string | null) => inst.getNodes().find(x => x.id === nodeId)
+    const s = nodeOf(params.source)
+    const t = nodeOf(params.target)
+    if (!s || !t) return
+    const deptIdOf = (n: Node | undefined) => n?.type === 'department' && n.data?.id != null ? Number((n.data as { id?: number }).id) : null
+    const sDept = deptIdOf(s)
+    const tDept = deptIdOf(t)
+    if (sDept !== null && tDept !== null && sDept !== tDept) {
+      const hasOtherParent = inst.getEdges().some(e => {
+        if ((e.data as { relation?: string } | undefined)?.relation === 'plain') return false
+        const ss = deptIdOf(nodeOf(e.source))
+        const tt = deptIdOf(nodeOf(e.target))
+        return tt === tDept && ss !== null && ss !== sDept
+      })
+      if (hasOtherParent) {
+        toast('У отдела может быть только один родитель')
+        return
       }
     }
+    setEdgeDraft({
+      mode: 'create',
+      source: params.source!,
+      target: params.target!,
+      sourceName: nodeName(s),
+      targetName: nodeName(t),
+      relation: 'parent',
+      parentIsSource: true,
+      note: '',
+    })
+  }, [])
+
+  const onEdgeClick: EdgeMouseHandler = useCallback((_, edge) => {
+    const inst = rfInstanceRef.current
+    if (!inst) return
+    const nodeOf = (nodeId?: string | null) => inst.getNodes().find(x => x.id === nodeId)
+    const s = nodeOf(edge.source)
+    const t = nodeOf(edge.target)
+    if (!s || !t) return
+    const data = edge.data as { relation?: EdgeRelation; note?: string } | undefined
+    setEdgeDraft({
+      mode: 'edit',
+      edgeId: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceName: nodeName(s),
+      targetName: nodeName(t),
+      relation: data?.relation === 'plain' ? 'plain' : 'parent',
+      parentIsSource: !edge.markerStart,
+      note: data?.note || '',
+    })
+  }, [])
+
+  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string) => {
+    const d = edgeDraft
+    if (!d) return
     saveSnapshot()
-    setEdges(eds => addEdge({ ...params, type: 'editable', style: EDGE_STYLE, markerEnd: EDGE_MARKER } as Edge, eds))
-  }, [setEdges, saveSnapshot])
+    const flip = relation === 'parent' && !parentIsSource
+    const source = flip ? d.target : d.source
+    const target = flip ? d.source : d.target
+    const style = relation === 'plain' ? { ...EDGE_STYLE, strokeDasharray: '6 4' } : EDGE_STYLE
+    setEdges(eds => {
+      if (d.mode === 'create') {
+        return addEdge({
+          id: `e-${source}-${target}-${Date.now()}`,
+          source,
+          target,
+          type: 'editable',
+          style,
+          markerEnd: relation === 'parent' ? EDGE_MARKER : undefined,
+          data: { relation, note },
+        } as Edge, eds)
+      }
+      return eds.map(e => e.id !== d.edgeId ? e : ({
+        ...e,
+        source,
+        target,
+        style,
+        markerEnd: relation === 'parent' ? EDGE_MARKER : undefined,
+        markerStart: undefined,
+        data: { ...(e.data as Record<string, unknown>), relation, note },
+      } as Edge))
+    })
+    setEdgeDraft(null)
+  }, [edgeDraft, saveSnapshot, setEdges])
+
+  const deleteEdgeDraft = useCallback(() => {
+    const d = edgeDraft
+    if (!d?.edgeId) return
+    saveSnapshot()
+    setEdges(eds => eds.filter(e => e.id !== d.edgeId))
+    setEdgeDraft(null)
+  }, [edgeDraft, saveSnapshot, setEdges])
 
   const onNodeDragStart = useCallback(() => { saveSnapshot() }, [saveSnapshot])
 
@@ -766,12 +981,13 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     saveSnapshot()
     setEdges(eds => eds.map(e => {
       if (e.id !== edgeId) return e
-      const hasStart = !!e.markerStart
       return {
         ...e,
-        markerEnd: hasStart ? EDGE_MARKER : undefined,
-        markerStart: hasStart ? undefined : EDGE_MARKER,
-      }
+        source: e.target,
+        target: e.source,
+        markerEnd: EDGE_MARKER,
+        markerStart: undefined,
+      } as Edge
     }))
     setEdgeContextMenu(null)
   }, [setEdges, saveSnapshot])
@@ -872,10 +1088,14 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
 
   useEffect(() => {
     if (!fullscreen || !onClose) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (pendingDrop || editingNode || activeDepartment || edgeDraft) return
+      onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen, onClose])
+  }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft])
 
   const content = (
     <div
@@ -997,6 +1217,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
             onDragOver={onDragOver}
             onNodeContextMenu={onNodeContextMenu}
             onEdgeContextMenu={onEdgeContextMenu}
+            onEdgeClick={onEdgeClick}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             onReconnect={onReconnect}
@@ -1043,6 +1264,15 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
         <TextInputModal
           onConfirm={handleSelectText}
           onClose={() => setPendingDrop(null)}
+        />
+      )}
+
+      {edgeDraft && (
+        <EdgeSettingsModal
+          draft={edgeDraft}
+          onConfirm={confirmEdgeDraft}
+          onDelete={deleteEdgeDraft}
+          onClose={() => setEdgeDraft(null)}
         />
       )}
 

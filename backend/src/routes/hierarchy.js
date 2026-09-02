@@ -58,6 +58,7 @@ function buildAutoHierarchy(rows) {
       target: nodeOf.get(r.id),
       style: AUTO_EDGE_STYLE,
       markerEnd: { type: 'arrowclosed', color: '#6b7280' },
+      data: { relation: 'parent' },
     }))
 
   return { nodes, edges, viewport: { x: 0, y: 0, zoom: 1 } }
@@ -77,6 +78,7 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
 
   const parentsByDept = new Map()
   for (const e of Array.isArray(edges) ? edges : []) {
+    if (e?.data?.relation === 'plain') continue
     const sourceDept = deptIdByNode.get(e?.source)
     const targetDept = deptIdByNode.get(e?.target)
     if (sourceDept == null || targetDept == null) continue
@@ -209,7 +211,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *               viewport: { type: object }
  *     responses:
  *       200:
- *         description: 'Структура сохранена; рёбра между department-нодами применены к departments.parent_id (source = родитель, target = ребёнок)'
+ *         description: 'Структура сохранена; рёбра между department-нодами с relation=parent (или без relation) применены к departments.parent_id (source = родитель, target = ребёнок); relation=plain игнорируется'
  *       400:
  *         description: 'Ошибка валидации рёбер (второй родитель, цикл, чужая организация) — сейв отклонён целиком'
  *         content:
