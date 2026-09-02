@@ -31,6 +31,7 @@ import {
   ConnectionMode,
 } from '@xyflow/react'
 import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { DepartmentHierarchyOverlay } from '@/modules/hierarchy/components/DepartmentHierarchyOverlay'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -645,6 +646,26 @@ export function HRHierarchy() {
   }, [])
 
   const onConnect = useCallback((params: Connection) => {
+    const inst = rfInstanceRef.current
+    if (inst) {
+      const deptIdOf = (nodeId?: string | null) => {
+        const n = inst.getNodes().find(x => x.id === nodeId)
+        return n?.type === 'department' && n?.data?.id != null ? Number((n.data as { id?: number }).id) : null
+      }
+      const sourceDept = deptIdOf(params.source)
+      const targetDept = deptIdOf(params.target)
+      if (sourceDept !== null && targetDept !== null && sourceDept !== targetDept) {
+        const hasOtherParent = inst.getEdges().some(e => {
+          const s = deptIdOf(e.source)
+          const t = deptIdOf(e.target)
+          return t === targetDept && s !== null && s !== sourceDept
+        })
+        if (hasOtherParent) {
+          toast('У отдела может быть только один родитель')
+          return
+        }
+      }
+    }
     saveSnapshot()
     setEdges(eds => addEdge({ ...params, type: 'editable', style: EDGE_STYLE, markerEnd: EDGE_MARKER } as Edge, eds))
   }, [setEdges, saveSnapshot])
@@ -916,6 +937,10 @@ export function HRHierarchy() {
               <div className="text-[10px] text-muted-foreground">Перетащите на холст</div>
             </div>
           </div>
+
+          <p className="text-[10px] text-muted-foreground leading-relaxed pt-1">
+            Рёбра между отделами задают подразделения (родителей)
+          </p>
         </div>
 
         {/* Canvas */}

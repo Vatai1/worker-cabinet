@@ -1,11 +1,143 @@
 import express from 'express'
-import { query } from '../config/database.js'
+import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 
 const router = express.Router()
 
 const DEFAULT_DATA = { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }
+
+const AUTO_NODE_GAP_X = 320
+const AUTO_NODE_GAP_Y = 220
+
+const AUTO_EDGE_STYLE = { stroke: '#6b7280', strokeWidth: 2 }
+
+function buildAutoHierarchy(rows) {
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  const nodeOf = new Map()
+  for (const r of rows) {
+    nodeOf.set(r.id, `department-${r.id}-auto`)
+  }
+
+  const levelOf = new Map()
+  for (const r of rows) {
+    const visited = new Set()
+    let cur = r
+    let level = 0
+    while (cur?.parent_id && !visited.has(cur.id)) {
+      visited.add(cur.id)
+      cur = byId.get(cur.parent_id)
+      level += 1
+    }
+    levelOf.set(r.id, level)
+  }
+
+  const counterByLevel = new Map()
+  const nodes = rows.map((r) => {
+    const level = levelOf.get(r.id) || 0
+    const idx = counterByLevel.get(level) || 0
+    counterByLevel.set(level, idx + 1)
+    return {
+      id: nodeOf.get(r.id),
+      type: 'department',
+      position: { x: idx * AUTO_NODE_GAP_X, y: level * AUTO_NODE_GAP_Y },
+      data: {
+        id: r.id,
+        name: r.name,
+        employeeCount: Number(r.employee_count) || 0,
+        managerName: r.manager_name || null,
+      },
+    }
+  })
+
+  const edges = rows
+    .filter((r) => r.parent_id && nodeOf.has(r.parent_id))
+    .map((r) => ({
+      id: `e-auto-${r.parent_id}-${r.id}`,
+      source: nodeOf.get(r.parent_id),
+      target: nodeOf.get(r.id),
+      style: AUTO_EDGE_STYLE,
+      markerEnd: { type: 'arrowclosed', color: '#6b7280' },
+    }))
+
+  return { nodes, edges, viewport: { x: 0, y: 0, zoom: 1 } }
+}
+
+async function buildDepartmentParentChanges(nodes, edges, req) {
+  const deptNodes = (Array.isArray(nodes) ? nodes : []).filter(
+    (n) => n?.type === 'department' && n?.data && n.data.id != null
+  )
+  const deptIdByNode = new Map()
+  const nameByDept = new Map()
+  for (const n of deptNodes) {
+    const deptId = Number(n.data.id)
+    deptIdByNode.set(n.id, deptId)
+    nameByDept.set(deptId, n.data.name || `Отдел #${deptId}`)
+  }
+
+  const parentsByDept = new Map()
+  for (const e of Array.isArray(edges) ? edges : []) {
+    const sourceDept = deptIdByNode.get(e?.source)
+    const targetDept = deptIdByNode.get(e?.target)
+    if (sourceDept == null || targetDept == null) continue
+    if (!parentsByDept.has(targetDept)) parentsByDept.set(targetDept, new Set())
+    parentsByDept.get(targetDept).add(sourceDept)
+  }
+
+  for (const [childDept, parents] of parentsByDept) {
+    if (parents.size > 1) {
+      const err = new Error(`У отдела может быть только один родитель: ${nameByDept.get(childDept)}`)
+      err.statusCode = 400
+      throw err
+    }
+  }
+
+  for (const childDept of parentsByDept.keys()) {
+    const visited = new Set()
+    let cur = childDept
+    while (cur != null && !visited.has(cur)) {
+      visited.add(cur)
+      const parents = parentsByDept.get(cur)
+      cur = parents && parents.size > 0 ? [...parents][0] : null
+    }
+    if (cur != null) {
+      const err = new Error('Цикл в иерархии отделов')
+      err.statusCode = 400
+      throw err
+    }
+  }
+
+  const involved = new Set()
+  for (const [childDept, parents] of parentsByDept) {
+    involved.add(childDept)
+    for (const p of parents) involved.add(p)
+  }
+
+  if (involved.size > 0) {
+    const { text, values } = orgScopedQuery(
+      'SELECT id, name FROM departments WHERE id = ANY($1)',
+      [[...involved]],
+      req
+    )
+    const found = await query(text, values)
+    const foundIds = new Set(found.rows.map((r) => r.id))
+    for (const deptId of involved) {
+      if (!foundIds.has(deptId)) {
+        const err = new Error(`Отдел не найден в организации: ${nameByDept.get(deptId)}`)
+        err.statusCode = 400
+        throw err
+      }
+    }
+  }
+
+  const changes = []
+  for (const n of deptNodes) {
+    const deptId = Number(n.data.id)
+    const parents = parentsByDept.get(deptId)
+    changes.push({ deptId, parentId: parents && parents.size > 0 ? [...parents][0] : null })
+  }
+  return changes
+}
 
 /**
  * @swagger
@@ -37,7 +169,17 @@ router.get('/', authenticateToken, async (req, res) => {
     const { text, values } = orgScopedQuery('SELECT data, updated_at, updated_by FROM hr_hierarchy WHERE id = 1', [], req)
     const result = await query(text, values)
     if (result.rows.length === 0) {
-      return res.json({ data: DEFAULT_DATA, updated_at: null, updated_by: null })
+      const deptResult = await query(
+        `SELECT d.id, d.name, d.parent_id,
+                m.first_name || ' ' || m.last_name as manager_name,
+                (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
+         FROM departments d
+         LEFT JOIN users m ON d.manager_id = m.id${req.org ? ' WHERE d.organization_id = $1' : ''}
+         ORDER BY d.name`,
+        req.org ? [req.org.org_id] : []
+      )
+      const auto = buildAutoHierarchy(deptResult.rows)
+      return res.json({ data: auto, updated_at: null, updated_by: null })
     }
     res.json(result.rows[0])
   } catch (error) {
@@ -67,16 +209,36 @@ router.get('/', authenticateToken, async (req, res) => {
  *               viewport: { type: object }
  *     responses:
  *       200:
- *         description: Структура сохранена
+ *         description: 'Структура сохранена; рёбра между department-нодами применены к departments.parent_id (source = родитель, target = ребёнок)'
+ *       400:
+ *         description: 'Ошибка валидации рёбер (второй родитель, цикл, чужая организация) — сейв отклонён целиком'
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   const { nodes, edges, viewport } = req.body
   if (!nodes || !edges) {
     return res.status(400).json({ error: 'Поля nodes и edges обязательны' })
   }
+
+  let parentChanges
   try {
+    parentChanges = await buildDepartmentParentChanges(nodes, edges, req)
+  } catch (error) {
+    if (error.statusCode === 400) {
+      return res.status(400).json({ error: error.message })
+    }
+    console.error('PUT /hierarchy validation error:', error)
+    return res.status(500).json({ error: 'Не удалось сохранить иерархию' })
+  }
+
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+
     const data = JSON.stringify({ nodes, edges, viewport: viewport ?? DEFAULT_DATA.viewport })
-    const result = await query(
+    const result = await client.query(
       `INSERT INTO hr_hierarchy (id, data, updated_at, updated_by, organization_id)
        VALUES (1, $1, NOW(), $2, $3)
        ON CONFLICT (id) DO UPDATE
@@ -86,10 +248,24 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
        RETURNING updated_at`,
       [data, req.user.id, currentOrgId(req)]
     )
+
+    for (const { deptId, parentId } of parentChanges) {
+      const { text, values } = orgScopedQuery(
+        'UPDATE departments SET parent_id = $1 WHERE id = $2',
+        [parentId, deptId],
+        req
+      )
+      await client.query(text, values)
+    }
+
+    await client.query('COMMIT')
     res.json({ updated_at: result.rows[0].updated_at })
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
     console.error('PUT /hierarchy error:', error)
     res.status(500).json({ error: 'Не удалось сохранить иерархию' })
+  } finally {
+    client.release()
   }
 })
 
