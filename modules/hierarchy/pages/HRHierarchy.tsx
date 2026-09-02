@@ -216,6 +216,9 @@ function segmentMidpoint(s: SplineSegment): Waypoint {
   }
 }
 
+let suppressEdgeMenuUntil = 0
+const suppressEdgeMenu = () => { suppressEdgeMenuUntil = Date.now() + 400 }
+
 function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, markerStart, style, data, selected }: EdgeProps) {
   const { setEdges, screenToFlowPosition } = useReactFlow()
   const saveSnapshot = useContext(SaveSnapshotContext)
@@ -243,7 +246,11 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
         return { ...ed, data: { ...ed.data, waypoints: wps } }
       }))
     }
-    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up) }
+    const up = () => {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      suppressEdgeMenu()
+    }
     document.addEventListener('mousemove', move)
     document.addEventListener('mouseup', up)
   }
@@ -252,6 +259,7 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
     e.stopPropagation()
     e.preventDefault()
     saveSnapshot()
+    suppressEdgeMenu()
     setEdges(eds => eds.map(ed => {
       if (ed.id !== id) return ed
       const wps = [...((ed.data as { waypoints?: Waypoint[] })?.waypoints ?? [])]
@@ -263,6 +271,7 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
   const addWaypoint = (e: React.MouseEvent, segIdx: number, x: number, y: number) => {
     e.stopPropagation()
     saveSnapshot()
+    suppressEdgeMenu()
     setEdges(eds => eds.map(ed => {
       if (ed.id !== id) return ed
       const wps = [...((ed.data as { waypoints?: Waypoint[] })?.waypoints ?? [])]
@@ -295,13 +304,13 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
           {hasWaypoints && waypoints.map((wp, i) => (
             <div
               key={`wp-${i}`}
-              style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${wp.x}px, ${wp.y}px)`, pointerEvents: 'all' }}
+              style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${wp.x}px, ${wp.y}px)`, pointerEvents: 'all', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'move' }}
               className="nodrag nopan"
               onMouseDown={e => dragWaypoint(e, i)}
               onDoubleClick={e => removeWaypoint(e, i)}
               title="Тащите • двойной клик — удалить"
             >
-              <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'white', border: '2px solid #6b7280', cursor: 'move' }} />
+              <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'white', border: '2px solid #6b7280', pointerEvents: 'none' }} />
             </div>
           ))}
           {hasWaypoints
@@ -310,23 +319,23 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
                 return (
                   <div
                     key={`mid-${i}`}
-                    style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)`, pointerEvents: 'all' }}
+                    style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)`, pointerEvents: 'all', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                     className="nodrag nopan"
                     onClick={e => addWaypoint(e, i, mid.x, mid.y)}
                     title="Клик — добавить точку опоры"
                   >
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', cursor: 'pointer', opacity: 0.7 }} />
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', opacity: 0.7, pointerEvents: 'none' }} />
                   </div>
                 )
               })
             : (
               <div
-                style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: 'all' }}
+                style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: 'all', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                 className="nodrag nopan"
                 onClick={e => addWaypoint(e, 0, labelX, labelY)}
                 title="Клик — добавить точку опоры"
               >
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', cursor: 'pointer', opacity: 0.7 }} />
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', opacity: 0.7, pointerEvents: 'none' }} />
               </div>
             )
           }
@@ -876,9 +885,18 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     })
   }, [])
 
-  const onEdgeClick: EdgeMouseHandler = useCallback((_, edge) => {
+  const onEdgeClick: EdgeMouseHandler = useCallback((event, edge) => {
+    if (Date.now() < suppressEdgeMenuUntil) return
     const inst = rfInstanceRef.current
     if (!inst) return
+    const wps = (edge.data as { waypoints?: Waypoint[] } | undefined)?.waypoints
+    if (wps?.length && 'clientX' in event) {
+      const nearWaypoint = wps.some(wp => {
+        const sp = inst.flowToScreenPosition(wp)
+        return Math.hypot(sp.x - event.clientX, sp.y - event.clientY) < 22
+      })
+      if (nearWaypoint) return
+    }
     const nodeOf = (nodeId?: string | null) => inst.getNodes().find(x => x.id === nodeId)
     const s = nodeOf(edge.source)
     const t = nodeOf(edge.target)
