@@ -98,9 +98,13 @@ function DepartmentNode({ data }: NodeProps) {
           <div className="text-white/70 text-xs mt-1">{d.employeeCount} сотр.</div>
         )}
       </div>
-      {d.managerName && (
+      {d.managerName ? (
         <div className="bg-card px-4 py-2 text-xs text-muted-foreground border-t border-border/50">
-          {d.managerName}
+          Начальник: <span className="font-medium text-foreground/80">{d.managerName}</span>
+        </div>
+      ) : (
+        <div className="bg-card px-4 py-2 text-xs text-muted-foreground/60 border-t border-border/50">
+          Без начальника
         </div>
       )}
       {d.description && (

@@ -11,6 +11,7 @@ import { useOrgStore } from '@/shared/store/orgStore'
 import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
 import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { OrganizationsTab } from '@/core/admin/components/OrganizationsTab'
+import { GlobalHierarchy } from '@/modules/hierarchy/pages/GlobalHierarchy'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
@@ -33,12 +34,12 @@ import {
   FolderKanban, Settings,
   Zap, Briefcase, Plane,
   Pencil, Save, Bot, Package,
-  Palette, Tag, LogIn,
+  Palette, Tag, LogIn, Network,
   Bug,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
-type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports'
+type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports'
 
 interface TabItem {
   id: TabId
@@ -63,6 +64,7 @@ const TAB_GROUPS: TabGroup[] = [
       { id: 'role-mappings', name: 'Роли по должности', icon: ShieldCheck, description: 'Автоназначение org_role при первом входе', color: 'from-rose-500 to-red-600' },
       { id: 'departments', name: 'Отделы', icon: Building2, description: 'Структура организации', color: 'from-emerald-500 to-teal-600' },
       { id: 'organizations', name: 'Учреждения', icon: Building2, description: 'Все учреждения системы', color: 'from-indigo-500 to-blue-600' },
+      { id: 'global-hierarchy', name: 'Иерархия', icon: Network, description: 'Глобальная структура учреждений', color: 'from-pink-500 to-rose-600' },
     ],
   },
   {
@@ -298,7 +300,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
       .catch(() => {})
   }, [])
 
-  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'bug-reports']
+  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'global-hierarchy', 'bug-reports']
 
   const filteredGroups = TAB_GROUPS
     .map((group) => ({
@@ -449,6 +451,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
           {activeTab === 'errors' && <ErrorsTab />}
           {activeTab === 'security' && <SecurityTab />}
           {activeTab === 'organizations' && <OrganizationsTab />}
+          {activeTab === 'global-hierarchy' && <GlobalHierarchy />}
           {activeTab === 'dict_positions' && <DictionariesTab initialTab="positions" />}
           {activeTab === 'dict_vacation' && <DictionariesTab initialTab="vacationTypes" />}
           {activeTab === 'dict_skills' && <DictionariesTab initialTab="skills" />}
