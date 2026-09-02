@@ -79,6 +79,7 @@ export interface VacationRequest {
   userAvatar?: string
   userGender?: 'male' | 'female' | 'other'
   departmentManagerId?: string
+  approverId?: string
   
   startDate: string
   endDate: string

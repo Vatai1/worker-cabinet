@@ -421,7 +421,7 @@ export function Vacation() {
   }, [isMySubstitutions, fetchMySubstitutions])
 
   const isManager = hasAnyRole('manager', 'hr', 'admin')
-  const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id)
+  const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id)
 
   if (isMySubstitutions) {
     return (

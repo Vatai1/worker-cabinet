@@ -52,6 +52,7 @@ interface DbVacationRequest {
   statusHistory?: VacationRequest['statusHistory']
   department_manager_id?: number | string | null
   departmentManagerId?: number | string | null
+  approver_id?: number | string | null
   substitutes?: VacationRequest['substitutes']
   delegated_to?: VacationRequest['delegated_to']
 }
@@ -113,6 +114,7 @@ const mapDbRequestToApi = (dbRequest: DbVacationRequest): VacationRequest => ({
   createdAt: dbRequest.created_at ?? '',
   statusHistory: dbRequest.statusHistory || [],
   departmentManagerId: (dbRequest.department_manager_id ?? dbRequest.departmentManagerId)?.toString(),
+  approverId: dbRequest.approver_id?.toString(),
   substitutes: dbRequest.substitutes || [],
   delegated_to: dbRequest.delegated_to || null,
 })

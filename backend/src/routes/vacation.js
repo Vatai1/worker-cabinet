@@ -187,6 +187,7 @@ function extractYear(date) {
  *   get:
  *     tags: [Vacation]
  *     summary: Получить список заявок на отпуск
+ *     description: 'Сотрудник видит свои заявки, approved-заявки своего отдела и все заявки отделов, где он куратор (parent_user_id)'
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -240,8 +241,8 @@ router.get('/requests', authenticateToken, async (req, res) => {
       params.push(userId)
     } else if (departmentId) {
       if (user.role === 'employee') {
-        whereClause += ' AND u.department_id = $' + (params.length + 1) + ' AND rs.code = $' + (params.length + 2)
-        params.push(departmentId, 'approved')
+        whereClause += ` AND ((u.department_id = $${params.length + 1} AND rs.code = $${params.length + 2}) OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 3}))`
+        params.push(departmentId, 'approved', user.id)
       } else {
         whereClause += ' AND u.department_id = $' + (params.length + 1)
         params.push(departmentId)
