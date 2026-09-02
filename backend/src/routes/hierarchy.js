@@ -19,6 +19,23 @@ function buildAutoHierarchy(rows) {
     nodeOf.set(r.id, `department-${r.id}-auto`)
   }
 
+  const curatorNodes = new Map()
+  for (const r of rows) {
+    if (r.parent_user_id && r.parent_user_first_name) {
+      curatorNodes.set(r.parent_user_id, {
+        id: `employee-${r.parent_user_id}-auto`,
+        type: 'employee',
+        position: { x: 0, y: 0 },
+        data: {
+          id: r.parent_user_id,
+          firstName: r.parent_user_first_name,
+          lastName: r.parent_user_last_name || '',
+          position: r.parent_user_position || '',
+        },
+      })
+    }
+  }
+
   const levelOf = new Map()
   for (const r of rows) {
     const visited = new Set()
@@ -29,15 +46,22 @@ function buildAutoHierarchy(rows) {
       cur = byId.get(cur.parent_id)
       level += 1
     }
+    if (r.parent_user_id) level = Math.max(level, 1)
     levelOf.set(r.id, level)
   }
 
   const counterByLevel = new Map()
-  const nodes = rows.map((r) => {
+  const nodes = []
+  for (const cn of curatorNodes.values()) {
+    const idx = counterByLevel.get(0) || 0
+    counterByLevel.set(0, idx + 1)
+    nodes.push({ ...cn, position: { x: idx * AUTO_NODE_GAP_X, y: 0 } })
+  }
+  for (const r of rows) {
     const level = levelOf.get(r.id) || 0
     const idx = counterByLevel.get(level) || 0
     counterByLevel.set(level, idx + 1)
-    return {
+    nodes.push({
       id: nodeOf.get(r.id),
       type: 'department',
       position: { x: idx * AUTO_NODE_GAP_X, y: level * AUTO_NODE_GAP_Y },
@@ -47,19 +71,33 @@ function buildAutoHierarchy(rows) {
         employeeCount: Number(r.employee_count) || 0,
         managerName: r.manager_name || null,
       },
-    }
-  })
+    })
+  }
 
-  const edges = rows
-    .filter((r) => r.parent_id && nodeOf.has(r.parent_id))
-    .map((r) => ({
-      id: `e-auto-${r.parent_id}-${r.id}`,
-      source: nodeOf.get(r.parent_id),
-      target: nodeOf.get(r.id),
-      style: AUTO_EDGE_STYLE,
-      markerEnd: { type: 'arrowclosed', color: '#6b7280' },
-      data: { relation: 'parent' },
-    }))
+  const edges = []
+  for (const r of rows) {
+    if (r.parent_id && nodeOf.has(r.parent_id)) {
+      edges.push({
+        id: `e-auto-${r.parent_id}-${r.id}`,
+        source: nodeOf.get(r.parent_id),
+        target: nodeOf.get(r.id),
+        style: AUTO_EDGE_STYLE,
+        markerEnd: { type: 'arrowclosed', color: '#6b7280' },
+        data: { relation: 'parent' },
+      })
+    }
+    const curator = curatorNodes.get(r.parent_user_id)
+    if (curator) {
+      edges.push({
+        id: `e-auto-u${r.parent_user_id}-${r.id}`,
+        source: curator.id,
+        target: nodeOf.get(r.id),
+        style: AUTO_EDGE_STYLE,
+        markerEnd: { type: 'arrowclosed', color: '#6b7280' },
+        data: { relation: 'parent' },
+      })
+    }
+  }
 
   return { nodes, edges, viewport: { x: 0, y: 0, zoom: 1 } }
 }
@@ -76,18 +114,39 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     nameByDept.set(deptId, n.data.name || `Отдел #${deptId}`)
   }
 
+  const userIdByNode = new Map()
+  const nameByUser = new Map()
+  for (const n of (Array.isArray(nodes) ? nodes : [])) {
+    if (n?.type === 'employee' && n?.data && n.data.id != null) {
+      const userId = Number(n.data.id)
+      userIdByNode.set(n.id, userId)
+      nameByUser.set(userId, `${n.data.lastName || ''} ${n.data.firstName || ''}`.trim() || `Пользователь #${userId}`)
+    }
+  }
+
   const parentsByDept = new Map()
+  const parentUserByDept = new Map()
   for (const e of Array.isArray(edges) ? edges : []) {
     if (e?.data?.relation === 'plain') continue
     const sourceDept = deptIdByNode.get(e?.source)
     const targetDept = deptIdByNode.get(e?.target)
-    if (sourceDept == null || targetDept == null) continue
-    if (!parentsByDept.has(targetDept)) parentsByDept.set(targetDept, new Set())
-    parentsByDept.get(targetDept).add(sourceDept)
+    const sourceUser = userIdByNode.get(e?.source)
+    if (sourceDept != null && targetDept != null) {
+      if (!parentsByDept.has(targetDept)) parentsByDept.set(targetDept, new Set())
+      parentsByDept.get(targetDept).add(sourceDept)
+    } else if (sourceUser != null && targetDept != null) {
+      const existing = parentUserByDept.get(targetDept)
+      if (existing != null && existing !== sourceUser) {
+        const err = new Error(`У отдела может быть только один родитель: ${nameByDept.get(targetDept)}`)
+        err.statusCode = 400
+        throw err
+      }
+      parentUserByDept.set(targetDept, sourceUser)
+    }
   }
 
   for (const [childDept, parents] of parentsByDept) {
-    if (parents.size > 1) {
+    if (parents.size > 1 || parentUserByDept.has(childDept)) {
       const err = new Error(`У отдела может быть только один родитель: ${nameByDept.get(childDept)}`)
       err.statusCode = 400
       throw err
@@ -132,11 +191,42 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     }
   }
 
+  if (parentUserByDept.size > 0) {
+    const involvedUsers = [...new Set(parentUserByDept.values())]
+    const userCheck = await query('SELECT id FROM users WHERE id = ANY($1)', [involvedUsers])
+    const foundUserIds = new Set(userCheck.rows.map((r) => r.id))
+    for (const userId of involvedUsers) {
+      if (!foundUserIds.has(userId)) {
+        const err = new Error(`Пользователь не найден: ${nameByUser.get(userId)}`)
+        err.statusCode = 400
+        throw err
+      }
+    }
+    if (req.org) {
+      const memberCheck = await query(
+        'SELECT user_id FROM user_organizations WHERE org_id = $1 AND user_id = ANY($2) AND is_active = true',
+        [req.org.org_id, involvedUsers]
+      )
+      const memberIds = new Set(memberCheck.rows.map((r) => r.user_id))
+      for (const userId of involvedUsers) {
+        if (!memberIds.has(userId)) {
+          const err = new Error(`Пользователь не состоит в организации: ${nameByUser.get(userId)}`)
+          err.statusCode = 400
+          throw err
+        }
+      }
+    }
+  }
+
   const changes = []
   for (const n of deptNodes) {
     const deptId = Number(n.data.id)
     const parents = parentsByDept.get(deptId)
-    changes.push({ deptId, parentId: parents && parents.size > 0 ? [...parents][0] : null })
+    changes.push({
+      deptId,
+      parentId: parents && parents.size > 0 ? [...parents][0] : null,
+      parentUserId: parentUserByDept.get(deptId) ?? null,
+    })
   }
   return changes
 }
@@ -172,11 +262,15 @@ router.get('/', authenticateToken, async (req, res) => {
     const result = await query(text, values)
     if (result.rows.length === 0) {
       const deptResult = await query(
-        `SELECT d.id, d.name, d.parent_id,
+        `SELECT d.id, d.name, d.parent_id, d.parent_user_id,
                 m.first_name || ' ' || m.last_name as manager_name,
+                pu.first_name as parent_user_first_name,
+                pu.last_name as parent_user_last_name,
+                pu.position as parent_user_position,
                 (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
          FROM departments d
-         LEFT JOIN users m ON d.manager_id = m.id${req.org ? ' WHERE d.organization_id = $1' : ''}
+         LEFT JOIN users m ON d.manager_id = m.id
+         LEFT JOIN users pu ON d.parent_user_id = pu.id${req.org ? ' WHERE d.organization_id = $1' : ''}
          ORDER BY d.name`,
         req.org ? [req.org.org_id] : []
       )
@@ -211,7 +305,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *               viewport: { type: object }
  *     responses:
  *       200:
- *         description: 'Структура сохранена; рёбра между department-нодами с relation=parent (или без relation) применены к departments.parent_id (source = родитель, target = ребёнок); relation=plain игнорируется'
+ *         description: 'Структура сохранена; рёбра с relation=parent (или без relation) между department-нодами применены к departments.parent_id (source = родитель), между employee- и department-нодой — к departments.parent_user_id (сотрудник = куратор отдела); relation=plain игнорируется'
  *       400:
  *         description: 'Ошибка валидации рёбер (второй родитель, цикл, чужая организация) — сейв отклонён целиком'
  *         content:
@@ -251,10 +345,10 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
       [data, req.user.id, currentOrgId(req)]
     )
 
-    for (const { deptId, parentId } of parentChanges) {
+    for (const { deptId, parentId, parentUserId } of parentChanges) {
       const { text, values } = orgScopedQuery(
-        'UPDATE departments SET parent_id = $1 WHERE id = $2',
-        [parentId, deptId],
+        'UPDATE departments SET parent_id = $1, parent_user_id = $2 WHERE id = $3',
+        [parentId, parentUserId, deptId],
         req
       )
       await client.query(text, values)

@@ -582,6 +582,8 @@ type EdgeDraft = {
   targetHandle: string | null
   sourceName: string
   targetName: string
+  sourceType: 'department' | 'employee' | 'text'
+  targetType: 'department' | 'employee' | 'text'
   relation: EdgeRelation
   parentIsSource: boolean
   note: string
@@ -625,7 +627,7 @@ function EdgeSettingsModal({
             {([
               ['parent', 'Родительская (родитель → ребёнок)'],
               ['plain', 'Простая (без направления)'],
-            ] as const).map(([value, label]) => (
+            ] as const).filter(([value]) => value !== 'parent' || draft.sourceType === 'department' || draft.targetType === 'department').map(([value, label]) => (
               <button
                 key={value}
                 onClick={() => setRelation(value)}
@@ -642,7 +644,7 @@ function EdgeSettingsModal({
               </button>
             ))}
           </div>
-          {relation === 'parent' && (
+          {relation === 'parent' && draft.sourceType === 'department' && draft.targetType === 'department' && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Кто родитель</p>
               {([
@@ -664,6 +666,15 @@ function EdgeSettingsModal({
                   <span className="truncate">{label}</span>
                 </button>
               ))}
+            </div>
+          )}
+          {relation === 'parent' && draft.sourceType !== draft.targetType &&
+            (draft.sourceType === 'employee' || draft.targetType === 'employee') &&
+            (draft.sourceType === 'department' || draft.targetType === 'department') && (
+            <div className="text-sm text-muted-foreground bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
+              {draft.sourceType === 'employee'
+                ? `${draft.sourceName} — куратор (родитель), ${draft.targetName} — ребёнок`
+                : `${draft.targetName} — куратор (родитель), ${draft.sourceName} — ребёнок`}
             </div>
           )}
           <div className="space-y-1.5">
@@ -833,6 +844,8 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       targetHandle: params.targetHandle ?? null,
       sourceName: nodeName(s),
       targetName: nodeName(t),
+      sourceType: (s.type as 'department' | 'employee' | 'text') || 'text',
+      targetType: (t.type as 'department' | 'employee' | 'text') || 'text',
       relation: 'parent',
       parentIsSource: true,
       note: '',
@@ -856,6 +869,8 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       targetHandle: edge.targetHandle ?? null,
       sourceName: nodeName(s),
       targetName: nodeName(t),
+      sourceType: (s.type as 'department' | 'employee' | 'text') || 'text',
+      targetType: (t.type as 'department' | 'employee' | 'text') || 'text',
       relation: data?.relation === 'plain' ? 'plain' : 'parent',
       parentIsSource: !edge.markerStart,
       note: data?.note || '',
@@ -866,7 +881,12 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     const d = edgeDraft
     if (!d) return
     saveSnapshot()
-    const flip = relation === 'parent' && !parentIsSource
+    const personDept = relation === 'parent' && d.sourceType !== d.targetType &&
+      (d.sourceType === 'employee' || d.targetType === 'employee') &&
+      (d.sourceType === 'department' || d.targetType === 'department')
+    const flip = personDept
+      ? d.sourceType !== 'employee'
+      : relation === 'parent' && !parentIsSource
     const source = flip ? d.target : d.source
     const target = flip ? d.source : d.target
     const sourceHandle = flip ? d.targetHandle : d.sourceHandle

@@ -1894,11 +1894,13 @@ async function migrateApprovalHierarchy(db) {
   try {
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES departments(id) ON DELETE SET NULL')
     await db.query('CREATE INDEX IF NOT EXISTS idx_departments_parent ON departments(parent_id)')
+    await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS parent_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL')
+    await db.query('CREATE INDEX IF NOT EXISTS idx_departments_parent_user ON departments(parent_user_id)')
     await db.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL')
     await db.query('CREATE INDEX IF NOT EXISTS idx_organizations_parent ON organizations(parent_id)')
     await db.query('ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS approver_id INTEGER REFERENCES users(id) ON DELETE SET NULL')
     await db.query('CREATE INDEX IF NOT EXISTS idx_vacation_requests_approver ON vacation_requests(approver_id)')
-    console.log('  ✓ approval hierarchy (departments.parent_id, organizations.parent_id, vacation_requests.approver_id)')
+    console.log('  ✓ approval hierarchy (departments.parent_id/parent_user_id, organizations.parent_id, vacation_requests.approver_id)')
   } catch (e) {
     console.log('  - approval hierarchy:', e.message)
   }

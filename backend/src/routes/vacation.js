@@ -29,10 +29,11 @@ async function resolveApproverId(userId, orgId, req) {
   const visitedDepts = new Set()
   while (deptId && !visitedDepts.has(deptId)) {
     visitedDepts.add(deptId)
-    const deptResult = await query('SELECT manager_id, parent_id FROM departments WHERE id = $1', [deptId])
+    const deptResult = await query('SELECT manager_id, parent_id, parent_user_id FROM departments WHERE id = $1', [deptId])
     const dept = deptResult.rows[0]
     if (!dept) break
     if (dept.manager_id !== null && dept.manager_id !== userId) return dept.manager_id
+    if (dept.parent_user_id !== null && dept.parent_user_id !== userId) return dept.parent_user_id
     deptId = dept.parent_id
   }
 
@@ -247,7 +248,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       }
     } else {
       if (user.role === 'employee') {
-        whereClause += ' AND vr.user_id = $' + (params.length + 1)
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1}))`
         params.push(user.id)
       } else if (user.role === 'manager') {
         const substExists = await isSubstitutionEnabled(req)
@@ -262,7 +263,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
                 AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
             )`
           : ''
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR vr.approver_id = $${params.length + 1}${substExists})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1})${substExists})`
         params.push(user.id)
       }
     }
