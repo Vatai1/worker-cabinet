@@ -17,7 +17,6 @@ import {
   MarkerType,
   useReactFlow,
   getBezierPath,
-  getSmoothStepPath,
   type Connection,
   type NodeTypes,
   type EdgeTypes,
@@ -171,19 +170,50 @@ function TextNode({ data }: NodeProps) {
 
 type Waypoint = { x: number; y: number }
 
-function extractSmoothStepCorners(path: string, sx: number, sy: number, tx: number, ty: number): Waypoint[] {
-  const pts: Waypoint[] = []
-  const re = /L\s+([-\d.]+)[,\s]+([-\d.]+)/g
-  let m
-  while ((m = re.exec(path)) !== null) {
-    const x = parseFloat(m[1])
-    const y = parseFloat(m[2])
-    if (!(Math.abs(x - sx) < 1 && Math.abs(y - sy) < 1) &&
-        !(Math.abs(x - tx) < 1 && Math.abs(y - ty) < 1)) {
-      pts.push({ x, y })
-    }
+type SplineSegment = { p1: Waypoint; c1: Waypoint; c2: Waypoint; p2: Waypoint }
+
+function positionDir(pos: Position): Waypoint {
+  if (pos === Position.Left) return { x: -1, y: 0 }
+  if (pos === Position.Right) return { x: 1, y: 0 }
+  if (pos === Position.Top) return { x: 0, y: -1 }
+  return { x: 0, y: 1 }
+}
+
+function buildSplineSegments(points: Waypoint[], sourcePosition: Position, targetPosition: Position): SplineSegment[] {
+  const segs: SplineSegment[] = []
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1
+    const prev = points[i - 1] ?? (() => {
+      const d = positionDir(sourcePosition)
+      return { x: p1.x - (d.x * segLen) / 2, y: p1.y - (d.y * segLen) / 2 }
+    })()
+    const next = points[i + 2] ?? (() => {
+      const d = positionDir(targetPosition)
+      return { x: p2.x + (d.x * segLen) / 2, y: p2.y + (d.y * segLen) / 2 }
+    })()
+    segs.push({
+      p1,
+      c1: { x: p1.x + (p2.x - prev.x) / 6, y: p1.y + (p2.y - prev.y) / 6 },
+      c2: { x: p2.x - (next.x - p1.x) / 6, y: p2.y - (next.y - p1.y) / 6 },
+      p2,
+    })
   }
-  return pts
+  return segs
+}
+
+function splinePath(segs: SplineSegment[]): string {
+  return segs.reduce((d, s, i) => (i === 0
+    ? `M ${s.p1.x},${s.p1.y} C ${s.c1.x},${s.c1.y} ${s.c2.x},${s.c2.y} ${s.p2.x},${s.p2.y}`
+    : `${d} C ${s.c1.x},${s.c1.y} ${s.c2.x},${s.c2.y} ${s.p2.x},${s.p2.y}`), '')
+}
+
+function segmentMidpoint(s: SplineSegment): Waypoint {
+  return {
+    x: (s.p1.x + 3 * s.c1.x + 3 * s.c2.x + s.p2.x) / 8,
+    y: (s.p1.y + 3 * s.c1.y + 3 * s.c2.y + s.p2.y) / 8,
+  }
 }
 
 function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, markerEnd, markerStart, style, data, selected }: EdgeProps) {
@@ -193,12 +223,13 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
   const hasWaypoints = waypoints.length > 0
 
   const [smoothPath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
-  const stepPath = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })[0]
 
   const allPoints = [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }]
-  const polyPath = allPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ')
+  const segments = buildSplineSegments(allPoints, sourcePosition, targetPosition)
+  const midSeg = segments[Math.floor((segments.length - 1) / 2)]
+  const notePos = hasWaypoints && midSeg ? segmentMidpoint(midSeg) : { x: labelX, y: labelY }
 
-  const pathD = hasWaypoints ? polyPath : smoothPath
+  const pathD = hasWaypoints ? splinePath(segments) : smoothPath
 
   const dragWaypoint = (e: React.MouseEvent, idx: number) => {
     e.stopPropagation()
@@ -235,12 +266,6 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
     setEdges(eds => eds.map(ed => {
       if (ed.id !== id) return ed
       const wps = [...((ed.data as { waypoints?: Waypoint[] })?.waypoints ?? [])]
-      if (wps.length === 0) {
-        const corners = extractSmoothStepCorners(stepPath, sourceX, sourceY, targetX, targetY)
-        if (corners.length > 0) {
-          return { ...ed, data: { ...ed.data, waypoints: corners } }
-        }
-      }
       wps.splice(segIdx, 0, { x, y })
       return { ...ed, data: { ...ed.data, waypoints: wps } }
     }))
@@ -253,7 +278,7 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
       {(data as { note?: string } | undefined)?.note && (
         <EdgeLabelRenderer>
           <div
-            style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 16}px)`, pointerEvents: 'none' }}
+            style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${notePos.x}px, ${notePos.y - 16}px)`, pointerEvents: 'none' }}
             className="nodrag nopan"
           >
             <div
@@ -280,15 +305,14 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
             </div>
           ))}
           {hasWaypoints
-            ? allPoints.slice(0, -1).map((p, i) => {
-                const mx = (p.x + allPoints[i + 1].x) / 2
-                const my = (p.y + allPoints[i + 1].y) / 2
+            ? segments.map((seg, i) => {
+                const mid = segmentMidpoint(seg)
                 return (
                   <div
                     key={`mid-${i}`}
-                    style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${mx}px, ${my}px)`, pointerEvents: 'all' }}
+                    style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)`, pointerEvents: 'all' }}
                     className="nodrag nopan"
-                    onClick={e => addWaypoint(e, i, mx, my)}
+                    onClick={e => addWaypoint(e, i, mid.x, mid.y)}
                     title="Клик — добавить точку опоры"
                   >
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', cursor: 'pointer', opacity: 0.7 }} />
