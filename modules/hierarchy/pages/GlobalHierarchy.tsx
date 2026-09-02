@@ -22,7 +22,7 @@ import { Building2, Network, X, Loader2, User } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { nodeTypes as hierarchyNodeTypes, EDGE_STYLE } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
@@ -202,13 +202,25 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
   return createPortal(content, document.body)
 }
 
-export function GlobalHierarchy() {
+interface Props {
+  fullscreen?: boolean
+  onClose?: () => void
+}
+
+export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
   const [orgs, setOrgs] = useState<OrgItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedOrg, setSelectedOrg] = useState<OrgItem | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges] = useEdgesState<Edge>([])
+
+  useEffect(() => {
+    if (!fullscreen || !onClose) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !selectedOrg) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreen, onClose, selectedOrg])
 
   useEffect(() => {
     const load = async () => {
@@ -238,10 +250,13 @@ export function GlobalHierarchy() {
     if (org) setSelectedOrg(org)
   }, [orgs])
 
-  return (
+  const content = (
     <div
-      className="flex flex-col overflow-hidden rounded-2xl border border-border shadow-sm bg-card"
-      style={{ height: 'calc(100vh - 220px)', minHeight: '500px' }}
+      className={cn(
+        'flex flex-col overflow-hidden rounded-2xl border border-border shadow-sm bg-card',
+        fullscreen && 'fixed inset-0 z-50 rounded-none border-0',
+      )}
+      style={fullscreen ? undefined : { height: 'calc(100vh - 220px)', minHeight: '500px' }}
     >
       <div className="px-6 py-4 border-b border-border flex-shrink-0 flex items-center justify-between">
         <div>
@@ -253,7 +268,14 @@ export function GlobalHierarchy() {
             Все учреждения системы. Нажмите на учреждение, чтобы посмотреть его иерархию.
           </p>
         </div>
-        <span className="text-xs text-muted-foreground">Учреждений: {orgs.length}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Учреждений: {orgs.length}</span>
+          {fullscreen && onClose && (
+            <Button size="sm" variant="outline" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
       <div className="flex-1 relative" style={{ minHeight: 0 }}>
         {loading && (
@@ -290,4 +312,6 @@ export function GlobalHierarchy() {
       )}
     </div>
   )
+
+  return fullscreen ? createPortal(content, document.body) : content
 }

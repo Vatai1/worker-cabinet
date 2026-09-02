@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
@@ -292,6 +292,12 @@ export function AdminPanel({ mode = 'global' }: Props) {
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const [apiVersion, setApiVersion] = useState<string | null>(null)
   const isGlobalMode = mode === 'global'
+  const prevTabRef = useRef<TabId>('users')
+
+  const switchTab = (tab: TabId) => {
+    if (tab !== 'global-hierarchy') prevTabRef.current = tab
+    setActiveTab(tab)
+  }
 
   useEffect(() => {
     fetchWithRetry(`${API_BASE_URL}/version`, { headers: getAuthHeaders() })
@@ -398,7 +404,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => switchTab(tab.id)}
                       className={cn(
                         'group flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200',
                         isActive
@@ -451,7 +457,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
           {activeTab === 'errors' && <ErrorsTab />}
           {activeTab === 'security' && <SecurityTab />}
           {activeTab === 'organizations' && <OrganizationsTab />}
-          {activeTab === 'global-hierarchy' && <GlobalHierarchy />}
+          {activeTab === 'global-hierarchy' && <GlobalHierarchy fullscreen onClose={() => switchTab(prevTabRef.current)} />}
           {activeTab === 'dict_positions' && <DictionariesTab initialTab="positions" />}
           {activeTab === 'dict_vacation' && <DictionariesTab initialTab="vacationTypes" />}
           {activeTab === 'dict_skills' && <DictionariesTab initialTab="skills" />}
