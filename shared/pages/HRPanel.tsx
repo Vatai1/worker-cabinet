@@ -91,6 +91,12 @@ export function HRPanel() {
   const [displayedMode, setDisplayedMode] = useState<'top' | 'left'>(layoutMode)
   const [phase, setPhase] = useState<'idle' | 'out' | 'in'>('idle')
 
+  const [visitedTabs, setVisitedTabs] = useState<Set<TabId>>(() => new Set(safeActiveTab ? [safeActiveTab] : []))
+  useEffect(() => {
+    if (!safeActiveTab) return
+    setVisitedTabs(prev => prev.has(safeActiveTab) ? prev : new Set(prev).add(safeActiveTab))
+  }, [safeActiveTab])
+
   useEffect(() => {
     if (layoutMode === displayedMode) return
     setPhase('out')
@@ -240,15 +246,17 @@ export function HRPanel() {
                   ['hr_vacation_types', HRVacationTypesTab],
                   ['hr_skills', HRSkillsTab],
                 ] as const).map(([id, Component]) => (
-                  <div
-                    key={id}
-                    className={cn(
-                      'animate-fade-in',
-                      safeActiveTab === id ? 'block' : 'hidden',
-                    )}
-                  >
-                    <Component />
-                  </div>
+                  visitedTabs.has(id) && (
+                    <div
+                      key={id}
+                      className={cn(
+                        'animate-fade-in',
+                        safeActiveTab === id ? 'block' : 'hidden',
+                      )}
+                    >
+                      <Component />
+                    </div>
+                  )
                 ))}
               </div>
             </div>

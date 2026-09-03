@@ -30,7 +30,7 @@ export function OrgSwitcher() {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { setOpen(true); fetchOrgs(true) }}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium
                    hover:bg-accent/50 transition-colors border border-border/40"
       >
