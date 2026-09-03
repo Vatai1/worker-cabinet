@@ -126,6 +126,7 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
 
   const parentsByDept = new Map()
   const parentUserByDept = new Map()
+  const visByDept = new Map()
   for (const e of Array.isArray(edges) ? edges : []) {
     if (e?.data?.relation === 'plain') continue
     const sourceDept = deptIdByNode.get(e?.source)
@@ -142,6 +143,11 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
         throw err
       }
       parentUserByDept.set(targetDept, sourceUser)
+    } else {
+      continue
+    }
+    if (targetDept != null && e?.data?.vacationVisibility) {
+      visByDept.set(targetDept, e.data.vacationVisibility)
     }
   }
 
@@ -222,10 +228,13 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
   for (const n of deptNodes) {
     const deptId = Number(n.data.id)
     const parents = parentsByDept.get(deptId)
+    const vis = visByDept.get(deptId)
     changes.push({
       deptId,
       parentId: parents && parents.size > 0 ? [...parents][0] : null,
       parentUserId: parentUserByDept.get(deptId) ?? null,
+      vacParentSeesChild: vis?.parentSeesChild !== false,
+      vacChildSeesParent: vis?.childSeesParent !== false,
     })
   }
   return changes
@@ -345,10 +354,10 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
       [data, req.user.id, currentOrgId(req)]
     )
 
-    for (const { deptId, parentId, parentUserId } of parentChanges) {
+    for (const { deptId, parentId, parentUserId, vacParentSeesChild, vacChildSeesParent } of parentChanges) {
       const { text, values } = orgScopedQuery(
-        'UPDATE departments SET parent_id = $1, parent_user_id = $2 WHERE id = $3',
-        [parentId, parentUserId, deptId],
+        'UPDATE departments SET parent_id = $1, parent_user_id = $2, vac_parent_sees_child = $3, vac_child_sees_parent = $4 WHERE id = $5',
+        [parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, deptId],
         req
       )
       await client.query(text, values)
