@@ -716,7 +716,7 @@ function EdgeSettingsModal({
                   <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${parentIsSource === value ? 'border-primary' : 'border-muted-foreground/40'}`}>
                     {parentIsSource === value && <span className="w-2 h-2 rounded-full bg-primary" />}
                   </span>
-                  <span className="truncate">{label}</span>
+                  <span className="min-w-0 break-words text-left">{label}</span>
                 </button>
               ))}
             </div>
