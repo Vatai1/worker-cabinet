@@ -32,9 +32,10 @@ import {
   ConnectionMode,
   NodeResizer,
 } from '@xyflow/react'
-import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink, Frame } from 'lucide-react'
+import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
+import { Switch } from '@/shared/components/ui/Switch'
 import { DepartmentHierarchyOverlay } from '@/modules/hierarchy/components/DepartmentHierarchyOverlay'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
@@ -635,6 +636,7 @@ type EdgeDraft = {
   relation: EdgeRelation
   parentIsSource: boolean
   strokeWidth: number
+  strokeColor: string
   note: string
 }
 
@@ -645,13 +647,14 @@ function EdgeSettingsModal({
   onClose,
 }: {
   draft: EdgeDraft
-  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number) => void
+  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string) => void
   onDelete?: () => void
   onClose: () => void
 }) {
   const [relation, setRelation] = useState<EdgeRelation>(draft.relation)
   const [parentIsSource, setParentIsSource] = useState(draft.parentIsSource)
   const [strokeWidth, setStrokeWidth] = useState(draft.strokeWidth)
+  const [strokeColor, setStrokeColor] = useState(draft.strokeColor)
   const [note, setNote] = useState(draft.note)
 
   return (
@@ -728,6 +731,23 @@ function EdgeSettingsModal({
             </div>
           )}
           <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Цвет линии</p>
+            <div className="flex gap-1.5 flex-wrap">
+              {NODE_COLORS.map(color => (
+                <button
+                  key={color}
+                  onClick={() => setStrokeColor(color)}
+                  className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
+                  style={{
+                    backgroundColor: color,
+                    borderColor: strokeColor === color ? 'white' : color,
+                    boxShadow: strokeColor === color ? `0 0 0 2px ${color}` : 'none',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Толщина линии</p>
               <span className="text-xs font-medium text-muted-foreground">{strokeWidth} px</span>
@@ -742,7 +762,7 @@ function EdgeSettingsModal({
               className="w-full accent-primary"
             />
             <svg className="w-full h-5" viewBox="0 0 200 8" preserveAspectRatio="none">
-              <line x1="0" y1="4" x2="200" y2="4" stroke="#6b7280" strokeWidth={strokeWidth} strokeLinecap="round" />
+              <line x1="0" y1="4" x2="200" y2="4" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             </svg>
           </div>
           <div className="space-y-1.5">
@@ -763,7 +783,7 @@ function EdgeSettingsModal({
             </Button>
           )}
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(relation, parentIsSource, note, strokeWidth)}>
+          <Button className="flex-1" onClick={() => onConfirm(relation, parentIsSource, note, strokeWidth, strokeColor)}>
             Сохранить
           </Button>
         </div>
@@ -773,6 +793,56 @@ function EdgeSettingsModal({
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+
+type VacationVisibility = { childSeesParent: boolean; parentSeesChild: boolean }
+
+function ParentEdgeSettingsModal({ edge, onConfirm, onClose }: {
+  edge: Edge
+  onConfirm: (childSeesParent: boolean, parentSeesChild: boolean) => void
+  onClose: () => void
+}) {
+  const vis = (edge.data as { vacationVisibility?: Partial<VacationVisibility> } | undefined)?.vacationVisibility
+  const [childSeesParent, setChildSeesParent] = useState(vis?.childSeesParent ?? true)
+  const [parentSeesChild, setParentSeesChild] = useState(vis?.parentSeesChild ?? true)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Eye className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">Родительская связь</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="px-6 py-4 space-y-3">
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Видят ли мой отпуск</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Дочерние элементы видят отпуска родителя</p>
+            </div>
+            <Switch checked={childSeesParent} onCheckedChange={setChildSeesParent} />
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Вижу ли я их отпуска</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Родитель видит отпуска дочерних элементов</p>
+            </div>
+            <Switch checked={parentSeesChild} onCheckedChange={setParentSeesChild} />
+          </div>
+        </div>
+        <div className="px-6 py-3 border-t border-border flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
+          <Button className="flex-1" onClick={() => onConfirm(childSeesParent, parentSeesChild)}>
+            Сохранить
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 type PendingDrop = { type: 'department' | 'employee' | 'text' | 'group'; position: { x: number; y: number } }
 type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text' | 'group'; x: number; y: number }
@@ -797,6 +867,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
   const [editingNode, setEditingNode] = useState<{ id: string; type: 'department' | 'employee' | 'text' | 'group' } | null>(null)
   const [activeDepartment, setActiveDepartment] = useState<{ id: number; name: string } | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<EdgeDraft | null>(null)
+  const [parentEdgeId, setParentEdgeId] = useState<string | null>(null)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -917,6 +988,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       relation: 'parent',
       parentIsSource: true,
       strokeWidth: 2,
+      strokeColor: '#6b7280',
       note: '',
     })
   }, [])
@@ -952,11 +1024,12 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       relation: data?.relation === 'plain' ? 'plain' : 'parent',
       parentIsSource: !edge.markerStart,
       strokeWidth: (edge.style as { strokeWidth?: number } | undefined)?.strokeWidth ?? 2,
+      strokeColor: (edge.style as { stroke?: string } | undefined)?.stroke ?? '#6b7280',
       note: data?.note || '',
     })
   }, [])
 
-  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number) => {
+  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string) => {
     const d = edgeDraft
     if (!d) return
     saveSnapshot()
@@ -971,8 +1044,9 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     const sourceHandle = flip ? d.targetHandle : d.sourceHandle
     const targetHandle = flip ? d.sourceHandle : d.targetHandle
     const style = relation === 'plain'
-      ? { ...EDGE_STYLE, strokeWidth, strokeDasharray: '6 4' }
-      : { ...EDGE_STYLE, strokeWidth }
+      ? { ...EDGE_STYLE, stroke: strokeColor, strokeWidth, strokeDasharray: '6 4' }
+      : { ...EDGE_STYLE, stroke: strokeColor, strokeWidth }
+    const marker = relation === 'parent' ? { type: MarkerType.ArrowClosed, color: strokeColor } : undefined
     setEdges(eds => {
       if (d.mode === 'create') {
         return addEdge({
@@ -983,7 +1057,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
           targetHandle: targetHandle ?? undefined,
           type: 'editable',
           style,
-          markerEnd: relation === 'parent' ? EDGE_MARKER : undefined,
+          markerEnd: marker,
           data: { relation, note },
         } as Edge, eds)
       }
@@ -994,7 +1068,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
         sourceHandle: sourceHandle ?? undefined,
         targetHandle: targetHandle ?? undefined,
         style,
-        markerEnd: relation === 'parent' ? EDGE_MARKER : undefined,
+        markerEnd: marker,
         markerStart: undefined,
         data: { ...(e.data as Record<string, unknown>), relation, note },
       } as Edge))
@@ -1092,28 +1166,20 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     setEdgeContextMenu({ edgeId: edge.id, x: e.clientX, y: e.clientY })
   }, [])
 
-  const reverseEdge = useCallback((edgeId: string) => {
-    saveSnapshot()
-    setEdges(eds => eds.map(e => {
-      if (e.id !== edgeId) return e
-      return {
-        ...e,
-        source: e.target,
-        target: e.source,
-        sourceHandle: e.targetHandle,
-        targetHandle: e.sourceHandle,
-        markerEnd: EDGE_MARKER,
-        markerStart: undefined,
-      } as Edge
-    }))
-    setEdgeContextMenu(null)
-  }, [setEdges, saveSnapshot])
-
   const deleteEdge = useCallback((edgeId: string) => {
     saveSnapshot()
     setEdges(eds => eds.filter(e => e.id !== edgeId))
     setEdgeContextMenu(null)
   }, [setEdges, saveSnapshot])
+
+  const saveParentEdgeSettings = useCallback((childSeesParent: boolean, parentSeesChild: boolean) => {
+    if (!parentEdgeId) return
+    saveSnapshot()
+    setEdges(eds => eds.map(e => e.id === parentEdgeId
+      ? { ...e, data: { ...(e.data as Record<string, unknown>), vacationVisibility: { childSeesParent, parentSeesChild } } }
+      : e))
+    setParentEdgeId(null)
+  }, [parentEdgeId, saveSnapshot, setEdges])
 
   const deleteNode = useCallback((nodeId: string) => {
     saveSnapshot()
@@ -1491,29 +1557,49 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       })()}
 
       {/* Edge context menu */}
-      {edgeContextMenu && (
-        <div
-          className="fixed z-50 min-w-[200px] overflow-hidden rounded-xl border border-border bg-card shadow-xl animate-in"
-          style={{ left: edgeContextMenu.x, top: edgeContextMenu.y }}
-          onClick={e => e.stopPropagation()}
-        >
-          <button
-            onClick={() => reverseEdge(edgeContextMenu.edgeId)}
-            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+      {edgeContextMenu && (() => {
+        const ec = edges.find(e => e.id === edgeContextMenu.edgeId)
+        const isParent = (ec?.data as { relation?: string } | undefined)?.relation !== 'plain'
+        return (
+          <div
+            className="fixed z-50 min-w-[200px] overflow-hidden rounded-xl border border-border bg-card shadow-xl animate-in"
+            style={{ left: edgeContextMenu.x, top: edgeContextMenu.y }}
+            onClick={e => e.stopPropagation()}
           >
-            <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
-            Поменять направление связи
-          </button>
-          <div className="h-px bg-border mx-2" />
-          <button
-            onClick={() => deleteEdge(edgeContextMenu.edgeId)}
-            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-          >
-            <Trash2 className="h-4 w-4" />
-            Удалить связь
-          </button>
-        </div>
-      )}
+            {isParent && (
+              <>
+                <button
+                  onClick={() => { setParentEdgeId(edgeContextMenu.edgeId); setEdgeContextMenu(null) }}
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+                >
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                  Настройки родительской связи
+                </button>
+                <div className="h-px bg-border mx-2" />
+              </>
+            )}
+            <button
+              onClick={() => deleteEdge(edgeContextMenu.edgeId)}
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <Trash2 className="h-4 w-4" />
+              Удалить связь
+            </button>
+          </div>
+        )
+      })()}
+
+      {parentEdgeId && (() => {
+        const e = edges.find(x => x.id === parentEdgeId)
+        if (!e) return null
+        return (
+          <ParentEdgeSettingsModal
+            edge={e}
+            onConfirm={saveParentEdgeSettings}
+            onClose={() => setParentEdgeId(null)}
+          />
+        )
+      })()}
 
       {/* Context menu */}
       {contextMenu && (
