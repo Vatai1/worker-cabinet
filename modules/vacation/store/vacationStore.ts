@@ -24,11 +24,13 @@ interface VacationStore {
 
   currentUserRequests: VacationRequest[]
   departmentRequests: VacationRequest[]
+  connectionsRequests: VacationRequest[]
 
   loading: boolean
   error: string | null
 
   fetchAllRequests: () => Promise<void>
+  fetchConnectionRequests: () => Promise<void>
   fetchUserRequests: (userId: string) => Promise<void>
   fetchDepartmentRequests: (departmentId: string) => Promise<void>
   fetchBalance: (userId: string, year: number) => Promise<VacationBalance>
@@ -73,6 +75,7 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
       
       currentUserRequests: [],
       departmentRequests: [],
+      connectionsRequests: [],
       
       loading: false,
       error: null,
@@ -84,6 +87,16 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
           set({ departmentRequests: data, loading: false })
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при загрузке заявок'), loading: false })
+        }
+      },
+
+      fetchConnectionRequests: async () => {
+        set({ loading: true, error: null })
+        try {
+          const data = await vacationApi.getAllRequests({ scope: 'connections' })
+          set({ connectionsRequests: data, loading: false })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при загрузке заявок по связям'), loading: false })
         }
       },
 

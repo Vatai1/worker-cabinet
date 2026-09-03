@@ -120,10 +120,11 @@ const mapDbRequestToApi = (dbRequest: DbVacationRequest): VacationRequest => ({
 })
 
 export const vacationApi = {
-  async getAllRequests(filters?: { departmentId?: string; year?: number }): Promise<VacationRequest[]> {
+  async getAllRequests(filters?: { departmentId?: string; year?: number; scope?: 'connections' }): Promise<VacationRequest[]> {
     const params = new URLSearchParams()
     if (filters?.departmentId) params.set('departmentId', filters.departmentId)
     if (filters?.year) params.set('year', filters.year.toString())
+    if (filters?.scope) params.set('scope', filters.scope)
     const query = params.toString() ? `?${params.toString()}` : ''
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests${query}`, {
       headers: getAuthHeadersWithContentType(),

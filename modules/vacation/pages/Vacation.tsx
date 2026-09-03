@@ -33,11 +33,13 @@ export function Vacation() {
   const {
     currentUserRequests,
     departmentRequests,
+    connectionsRequests,
     loading,
     error,
     fetchAllRequests,
     fetchUserRequests,
     fetchDepartmentRequests,
+    fetchConnectionRequests,
     fetchBalance,
     fetchRestrictions,
     approveRequest,
@@ -63,7 +65,7 @@ export function Vacation() {
   const [showRestrictionModal, setShowRestrictionModal] = useState(false)
   const [showApplicationModal, setShowApplicationModal] = useState(false)
   const [showTransferApplicationModal, setShowTransferApplicationModal] = useState(false)
-  const [calendarView, setCalendarView] = useState<'department' | 'personal'>('department')
+  const [calendarView, setCalendarView] = useState<'department' | 'personal' | 'connections'>('department')
   const [restrictionWarnings, setRestrictionWarnings] = useState<VacationValidationError[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<VacationValidationError[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
@@ -402,12 +404,13 @@ export function Vacation() {
 
   const calendarRequests = useMemo(() => {
     if (calendarView === 'personal') return currentUserRequests
-    const merged = [...departmentRequests]
+    const base = calendarView === 'connections' ? connectionsRequests : departmentRequests
+    const merged = [...base]
     currentUserRequests.forEach(r => {
       if (!merged.some(m => m.id === r.id)) merged.push(r)
     })
     return merged
-  }, [departmentRequests, currentUserRequests, calendarView])
+  }, [departmentRequests, connectionsRequests, currentUserRequests, calendarView])
 
   const handlePrevYear = () => setYear((y) => y - 1)
   const handleNextYear = () => setYear((y) => y + 1)
@@ -419,6 +422,10 @@ export function Vacation() {
   useEffect(() => {
     if (isMySubstitutions) fetchMySubstitutions()
   }, [isMySubstitutions, fetchMySubstitutions])
+
+  useEffect(() => {
+    if (calendarView === 'connections') fetchConnectionRequests()
+  }, [calendarView, fetchConnectionRequests])
 
   const isManager = hasAnyRole('manager', 'hr', 'admin')
   const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id)
@@ -653,6 +660,17 @@ export function Vacation() {
                 }`}
               >
                 Отдел
+              </button>
+              <button
+                type="button"
+                onClick={() => setCalendarView('connections')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  calendarView === 'connections'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Связи
               </button>
               <button
                 type="button"

@@ -216,6 +216,10 @@ function extractYear(date) {
  *         name: departmentId
  *         schema: { type: integer }
  *       - in: query
+ *         name: scope
+ *         schema: { type: string, enum: [connections] }
+ *         description: 'connections — только заявки по связям иерархии (подчинённые, курируемые отделы, родители)'
+ *       - in: query
  *         name: year
  *         schema: { type: integer }
  *     responses:
@@ -229,7 +233,7 @@ function extractYear(date) {
  */
 router.get('/requests', authenticateToken, async (req, res) => {
   try {
-    const { userId, status, departmentId, year } = req.query
+    const { userId, status, departmentId, year, scope } = req.query
     const user = req.user
 
     let whereClause = 'WHERE 1=1'
@@ -239,7 +243,10 @@ router.get('/requests', authenticateToken, async (req, res) => {
       params.push(req.org.org_id)
     }
 
-    if (userId) {
+    if (scope === 'connections') {
+      whereClause += ` AND (${userParentSeesChildVacations(params.length + 1)} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userChildSeesParentVacations(params.length + 1)} OR ${childSeesParentVacations(params.length + 1)})`
+      params.push(user.id)
+    } else if (userId) {
       if (parseInt(userId) !== user.id) {
         if (user.role === 'employee') {
           return res.status(403).json({ error: 'Forbidden' })
