@@ -32,7 +32,7 @@ import {
   ConnectionMode,
   NodeResizer,
 } from '@xyflow/react'
-import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye } from 'lucide-react'
+import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { Switch } from '@/shared/components/ui/Switch'
@@ -656,6 +656,9 @@ function EdgeSettingsModal({
   const [strokeWidth, setStrokeWidth] = useState(draft.strokeWidth)
   const [strokeColor, setStrokeColor] = useState(draft.strokeColor)
   const [note, setNote] = useState(draft.note)
+  const parentAvailable = draft.sourceType !== 'text' && draft.targetType !== 'text' &&
+    (draft.sourceType === 'department' || draft.targetType === 'department' || (draft.sourceType === 'employee' && draft.targetType === 'employee'))
+  const effectiveRelation: EdgeRelation = parentAvailable ? relation : 'plain'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -680,7 +683,7 @@ function EdgeSettingsModal({
             {([
               ['parent', 'Родительская (родитель → ребёнок)'],
               ['plain', 'Простая (без направления)'],
-            ] as const).filter(([value]) => value !== 'parent' || draft.sourceType === 'department' || draft.targetType === 'department' || (draft.sourceType === 'employee' && draft.targetType === 'employee')).map(([value, label]) => (
+            ] as const).filter(([value]) => value !== 'parent' || parentAvailable).map(([value, label]) => (
               <button
                 key={value}
                 onClick={() => setRelation(value)}
@@ -783,7 +786,7 @@ function EdgeSettingsModal({
             </Button>
           )}
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(relation, parentIsSource, note, strokeWidth, strokeColor)}>
+          <Button className="flex-1" onClick={() => onConfirm(effectiveRelation, parentIsSource, note, strokeWidth, strokeColor)}>
             Сохранить
           </Button>
         </div>
@@ -840,6 +843,60 @@ function ParentEdgeSettingsModal({ edge, onConfirm, onClose }: {
 
 type PendingDrop = { type: 'department' | 'employee' | 'text' | 'group'; position: { x: number; y: number } }
 
+function ConfirmDeleteNodeModal({ edgeCount, onConfirm, onClose }: { edgeCount: number; onConfirm: () => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Trash2 className="h-5 w-5 text-destructive" />
+            <h2 className="text-lg font-semibold">Удалить блок?</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-sm text-muted-foreground">
+            У блока есть связи ({edgeCount}) — они будут удалены вместе с ним.
+          </p>
+        </div>
+        <div className="px-6 py-3 border-t border-border flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
+          <Button variant="destructive" className="flex-1" onClick={onConfirm}>Удалить</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ConfirmLeaveModal({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            <h2 className="text-lg font-semibold">Несохранённые изменения</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-sm text-muted-foreground">
+            Изменения иерархии не сохранены и будут потеряны.
+          </p>
+        </div>
+        <div className="px-6 py-3 border-t border-border flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>Остаться</Button>
+          <Button variant="destructive" className="flex-1" onClick={onConfirm}>Выйти без сохранения</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ConfirmDeleteEdgeModal({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -888,6 +945,8 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
   const [edgeDraft, setEdgeDraft] = useState<EdgeDraft | null>(null)
   const [parentEdgeId, setParentEdgeId] = useState<string | null>(null)
   const [confirmDeleteEdgeId, setConfirmDeleteEdgeId] = useState<string | null>(null)
+  const [confirmDeleteNode, setConfirmDeleteNode] = useState<string | null>(null)
+  const [confirmLeave, setConfirmLeave] = useState(false)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -896,12 +955,14 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
 
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([])
   const isRestoringRef = useRef(false)
+  const [dirty, setDirty] = useState(false)
 
   const saveSnapshot = useCallback(() => {
     if (isRestoringRef.current) return
     const inst = rfInstanceRef.current
     if (!inst) return
     historyRef.current = [...historyRef.current.slice(-49), { nodes: inst.getNodes(), edges: inst.getEdges() }]
+    setDirty(true)
   }, [])
 
   const undo = useCallback(() => {
@@ -1227,6 +1288,15 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     setContextMenu(null)
   }, [setNodes, setEdges, saveSnapshot])
 
+  const requestDeleteNode = useCallback((nodeId: string) => {
+    setContextMenu(null)
+    if (edges.some(e => e.source === nodeId || e.target === nodeId)) {
+      setConfirmDeleteNode(nodeId)
+    } else {
+      deleteNode(nodeId)
+    }
+  }, [edges, deleteNode])
+
   const setNodeColor = useCallback((nodeId: string, color: string) => {
     saveSnapshot()
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, color } } : n))
@@ -1321,6 +1391,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
         throw new Error(d.error || 'Не удалось сохранить иерархию')
       }
       setSavedLabel(true)
+      setDirty(false)
       setTimeout(() => setSavedLabel(false), 2000)
     } catch (err) {
       setError(getErrorMessage(err))
@@ -1329,16 +1400,34 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     }
   }
 
+  const requestClose = useCallback(() => {
+    if (dirty) {
+      setConfirmLeave(true)
+      return
+    }
+    onClose?.()
+  }, [dirty, onClose])
+
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
+
   useEffect(() => {
     if (!fullscreen || !onClose) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (pendingDrop || editingNode || activeDepartment || edgeDraft || parentEdgeId || confirmDeleteEdgeId) return
-      onClose()
+      if (pendingDrop || editingNode || activeDepartment || edgeDraft || parentEdgeId || confirmDeleteEdgeId || confirmDeleteNode || confirmLeave) return
+      requestClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft, parentEdgeId, confirmDeleteEdgeId])
+  }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft, parentEdgeId, confirmDeleteEdgeId, confirmDeleteNode, confirmLeave, requestClose])
 
   const displayNodes = useMemo(
     () => nodes.map(n => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 })) as Node[],
@@ -1371,7 +1460,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
             {saving ? 'Сохранение...' : 'Сохранить'}
           </Button>
           {fullscreen && onClose && (
-            <Button size="sm" variant="outline" onClick={onClose}>
+            <Button size="sm" variant="outline" onClick={requestClose}>
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -1487,7 +1576,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
             onReconnectEnd={onReconnectEnd}
             connectionMode={ConnectionMode.Loose}
             colorMode={darkMode ? 'dark' : 'light'}
-            deleteKeyCode="Delete"
+            deleteKeyCode={null}
             fitView
             fitViewOptions={{ maxZoom: 1 }}
           >
@@ -1549,6 +1638,24 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
         <ConfirmDeleteEdgeModal
           onConfirm={() => { deleteEdge(confirmDeleteEdgeId); setConfirmDeleteEdgeId(null) }}
           onClose={() => setConfirmDeleteEdgeId(null)}
+        />
+      )}
+
+      {confirmDeleteNode && (() => {
+        const count = edges.filter(e => e.source === confirmDeleteNode || e.target === confirmDeleteNode).length
+        return (
+          <ConfirmDeleteNodeModal
+            edgeCount={count}
+            onConfirm={() => { deleteNode(confirmDeleteNode); setConfirmDeleteNode(null) }}
+            onClose={() => setConfirmDeleteNode(null)}
+          />
+        )
+      })()}
+
+      {confirmLeave && (
+        <ConfirmLeaveModal
+          onConfirm={() => { setConfirmLeave(false); onClose?.() }}
+          onClose={() => setConfirmLeave(false)}
         />
       )}
 
@@ -1700,7 +1807,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
           </button>
           <div className="h-px bg-border mx-2" />
           <button
-            onClick={() => deleteNode(contextMenu.nodeId)}
+            onClick={() => requestDeleteNode(contextMenu.nodeId)}
             className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
           >
             <Trash2 className="h-4 w-4" />
