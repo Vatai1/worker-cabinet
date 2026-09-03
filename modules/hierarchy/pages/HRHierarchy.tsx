@@ -839,6 +839,31 @@ function ParentEdgeSettingsModal({ edge, onConfirm, onClose }: {
 }
 
 type PendingDrop = { type: 'department' | 'employee' | 'text' | 'group'; position: { x: number; y: number } }
+
+function ConfirmDeleteEdgeModal({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Trash2 className="h-5 w-5 text-destructive" />
+            <h2 className="text-lg font-semibold">Удалить связь?</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-sm text-muted-foreground">Связь будет удалена из иерархии.</p>
+        </div>
+        <div className="px-6 py-3 border-t border-border flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
+          <Button variant="destructive" className="flex-1" onClick={onConfirm}>Удалить</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
 type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text' | 'group'; x: number; y: number }
 type EdgeContextMenu = { edgeId: string; x: number; y: number }
 
@@ -862,6 +887,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
   const [activeDepartment, setActiveDepartment] = useState<{ id: number; name: string } | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<EdgeDraft | null>(null)
   const [parentEdgeId, setParentEdgeId] = useState<string | null>(null)
+  const [confirmDeleteEdgeId, setConfirmDeleteEdgeId] = useState<string | null>(null)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -1067,14 +1093,6 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
         data: { ...(e.data as Record<string, unknown>), relation, note },
       } as Edge))
     })
-    setEdgeDraft(null)
-  }, [edgeDraft, saveSnapshot, setEdges])
-
-  const deleteEdgeDraft = useCallback(() => {
-    const d = edgeDraft
-    if (!d?.edgeId) return
-    saveSnapshot()
-    setEdges(eds => eds.filter(e => e.id !== d.edgeId))
     setEdgeDraft(null)
   }, [edgeDraft, saveSnapshot, setEdges])
 
@@ -1288,12 +1306,12 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     if (!fullscreen || !onClose) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (pendingDrop || editingNode || activeDepartment || edgeDraft) return
+      if (pendingDrop || editingNode || activeDepartment || edgeDraft || parentEdgeId || confirmDeleteEdgeId) return
       onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft])
+  }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft, parentEdgeId, confirmDeleteEdgeId])
 
   const displayNodes = useMemo(
     () => nodes.map(n => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 })) as Node[],
@@ -1495,8 +1513,15 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
         <EdgeSettingsModal
           draft={edgeDraft}
           onConfirm={confirmEdgeDraft}
-          onDelete={deleteEdgeDraft}
+          onDelete={() => { if (edgeDraft.edgeId) setConfirmDeleteEdgeId(edgeDraft.edgeId); setEdgeDraft(null) }}
           onClose={() => setEdgeDraft(null)}
+        />
+      )}
+
+      {confirmDeleteEdgeId && (
+        <ConfirmDeleteEdgeModal
+          onConfirm={() => { deleteEdge(confirmDeleteEdgeId); setConfirmDeleteEdgeId(null) }}
+          onClose={() => setConfirmDeleteEdgeId(null)}
         />
       )}
 
@@ -1573,7 +1598,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
               </>
             )}
             <button
-              onClick={() => deleteEdge(edgeContextMenu.edgeId)}
+              onClick={() => { setConfirmDeleteEdgeId(edgeContextMenu.edgeId); setEdgeContextMenu(null) }}
               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
             >
               <Trash2 className="h-4 w-4" />
