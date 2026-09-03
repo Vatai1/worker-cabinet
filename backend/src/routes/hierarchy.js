@@ -429,6 +429,92 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
 
 /**
  * @swagger
+ * /hierarchy/global:
+ *   get:
+ *     tags: [Hierarchy]
+ *     summary: Получить глобальную иерархию организаций (ReactFlow layout)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Данные глобальной иерархии
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     nodes: { type: array, items: { type: object } }
+ *                     edges: { type: array, items: { type: object } }
+ *                     viewport: { type: object }
+ *                 updated_at: { type: string, format: date-time, nullable: true }
+ */
+router.get('/global', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT data, updated_at FROM global_hierarchy WHERE id = 1')
+    if (result.rows.length === 0) {
+      return res.json({ data: null, updated_at: null })
+    }
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('GET /hierarchy/global error:', error)
+    res.status(500).json({ error: 'Не удалось загрузить глобальную иерархию' })
+  }
+})
+
+/**
+ * @swagger
+ * /hierarchy/global:
+ *   put:
+ *     tags: [Hierarchy]
+ *     summary: Сохранить глобальную иерархию организаций (hr/admin/superadmin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nodes: { type: array, items: { type: object } }
+ *               edges: { type: array, items: { type: object } }
+ *               viewport: { type: object }
+ *     responses:
+ *       200:
+ *         description: Сохранено
+ *       400:
+ *         description: Ошибка валидации
+ */
+router.put('/global', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), async (req, res) => {
+  const { nodes, edges, viewport } = req.body
+  if (!nodes || !edges) {
+    return res.status(400).json({ error: 'Поля nodes и edges обязательны' })
+  }
+  try {
+    const data = JSON.stringify({ nodes, edges, viewport: viewport ?? { x: 0, y: 0, zoom: 1 } })
+    const result = await query(
+      `INSERT INTO global_hierarchy (id, data, updated_at, updated_by)
+       VALUES (1, $1, NOW(), $2)
+       ON CONFLICT (id) DO UPDATE
+         SET data = EXCLUDED.data,
+             updated_at = EXCLUDED.updated_at,
+             updated_by = EXCLUDED.updated_by
+       RETURNING updated_at`,
+      [data, req.user.id]
+    )
+    res.json({ updated_at: result.rows[0].updated_at })
+  } catch (error) {
+    console.error('PUT /hierarchy/global error:', error)
+    res.status(500).json({ error: 'Не удалось сохранить глобальную иерархию' })
+  }
+})
+
+/**
+ * @swagger
  * /hierarchy/department/{id}:
  *   get:
  *     tags: [Hierarchy]

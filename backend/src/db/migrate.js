@@ -1073,6 +1073,17 @@ async function runMigrations() {
     console.log('  ✓ hr_hierarchy')
 
     await db.query(`
+      CREATE TABLE IF NOT EXISTS global_hierarchy (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        data JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}',
+        updated_at TIMESTAMP DEFAULT NOW(),
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        CONSTRAINT single_row_global CHECK (id = 1)
+      )
+    `).catch(e => console.log('  - global_hierarchy:', e.message))
+    console.log('  ✓ global_hierarchy')
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS department_hierarchy (
         department_id INTEGER PRIMARY KEY REFERENCES departments(id) ON DELETE CASCADE,
         data JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1}}',
