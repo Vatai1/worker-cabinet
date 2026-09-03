@@ -634,6 +634,7 @@ type EdgeDraft = {
   targetType: 'department' | 'employee' | 'text'
   relation: EdgeRelation
   parentIsSource: boolean
+  strokeWidth: number
   note: string
 }
 
@@ -644,12 +645,13 @@ function EdgeSettingsModal({
   onClose,
 }: {
   draft: EdgeDraft
-  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string) => void
+  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number) => void
   onDelete?: () => void
   onClose: () => void
 }) {
   const [relation, setRelation] = useState<EdgeRelation>(draft.relation)
   const [parentIsSource, setParentIsSource] = useState(draft.parentIsSource)
+  const [strokeWidth, setStrokeWidth] = useState(draft.strokeWidth)
   const [note, setNote] = useState(draft.note)
 
   return (
@@ -725,6 +727,24 @@ function EdgeSettingsModal({
                 : `${draft.targetName} — куратор (родитель), ${draft.sourceName} — ребёнок`}
             </div>
           )}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Толщина линии</p>
+              <span className="text-xs font-medium text-muted-foreground">{strokeWidth} px</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={6}
+              step={0.5}
+              value={strokeWidth}
+              onChange={e => setStrokeWidth(Number(e.target.value))}
+              className="w-full accent-primary"
+            />
+            <svg className="w-full h-5" viewBox="0 0 200 8" preserveAspectRatio="none">
+              <line x1="0" y1="4" x2="200" y2="4" stroke="#6b7280" strokeWidth={strokeWidth} strokeLinecap="round" />
+            </svg>
+          </div>
           <div className="space-y-1.5">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Примечание</p>
             <textarea
@@ -743,7 +763,7 @@ function EdgeSettingsModal({
             </Button>
           )}
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(relation, parentIsSource, note)}>
+          <Button className="flex-1" onClick={() => onConfirm(relation, parentIsSource, note, strokeWidth)}>
             Сохранить
           </Button>
         </div>
@@ -896,6 +916,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       targetType: (t.type as 'department' | 'employee' | 'text') || 'text',
       relation: 'parent',
       parentIsSource: true,
+      strokeWidth: 2,
       note: '',
     })
   }, [])
@@ -930,11 +951,12 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       targetType: (t.type as 'department' | 'employee' | 'text') || 'text',
       relation: data?.relation === 'plain' ? 'plain' : 'parent',
       parentIsSource: !edge.markerStart,
+      strokeWidth: (edge.style as { strokeWidth?: number } | undefined)?.strokeWidth ?? 2,
       note: data?.note || '',
     })
   }, [])
 
-  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string) => {
+  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number) => {
     const d = edgeDraft
     if (!d) return
     saveSnapshot()
@@ -948,7 +970,9 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     const target = flip ? d.source : d.target
     const sourceHandle = flip ? d.targetHandle : d.sourceHandle
     const targetHandle = flip ? d.sourceHandle : d.targetHandle
-    const style = relation === 'plain' ? { ...EDGE_STYLE, strokeDasharray: '6 4' } : EDGE_STYLE
+    const style = relation === 'plain'
+      ? { ...EDGE_STYLE, strokeWidth, strokeDasharray: '6 4' }
+      : { ...EDGE_STYLE, strokeWidth }
     setEdges(eds => {
       if (d.mode === 'create') {
         return addEdge({
