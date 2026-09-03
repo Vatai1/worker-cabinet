@@ -6,7 +6,6 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
-  MarkerType,
   ConnectionMode,
   Handle,
   Position,
@@ -25,7 +24,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
-import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, EDGE_STYLE } from '@/modules/hierarchy/pages/HRHierarchy'
+import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
   id: number
@@ -47,7 +46,7 @@ const HANDLE_STYLE = { width: 10, height: 10, background: '#6b7280', border: '2p
 const HANDLE_CLASS = '!opacity-0 pointer-events-none'
 
 function OrganizationNode({ data }: NodeProps) {
-  const d = data as { name: string; memberCount?: number; headName?: string | null }
+  const d = data as { name: string; memberCount?: number; headName?: string | null; childOrgs?: { id: number; name: string; childCount?: number }[] }
   return (
     <div className="group min-w-[240px] rounded-xl overflow-hidden shadow-lg border-2 border-indigo-500/60 bg-card hover:shadow-xl hover:border-primary transition-all duration-200 select-none cursor-pointer">
       <div className="px-4 py-3 bg-gradient-to-br from-indigo-500 to-blue-600">
@@ -67,6 +66,22 @@ function OrganizationNode({ data }: NodeProps) {
           </div>
         )}
       </div>
+      {(d.childOrgs?.length ?? 0) > 0 && (
+        <div className="bg-card px-3 py-2 border-t border-border/50 space-y-1">
+          {d.childOrgs!.map(c => (
+            <div
+              key={c.id}
+              className="flex items-center gap-1.5 rounded-md bg-indigo-500/10 hover:bg-indigo-500/20 px-2 py-1.5 cursor-pointer text-xs nodrag"
+              title="Нажмите, чтобы открыть иерархию организации"
+              onClick={e => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('wc-open-org', { detail: c.id })) }}
+            >
+              <Building2 className="h-3 w-3 text-indigo-500 shrink-0" />
+              <span className="truncate text-foreground">{c.name}</span>
+              {!!c.childCount && <span className="ml-auto text-muted-foreground shrink-0">+{c.childCount}</span>}
+            </div>
+          ))}
+        </div>
+      )}
       <Handle type="source" position={Position.Top} className={HANDLE_CLASS} style={HANDLE_STYLE} />
       <Handle type="source" position={Position.Bottom} className={HANDLE_CLASS} style={HANDLE_STYLE} />
       <Handle type="source" position={Position.Left} className={HANDLE_CLASS} style={HANDLE_STYLE} />
@@ -77,53 +92,78 @@ function OrganizationNode({ data }: NodeProps) {
 
 const orgNodeTypes = { organization: OrganizationNode, group: GroupNode, text: TextNode }
 
-function orgDataOf(o: OrgItem) {
+function directChildrenMap(orgs: OrgItem[]) {
+  const map = new Map<number, OrgItem[]>()
+  for (const o of orgs) {
+    if (o.parent_id == null) continue
+    if (!map.has(o.parent_id)) map.set(o.parent_id, [])
+    map.get(o.parent_id)!.push(o)
+  }
+  return map
+}
+
+function countDescendants(orgId: number, childrenMap: Map<number, OrgItem[]>): number {
+  const kids = childrenMap.get(orgId) ?? []
+  return kids.reduce((sum, k) => sum + 1 + countDescendants(k.id, childrenMap), 0)
+}
+
+function orgDataOf(o: OrgItem, childrenMap: Map<number, OrgItem[]>) {
+  const kids = childrenMap.get(o.id) ?? []
   return {
     name: o.name,
     memberCount: o.member_count,
     headName: o.head_id ? [o.head_last_name, o.head_first_name].filter(Boolean).join(' ') || null : null,
+    childOrgs: kids.map(k => ({ id: k.id, name: k.name, childCount: countDescendants(k.id, childrenMap) })),
   }
 }
 
 function buildOrgGraph(orgs: OrgItem[]) {
   const byId = new Map(orgs.map((o) => [o.id, o]))
-  const levelOf = new Map<number, number>()
-  for (const o of orgs) {
-    const visited = new Set<number>()
-    let cur: OrgItem | undefined = o
-    let level = 0
-    while (cur?.parent_id && !visited.has(cur.id)) {
-      visited.add(cur.id)
-      cur = byId.get(cur.parent_id)
-      level += 1
-    }
-    levelOf.set(o.id, level)
-  }
+  const childrenMap = directChildrenMap(orgs)
+  const topLevel = orgs.filter((o) => !o.parent_id || !byId.has(o.parent_id))
 
-  const counterByLevel = new Map<number, number>()
-  const nodes: Node[] = orgs.map((o) => {
-    const level = levelOf.get(o.id) || 0
-    const idx = counterByLevel.get(level) || 0
-    counterByLevel.set(level, idx + 1)
-    return {
-      id: `org-${o.id}`,
-      type: 'organization',
-      position: { x: idx * GAP_X, y: level * GAP_Y },
-      data: orgDataOf(o),
-    }
-  })
+  const nodes: Node[] = topLevel.map((o, idx) => ({
+    id: `org-${o.id}`,
+    type: 'organization',
+    position: { x: idx * GAP_X, y: 0 },
+    data: orgDataOf(o, childrenMap),
+  }))
 
-  const edges: Edge[] = orgs
-    .filter((o) => o.parent_id && byId.has(o.parent_id))
-    .map((o) => ({
-      id: `e-org-${o.parent_id}-${o.id}`,
-      source: `org-${o.parent_id}`,
-      target: `org-${o.id}`,
-      style: EDGE_STYLE,
-      markerEnd: { type: MarkerType.ArrowClosed, color: '#6b7280' },
-    }))
-
+  const edges: Edge[] = []
   return { nodes, edges }
+}
+
+function refreshOrgNodes(orgList: OrgItem[], prevNodes: Node[], prevViewport: { x: number; y: number; zoom: number } | null) {
+  const byId = new Map(orgList.map((o) => [o.id, o]))
+  const childrenMap = directChildrenMap(orgList)
+  const topLevel = orgList.filter((o) => !o.parent_id || !byId.has(o.parent_id))
+  const topIds = new Set(topLevel.map((o) => `org-${o.id}`))
+
+  const nodes: Node[] = []
+  for (const n of prevNodes) {
+    if (n.type === 'organization' && !topIds.has(n.id)) continue
+    if (n.type === 'organization') {
+      const o = byId.get(Number(String(n.id).replace('org-', '')))
+      if (!o) continue
+      nodes.push({ ...n, selected: false, data: orgDataOf(o, childrenMap) })
+    } else {
+      nodes.push({ ...n, selected: false })
+    }
+  }
+  const present = new Set(nodes.map((n) => n.id))
+  const missing = topLevel.filter((o) => !present.has(`org-${o.id}`))
+  if (missing.length > 0) {
+    const maxY = nodes.reduce((m, n) => Math.max(m, n.position?.y ?? 0), 0)
+    missing.forEach((o, i) => {
+      nodes.push({
+        id: `org-${o.id}`,
+        type: 'organization',
+        position: { x: i * GAP_X, y: maxY + GAP_Y },
+        data: orgDataOf(o, childrenMap),
+      })
+    })
+  }
+  return { nodes, edges: [] as Edge[], viewport: prevViewport }
 }
 
 function mergeSavedLayout(orgs: OrgItem[], saved: { nodes?: Node[]; edges?: Edge[]; viewport?: { x: number; y: number; zoom: number } } | null) {
@@ -131,29 +171,7 @@ function mergeSavedLayout(orgs: OrgItem[], saved: { nodes?: Node[]; edges?: Edge
   if (!saved?.nodes?.length) {
     return { nodes: graph.nodes, edges: graph.edges, viewport: null }
   }
-  const autoById = new Map(graph.nodes.map((n) => [n.id, n]))
-  const nodes: Node[] = []
-  const seenOrgIds = new Set<string>()
-  for (const sn of saved.nodes) {
-    if (sn.type === 'organization') {
-      const fresh = autoById.get(sn.id)
-      if (!fresh) continue
-      seenOrgIds.add(sn.id)
-      nodes.push({ ...sn, selected: false, data: fresh.data })
-    } else {
-      nodes.push({ ...sn, selected: false })
-    }
-  }
-  const newOrgs = graph.nodes.filter((n) => !seenOrgIds.has(n.id))
-  if (newOrgs.length > 0) {
-    const maxY = nodes.reduce((m, n) => Math.max(m, n.position?.y ?? 0), 0)
-    newOrgs.forEach((n, i) => {
-      nodes.push({ ...n, position: { x: i * GAP_X, y: maxY + GAP_Y } })
-    })
-  }
-  const ids = new Set(nodes.map((n) => n.id))
-  const edges = graph.edges.filter((e) => ids.has(e.source) && ids.has(e.target))
-  return { nodes, edges, viewport: saved.viewport ?? null }
+  return refreshOrgNodes(orgs, saved.nodes, saved.viewport ?? null)
 }
 
 function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => void }) {
@@ -256,8 +274,14 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
   const [saving, setSaving] = useState(false)
   const [savedLabel, setSavedLabel] = useState(false)
   const [showInstruction, setShowInstruction] = useState(false)
+  const [pendingNest, setPendingNest] = useState<{ orgId: number; orgName: string; targetId: number; targetName: string; prevPosition: { x: number; y: number } } | null>(null)
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null)
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
+  const dragStartPosRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+
+  const onNodeDragStart = useCallback((_: unknown, node: Node) => {
+    dragStartPosRef.current.set(node.id, { x: node.position.x, y: node.position.y })
+  }, [])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -268,10 +292,10 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
 
   useEffect(() => {
     if (!fullscreen || !onClose) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !selectedOrg && !pendingDrop && !editingNode && !showInstruction) onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !selectedOrg && !pendingDrop && !editingNode && !showInstruction && !pendingNest) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen, onClose, selectedOrg, pendingDrop, editingNode, showInstruction])
+  }, [fullscreen, onClose, selectedOrg, pendingDrop, editingNode, showInstruction, pendingNest])
 
   useEffect(() => {
     const load = async () => {
@@ -352,22 +376,42 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
       const h = n.measured?.height ?? 100
       return cx >= n.position.x && cx <= n.position.x + w && cy >= n.position.y && cy <= n.position.y + h
     })
-    const targetId = target ? Number(String(target.id).replace('org-', '')) : null
-    if ((targetId ?? null) === (draggedOrg.parent_id ?? null)) return
-    if (targetId !== null) {
-      const parentOf = new Map(orgs.map(o => [o.id, o.parent_id ?? null]))
-      let cur: number | null = targetId
-      const seen = new Set<number>()
-      while (cur !== null && !seen.has(cur)) {
-        seen.add(cur)
-        if (cur === draggedId) {
-          toast('Нельзя вложить организацию в свою дочернюю')
-          return
-        }
-        cur = parentOf.get(cur) ?? null
+    if (!target) return
+    const targetId = Number(String(target.id).replace('org-', ''))
+    const targetOrg = orgs.find(o => o.id === targetId)
+    if (!targetOrg) return
+    const parentOf = new Map(orgs.map(o => [o.id, o.parent_id ?? null]))
+    let cur: number | null = targetId
+    const seen = new Set<number>()
+    while (cur !== null && !seen.has(cur)) {
+      seen.add(cur)
+      if (cur === draggedId) {
+        toast('Нельзя перенести организацию в её дочернюю')
+        return
       }
+      cur = parentOf.get(cur) ?? null
     }
-    fetch(`${API_BASE_URL}/organizations/${draggedId}`, {
+    const prevPosition = dragStartPosRef.current.get(draggedNode.id) ?? { x: draggedNode.position.x, y: draggedNode.position.y }
+    setPendingNest({
+      orgId: draggedId,
+      orgName: draggedOrg.name,
+      targetId,
+      targetName: targetOrg.name,
+      prevPosition,
+    })
+  }, [orgs])
+
+  const cancelNest = useCallback(() => {
+    if (!pendingNest) return
+    setNodes(nds => nds.map(n => n.id === `org-${pendingNest.orgId}` ? { ...n, position: pendingNest.prevPosition } : n))
+    setPendingNest(null)
+  }, [pendingNest, setNodes])
+
+  const confirmNest = useCallback(() => {
+    if (!pendingNest) return
+    const { orgId, targetId } = pendingNest
+    setPendingNest(null)
+    fetch(`${API_BASE_URL}/organizations/${orgId}`, {
       method: 'PUT',
       headers: getAuthHeadersWithContentType(),
       body: JSON.stringify({ parent_id: targetId }),
@@ -376,13 +420,23 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
         const d = await res.json().catch(() => ({}))
         throw new Error(d.error || 'Ошибка')
       }
-      const updatedOrgs = orgs.map(o => o.id === draggedId ? { ...o, parent_id: targetId } : o)
+      const updatedOrgs = orgs.map(o => o.id === orgId ? { ...o, parent_id: targetId } : o)
       setOrgs(updatedOrgs)
-      const ids = new Set(nodes.map(n => n.id))
-      setEdges(buildOrgGraph(updatedOrgs).edges.filter(e => ids.has(e.source) && ids.has(e.target)))
-      toast(targetId ? 'Организация стала дочерней' : 'Организация отвязана от родителя')
-    }).catch(() => toast('Не удалось изменить родителя организации'))
-  }, [orgs, nodes, setEdges])
+      setNodes(prev => refreshOrgNodes(updatedOrgs, prev, null).nodes)
+      setEdges([])
+      toast('Организация перенесена внутрь родительской')
+    }).catch(() => toast('Не удалось перенести организацию'))
+  }, [pendingNest, orgs, setNodes, setEdges])
+
+  useEffect(() => {
+    const openOrg = (e: Event) => {
+      const orgId = (e as CustomEvent<number>).detail
+      const org = orgs.find(o => o.id === orgId)
+      if (org) setSelectedOrg(org)
+    }
+    window.addEventListener('wc-open-org', openOrg as EventListener)
+    return () => window.removeEventListener('wc-open-org', openOrg as EventListener)
+  }, [orgs])
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -541,6 +595,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
               onNodesChange={onNodesChange}
               onNodeClick={onNodeClick}
               onNodeContextMenu={onNodeContextMenu}
+              onNodeDragStart={onNodeDragStart}
               onNodeDragStop={onNodeDragStop}
               onDrop={onDrop}
               onDragOver={onDragOver}
@@ -587,13 +642,38 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
             </div>
           )
         })()}
+        {pendingNest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden animate-scale-in">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <Network className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold">Перенести организацию?</h2>
+                </div>
+                <button onClick={cancelNest} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </div>
+              <div className="px-6 py-4">
+                <p className="text-sm text-muted-foreground">
+                  Организация <span className="font-medium text-foreground">«{pendingNest.orgName}»</span> будет перенесена внутрь{' '}
+                  <span className="font-medium text-foreground">«{pendingNest.targetName}»</span> и станет её дочерней.
+                </p>
+              </div>
+              <div className="px-6 py-3 border-t border-border flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={cancelNest}>Отмена</Button>
+                <Button className="flex-1" onClick={confirmNest}>Перенести</Button>
+              </div>
+            </div>
+          </div>
+        )}
         {showInstruction && (
           <InstructionModal
             title="Инструкция по глобальной иерархии"
             onClose={() => setShowInstruction(false)}
             items={[
               { title: 'Просмотр учреждения', text: 'Клик по организации открывает её внутреннюю иерархию в режиме только чтение.' },
-              { title: 'Вложенность организаций', text: 'Перетащите организацию так, чтобы её центр оказался поверх другой организации — она станет дочерней, появится стрелка от родителя. Перетащите на пустое место — организация отвяжется. Вложить организацию в её собственную дочернюю нельзя.' },
+              { title: 'Вложенность организаций', text: 'Перетащите организацию поверх другой — откроется подтверждение. После переноса организация проваливается внутрь родительской и отображается строкой в её карточке; клик по строке открывает иерархию вложенной организации. Перенос в свою дочернюю невозможен.' },
               { title: 'Группы организаций', text: 'Пунктирная рамка из панели слева объединяет организации визуально. Растяните её за углы при выделении, перетащите организации внутрь.' },
               { title: 'Описание', text: 'Текстовый блок для заметок на схеме. Редактирование и удаление — через ПКМ.' },
               { title: 'Связи', text: 'Стрелки между организациями строятся автоматически по вложенности и не редактируются вручную.' },
