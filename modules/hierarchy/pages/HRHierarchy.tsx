@@ -680,7 +680,7 @@ function EdgeSettingsModal({
             {([
               ['parent', 'Родительская (родитель → ребёнок)'],
               ['plain', 'Простая (без направления)'],
-            ] as const).filter(([value]) => value !== 'parent' || draft.sourceType === 'department' || draft.targetType === 'department').map(([value, label]) => (
+            ] as const).filter(([value]) => value !== 'parent' || draft.sourceType === 'department' || draft.targetType === 'department' || (draft.sourceType === 'employee' && draft.targetType === 'employee')).map(([value, label]) => (
               <button
                 key={value}
                 onClick={() => setRelation(value)}
@@ -697,7 +697,7 @@ function EdgeSettingsModal({
               </button>
             ))}
           </div>
-          {relation === 'parent' && draft.sourceType === 'department' && draft.targetType === 'department' && (
+          {relation === 'parent' && ((draft.sourceType === 'department' && draft.targetType === 'department') || (draft.sourceType === 'employee' && draft.targetType === 'employee')) && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Кто родитель</p>
               {([
@@ -981,6 +981,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     const t = nodeOf(params.target)
     if (!s || !t) return
     const deptIdOf = (n: Node | undefined) => n?.type === 'department' && n.data?.id != null ? Number((n.data as { id?: number }).id) : null
+    const userIdOf = (n: Node | undefined) => n?.type === 'employee' && n.data?.id != null ? Number((n.data as { id?: number }).id) : null
     const sDept = deptIdOf(s)
     const tDept = deptIdOf(t)
     if (sDept !== null && tDept !== null && sDept !== tDept) {
@@ -993,6 +994,32 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       if (hasOtherParent) {
         toast('У отдела может быть только один родитель')
         return
+      }
+    }
+    const sUser = userIdOf(s)
+    const tUser = userIdOf(t)
+    if (sUser !== null && tUser !== null && sUser !== tUser) {
+      const userParentOf = new Map<number, number>()
+      for (const e of inst.getEdges()) {
+        if ((e.data as { relation?: string } | undefined)?.relation === 'plain') continue
+        const ss = userIdOf(nodeOf(e.source))
+        const tt = userIdOf(nodeOf(e.target))
+        if (ss !== null && tt !== null && ss !== tt) userParentOf.set(tt, ss)
+      }
+      const existingParent = userParentOf.get(tUser)
+      if (existingParent != null && existingParent !== sUser) {
+        toast('У сотрудника может быть только один родитель')
+        return
+      }
+      let cur: number | null = sUser
+      const seen = new Set<number>()
+      while (cur != null && !seen.has(cur)) {
+        seen.add(cur)
+        if (cur === tUser) {
+          toast('Цикл в иерархии сотрудников')
+          return
+        }
+        cur = userParentOf.get(cur) ?? null
       }
     }
     setEdgeDraft({

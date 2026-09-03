@@ -126,12 +126,15 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
 
   const parentsByDept = new Map()
   const parentUserByDept = new Map()
+  const parentUserByUser = new Map()
   const visByDept = new Map()
+  const visByUser = new Map()
   for (const e of Array.isArray(edges) ? edges : []) {
     if (e?.data?.relation === 'plain') continue
     const sourceDept = deptIdByNode.get(e?.source)
     const targetDept = deptIdByNode.get(e?.target)
     const sourceUser = userIdByNode.get(e?.source)
+    const targetUser = userIdByNode.get(e?.target)
     if (sourceDept != null && targetDept != null) {
       if (!parentsByDept.has(targetDept)) parentsByDept.set(targetDept, new Set())
       parentsByDept.get(targetDept).add(sourceDept)
@@ -143,17 +146,40 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
         throw err
       }
       parentUserByDept.set(targetDept, sourceUser)
+    } else if (sourceUser != null && targetUser != null && sourceUser !== targetUser) {
+      const existing = parentUserByUser.get(targetUser)
+      if (existing != null && existing !== sourceUser) {
+        const err = new Error(`У сотрудника может быть только один родитель: ${nameByUser.get(targetUser)}`)
+        err.statusCode = 400
+        throw err
+      }
+      parentUserByUser.set(targetUser, sourceUser)
     } else {
       continue
     }
-    if (targetDept != null && e?.data?.vacationVisibility) {
-      visByDept.set(targetDept, e.data.vacationVisibility)
+    if (e?.data?.vacationVisibility) {
+      if (targetDept != null) visByDept.set(targetDept, e.data.vacationVisibility)
+      else if (targetUser != null) visByUser.set(targetUser, e.data.vacationVisibility)
     }
   }
 
   for (const [childDept, parents] of parentsByDept) {
     if (parents.size > 1 || parentUserByDept.has(childDept)) {
       const err = new Error(`У отдела может быть только один родитель: ${nameByDept.get(childDept)}`)
+      err.statusCode = 400
+      throw err
+    }
+  }
+
+  for (const childUser of parentUserByUser.keys()) {
+    const visited = new Set()
+    let cur = childUser
+    while (cur != null && !visited.has(cur)) {
+      visited.add(cur)
+      cur = parentUserByUser.get(cur) ?? null
+    }
+    if (cur != null) {
+      const err = new Error('Цикл в иерархии сотрудников')
       err.statusCode = 400
       throw err
     }
@@ -197,8 +223,12 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     }
   }
 
-  if (parentUserByDept.size > 0) {
-    const involvedUsers = [...new Set(parentUserByDept.values())]
+  if (parentUserByDept.size > 0 || parentUserByUser.size > 0) {
+    const involvedUsers = [...new Set([
+      ...parentUserByDept.values(),
+      ...parentUserByUser.keys(),
+      ...parentUserByUser.values(),
+    ])]
     const userCheck = await query('SELECT id FROM users WHERE id = ANY($1)', [involvedUsers])
     const foundUserIds = new Set(userCheck.rows.map((r) => r.id))
     for (const userId of involvedUsers) {
@@ -224,12 +254,12 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     }
   }
 
-  const changes = []
+  const deptChanges = []
   for (const n of deptNodes) {
     const deptId = Number(n.data.id)
     const parents = parentsByDept.get(deptId)
     const vis = visByDept.get(deptId)
-    changes.push({
+    deptChanges.push({
       deptId,
       parentId: parents && parents.size > 0 ? [...parents][0] : null,
       parentUserId: parentUserByDept.get(deptId) ?? null,
@@ -237,7 +267,23 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
       vacChildSeesParent: vis?.childSeesParent !== false,
     })
   }
-  return changes
+
+  const userChanges = []
+  const seenUserIds = new Set()
+  for (const n of (Array.isArray(nodes) ? nodes : [])) {
+    if (n?.type !== 'employee' || !n?.data || n.data.id == null) continue
+    const userId = Number(n.data.id)
+    if (seenUserIds.has(userId)) continue
+    seenUserIds.add(userId)
+    const vis = visByUser.get(userId)
+    userChanges.push({
+      userId,
+      managerId: parentUserByUser.get(userId) ?? null,
+      vacParentSeesChild: vis?.parentSeesChild !== false,
+      vacChildSeesParent: vis?.childSeesParent !== false,
+    })
+  }
+  return { deptChanges, userChanges }
 }
 
 /**
@@ -354,13 +400,20 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
       [data, req.user.id, currentOrgId(req)]
     )
 
-    for (const { deptId, parentId, parentUserId, vacParentSeesChild, vacChildSeesParent } of parentChanges) {
+    for (const { deptId, parentId, parentUserId, vacParentSeesChild, vacChildSeesParent } of parentChanges.deptChanges) {
       const { text, values } = orgScopedQuery(
         'UPDATE departments SET parent_id = $1, parent_user_id = $2, vac_parent_sees_child = $3, vac_child_sees_parent = $4 WHERE id = $5',
         [parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, deptId],
         req
       )
       await client.query(text, values)
+    }
+
+    for (const { userId, managerId, vacParentSeesChild, vacChildSeesParent } of parentChanges.userChanges) {
+      await client.query(
+        'UPDATE users SET manager_id = $1, vac_parent_sees_child = $2, vac_child_sees_parent = $3 WHERE id = $4',
+        [managerId, vacParentSeesChild, vacChildSeesParent, userId]
+      )
     }
 
     await client.query('COMMIT')

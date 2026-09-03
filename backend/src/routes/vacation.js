@@ -94,6 +94,10 @@ const childSeesParentVacations = (n) => `EXISTS (
     )
 )`
 
+const userParentSeesChildVacations = (n) => `vr.user_id IN (SELECT id FROM users WHERE manager_id = $${n} AND vac_parent_sees_child)`
+
+const userChildSeesParentVacations = (n) => `(vr.user_id = (SELECT manager_id FROM users WHERE id = $${n}) AND (SELECT vac_child_sees_parent FROM users WHERE id = $${n}) AND rs.code = 'approved')`
+
 async function notifyVacationCreated(request, employeeId, req) {
   const empName = await getEmpName(employeeId)
   const payload = {
@@ -252,7 +256,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       params.push(userId)
     } else if (departmentId) {
       if (user.role === 'employee') {
-        whereClause += ` AND ((u.department_id = $${params.length + 1} AND rs.code = $${params.length + 2}) OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 3} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 3)})`
+        whereClause += ` AND ((u.department_id = $${params.length + 1} AND rs.code = $${params.length + 2}) OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 3} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 3)} OR ${userParentSeesChildVacations(params.length + 3)} OR ${userChildSeesParentVacations(params.length + 3)})`
         params.push(departmentId, 'approved', user.id)
       } else {
         whereClause += ' AND u.department_id = $' + (params.length + 1)
@@ -260,7 +264,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       }
     } else {
       if (user.role === 'employee') {
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)})`
         params.push(user.id)
       } else if (user.role === 'manager') {
         const substExists = await isSubstitutionEnabled(req)
@@ -275,7 +279,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
                 AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
             )`
           : ''
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child)${substExists})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userParentSeesChildVacations(params.length + 1)}${substExists})`
         params.push(user.id)
       }
     }
