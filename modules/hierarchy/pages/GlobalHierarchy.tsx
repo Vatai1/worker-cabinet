@@ -179,16 +179,44 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
   const [edges, setEdges] = useEdgesState<Edge>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [currentOrg, setCurrentOrg] = useState<OrgItem>(org)
+  const orgListRef = useRef<OrgItem[]>([])
+
+  useEffect(() => { setCurrentOrg(org) }, [org])
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true)
+      setError(null)
       try {
-        const res = await fetch(`${API_BASE_URL}/hierarchy`, {
-          headers: { ...getAuthHeaders(), 'X-Organization-Id': String(org.id) },
-        })
-        if (!res.ok) throw new Error('Не удалось загрузить иерархию')
-        const { data } = await res.json()
-        setNodes((data.nodes || []).map((n: Node) => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 })))
+        const [hierRes, orgsRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/hierarchy`, {
+            headers: { ...getAuthHeaders(), 'X-Organization-Id': String(currentOrg.id) },
+          }),
+          fetch(`${API_BASE_URL}/organizations`, { headers: getAuthHeaders() }),
+        ])
+        if (!hierRes.ok) throw new Error('Не удалось загрузить иерархию')
+        const { data } = await hierRes.json()
+        const allNodes: Node[] = (data.nodes || []).map((n: Node) => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 }))
+        if (orgsRes.ok) {
+          const allOrgs: OrgItem[] = await orgsRes.json()
+          orgListRef.current = Array.isArray(allOrgs) ? allOrgs : []
+          const childrenMap = directChildrenMap(orgListRef.current)
+          const childOrgs = orgListRef.current.filter(o => o.parent_id === currentOrg.id)
+          if (childOrgs.length > 0) {
+            const maxY = allNodes.reduce((m, n) => Math.max(m, n.position?.y ?? 0), 0)
+            childOrgs.forEach((o, i) => {
+              allNodes.push({
+                id: `org-${o.id}`,
+                type: 'organization',
+                position: { x: i * 360, y: maxY + 320 },
+                data: orgDataOf(o, childrenMap),
+                draggable: false,
+              } as Node)
+            })
+          }
+        }
+        setNodes(allNodes)
         setEdges((data.edges || []).map((e: Edge) => ({ ...e, type: undefined })))
       } catch (err) {
         setError(getErrorMessage(err))
@@ -197,7 +225,7 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
       }
     }
     load()
-  }, [org.id, setNodes, setEdges])
+  }, [currentOrg.id, setNodes, setEdges])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -205,21 +233,38 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const viewerNodeTypes = { ...hierarchyNodeTypes, organization: OrganizationNode }
+
+  const onViewerNodeClick = useCallback<NodeMouseHandler>((_, node) => {
+    if (node.type !== 'organization') return
+    const orgId = Number(String(node.id).replace('org-', ''))
+    const target = orgListRef.current.find(o => o.id === orgId)
+    if (target) setCurrentOrg(target)
+  }, [])
+
   const content = (
     <div className="fixed inset-0 z-50 flex flex-col bg-card">
       <div className="px-6 py-4 border-b border-border flex-shrink-0 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Network className="h-5 w-5 text-primary" />
-            {org.name}
+            {currentOrg.name}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Просмотр иерархии учреждения (только чтение)
+            Просмотр иерархии учреждения (только чтение). Клик по вложенной организации открывает её.
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          {currentOrg.id !== org.id && (
+            <Button size="sm" variant="outline" onClick={() => setCurrentOrg(org)}>
+              <Building2 className="h-4 w-4 mr-1.5" />
+              {org.name}
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       <div className="flex-1 relative" style={{ minHeight: 0 }}>
         {loading && (
@@ -230,15 +275,17 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
         {error && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-destructive">{error}</div>
         )}
-        {!loading && !error && (
+        {!loading && !error && nodes.length > 0 && (
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            nodeTypes={hierarchyNodeTypes}
+            nodeTypes={viewerNodeTypes}
             onNodesChange={onNodesChange}
+            onNodeClick={onViewerNodeClick}
             nodesDraggable={false}
             nodesConnectable={false}
             edgesReconnectable={false}
+            deleteKeyCode={null}
             connectionMode={ConnectionMode.Loose}
             fitView
             minZoom={0.1}
@@ -248,6 +295,13 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
             <MiniMap nodeStrokeWidth={3} zoomable pannable />
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(var(--border))" />
           </ReactFlow>
+        )}
+        {!loading && !error && nodes.length === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <Network className="h-10 w-10 opacity-40" />
+            <p className="text-sm font-medium">Иерархия учреждения ещё не построена</p>
+            <p className="text-xs">HR этой организации ещё не создал схему отделов и сотрудников</p>
+          </div>
         )}
       </div>
     </div>
