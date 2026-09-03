@@ -19,12 +19,13 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Building2, Network, X, Loader2, User, Save, Frame, AlignLeft, Pencil, Trash2 } from 'lucide-react'
+import { Building2, Network, X, Loader2, User, Save, Frame, AlignLeft, Pencil, Trash2, BookOpen } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
-import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, EDGE_STYLE } from '@/modules/hierarchy/pages/HRHierarchy'
+import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, EDGE_STYLE } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
   id: number
@@ -254,6 +255,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedLabel, setSavedLabel] = useState(false)
+  const [showInstruction, setShowInstruction] = useState(false)
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null)
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
 
@@ -266,10 +268,10 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
 
   useEffect(() => {
     if (!fullscreen || !onClose) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !selectedOrg && !pendingDrop && !editingNode) onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !selectedOrg && !pendingDrop && !editingNode && !showInstruction) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen, onClose, selectedOrg, pendingDrop, editingNode])
+  }, [fullscreen, onClose, selectedOrg, pendingDrop, editingNode, showInstruction])
 
   useEffect(() => {
     const load = async () => {
@@ -331,6 +333,56 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
     e.preventDefault()
     setContextMenu({ nodeId: node.id, x: e.clientX, y: e.clientY })
   }, [])
+
+  const onNodeDragStop = useCallback((_: unknown, draggedNode: Node) => {
+    if (draggedNode.type !== 'organization') return
+    const inst = rfInstanceRef.current
+    if (!inst) return
+    const draggedId = Number(String(draggedNode.id).replace('org-', ''))
+    const draggedOrg = orgs.find(o => o.id === draggedId)
+    if (!draggedOrg) return
+    const dragged = inst.getNode(draggedNode.id)
+    const dw = dragged?.measured?.width ?? 240
+    const dh = dragged?.measured?.height ?? 100
+    const cx = draggedNode.position.x + dw / 2
+    const cy = draggedNode.position.y + dh / 2
+    const target = inst.getNodes().find(n => {
+      if (n.type !== 'organization' || n.id === draggedNode.id) return false
+      const w = n.measured?.width ?? 240
+      const h = n.measured?.height ?? 100
+      return cx >= n.position.x && cx <= n.position.x + w && cy >= n.position.y && cy <= n.position.y + h
+    })
+    const targetId = target ? Number(String(target.id).replace('org-', '')) : null
+    if ((targetId ?? null) === (draggedOrg.parent_id ?? null)) return
+    if (targetId !== null) {
+      const parentOf = new Map(orgs.map(o => [o.id, o.parent_id ?? null]))
+      let cur: number | null = targetId
+      const seen = new Set<number>()
+      while (cur !== null && !seen.has(cur)) {
+        seen.add(cur)
+        if (cur === draggedId) {
+          toast('Нельзя вложить организацию в свою дочернюю')
+          return
+        }
+        cur = parentOf.get(cur) ?? null
+      }
+    }
+    fetch(`${API_BASE_URL}/organizations/${draggedId}`, {
+      method: 'PUT',
+      headers: getAuthHeadersWithContentType(),
+      body: JSON.stringify({ parent_id: targetId }),
+    }).then(async res => {
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || 'Ошибка')
+      }
+      const updatedOrgs = orgs.map(o => o.id === draggedId ? { ...o, parent_id: targetId } : o)
+      setOrgs(updatedOrgs)
+      const ids = new Set(nodes.map(n => n.id))
+      setEdges(buildOrgGraph(updatedOrgs).edges.filter(e => ids.has(e.source) && ids.has(e.target)))
+      toast(targetId ? 'Организация стала дочерней' : 'Организация отвязана от родителя')
+    }).catch(() => toast('Не удалось изменить родителя организации'))
+  }, [orgs, nodes, setEdges])
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -467,6 +519,10 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
               <div className="text-[10px] text-muted-foreground">Текстовый блок</div>
             </div>
           </div>
+          <Button variant="outline" size="sm" className="w-full" onClick={() => setShowInstruction(true)}>
+            <BookOpen className="h-4 w-4 mr-1.5" />
+            Инструкция
+          </Button>
         </div>
         <div className="flex-1 relative" style={{ minHeight: 0 }}>
           {loading && (
@@ -485,6 +541,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
               onNodesChange={onNodesChange}
               onNodeClick={onNodeClick}
               onNodeContextMenu={onNodeContextMenu}
+              onNodeDragStop={onNodeDragStop}
               onDrop={onDrop}
               onDragOver={onDragOver}
               onInit={handleInit}
@@ -530,6 +587,20 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
             </div>
           )
         })()}
+        {showInstruction && (
+          <InstructionModal
+            title="Инструкция по глобальной иерархии"
+            onClose={() => setShowInstruction(false)}
+            items={[
+              { title: 'Просмотр учреждения', text: 'Клик по организации открывает её внутреннюю иерархию в режиме только чтение.' },
+              { title: 'Вложенность организаций', text: 'Перетащите организацию так, чтобы её центр оказался поверх другой организации — она станет дочерней, появится стрелка от родителя. Перетащите на пустое место — организация отвяжется. Вложить организацию в её собственную дочернюю нельзя.' },
+              { title: 'Группы организаций', text: 'Пунктирная рамка из панели слева объединяет организации визуально. Растяните её за углы при выделении, перетащите организации внутрь.' },
+              { title: 'Описание', text: 'Текстовый блок для заметок на схеме. Редактирование и удаление — через ПКМ.' },
+              { title: 'Связи', text: 'Стрелки между организациями строятся автоматически по вложенности и не редактируются вручную.' },
+              { title: 'Сохранение', text: 'Кнопка «Сохранить» фиксирует расположение организаций, группы и описания. Вложенность применяется сразу.' },
+            ]}
+          />
+        )}
         {pendingDrop && (
           <TextInputModal
             onConfirm={handleCreateFromDrop}

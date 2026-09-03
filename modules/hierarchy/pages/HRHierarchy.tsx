@@ -32,7 +32,7 @@ import {
   ConnectionMode,
   NodeResizer,
 } from '@xyflow/react'
-import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle } from 'lucide-react'
+import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { Switch } from '@/shared/components/ui/Switch'
@@ -897,6 +897,35 @@ function ConfirmLeaveModal({ onConfirm, onClose }: { onConfirm: () => void; onCl
   )
 }
 
+export function InstructionModal({ title, items, onClose }: { title: string; items: { title: string; text: string }[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden animate-scale-in flex flex-col max-h-[80vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">{title}</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="px-6 py-4 space-y-3 overflow-y-auto">
+          {items.map(item => (
+            <div key={item.title} className="rounded-lg border border-border px-4 py-3">
+              <p className="text-sm font-medium">{item.title}</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{item.text}</p>
+            </div>
+          ))}
+        </div>
+        <div className="px-6 py-3 border-t border-border">
+          <Button className="w-full" onClick={onClose}>Понятно</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ConfirmDeleteEdgeModal({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -947,6 +976,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
   const [confirmDeleteEdgeId, setConfirmDeleteEdgeId] = useState<string | null>(null)
   const [confirmDeleteNode, setConfirmDeleteNode] = useState<string | null>(null)
   const [confirmLeave, setConfirmLeave] = useState(false)
+  const [showInstruction, setShowInstruction] = useState(false)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -1422,12 +1452,12 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     if (!fullscreen || !onClose) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (pendingDrop || editingNode || activeDepartment || edgeDraft || parentEdgeId || confirmDeleteEdgeId || confirmDeleteNode || confirmLeave) return
+      if (pendingDrop || editingNode || activeDepartment || edgeDraft || parentEdgeId || confirmDeleteEdgeId || confirmDeleteNode || confirmLeave || showInstruction) return
       requestClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft, parentEdgeId, confirmDeleteEdgeId, confirmDeleteNode, confirmLeave, requestClose])
+  }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft, parentEdgeId, confirmDeleteEdgeId, confirmDeleteNode, confirmLeave, showInstruction, requestClose])
 
   const displayNodes = useMemo(
     () => nodes.map(n => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 })) as Node[],
@@ -1537,6 +1567,10 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
           <p className="text-[10px] text-muted-foreground leading-relaxed pt-1">
             Рёбра между отделами задают подразделения (родителей)
           </p>
+          <Button variant="outline" size="sm" className="w-full" onClick={() => setShowInstruction(true)}>
+            <BookOpen className="h-4 w-4 mr-1.5" />
+            Инструкция
+          </Button>
         </div>
 
         {/* Canvas */}
@@ -1597,6 +1631,22 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       </div>
 
       {/* Modals */}
+      {showInstruction && (
+        <InstructionModal
+          title="Инструкция по иерархии"
+          onClose={() => setShowInstruction(false)}
+          items={[
+            { title: 'Добавление элементов', text: 'Перетащите блок из панели слева на холст. Для отдела или сотрудника откроется окно выбора. Описание и группа добавляются сразу.' },
+            { title: 'Связи', text: 'Потяните от точки на краю блока к другому блоку. Клик по связи открывает настройки: тип, кто родитель, толщину, цвет и примечание.' },
+            { title: 'Родительские связи', text: 'Отдел ↔ отдел задаёт структуру подразделений, сотрудник ↔ отдел назначает куратора, сотрудник ↔ сотрудник — личного руководителя. С текстовыми блоками родительская связь недоступна.' },
+            { title: 'Видимость отпусков', text: 'ПКМ по родительской связи → «Настройки родительской связи»: «Родитель видит отпуска подчинённых» и «Отпуск родителя виден подчинённым». Флаги применяются к отпускам после сохранения.' },
+            { title: 'Точки опоры', text: 'Выделите связь: точки на линии можно тянуть, «+» добавляет точку, двойной клик по точке удаляет её. Линия рисуется кривой Безье.' },
+            { title: 'Группы и описание', text: 'Пунктирные рамки объединяют элементы визуально, текстовые блоки служат для заметок. Редактирование и удаление — через ПКМ.' },
+            { title: 'Сохранение и отмена', text: 'Кнопка «Сохранить» записывает схему. Ctrl+Z — отменить последнее действие. Удаление блоков и связей требует подтверждения, а выход с несохранёнными изменениями предупреждает.' },
+          ]}
+        />
+      )}
+
       {pendingDrop?.type === 'department' && (
         <SelectDepartmentModal
           departments={departments}
