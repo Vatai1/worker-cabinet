@@ -819,17 +819,11 @@ function ParentEdgeSettingsModal({ edge, onConfirm, onClose }: {
         </div>
         <div className="px-6 py-4 space-y-3">
           <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-            <div>
-              <p className="text-sm font-medium">Дети видят отпуск родителя</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Видимость отпусков родителя для дочерних элементов</p>
-            </div>
+            <p className="text-sm font-medium">Отпуск родителя виден дочерним элементам</p>
             <Switch checked={childSeesParent} onCheckedChange={setChildSeesParent} />
           </div>
           <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-            <div>
-              <p className="text-sm font-medium">Родитель видит отпуска детей</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Видимость отпусков дочерних элементов для родителя</p>
-            </div>
+            <p className="text-sm font-medium">Родитель видит отпуска дочерних элементов</p>
             <Switch checked={parentSeesChild} onCheckedChange={setParentSeesChild} />
           </div>
         </div>
