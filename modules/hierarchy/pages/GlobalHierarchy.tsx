@@ -134,7 +134,7 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
         })
         if (!res.ok) throw new Error('Не удалось загрузить иерархию')
         const { data } = await res.json()
-        setNodes(data.nodes || [])
+        setNodes((data.nodes || []).map((n: Node) => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 })))
         setEdges((data.edges || []).map((e: Edge) => ({ ...e, type: undefined })))
       } catch (err) {
         setError(getErrorMessage(err))

@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useRef, createContext, useContext } from 'react'
+﻿import { useState, useCallback, useEffect, useRef, useMemo, createContext, useContext } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ReactFlow,
@@ -30,8 +30,9 @@ import {
   type NodeChange,
   type EdgeChange,
   ConnectionMode,
+  NodeResizer,
 } from '@xyflow/react'
-import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink } from 'lucide-react'
+import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink, Frame } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { DepartmentHierarchyOverlay } from '@/modules/hierarchy/components/DepartmentHierarchyOverlay'
@@ -164,6 +165,19 @@ function TextNode({ data }: NodeProps) {
         {d.text}
       </div>
       {HANDLES}
+    </div>
+  )
+}
+
+function GroupNode({ data, selected }: NodeProps) {
+  const d = data as { title?: string; color?: string }
+  const color = d.color ?? '#6b7280'
+  return (
+    <div className="w-full h-full rounded-2xl border-2 border-dashed" style={{ borderColor: color, background: `${color}0F` }}>
+      <NodeResizer color={color} isVisible={selected} minWidth={200} minHeight={140} lineClassName="!border-dashed" />
+      <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider truncate" style={{ color }}>
+        {d.title || 'Группа'}
+      </div>
     </div>
   )
 }
@@ -349,6 +363,7 @@ const nodeTypes: NodeTypes = {
   department: DepartmentNode,
   employee: EmployeeNode,
   text: TextNode,
+  group: GroupNode,
 }
 
 const edgeTypes: EdgeTypes = {
@@ -739,8 +754,8 @@ function EdgeSettingsModal({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type PendingDrop = { type: 'department' | 'employee' | 'text'; position: { x: number; y: number } }
-type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text'; x: number; y: number }
+type PendingDrop = { type: 'department' | 'employee' | 'text' | 'group'; position: { x: number; y: number } }
+type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text' | 'group'; x: number; y: number }
 type EdgeContextMenu = { edgeId: string; x: number; y: number }
 
 interface Props {
@@ -759,7 +774,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
   const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [edgeContextMenu, setEdgeContextMenu] = useState<EdgeContextMenu | null>(null)
-  const [editingNode, setEditingNode] = useState<{ id: string; type: 'department' | 'employee' | 'text' } | null>(null)
+  const [editingNode, setEditingNode] = useState<{ id: string; type: 'department' | 'employee' | 'text' | 'group' } | null>(null)
   const [activeDepartment, setActiveDepartment] = useState<{ id: number; name: string } | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<EdgeDraft | null>(null)
 
@@ -996,7 +1011,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    const type = e.dataTransfer.getData('reactflow-type') as 'department' | 'employee'
+    const type = e.dataTransfer.getData('reactflow-type') as PendingDrop['type']
     if (!type) return
     const inst = rfInstanceRef.current
     if (!inst) return
@@ -1041,7 +1056,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     setEdgeContextMenu(null)
     setContextMenu({
       nodeId: node.id,
-      nodeType: node.type as 'department' | 'employee',
+      nodeType: (node.type ?? 'text') as ContextMenu['nodeType'],
       x: e.clientX,
       y: e.clientY,
     })
@@ -1089,7 +1104,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     setContextMenu(null)
   }, [setNodes, saveSnapshot])
 
-  const startEdit = useCallback((nodeId: string, nodeType: 'department' | 'employee' | 'text') => {
+  const startEdit = useCallback((nodeId: string, nodeType: 'department' | 'employee' | 'text' | 'group') => {
     setEditingNode({ id: nodeId, type: nodeType })
     setContextMenu(null)
   }, [])
@@ -1119,7 +1134,27 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
   const handleEditText = (text: string) => {
     if (!editingNode) return
     saveSnapshot()
-    setNodes(nds => nds.map(n => n.id === editingNode.id ? { ...n, data: { text } } : n))
+    setNodes(nds => nds.map(n => n.id === editingNode.id ? { ...n, data: { ...n.data, text } } : n))
+    setEditingNode(null)
+  }
+
+  const handleSelectGroup = (title: string) => {
+    if (!pendingDrop) return
+    saveSnapshot()
+    setNodes(nds => [...nds, {
+      id: `group-${Date.now()}`,
+      type: 'group',
+      position: { x: pendingDrop.position.x - 200, y: pendingDrop.position.y - 14 },
+      style: { width: 400, height: 260 },
+      data: { title },
+    } as Node])
+    setPendingDrop(null)
+  }
+
+  const handleEditGroup = (title: string) => {
+    if (!editingNode) return
+    saveSnapshot()
+    setNodes(nds => nds.map(n => n.id === editingNode.id ? { ...n, data: { ...n.data, title } } : n))
     setEditingNode(null)
   }
 
@@ -1146,10 +1181,11 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     setSaving(true)
     try {
       const { nodes: n, edges: e, viewport } = inst.toObject()
+      const nodesClean = n.map(x => ({ ...x, selected: false }))
       const res = await fetch(`${API_BASE_URL}/hierarchy`, {
         method: 'PUT',
         headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ nodes: n, edges: e, viewport }),
+        body: JSON.stringify({ nodes: nodesClean, edges: e, viewport }),
       })
       if (!res.ok) {
         const d = await res.json()
@@ -1174,6 +1210,11 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft])
+
+  const displayNodes = useMemo(
+    () => nodes.map(n => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 })) as Node[],
+    [nodes],
+  )
 
   const content = (
     <div
@@ -1261,6 +1302,20 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
             </div>
           </div>
 
+          <div
+            draggable
+            onDragStart={e => { e.dataTransfer.setData('reactflow-type', 'group'); e.dataTransfer.effectAllowed = 'move' }}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-border bg-muted/30 cursor-grab active:cursor-grabbing hover:bg-muted/60 hover:border-border transition-all select-none"
+          >
+            <div className="w-9 h-9 rounded-lg bg-muted border-2 border-dashed border-border flex items-center justify-center flex-shrink-0">
+              <Frame className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold">Группа</div>
+              <div className="text-[10px] text-muted-foreground">Рамка для элементов</div>
+            </div>
+          </div>
+
           <p className="text-[10px] text-muted-foreground leading-relaxed pt-1">
             Рёбра между отделами задают подразделения (родителей)
           </p>
@@ -1284,7 +1339,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
             </div>
           )}
           <ReactFlow
-            nodes={nodes}
+            nodes={displayNodes}
             edges={edges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
@@ -1344,6 +1399,13 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
           onClose={() => setPendingDrop(null)}
         />
       )}
+      {pendingDrop?.type === 'group' && (
+        <TextInputModal
+          onConfirm={handleSelectGroup}
+          onClose={() => setPendingDrop(null)}
+          initialText="Группа"
+        />
+      )}
 
       {edgeDraft && (
         <EdgeSettingsModal
@@ -1389,6 +1451,17 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
             onConfirm={handleEditText}
             onClose={() => setEditingNode(null)}
             initialText={d?.text ?? ''}
+          />
+        )
+      })()}
+      {editingNode?.type === 'group' && (() => {
+        const n = nodes.find(n => n.id === editingNode.id)
+        const d = n?.data as { title?: string } | undefined
+        return (
+          <TextInputModal
+            onConfirm={handleEditGroup}
+            onClose={() => setEditingNode(null)}
+            initialText={d?.title ?? ''}
           />
         )
       })()}
@@ -1485,7 +1558,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
   return fullscreen ? createPortal(content, document.body) : content
 }
 
-export { DepartmentNode, EmployeeNode, TextNode, nodeTypes, EditableEdge, edgeTypes }
+export { DepartmentNode, EmployeeNode, TextNode, GroupNode, nodeTypes, EditableEdge, edgeTypes }
 export { SelectDepartmentModal, SelectEmployeeModal, TextInputModal }
 export type { Department, DeptEmployee }
 export { SaveSnapshotContext, EDGE_STYLE, EDGE_MARKER, NODE_COLORS }
