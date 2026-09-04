@@ -1108,7 +1108,7 @@ function ConfirmDeleteEdgeModal({ onConfirm, onClose }: { onConfirm: () => void;
     </div>
   )
 }
-type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text' | 'group'; x: number; y: number }
+type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text' | 'group' | 'organization'; x: number; y: number }
 type EdgeContextMenu = { edgeId: string; x: number; y: number }
 
 interface Props {
@@ -1116,10 +1116,11 @@ interface Props {
   onClose?: () => void
   orgId?: number
   onOpenOrg?: (orgId: number) => void
+  onViewOrg?: (orgId: number) => void
   onBack?: () => void
 }
 
-export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onBack }: Props) {
+export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onViewOrg, onBack }: Props) {
   const { darkMode } = useUIStore()
   const [departments, setDepartments] = useState<Department[]>([])
   const [orgMembers, setOrgMembers] = useState<DeptEmployee[]>([])
@@ -1493,18 +1494,10 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
     setPendingDrop(null)
   }
 
-  const onNodeClick = useCallback<NodeMouseHandler>((_, node) => {
-    if (node.type !== 'organization') return
-    if (!onOpenOrg) return
-    const targetOrgId = Number(String(node.id).replace('org-', ''))
-    if (!targetOrgId) return
-    if (dirty) {
-      runAfterLeaveGuarded(() => onOpenOrg(targetOrgId))
-      return
-    }
+  const diveToNode = useCallback((node: Node, after: () => void) => {
     const inst = rfInstanceRef.current
     if (!inst) {
-      onOpenOrg(targetOrgId)
+      after()
       return
     }
     const w = node.measured?.width ?? 240
@@ -1514,8 +1507,20 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
       { x: window.innerWidth / 2 - (node.position.x + w / 2) * z, y: window.innerHeight / 2 - (node.position.y + h / 2) * z, zoom: z },
       { duration: 340 },
     )
-    setTimeout(() => onOpenOrg(targetOrgId), 350)
-  }, [onOpenOrg, dirty, runAfterLeaveGuarded])
+    setTimeout(after, 350)
+  }, [])
+
+  const onNodeClick = useCallback<NodeMouseHandler>((_, node) => {
+    if (node.type !== 'organization') return
+    if (!onOpenOrg) return
+    const targetOrgId = Number(String(node.id).replace('org-', ''))
+    if (!targetOrgId) return
+    if (dirty) {
+      runAfterLeaveGuarded(() => onOpenOrg(targetOrgId))
+      return
+    }
+    diveToNode(node, () => onOpenOrg(targetOrgId))
+  }, [onOpenOrg, dirty, runAfterLeaveGuarded, diveToNode])
 
   const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
     e.preventDefault()
@@ -2067,7 +2072,36 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
       })()}
 
       {/* Context menu */}
-      {contextMenu && (
+      {contextMenu && contextMenu.nodeType === 'organization' && (
+        <div
+          className="fixed z-50 min-w-[180px] overflow-hidden rounded-xl border border-border bg-card shadow-xl animate-in"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          {(() => {
+            const node = nodes.find(n => n.id === contextMenu.nodeId)
+            const orgId = node ? Number(String(node.id).replace('org-', '')) : 0
+            return (
+              <button
+                onClick={() => {
+                  setContextMenu(null)
+                  if (!node || !orgId || !onViewOrg) return
+                  if (dirty) {
+                    runAfterLeaveGuarded(() => onViewOrg(orgId))
+                    return
+                  }
+                  diveToNode(node, () => onViewOrg(orgId))
+                }}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+              >
+                <Eye className="h-4 w-4 text-muted-foreground" />
+                Просмотреть
+              </button>
+            )
+          })()}
+        </div>
+      )}
+      {contextMenu && contextMenu.nodeType !== 'organization' && (
         <div
           className="fixed z-50 min-w-[180px] overflow-hidden rounded-xl border border-border bg-card shadow-xl animate-in"
           style={{ left: contextMenu.x, top: contextMenu.y }}
@@ -2111,7 +2145,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
             </>
           )}
           <button
-            onClick={() => startEdit(contextMenu.nodeId, contextMenu.nodeType)}
+            onClick={() => startEdit(contextMenu.nodeId, contextMenu.nodeType as 'department' | 'employee' | 'text' | 'group')}
             className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
           >
             <Pencil className="h-4 w-4 text-muted-foreground" />

@@ -301,6 +301,14 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
           }
           navigateTo(target, false)
         }}
+        onViewOrg={orgId => {
+          if (orgId === currentOrg.id) {
+            setEditing(false)
+            return
+          }
+          const target = orgListRef.current.find(o => o.id === orgId)
+          if (target) navigateTo(target, false)
+        }}
       />
     )
   }
