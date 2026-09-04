@@ -108,7 +108,6 @@ function buildRootOrgNode(baseNodes: Node[], org: ChildOrgItem): Node {
       name: org.name,
       memberCount: org.member_count,
       headName: org.head_id ? [org.head_last_name, org.head_first_name].filter(Boolean).join(' ') || null : null,
-      subtitle: 'Организация',
     },
     draggable: false,
     selectable: false,
@@ -423,7 +422,7 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
 }
 
 function ChildOrgNode({ data }: NodeProps) {
-  const d = data as { name: string; memberCount?: number; headName?: string | null; subtitle?: string }
+  const d = data as { name: string; memberCount?: number; headName?: string | null }
   return (
     <div className="group min-w-[220px] rounded-xl overflow-hidden shadow-lg border-2 border-indigo-500/60 bg-card hover:shadow-xl hover:border-primary transition-all duration-200 select-none cursor-pointer">
       <div className="px-4 py-3 bg-gradient-to-br from-indigo-500 to-blue-600">
@@ -434,13 +433,14 @@ function ChildOrgNode({ data }: NodeProps) {
       </div>
       <div className="bg-card px-4 py-2 text-xs text-muted-foreground border-t border-border/50 space-y-1">
         {d.memberCount !== undefined && <div>{d.memberCount} сотр.</div>}
-        {d.headName && (
+        {d.headName ? (
           <div className="flex items-center gap-1.5">
             <User className="h-3 w-3 shrink-0" />
             <span className="truncate">{d.headName}</span>
           </div>
+        ) : (
+          <div className="text-amber-600 dark:text-amber-400">Руководитель не назначен</div>
         )}
-        <div className="text-[10px] text-muted-foreground/70">{d.subtitle ?? 'Дочерняя организация'}</div>
       </div>
       <Handle type="source" position={Position.Top} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
       <Handle type="source" position={Position.Bottom} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
