@@ -32,7 +32,7 @@ import {
   ConnectionMode,
   NodeResizer,
 } from '@xyflow/react'
-import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle, BookOpen } from 'lucide-react'
+import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeft, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { Switch } from '@/shared/components/ui/Switch'
@@ -442,10 +442,10 @@ function ChildOrgNode({ data }: NodeProps) {
           <div className="text-amber-600 dark:text-amber-400">Руководитель не назначен</div>
         )}
       </div>
-      <Handle type="source" position={Position.Top} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
-      <Handle type="source" position={Position.Bottom} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
-      <Handle type="source" position={Position.Left} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
-      <Handle type="source" position={Position.Right} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
+      <Handle type="source" id="top" position={Position.Top} className={HANDLE_CLASS} style={HANDLE_STYLE} />
+      <Handle type="source" id="bottom" position={Position.Bottom} className={HANDLE_CLASS} style={HANDLE_STYLE} />
+      <Handle type="source" id="left" position={Position.Left} className={HANDLE_CLASS} style={HANDLE_STYLE} />
+      <Handle type="source" id="right" position={Position.Right} className={HANDLE_CLASS} style={HANDLE_STYLE} />
     </div>
   )
 }
@@ -1056,9 +1056,10 @@ interface Props {
   onClose?: () => void
   orgId?: number
   onOpenOrg?: (orgId: number) => void
+  onBack?: () => void
 }
 
-export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: Props) {
+export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onBack }: Props) {
   const { darkMode } = useUIStore()
   const [departments, setDepartments] = useState<Department[]>([])
   const [orgMembers, setOrgMembers] = useState<DeptEmployee[]>([])
@@ -1083,11 +1084,20 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: P
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null)
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
-  const pendingOpenOrgRef = useRef<number | null>(null)
+  const pendingAfterLeaveRef = useRef<(() => void) | null>(null)
 
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([])
   const isRestoringRef = useRef(false)
   const [dirty, setDirty] = useState(false)
+
+  const runAfterLeaveGuarded = useCallback((action: () => void) => {
+    if (dirty) {
+      pendingAfterLeaveRef.current = action
+      setConfirmLeave(true)
+      return
+    }
+    action()
+  }, [dirty])
 
   const saveSnapshot = useCallback(() => {
     if (isRestoringRef.current) return
@@ -1154,6 +1164,8 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: P
               id: `e-orgedit-${scopeOrgId}-${String(c.id).replace('org-', '')}`,
               source: `org-${scopeOrgId}`,
               target: c.id,
+              sourceHandle: 'bottom',
+              targetHandle: 'top',
               style: { stroke: '#6b7280', strokeWidth: 2 },
               markerEnd: { type: 'arrowclosed', color: '#6b7280' },
             } as Edge)
@@ -1436,13 +1448,8 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: P
     if (!onOpenOrg) return
     const targetOrgId = Number(String(node.id).replace('org-', ''))
     if (!targetOrgId) return
-    if (dirty) {
-      pendingOpenOrgRef.current = targetOrgId
-      setConfirmLeave(true)
-      return
-    }
-    onOpenOrg(targetOrgId)
-  }, [onOpenOrg, dirty])
+    runAfterLeaveGuarded(() => onOpenOrg(targetOrgId))
+  }, [onOpenOrg, runAfterLeaveGuarded])
 
   const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
     e.preventDefault()
@@ -1651,6 +1658,12 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: P
         </div>
         <div className="flex items-center gap-2">
           {savedLabel && <span className="text-xs text-green-600 dark:text-green-400">Сохранено</span>}
+          {fullscreen && onBack && (
+            <Button size="sm" variant="outline" onClick={() => runAfterLeaveGuarded(() => onBack())}>
+              <ArrowLeft className="h-4 w-4 mr-1.5" />
+              Назад
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={save} disabled={saving}>
             <Save className="h-4 w-4 mr-1.5" />
             {saving ? 'Сохранение...' : 'Сохранить'}
@@ -1874,12 +1887,12 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: P
         <ConfirmLeaveModal
           onConfirm={() => {
             setConfirmLeave(false)
-            const target = pendingOpenOrgRef.current
-            pendingOpenOrgRef.current = null
-            if (target != null) onOpenOrg?.(target)
+            const action = pendingAfterLeaveRef.current
+            pendingAfterLeaveRef.current = null
+            if (action) action()
             else onClose?.()
           }}
-          onClose={() => { pendingOpenOrgRef.current = null; setConfirmLeave(false) }}
+          onClose={() => { pendingAfterLeaveRef.current = null; setConfirmLeave(false) }}
         />
       )}
 

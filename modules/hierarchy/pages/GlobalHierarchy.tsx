@@ -19,7 +19,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Building2, Network, X, Loader2, User, Save, Frame, AlignLeft, Pencil, Trash2, BookOpen } from 'lucide-react'
+import { Building2, Network, X, Loader2, User, Save, Frame, AlignLeft, Pencil, Trash2, BookOpen, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -182,11 +182,28 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
   const [error, setError] = useState<string | null>(null)
   const [currentOrg, setCurrentOrg] = useState<OrgItem>(org)
   const [editing, setEditing] = useState(() => (canEditOrg ? canEditOrg(org.id) : false))
+  const [navStack, setNavStack] = useState<OrgItem[]>([])
   const orgListRef = useRef<OrgItem[]>([])
   const currentOrgRef = useRef(currentOrg)
   useEffect(() => { currentOrgRef.current = currentOrg }, [currentOrg])
 
-  useEffect(() => { setCurrentOrg(org); setEditing(canEditOrg ? canEditOrg(org.id) : false) }, [org, canEditOrg])
+  useEffect(() => { setCurrentOrg(org); setEditing(canEditOrg ? canEditOrg(org.id) : false); setNavStack([]) }, [org, canEditOrg])
+
+  const navigateTo = useCallback((target: OrgItem, keepEditing: boolean) => {
+    setNavStack(s => [...s, currentOrgRef.current])
+    setCurrentOrg(target)
+    setEditing(keepEditing)
+  }, [])
+
+  const goBack = useCallback(() => {
+    setNavStack(s => {
+      if (s.length === 0) return s
+      const prev = s[s.length - 1]
+      setCurrentOrg(prev)
+      setEditing(canEditOrg ? canEditOrg(prev.id) : false)
+      return s.slice(0, -1)
+    })
+  }, [canEditOrg])
 
   useEffect(() => {
     const org = currentOrgRef.current
@@ -270,11 +287,8 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
     const orgId = Number(String(node.id).replace('org-', ''))
     if (orgId === currentOrg.id) return
     const target = orgListRef.current.find(o => o.id === orgId)
-    if (target) {
-      setCurrentOrg(target)
-      setEditing(canEditOrg ? canEditOrg(target.id) : false)
-    }
-  }, [currentOrg.id, canEditOrg])
+    if (target) navigateTo(target, canEditOrg ? canEditOrg(target.id) : false)
+  }, [currentOrg.id, canEditOrg, navigateTo])
 
   if (editing) {
     return (
@@ -282,15 +296,15 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
         fullscreen
         orgId={currentOrg.id}
         onClose={() => setEditing(false)}
+        onBack={navStack.length > 0 ? goBack : undefined}
         onOpenOrg={orgId => {
           const target = orgListRef.current.find(o => o.id === orgId)
           if (!target) return
           if (canEditOrg && canEditOrg(target.id)) {
-            setCurrentOrg(target)
+            navigateTo(target, true)
             return
           }
-          setEditing(false)
-          setCurrentOrg(target)
+          navigateTo(target, false)
         }}
       />
     )
@@ -309,10 +323,10 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {currentOrg.id !== org.id && (
-            <Button size="sm" variant="outline" onClick={() => setCurrentOrg(org)}>
-              <Building2 className="h-4 w-4 mr-1.5" />
-              {org.name}
+          {navStack.length > 0 && (
+            <Button size="sm" variant="outline" onClick={goBack}>
+              <ArrowLeft className="h-4 w-4 mr-1.5" />
+              {navStack[navStack.length - 1].name}
             </Button>
           )}
           {(canEditOrg ? canEditOrg(currentOrg.id) : false) && (
