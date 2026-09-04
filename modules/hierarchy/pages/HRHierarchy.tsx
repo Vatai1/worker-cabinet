@@ -442,6 +442,10 @@ function ChildOrgNode({ data }: NodeProps) {
         )}
         <div className="text-[10px] text-muted-foreground/70">{d.subtitle ?? 'Дочерняя организация'}</div>
       </div>
+      <Handle type="source" position={Position.Top} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
+      <Handle type="source" position={Position.Bottom} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
+      <Handle type="source" position={Position.Left} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
+      <Handle type="source" position={Position.Right} className="!opacity-0 pointer-events-none" style={HANDLE_STYLE} />
     </div>
   )
 }
@@ -1136,17 +1140,29 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: P
         const { data } = await res.json()
         const baseNodes: Node[] = data.nodes ?? []
         const extraOrgNodes: Node[] = []
+        const orgEdges: Edge[] = []
         const scopeOrgId = orgId ?? useOrgStore.getState().currentOrgId
         if (orgsRes?.ok && scopeOrgId != null) {
           const tree = await orgsRes.json() as ChildOrgItem[]
           const self = tree.find(o => o.id === scopeOrgId)
+          const childOrgs = tree.filter(o => o.parent_id === scopeOrgId)
           if (self) extraOrgNodes.push(buildRootOrgNode(baseNodes, self))
-          extraOrgNodes.push(...buildChildOrgNodes(baseNodes, tree.filter(o => o.parent_id === scopeOrgId)))
+          const childCards = buildChildOrgNodes(baseNodes, childOrgs)
+          extraOrgNodes.push(...childCards)
+          for (const c of childCards) {
+            orgEdges.push({
+              id: `e-orgedit-${scopeOrgId}-${String(c.id).replace('org-', '')}`,
+              source: `org-${scopeOrgId}`,
+              target: c.id,
+              style: { stroke: '#6b7280', strokeWidth: 2 },
+              markerEnd: { type: 'arrowclosed', color: '#6b7280' },
+            } as Edge)
+          }
         }
         setNodes([...extraOrgNodes, ...baseNodes])
         historyRef.current = []
         setDirty(false)
-        if (data.edges) setEdges((data.edges as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })))
+        setEdges([...((data.edges ?? []) as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })), ...orgEdges])
         if (data.viewport) {
           if (rfInstanceRef.current) {
             rfInstanceRef.current.setViewport(data.viewport)
@@ -1560,10 +1576,11 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: P
     try {
       const { nodes: n, edges: e, viewport } = inst.toObject()
       const nodesClean = n.filter(x => x.type !== 'organization').map(x => ({ ...x, selected: false }))
+      const edgesClean = e.filter(x => !String(x.source).startsWith('org-') && !String(x.target).startsWith('org-'))
       const res = await fetch(`${API_BASE_URL}/hierarchy`, {
         method: 'PUT',
         headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
-        body: JSON.stringify({ nodes: nodesClean, edges: e, viewport }),
+        body: JSON.stringify({ nodes: nodesClean, edges: edgesClean, viewport }),
       })
       if (!res.ok) {
         const d = await res.json()
