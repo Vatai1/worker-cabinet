@@ -67,7 +67,7 @@ interface OrgMemberRow {
 interface ChildOrgItem {
   id: number
   name: string
-  parent_id: number | null
+  parent_id?: number | null
   member_count?: number
   head_id?: number | null
   head_first_name?: string | null
@@ -111,6 +111,33 @@ function buildRootOrgNode(baseNodes: Node[], org: ChildOrgItem, savedPos?: { x: 
     selectable: false,
     deletable: false,
   } as Node
+}
+
+function buildOrgOverlay(
+  baseNodes: Node[],
+  self: ChildOrgItem | null,
+  childOrgs: ChildOrgItem[],
+  savedPositions: Record<string, { x: number; y: number }> = {},
+): { nodes: Node[]; edges: Edge[] } {
+  const nodes: Node[] = []
+  const edges: Edge[] = []
+  if (self) nodes.push(buildRootOrgNode(baseNodes, self, savedPositions[String(self.id)]))
+  const childCards = buildChildOrgNodes(baseNodes, childOrgs, savedPositions)
+  nodes.push(...childCards)
+  if (self) {
+    for (const c of childCards) {
+      edges.push({
+        id: `e-orgedit-${self.id}-${String(c.id).replace('org-', '')}`,
+        source: `org-${self.id}`,
+        target: c.id,
+        sourceHandle: 'bottom',
+        targetHandle: 'top',
+        style: { stroke: '#6b7280', strokeWidth: 2 },
+        markerEnd: { type: 'arrowclosed', color: '#6b7280' },
+      } as Edge)
+    }
+  }
+  return { nodes, edges }
 }
 
 interface Department {
@@ -1177,33 +1204,17 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
         if (!res.ok) throw new Error('Не удалось загрузить иерархию')
         const { data } = await res.json()
         const baseNodes: Node[] = data.nodes ?? []
-        const extraOrgNodes: Node[] = []
-        const orgEdges: Edge[] = []
         const savedOrgPositions = (data.orgPositions ?? {}) as Record<string, { x: number; y: number }>
         const scopeOrgId = orgId ?? useOrgStore.getState().currentOrgId
+        let overlay: { nodes: Node[]; edges: Edge[] } = { nodes: [], edges: [] }
         if (orgsRes?.ok && scopeOrgId != null) {
           const tree = await orgsRes.json() as ChildOrgItem[]
-          const self = tree.find(o => o.id === scopeOrgId)
-          const childOrgs = tree.filter(o => o.parent_id === scopeOrgId)
-          if (self) extraOrgNodes.push(buildRootOrgNode(baseNodes, self, savedOrgPositions[String(scopeOrgId)]))
-          const childCards = buildChildOrgNodes(baseNodes, childOrgs, savedOrgPositions)
-          extraOrgNodes.push(...childCards)
-          for (const c of childCards) {
-            orgEdges.push({
-              id: `e-orgedit-${scopeOrgId}-${String(c.id).replace('org-', '')}`,
-              source: `org-${scopeOrgId}`,
-              target: c.id,
-              sourceHandle: 'bottom',
-              targetHandle: 'top',
-              style: { stroke: '#6b7280', strokeWidth: 2 },
-              markerEnd: { type: 'arrowclosed', color: '#6b7280' },
-            } as Edge)
-          }
+          overlay = buildOrgOverlay(baseNodes, tree.find(o => o.id === scopeOrgId) ?? null, tree.filter(o => o.parent_id === scopeOrgId), savedOrgPositions)
         }
-        setNodes([...extraOrgNodes, ...baseNodes])
+        setNodes([...overlay.nodes, ...baseNodes])
         historyRef.current = []
         setDirty(false)
-        setEdges([...((data.edges ?? []) as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })), ...orgEdges])
+        setEdges([...((data.edges ?? []) as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })), ...overlay.edges])
         if (data.viewport) {
           if (rfInstanceRef.current) {
             rfInstanceRef.current.setViewport(data.viewport)
@@ -1828,6 +1839,8 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
             onReconnect={onReconnect}
             onReconnectStart={onReconnectStart}
             onReconnectEnd={onReconnectEnd}
+            multiSelectionKeyCode={['Control', 'Meta']}
+            selectionKeyCode={['Shift', 'Control']}
             connectionMode={ConnectionMode.Loose}
             colorMode={darkMode ? 'dark' : 'light'}
             deleteKeyCode={null}
@@ -2101,5 +2114,6 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
 
 export { DepartmentNode, EmployeeNode, TextNode, GroupNode, nodeTypes, EditableEdge, edgeTypes }
 export { SelectDepartmentModal, SelectEmployeeModal, TextInputModal }
+export { ChildOrgNode, buildOrgOverlay }
 export type { Department, DeptEmployee }
 export { SaveSnapshotContext, EDGE_STYLE, EDGE_MARKER, NODE_COLORS }

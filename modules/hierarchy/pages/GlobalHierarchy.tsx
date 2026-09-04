@@ -6,7 +6,6 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
-  MarkerType,
   ConnectionMode,
   Handle,
   Position,
@@ -25,7 +24,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
-import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, EDGE_STYLE, HRHierarchy } from '@/modules/hierarchy/pages/HRHierarchy'
+import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, HRHierarchy, ChildOrgNode, buildOrgOverlay } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
   id: number
@@ -183,7 +182,10 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
   const [currentOrg, setCurrentOrg] = useState<OrgItem>(org)
   const [editing, setEditing] = useState(() => (canEditOrg ? canEditOrg(org.id) : false))
   const [navStack, setNavStack] = useState<OrgItem[]>([])
+  const [hasSavedViewport, setHasSavedViewport] = useState(false)
   const orgListRef = useRef<OrgItem[]>([])
+  const viewerRfRef = useRef<ReactFlowInstance | null>(null)
+  const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
   const currentOrgRef = useRef(currentOrg)
   useEffect(() => { currentOrgRef.current = currentOrg }, [currentOrg])
 
@@ -220,51 +222,25 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
         if (!hierRes.ok) throw new Error('Не удалось загрузить иерархию')
         const { data } = await hierRes.json()
         const contentNodes: Node[] = (data.nodes || []).map((n: Node) => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 }))
-        const orgEdges: Edge[] = []
         let childOrgs: OrgItem[] = []
-        let childrenMap = new Map<number, OrgItem[]>()
         if (orgsRes.ok) {
           const allOrgs: OrgItem[] = await orgsRes.json()
           orgListRef.current = Array.isArray(allOrgs) ? allOrgs : []
-          childrenMap = directChildrenMap(orgListRef.current)
           childOrgs = orgListRef.current.filter(o => o.parent_id === org.id)
         }
-        let rootPos = { x: 0, y: 0 }
-        if (contentNodes.length > 0 || childOrgs.length > 0) {
-          const xs = [...contentNodes.map(n => n.position?.x ?? 0), 0]
-          const ys = [...contentNodes.map(n => n.position?.y ?? 0), 0]
-          rootPos = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: Math.min(...ys) - 380 }
+        const overlay = buildOrgOverlay(
+          contentNodes,
+          org,
+          childOrgs,
+          (data.orgPositions ?? {}) as Record<string, { x: number; y: number }>,
+        )
+        setNodes([...overlay.nodes, ...contentNodes])
+        setEdges([...(data.edges || []).map((e: Edge) => ({ ...e, type: undefined })), ...overlay.edges])
+        setHasSavedViewport(!!data.viewport)
+        if (data.viewport) {
+          if (viewerRfRef.current) viewerRfRef.current.setViewport(data.viewport)
+          else pendingViewportRef.current = data.viewport
         }
-        const rootData = { ...orgDataOf(org, childrenMap), childOrgs: [] }
-        const rootNode: Node = {
-          id: `org-${org.id}`,
-          type: 'organization',
-          position: rootPos,
-          data: rootData,
-          draggable: false,
-        } as Node
-        if (childOrgs.length > 0) {
-          const maxY = contentNodes.reduce((m, n) => Math.max(m, n.position?.y ?? 0), rootPos.y)
-          const baseY = contentNodes.length > 0 ? maxY + 360 : rootPos.y + 360
-          childOrgs.forEach((o, i) => {
-            contentNodes.push({
-              id: `org-${o.id}`,
-              type: 'organization',
-              position: { x: rootPos.x + (i - (childOrgs.length - 1) / 2) * 360, y: baseY },
-              data: orgDataOf(o, childrenMap),
-              draggable: false,
-            } as Node)
-            orgEdges.push({
-              id: `e-orgchild-${org.id}-${o.id}`,
-              source: `org-${org.id}`,
-              target: `org-${o.id}`,
-              style: EDGE_STYLE,
-              markerEnd: { type: MarkerType.ArrowClosed, color: '#6b7280' },
-            })
-          })
-        }
-        setNodes([rootNode, ...contentNodes])
-        setEdges([...(data.edges || []).map((e: Edge) => ({ ...e, type: undefined })), ...orgEdges])
       } catch (err) {
         setError(getErrorMessage(err))
       } finally {
@@ -280,7 +256,15 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, editing])
 
-  const viewerNodeTypes = { ...hierarchyNodeTypes, organization: OrganizationNode }
+  const viewerNodeTypes = { ...hierarchyNodeTypes, organization: ChildOrgNode }
+
+  const handleViewerInit = useCallback((inst: ReactFlowInstance) => {
+    viewerRfRef.current = inst
+    if (pendingViewportRef.current) {
+      inst.setViewport(pendingViewportRef.current)
+      pendingViewportRef.current = null
+    }
+  }, [])
 
   const onViewerNodeClick = useCallback<NodeMouseHandler>((_, node) => {
     if (node.type !== 'organization') return
@@ -356,12 +340,13 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
             nodeTypes={viewerNodeTypes}
             onNodesChange={onNodesChange}
             onNodeClick={onViewerNodeClick}
+            onInit={handleViewerInit}
             nodesDraggable={false}
             nodesConnectable={false}
             edgesReconnectable={false}
             deleteKeyCode={null}
             connectionMode={ConnectionMode.Loose}
-            fitView
+            fitView={!hasSavedViewport}
             minZoom={0.1}
             proOptions={{ hideAttribution: true }}
           >
