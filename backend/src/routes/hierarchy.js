@@ -367,6 +367,9 @@ router.get('/', authenticateToken, async (req, res) => {
  *               nodes: { type: array, items: { type: object } }
  *               edges: { type: array, items: { type: object } }
  *               viewport: { type: object }
+ *               orgPositions:
+ *                 type: object
+ *                 description: 'Позиции карточек организаций на схеме (orgPositions[orgId] = {x, y})'
  *     responses:
  *       200:
  *         description: 'Структура сохранена; рёбра с relation=parent (или без relation) между department-нодами применены к departments.parent_id (source = родитель), между employee- и department-нодой — к departments.parent_user_id (сотрудник = куратор отдела); relation=plain игнорируется'
@@ -377,7 +380,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), async (req, res) => {
-  const { nodes, edges, viewport } = req.body
+  const { nodes, edges, viewport, orgPositions } = req.body
   if (!nodes || !edges) {
     return res.status(400).json({ error: 'Поля nodes и edges обязательны' })
   }
@@ -401,7 +404,12 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
   try {
     await client.query('BEGIN')
 
-    const data = JSON.stringify({ nodes, edges, viewport: viewport ?? DEFAULT_DATA.viewport })
+    const data = JSON.stringify({
+      nodes,
+      edges,
+      viewport: viewport ?? DEFAULT_DATA.viewport,
+      orgPositions: orgPositions && typeof orgPositions === 'object' && !Array.isArray(orgPositions) ? orgPositions : {},
+    })
     const result = await client.query(
       `INSERT INTO hr_hierarchy (id, data, updated_at, updated_by, organization_id)
        VALUES ($4, $1, NOW(), $2, $3)

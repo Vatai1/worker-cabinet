@@ -74,7 +74,7 @@ interface ChildOrgItem {
   head_last_name?: string | null
 }
 
-function buildChildOrgNodes(baseNodes: Node[], childOrgs: ChildOrgItem[]): Node[] {
+function buildChildOrgNodes(baseNodes: Node[], childOrgs: ChildOrgItem[], savedPositions: Record<string, { x: number; y: number }> = {}): Node[] {
   if (childOrgs.length === 0) return []
   const xs = baseNodes.map(n => n.position?.x ?? 0)
   const ys = baseNodes.map(n => n.position?.y ?? 0)
@@ -83,19 +83,18 @@ function buildChildOrgNodes(baseNodes: Node[], childOrgs: ChildOrgItem[]): Node[
   return childOrgs.map((o, i) => ({
     id: `org-${o.id}`,
     type: 'organization',
-    position: { x: centerX + (i - (childOrgs.length - 1) / 2) * 360, y: maxY + 380 },
+    position: savedPositions[String(o.id)] ?? { x: centerX + (i - (childOrgs.length - 1) / 2) * 360, y: maxY + 380 },
     data: {
       name: o.name,
       memberCount: o.member_count,
       headName: o.head_id ? [o.head_last_name, o.head_first_name].filter(Boolean).join(' ') || null : null,
     },
-    draggable: false,
     selectable: false,
     deletable: false,
   } as Node))
 }
 
-function buildRootOrgNode(baseNodes: Node[], org: ChildOrgItem): Node {
+function buildRootOrgNode(baseNodes: Node[], org: ChildOrgItem, savedPos?: { x: number; y: number }): Node {
   const xs = baseNodes.map(n => n.position?.x ?? 0)
   const ys = baseNodes.map(n => n.position?.y ?? 0)
   const centerX = xs.length > 0 ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0
@@ -103,13 +102,12 @@ function buildRootOrgNode(baseNodes: Node[], org: ChildOrgItem): Node {
   return {
     id: `org-${org.id}`,
     type: 'organization',
-    position: { x: centerX, y: ys.length > 0 ? minY - 380 : 0 },
+    position: savedPos ?? { x: centerX, y: ys.length > 0 ? minY - 380 : 0 },
     data: {
       name: org.name,
       memberCount: org.member_count,
       headName: org.head_id ? [org.head_last_name, org.head_first_name].filter(Boolean).join(' ') || null : null,
     },
-    draggable: false,
     selectable: false,
     deletable: false,
   } as Node
@@ -735,6 +733,7 @@ type EdgeDraft = {
   parentIsSource: boolean
   strokeWidth: number
   strokeColor: string
+  lineStyle: 'solid' | 'dashed'
   note: string
 }
 
@@ -745,7 +744,7 @@ function EdgeSettingsModal({
   onClose,
 }: {
   draft: EdgeDraft
-  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string) => void
+  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed') => void
   onDelete?: () => void
   onClose: () => void
 }) {
@@ -753,6 +752,7 @@ function EdgeSettingsModal({
   const [parentIsSource, setParentIsSource] = useState(draft.parentIsSource)
   const [strokeWidth, setStrokeWidth] = useState(draft.strokeWidth)
   const [strokeColor, setStrokeColor] = useState(draft.strokeColor)
+  const [lineStyle, setLineStyle] = useState<'solid' | 'dashed'>(draft.lineStyle)
   const [note, setNote] = useState(draft.note)
   const parentAvailable = draft.sourceType !== 'text' && draft.targetType !== 'text' &&
     (draft.sourceType === 'department' || draft.targetType === 'department' || (draft.sourceType === 'employee' && draft.targetType === 'employee'))
@@ -832,6 +832,34 @@ function EdgeSettingsModal({
             </div>
           )}
           <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Стиль линии</p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                ['solid', 'Сплошная'],
+                ['dashed', 'Пунктирная'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setLineStyle(value)}
+                  className={`flex flex-col items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                    lineStyle === value
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border hover:bg-muted/50 text-muted-foreground'
+                  }`}
+                >
+                  {label}
+                  <svg className="w-full h-3" viewBox="0 0 100 6" preserveAspectRatio="none">
+                    <line
+                      x1="2" y1="3" x2="98" y2="3"
+                      stroke={strokeColor} strokeWidth={Math.max(strokeWidth, 1.5)} strokeLinecap="round"
+                      strokeDasharray={value === 'dashed' ? '6 4' : undefined}
+                    />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Цвет линии</p>
             <div className="flex gap-1.5 flex-wrap">
               {NODE_COLORS.map(color => (
@@ -884,7 +912,7 @@ function EdgeSettingsModal({
             </Button>
           )}
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(effectiveRelation, parentIsSource, note, strokeWidth, strokeColor)}>
+          <Button className="flex-1" onClick={() => onConfirm(effectiveRelation, parentIsSource, note, strokeWidth, strokeColor, lineStyle)}>
             Сохранить
           </Button>
         </div>
@@ -1151,13 +1179,14 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
         const baseNodes: Node[] = data.nodes ?? []
         const extraOrgNodes: Node[] = []
         const orgEdges: Edge[] = []
+        const savedOrgPositions = (data.orgPositions ?? {}) as Record<string, { x: number; y: number }>
         const scopeOrgId = orgId ?? useOrgStore.getState().currentOrgId
         if (orgsRes?.ok && scopeOrgId != null) {
           const tree = await orgsRes.json() as ChildOrgItem[]
           const self = tree.find(o => o.id === scopeOrgId)
           const childOrgs = tree.filter(o => o.parent_id === scopeOrgId)
-          if (self) extraOrgNodes.push(buildRootOrgNode(baseNodes, self))
-          const childCards = buildChildOrgNodes(baseNodes, childOrgs)
+          if (self) extraOrgNodes.push(buildRootOrgNode(baseNodes, self, savedOrgPositions[String(scopeOrgId)]))
+          const childCards = buildChildOrgNodes(baseNodes, childOrgs, savedOrgPositions)
           extraOrgNodes.push(...childCards)
           for (const c of childCards) {
             orgEdges.push({
@@ -1291,6 +1320,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
       parentIsSource: true,
       strokeWidth: 2,
       strokeColor: '#6b7280',
+      lineStyle: 'solid',
       note: '',
     })
   }, [])
@@ -1311,7 +1341,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
     const s = nodeOf(edge.source)
     const t = nodeOf(edge.target)
     if (!s || !t) return
-    const data = edge.data as { relation?: EdgeRelation; note?: string } | undefined
+    const data = edge.data as { relation?: EdgeRelation; note?: string; lineStyle?: 'solid' | 'dashed' } | undefined
     setEdgeDraft({
       mode: 'edit',
       edgeId: edge.id,
@@ -1327,11 +1357,12 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
       parentIsSource: !edge.markerStart,
       strokeWidth: (edge.style as { strokeWidth?: number } | undefined)?.strokeWidth ?? 2,
       strokeColor: (edge.style as { stroke?: string } | undefined)?.stroke ?? '#6b7280',
+      lineStyle: data?.lineStyle ?? ((edge.style as { strokeDasharray?: string } | undefined)?.strokeDasharray ? 'dashed' : 'solid'),
       note: data?.note || '',
     })
   }, [])
 
-  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string) => {
+  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed') => {
     const d = edgeDraft
     if (!d) return
     saveSnapshot()
@@ -1345,9 +1376,12 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
     const target = flip ? d.source : d.target
     const sourceHandle = flip ? d.targetHandle : d.sourceHandle
     const targetHandle = flip ? d.sourceHandle : d.targetHandle
-    const style = relation === 'plain'
-      ? { ...EDGE_STYLE, stroke: strokeColor, strokeWidth, strokeDasharray: '6 4' }
-      : { ...EDGE_STYLE, stroke: strokeColor, strokeWidth }
+    const style = {
+      ...EDGE_STYLE,
+      stroke: strokeColor,
+      strokeWidth,
+      ...(lineStyle === 'dashed' ? { strokeDasharray: '6 4' } : {}),
+    }
     const marker = relation === 'parent' ? { type: MarkerType.ArrowClosed, color: strokeColor } : undefined
     setEdges(eds => {
       if (d.mode === 'create') {
@@ -1360,7 +1394,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
           type: 'editable',
           style,
           markerEnd: marker,
-          data: { relation, note },
+          data: { relation, note, lineStyle },
         } as Edge, eds)
       }
       return eds.map(e => e.id !== d.edgeId ? e : ({
@@ -1372,7 +1406,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
         style,
         markerEnd: marker,
         markerStart: undefined,
-        data: { ...(e.data as Record<string, unknown>), relation, note },
+        data: { ...(e.data as Record<string, unknown>), relation, note, lineStyle },
       } as Edge))
     })
     setEdgeDraft(null)
@@ -1584,10 +1618,16 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
       const { nodes: n, edges: e, viewport } = inst.toObject()
       const nodesClean = n.filter(x => x.type !== 'organization').map(x => ({ ...x, selected: false }))
       const edgesClean = e.filter(x => !String(x.source).startsWith('org-') && !String(x.target).startsWith('org-'))
+      const orgPositions: Record<string, { x: number; y: number }> = {}
+      for (const x of n) {
+        if (x.type === 'organization') {
+          orgPositions[String(x.id).replace('org-', '')] = { x: Math.round(x.position?.x ?? 0), y: Math.round(x.position?.y ?? 0) }
+        }
+      }
       const res = await fetch(`${API_BASE_URL}/hierarchy`, {
         method: 'PUT',
         headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
-        body: JSON.stringify({ nodes: nodesClean, edges: edgesClean, viewport }),
+        body: JSON.stringify({ nodes: nodesClean, edges: edgesClean, viewport, orgPositions }),
       })
       if (!res.ok) {
         const d = await res.json()
