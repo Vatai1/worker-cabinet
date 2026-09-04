@@ -54,6 +54,15 @@ interface DeptEmployee {
   departmentId?: number
 }
 
+interface OrgMemberRow {
+  id: number
+  first_name: string
+  last_name: string
+  position: string | null
+  department_id: number | null
+  department_name: string | null
+}
+
 interface Department {
   id: number
   name: string
@@ -467,12 +476,14 @@ function SelectDepartmentModal({
 
 function SelectEmployeeModal({
   departments,
+  members = [],
   onSelect,
   onClose,
   initialDescription = '',
   initialId,
 }: {
   departments: Department[]
+  members?: DeptEmployee[]
   onSelect: (emp: DeptEmployee, description: string) => void
   onClose: () => void
   initialDescription?: string
@@ -482,9 +493,14 @@ function SelectEmployeeModal({
   const [deptId, setDeptId] = useState<number | null>(null)
   const [description, setDescription] = useState(initialDescription)
 
-  const employees: DeptEmployee[] = departments.flatMap(d =>
-    (d.employees ?? []).map(e => ({ ...e, departmentName: d.name, departmentId: d.id }))
-  )
+  const employees: DeptEmployee[] = (() => {
+    const byId = new Map<number, DeptEmployee>()
+    for (const m of members) byId.set(m.id, m)
+    for (const d of departments) {
+      for (const e of d.employees ?? []) byId.set(e.id, { ...e, departmentName: d.name, departmentId: d.id })
+    }
+    return [...byId.values()]
+  })()
   const [selected, setSelected] = useState<DeptEmployee | null>(
     initialId ? (employees.find(e => e.id === initialId) ?? null) : null
   )
@@ -962,6 +978,7 @@ interface Props {
 export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
   const { darkMode } = useUIStore()
   const [departments, setDepartments] = useState<Department[]>([])
+  const [orgMembers, setOrgMembers] = useState<DeptEmployee[]>([])
   const [loading, setLoading] = useState(true)
   const [hierarchyLoading, setHierarchyLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -1069,9 +1086,25 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
       } finally {
         setLoading(false)
       }
+      try {
+        const res = await fetch(`${API_BASE_URL}/users/search`, { headers: { ...getAuthHeaders(), ...orgHeaders() } })
+        if (res.ok) {
+          const rows = await res.json() as OrgMemberRow[]
+          setOrgMembers(rows.map(u => ({
+            id: u.id,
+            first_name: u.first_name,
+            last_name: u.last_name,
+            position: u.position ?? '',
+            departmentName: u.department_name ?? undefined,
+            departmentId: u.department_id ?? undefined,
+          })))
+        }
+      } catch {
+        setOrgMembers([])
+      }
     }
     load()
-  }, [orgId])
+  }, [orgId, orgHeaders])
 
   const onConnect = useCallback((params: Connection) => {
     const inst = rfInstanceRef.current
@@ -1666,6 +1699,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
       {pendingDrop?.type === 'employee' && (
         <SelectEmployeeModal
           departments={departments}
+          members={orgMembers}
           onSelect={handleSelectEmployee}
           onClose={() => setPendingDrop(null)}
         />
@@ -1738,6 +1772,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
         return (
           <SelectEmployeeModal
             departments={departments}
+            members={orgMembers}
             onSelect={handleEditEmployee}
             onClose={() => setEditingNode(null)}
             initialId={d?.id}
