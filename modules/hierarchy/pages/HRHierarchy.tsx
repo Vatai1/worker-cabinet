@@ -40,6 +40,7 @@ import { DepartmentHierarchyOverlay } from '@/modules/hierarchy/components/Depar
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
+import { useOrgStore } from '@/shared/store/orgStore'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { useUIStore } from '@/shared/store/uiStore'
 
@@ -61,6 +62,37 @@ interface OrgMemberRow {
   position: string | null
   department_id: number | null
   department_name: string | null
+}
+
+interface ChildOrgItem {
+  id: number
+  name: string
+  parent_id: number | null
+  member_count?: number
+  head_id?: number | null
+  head_first_name?: string | null
+  head_last_name?: string | null
+}
+
+function buildChildOrgNodes(baseNodes: Node[], childOrgs: ChildOrgItem[]): Node[] {
+  if (childOrgs.length === 0) return []
+  const xs = baseNodes.map(n => n.position?.x ?? 0)
+  const ys = baseNodes.map(n => n.position?.y ?? 0)
+  const centerX = xs.length > 0 ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0
+  const maxY = ys.length > 0 ? Math.max(...ys) : 0
+  return childOrgs.map((o, i) => ({
+    id: `org-${o.id}`,
+    type: 'organization',
+    position: { x: centerX + (i - (childOrgs.length - 1) / 2) * 360, y: maxY + 380 },
+    data: {
+      name: o.name,
+      memberCount: o.member_count,
+      headName: o.head_id ? [o.head_last_name, o.head_first_name].filter(Boolean).join(' ') || null : null,
+    },
+    draggable: false,
+    selectable: false,
+    deletable: false,
+  } as Node))
 }
 
 interface Department {
@@ -369,11 +401,36 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
   )
 }
 
+function ChildOrgNode({ data }: NodeProps) {
+  const d = data as { name: string; memberCount?: number; headName?: string | null }
+  return (
+    <div className="group min-w-[220px] rounded-xl overflow-hidden shadow-lg border-2 border-indigo-500/60 bg-card hover:shadow-xl hover:border-primary transition-all duration-200 select-none cursor-pointer">
+      <div className="px-4 py-3 bg-gradient-to-br from-indigo-500 to-blue-600">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-white/80 flex-shrink-0" />
+          <span className="text-white font-semibold text-sm truncate">{d.name}</span>
+        </div>
+      </div>
+      <div className="bg-card px-4 py-2 text-xs text-muted-foreground border-t border-border/50 space-y-1">
+        {d.memberCount !== undefined && <div>{d.memberCount} сотр.</div>}
+        {d.headName && (
+          <div className="flex items-center gap-1.5">
+            <User className="h-3 w-3 shrink-0" />
+            <span className="truncate">{d.headName}</span>
+          </div>
+        )}
+        <div className="text-[10px] text-muted-foreground/70">Дочерняя организация</div>
+      </div>
+    </div>
+  )
+}
+
 const nodeTypes: NodeTypes = {
   department: DepartmentNode,
   employee: EmployeeNode,
   text: TextNode,
   group: GroupNode,
+  organization: ChildOrgNode,
 }
 
 const edgeTypes: EdgeTypes = {
@@ -973,9 +1030,10 @@ interface Props {
   fullscreen?: boolean
   onClose?: () => void
   orgId?: number
+  onOpenOrg?: (orgId: number) => void
 }
 
-export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
+export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: Props) {
   const { darkMode } = useUIStore()
   const [departments, setDepartments] = useState<Department[]>([])
   const [orgMembers, setOrgMembers] = useState<DeptEmployee[]>([])
@@ -1000,6 +1058,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null)
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
+  const pendingOpenOrgRef = useRef<number | null>(null)
 
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([])
   const isRestoringRef = useRef(false)
@@ -1048,10 +1107,20 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
   useEffect(() => {
     const loadHierarchy = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/hierarchy`, { headers: { ...getAuthHeaders(), ...orgHeaders() } })
+        const [res, orgsRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/hierarchy`, { headers: { ...getAuthHeaders(), ...orgHeaders() } }),
+          fetch(`${API_BASE_URL}/organizations/tree`, { headers: getAuthHeaders() }).catch(() => null),
+        ])
         if (!res.ok) throw new Error('Не удалось загрузить иерархию')
         const { data } = await res.json()
-        if (data.nodes) setNodes(data.nodes)
+        const baseNodes: Node[] = data.nodes ?? []
+        let childCards: Node[] = []
+        const scopeOrgId = orgId ?? useOrgStore.getState().currentOrgId
+        if (orgsRes?.ok && scopeOrgId != null) {
+          const tree = await orgsRes.json() as ChildOrgItem[]
+          childCards = buildChildOrgNodes(baseNodes, tree.filter(o => o.parent_id === scopeOrgId))
+        }
+        setNodes([...baseNodes, ...childCards])
         if (data.edges) setEdges((data.edges as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })))
         if (data.viewport) {
           if (rfInstanceRef.current) {
@@ -1067,7 +1136,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
       }
       }
       loadHierarchy()
-      }, [setNodes, setEdges, orgHeaders])
+      }, [setNodes, setEdges, orgHeaders, orgId])
 
   useEffect(() => {
     const load = async () => {
@@ -1321,6 +1390,19 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
     setPendingDrop(null)
   }
 
+  const onNodeClick = useCallback<NodeMouseHandler>((_, node) => {
+    if (node.type !== 'organization') return
+    if (!onOpenOrg) return
+    const targetOrgId = Number(String(node.id).replace('org-', ''))
+    if (!targetOrgId) return
+    if (dirty) {
+      pendingOpenOrgRef.current = targetOrgId
+      setConfirmLeave(true)
+      return
+    }
+    onOpenOrg(targetOrgId)
+  }, [onOpenOrg, dirty])
+
   const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
     e.preventDefault()
     setEdgeContextMenu(null)
@@ -1452,7 +1534,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
     setSaving(true)
     try {
       const { nodes: n, edges: e, viewport } = inst.toObject()
-      const nodesClean = n.map(x => ({ ...x, selected: false }))
+      const nodesClean = n.filter(x => x.type !== 'organization').map(x => ({ ...x, selected: false }))
       const res = await fetch(`${API_BASE_URL}/hierarchy`, {
         method: 'PUT',
         headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
@@ -1638,6 +1720,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
+            onNodeClick={onNodeClick}
             onNodeDragStart={onNodeDragStart}
             onInit={handleInit}
             onDrop={onDrop}
@@ -1747,8 +1830,14 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
 
       {confirmLeave && (
         <ConfirmLeaveModal
-          onConfirm={() => { setConfirmLeave(false); onClose?.() }}
-          onClose={() => setConfirmLeave(false)}
+          onConfirm={() => {
+            setConfirmLeave(false)
+            const target = pendingOpenOrgRef.current
+            pendingOpenOrgRef.current = null
+            if (target != null) onOpenOrg?.(target)
+            else onClose?.()
+          }}
+          onClose={() => { pendingOpenOrgRef.current = null; setConfirmLeave(false) }}
         />
       )}
 

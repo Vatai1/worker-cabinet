@@ -279,6 +279,13 @@ function OrgHierarchyViewer({ org, editableOrgId, onClose }: { org: OrgItem; edi
         fullscreen
         orgId={currentOrg.id}
         onClose={() => setEditing(false)}
+        onOpenOrg={orgId => {
+          const target = orgListRef.current.find(o => o.id === orgId)
+          if (target) {
+            setEditing(false)
+            setCurrentOrg(target)
+          }
+        }}
       />
     )
   }
