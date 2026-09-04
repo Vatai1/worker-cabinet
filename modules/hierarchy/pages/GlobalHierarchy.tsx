@@ -6,6 +6,7 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  MarkerType,
   ConnectionMode,
   Handle,
   Position,
@@ -24,7 +25,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
-import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal } from '@/modules/hierarchy/pages/HRHierarchy'
+import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, EDGE_STYLE } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
   id: number
@@ -181,43 +182,71 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
   const [error, setError] = useState<string | null>(null)
   const [currentOrg, setCurrentOrg] = useState<OrgItem>(org)
   const orgListRef = useRef<OrgItem[]>([])
+  const currentOrgRef = useRef(currentOrg)
+  useEffect(() => { currentOrgRef.current = currentOrg }, [currentOrg])
 
   useEffect(() => { setCurrentOrg(org) }, [org])
 
   useEffect(() => {
+    const org = currentOrgRef.current
     const load = async () => {
       setLoading(true)
       setError(null)
       try {
         const [hierRes, orgsRes] = await Promise.all([
           fetch(`${API_BASE_URL}/hierarchy`, {
-            headers: { ...getAuthHeaders(), 'X-Organization-Id': String(currentOrg.id) },
+            headers: { ...getAuthHeaders(), 'X-Organization-Id': String(org.id) },
           }),
           fetch(`${API_BASE_URL}/organizations`, { headers: getAuthHeaders() }),
         ])
         if (!hierRes.ok) throw new Error('Не удалось загрузить иерархию')
         const { data } = await hierRes.json()
-        const allNodes: Node[] = (data.nodes || []).map((n: Node) => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 }))
+        const contentNodes: Node[] = (data.nodes || []).map((n: Node) => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 }))
+        const orgEdges: Edge[] = []
+        let childOrgs: OrgItem[] = []
+        let childrenMap = new Map<number, OrgItem[]>()
         if (orgsRes.ok) {
           const allOrgs: OrgItem[] = await orgsRes.json()
           orgListRef.current = Array.isArray(allOrgs) ? allOrgs : []
-          const childrenMap = directChildrenMap(orgListRef.current)
-          const childOrgs = orgListRef.current.filter(o => o.parent_id === currentOrg.id)
-          if (childOrgs.length > 0) {
-            const maxY = allNodes.reduce((m, n) => Math.max(m, n.position?.y ?? 0), 0)
-            childOrgs.forEach((o, i) => {
-              allNodes.push({
-                id: `org-${o.id}`,
-                type: 'organization',
-                position: { x: i * 360, y: maxY + 320 },
-                data: orgDataOf(o, childrenMap),
-                draggable: false,
-              } as Node)
-            })
-          }
+          childrenMap = directChildrenMap(orgListRef.current)
+          childOrgs = orgListRef.current.filter(o => o.parent_id === org.id)
         }
-        setNodes(allNodes)
-        setEdges((data.edges || []).map((e: Edge) => ({ ...e, type: undefined })))
+        let rootPos = { x: 0, y: 0 }
+        if (contentNodes.length > 0 || childOrgs.length > 0) {
+          const xs = [...contentNodes.map(n => n.position?.x ?? 0), 0]
+          const ys = [...contentNodes.map(n => n.position?.y ?? 0), 0]
+          rootPos = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: Math.min(...ys) - 380 }
+        }
+        const rootData = { ...orgDataOf(org, childrenMap), childOrgs: [] }
+        const rootNode: Node = {
+          id: `org-${org.id}`,
+          type: 'organization',
+          position: rootPos,
+          data: rootData,
+          draggable: false,
+        } as Node
+        if (childOrgs.length > 0) {
+          const maxY = contentNodes.reduce((m, n) => Math.max(m, n.position?.y ?? 0), rootPos.y)
+          const baseY = contentNodes.length > 0 ? maxY + 360 : rootPos.y + 360
+          childOrgs.forEach((o, i) => {
+            contentNodes.push({
+              id: `org-${o.id}`,
+              type: 'organization',
+              position: { x: rootPos.x + (i - (childOrgs.length - 1) / 2) * 360, y: baseY },
+              data: orgDataOf(o, childrenMap),
+              draggable: false,
+            } as Node)
+            orgEdges.push({
+              id: `e-orgchild-${org.id}-${o.id}`,
+              source: `org-${org.id}`,
+              target: `org-${o.id}`,
+              style: EDGE_STYLE,
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#6b7280' },
+            })
+          })
+        }
+        setNodes([rootNode, ...contentNodes])
+        setEdges([...(data.edges || []).map((e: Edge) => ({ ...e, type: undefined })), ...orgEdges])
       } catch (err) {
         setError(getErrorMessage(err))
       } finally {
@@ -238,9 +267,10 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
   const onViewerNodeClick = useCallback<NodeMouseHandler>((_, node) => {
     if (node.type !== 'organization') return
     const orgId = Number(String(node.id).replace('org-', ''))
+    if (orgId === currentOrg.id) return
     const target = orgListRef.current.find(o => o.id === orgId)
     if (target) setCurrentOrg(target)
-  }, [])
+  }, [currentOrg.id])
 
   const content = (
     <div className="fixed inset-0 z-50 flex flex-col bg-card">
@@ -275,7 +305,7 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
         {error && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-destructive">{error}</div>
         )}
-        {!loading && !error && nodes.length > 0 && (
+        {!loading && !error && (
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -295,13 +325,6 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
             <MiniMap nodeStrokeWidth={3} zoomable pannable />
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(var(--border))" />
           </ReactFlow>
-        )}
-        {!loading && !error && nodes.length === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-            <Network className="h-10 w-10 opacity-40" />
-            <p className="text-sm font-medium">Иерархия учреждения ещё не построена</p>
-            <p className="text-xs">HR этой организации ещё не создал схему отделов и сотрудников</p>
-          </div>
         )}
       </div>
     </div>
@@ -726,7 +749,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
             title="Инструкция по глобальной иерархии"
             onClose={() => setShowInstruction(false)}
             items={[
-              { title: 'Просмотр учреждения', text: 'Клик по организации открывает её внутреннюю иерархию в режиме только чтение.' },
+              { title: 'Просмотр учреждения', text: 'Клик по организации открывает её иерархию: сама организация — корневой узел сверху, ниже — схема её отделов и дочерние организации, соединённые стрелками с корнем. Клик по дочерней организации переходит внутрь неё, кнопка в шапке возвращает назад.' },
               { title: 'Вложенность организаций', text: 'Перетащите организацию поверх другой — откроется подтверждение. После переноса организация проваливается внутрь родительской и отображается строкой в её карточке; клик по строке открывает иерархию вложенной организации. Перенос в свою дочернюю невозможен.' },
               { title: 'Группы организаций', text: 'Пунктирная рамка из панели слева объединяет организации визуально. Растяните её за углы при выделении, перетащите организации внутрь.' },
               { title: 'Описание', text: 'Текстовый блок для заметок на схеме. Редактирование и удаление — через ПКМ.' },
