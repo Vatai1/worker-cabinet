@@ -175,18 +175,18 @@ function mergeSavedLayout(orgs: OrgItem[], saved: { nodes?: Node[]; edges?: Edge
   return refreshOrgNodes(orgs, saved.nodes, saved.viewport ?? null)
 }
 
-function OrgHierarchyViewer({ org, editableOrgId, onClose }: { org: OrgItem; editableOrgId?: number; onClose: () => void }) {
+function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEditOrg?: (orgId: number) => boolean; onClose: () => void }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges] = useEdgesState<Edge>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentOrg, setCurrentOrg] = useState<OrgItem>(org)
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(() => (canEditOrg ? canEditOrg(org.id) : false))
   const orgListRef = useRef<OrgItem[]>([])
   const currentOrgRef = useRef(currentOrg)
   useEffect(() => { currentOrgRef.current = currentOrg }, [currentOrg])
 
-  useEffect(() => { setCurrentOrg(org) }, [org])
+  useEffect(() => { setCurrentOrg(org); setEditing(canEditOrg ? canEditOrg(org.id) : false) }, [org, canEditOrg])
 
   useEffect(() => {
     const org = currentOrgRef.current
@@ -270,8 +270,11 @@ function OrgHierarchyViewer({ org, editableOrgId, onClose }: { org: OrgItem; edi
     const orgId = Number(String(node.id).replace('org-', ''))
     if (orgId === currentOrg.id) return
     const target = orgListRef.current.find(o => o.id === orgId)
-    if (target) setCurrentOrg(target)
-  }, [currentOrg.id])
+    if (target) {
+      setCurrentOrg(target)
+      setEditing(canEditOrg ? canEditOrg(target.id) : false)
+    }
+  }, [currentOrg.id, canEditOrg])
 
   if (editing) {
     return (
@@ -281,10 +284,13 @@ function OrgHierarchyViewer({ org, editableOrgId, onClose }: { org: OrgItem; edi
         onClose={() => setEditing(false)}
         onOpenOrg={orgId => {
           const target = orgListRef.current.find(o => o.id === orgId)
-          if (target) {
-            setEditing(false)
+          if (!target) return
+          if (canEditOrg && canEditOrg(target.id)) {
             setCurrentOrg(target)
+            return
           }
+          setEditing(false)
+          setCurrentOrg(target)
         }}
       />
     )
@@ -299,7 +305,7 @@ function OrgHierarchyViewer({ org, editableOrgId, onClose }: { org: OrgItem; edi
             {currentOrg.name}
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Просмотр иерархии учреждения (только чтение). Клик по вложенной организации открывает её.
+            Клик по вложенной организации открывает её иерархию.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -309,7 +315,7 @@ function OrgHierarchyViewer({ org, editableOrgId, onClose }: { org: OrgItem; edi
               {org.name}
             </Button>
           )}
-          {(editableOrgId === undefined || currentOrg.id === editableOrgId) && (
+          {(canEditOrg ? canEditOrg(currentOrg.id) : false) && (
             <Button size="sm" onClick={() => setEditing(true)}>
               <Pencil className="h-4 w-4 mr-1.5" />
               Редактировать
@@ -365,6 +371,7 @@ interface Props {
 
 export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId }: Props) {
   const restricted = editScopeOrgId !== undefined
+  const canEditOrg = useCallback((orgId: number) => editScopeOrgId === undefined || orgId === editScopeOrgId, [editScopeOrgId])
   const [orgs, setOrgs] = useState<OrgItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -629,8 +636,8 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId }:
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             {restricted
-              ? 'Все учреждения системы. Нажмите на организацию, чтобы посмотреть её иерархию. Редактирование доступно только для вашей организации.'
-              : 'Все учреждения системы. Перетащите организации в группы, нажмите на учреждение, чтобы посмотреть его иерархию.'}
+              ? 'Все учреждения системы. Клик по организации открывает её иерархию; ваша организация — сразу в редактировании.'
+              : 'Все учреждения системы. Клик по учреждению открывает редактор его иерархии. Перетащите организации в группы для наглядности.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -812,7 +819,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId }:
         })()}
       </div>
       {selectedOrg && (
-        <OrgHierarchyViewer org={selectedOrg} editableOrgId={editScopeOrgId} onClose={() => setSelectedOrg(null)} />
+        <OrgHierarchyViewer org={selectedOrg} canEditOrg={canEditOrg} onClose={() => setSelectedOrg(null)} />
       )}
     </div>
   )

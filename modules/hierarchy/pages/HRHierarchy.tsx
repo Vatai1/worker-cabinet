@@ -95,6 +95,27 @@ function buildChildOrgNodes(baseNodes: Node[], childOrgs: ChildOrgItem[]): Node[
   } as Node))
 }
 
+function buildRootOrgNode(baseNodes: Node[], org: ChildOrgItem): Node {
+  const xs = baseNodes.map(n => n.position?.x ?? 0)
+  const ys = baseNodes.map(n => n.position?.y ?? 0)
+  const centerX = xs.length > 0 ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0
+  const minY = ys.length > 0 ? Math.min(...ys) : 0
+  return {
+    id: `org-${org.id}`,
+    type: 'organization',
+    position: { x: centerX, y: ys.length > 0 ? minY - 380 : 0 },
+    data: {
+      name: org.name,
+      memberCount: org.member_count,
+      headName: org.head_id ? [org.head_last_name, org.head_first_name].filter(Boolean).join(' ') || null : null,
+      subtitle: 'Организация',
+    },
+    draggable: false,
+    selectable: false,
+    deletable: false,
+  } as Node
+}
+
 interface Department {
   id: number
   name: string
@@ -402,7 +423,7 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
 }
 
 function ChildOrgNode({ data }: NodeProps) {
-  const d = data as { name: string; memberCount?: number; headName?: string | null }
+  const d = data as { name: string; memberCount?: number; headName?: string | null; subtitle?: string }
   return (
     <div className="group min-w-[220px] rounded-xl overflow-hidden shadow-lg border-2 border-indigo-500/60 bg-card hover:shadow-xl hover:border-primary transition-all duration-200 select-none cursor-pointer">
       <div className="px-4 py-3 bg-gradient-to-br from-indigo-500 to-blue-600">
@@ -419,7 +440,7 @@ function ChildOrgNode({ data }: NodeProps) {
             <span className="truncate">{d.headName}</span>
           </div>
         )}
-        <div className="text-[10px] text-muted-foreground/70">Дочерняя организация</div>
+        <div className="text-[10px] text-muted-foreground/70">{d.subtitle ?? 'Дочерняя организация'}</div>
       </div>
     </div>
   )
@@ -1114,13 +1135,17 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg }: P
         if (!res.ok) throw new Error('Не удалось загрузить иерархию')
         const { data } = await res.json()
         const baseNodes: Node[] = data.nodes ?? []
-        let childCards: Node[] = []
+        const extraOrgNodes: Node[] = []
         const scopeOrgId = orgId ?? useOrgStore.getState().currentOrgId
         if (orgsRes?.ok && scopeOrgId != null) {
           const tree = await orgsRes.json() as ChildOrgItem[]
-          childCards = buildChildOrgNodes(baseNodes, tree.filter(o => o.parent_id === scopeOrgId))
+          const self = tree.find(o => o.id === scopeOrgId)
+          if (self) extraOrgNodes.push(buildRootOrgNode(baseNodes, self))
+          extraOrgNodes.push(...buildChildOrgNodes(baseNodes, tree.filter(o => o.parent_id === scopeOrgId)))
         }
-        setNodes([...baseNodes, ...childCards])
+        setNodes([...extraOrgNodes, ...baseNodes])
+        historyRef.current = []
+        setDirty(false)
         if (data.edges) setEdges((data.edges as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })))
         if (data.viewport) {
           if (rfInstanceRef.current) {
