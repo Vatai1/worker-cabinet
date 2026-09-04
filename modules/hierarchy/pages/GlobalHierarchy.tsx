@@ -381,9 +381,10 @@ interface Props {
   fullscreen?: boolean
   onClose?: () => void
   editScopeOrgId?: number
+  initialOrgId?: number
 }
 
-export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId }: Props) {
+export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, initialOrgId }: Props) {
   const restricted = editScopeOrgId !== undefined
   const canEditOrg = useCallback((orgId: number) => editScopeOrgId === undefined || orgId === editScopeOrgId, [editScopeOrgId])
   const [orgs, setOrgs] = useState<OrgItem[]>([])
@@ -432,6 +433,10 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId }:
         const data = await orgRes.json()
         const orgList: OrgItem[] = Array.isArray(data) ? data : []
         setOrgs(orgList)
+        if (initialOrgId != null) {
+          const own = orgList.find(o => o.id === initialOrgId)
+          if (own) setSelectedOrg(own)
+        }
         let saved: { nodes?: Node[]; edges?: Edge[]; viewport?: { x: number; y: number; zoom: number } } | null = null
         if (layoutRes.ok) {
           const j = await layoutRes.json()
@@ -454,7 +459,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId }:
       }
     }
     load()
-  }, [setNodes, setEdges])
+  }, [setNodes, setEdges, initialOrgId])
 
   const handleInit = useCallback((inst: ReactFlowInstance) => {
     rfInstanceRef.current = inst
