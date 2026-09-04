@@ -447,7 +447,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
               </div>
             </div>
           )}
-          {activeTab === 'users' && <UsersTab />}
+          {activeTab === 'users' && <UsersTab mode={mode} />}
           {activeTab === 'roles' && <RolesTab />}
           {activeTab === 'role-mappings' && <AdminRoleMappings />}
           {activeTab === 'departments' && <DepartmentsTab />}
@@ -472,7 +472,8 @@ export function AdminPanel({ mode = 'global' }: Props) {
 
 // ===================== USERS TAB =====================
 
-function UsersTab() {
+function UsersTab({ mode }: { mode?: 'global' | 'org' }) {
+  const isGlobalMode = mode === 'global'
   const [users, setUsers] = useState<AdminUser[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -796,6 +797,11 @@ function UsersTab() {
         <UserDetailModal
           user={detailUser}
           roles={roles}
+          isGlobal={isGlobalMode}
+          onOrgsChanged={(orgString) => {
+            setUsers(prev => prev.map(u => u.id === detailUser.id ? { ...u, organizations: orgString } : u))
+            setDetailUser(prev => prev ? { ...prev, organizations: orgString } : null)
+          }}
           onClose={() => setDetailUser(null)}
           onChangeRole={(role) => { changeRole(detailUser.id, role) }}
           onChangeStatus={(status) => { changeStatus(detailUser.id, status) }}
@@ -806,15 +812,32 @@ function UsersTab() {
   )
 }
 
-function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, onResetPassword }: {
+interface UserOrgMembership {
+  id: number
+  name: string
+  org_role: string
+  department_name: string | null
+  is_primary: boolean
+}
+
+const ORG_ROLE_SELECT_COLORS: Record<string, string> = {
+  employee: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  manager: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  hr: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  admin: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+}
+
+function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChangeRole, onChangeStatus, onResetPassword }: {
   user: AdminUser
   roles: AdminRole[]
+  isGlobal?: boolean
+  onOrgsChanged?: (orgs: string | null) => void
   onClose: () => void
   onChangeRole: (role: string) => void
   onChangeStatus: (status: string) => void
   onResetPassword: (password: string) => void
 }) {
-  const [activeSection, setActiveSection] = useState<'info' | 'edit' | 'role' | 'password'>('info')
+  const [activeSection, setActiveSection] = useState<'info' | 'edit' | 'orgs' | 'role' | 'password'>('info')
   const [newPassword, setNewPassword] = useState('')
   const [selectedRole, setSelectedRole] = useState(user.role)
   const departments = useDepartmentsStore(s => s.departments) as { id: number; name: string }[]
@@ -830,6 +853,12 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
   const [showDeptPicker, setShowDeptPicker] = useState(false)
   const [showPositionPicker, setShowPositionPicker] = useState(false)
   const [positions, setPositions] = useState<string[]>([])
+  const [memberships, setMemberships] = useState<UserOrgMembership[]>([])
+  const [allOrgs, setAllOrgs] = useState<{ id: number; name: string }[]>([])
+  const [orgsLoading, setOrgsLoading] = useState(false)
+  const [addOrgId, setAddOrgId] = useState('')
+  const [addOrgRole, setAddOrgRole] = useState('employee')
+  const [orgBusy, setOrgBusy] = useState(false)
   const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
 
   useEffect(() => {
@@ -839,6 +868,128 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
       .then(data => setPositions((Array.isArray(data) ? data : data.positions || []).map((p: { name: string }) => p.name)))
       .catch(() => {})
   }, [fetchDepartments])
+
+  const loadMemberships = useCallback(async (): Promise<UserOrgMembership[]> => {
+    setOrgsLoading(true)
+    try {
+      const [uRes, oRes] = await Promise.all([
+        fetchWithRetry(`${API_BASE_URL}/users/${user.id}`, { headers: getAuthHeaders() }),
+        fetchWithRetry(`${API_BASE_URL}/organizations`, { headers: getAuthHeaders() }),
+      ])
+      let list: UserOrgMembership[] = []
+      if (uRes.ok) {
+        const data = await uRes.json()
+        list = Array.isArray(data.organizations) ? data.organizations : []
+        setMemberships(list)
+      }
+      if (oRes.ok) setAllOrgs(await oRes.json())
+      return list
+    } catch {
+      return []
+    } finally {
+      setOrgsLoading(false)
+    }
+  }, [user.id])
+
+  useEffect(() => {
+    if (isGlobal) loadMemberships()
+  }, [isGlobal, loadMemberships])
+
+  const availableOrgs = allOrgs.filter(o => !memberships.some(m => m.id === o.id))
+
+  const notifyOrgsChanged = (list: UserOrgMembership[]) => {
+    onOrgsChanged?.(list.map(o => o.name).join(', ') || null)
+  }
+
+  const addMembership = async () => {
+    if (!addOrgId) return
+    setOrgBusy(true)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${addOrgId}/members`, {
+        method: 'POST',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ email: user.email, org_role: addOrgRole }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Ошибка')
+      }
+      setAddOrgId('')
+      setAddOrgRole('employee')
+      notifyOrgsChanged(await loadMemberships())
+    } catch (err) {
+      alert(getErrorMessage(err))
+    } finally {
+      setOrgBusy(false)
+    }
+  }
+
+  const removeMembership = async (org: UserOrgMembership) => {
+    const confirmed = await confirmDialog({
+      title: 'Исключить из организации',
+      message: `Исключить ${user.first_name} ${user.last_name} из «${org.name}»?`,
+      confirmText: 'Исключить',
+      variant: 'danger',
+    })
+    if (!confirmed) return
+    setOrgBusy(true)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${org.id}/members/${user.id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Ошибка')
+      }
+      notifyOrgsChanged(await loadMemberships())
+    } catch (err) {
+      alert(getErrorMessage(err))
+    } finally {
+      setOrgBusy(false)
+    }
+  }
+
+  const makePrimary = async (org: UserOrgMembership) => {
+    setOrgBusy(true)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/users/${user.id}/primary-org`, {
+        method: 'PATCH',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ orgId: org.id }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Ошибка')
+      }
+      await loadMemberships()
+    } catch (err) {
+      alert(getErrorMessage(err))
+    } finally {
+      setOrgBusy(false)
+    }
+  }
+
+  const changeOrgRole = async (org: UserOrgMembership, orgRole: string) => {
+    setOrgBusy(true)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${org.id}/members/${user.id}`, {
+        method: 'PUT',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ org_role: orgRole }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Ошибка')
+      }
+      await loadMemberships()
+    } catch (err) {
+      alert(getErrorMessage(err))
+      await loadMemberships()
+    } finally {
+      setOrgBusy(false)
+    }
+  }
 
   const saveEdit = async () => {
     const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Обновить данные ${user.first_name} ${user.last_name}?`, confirmText: 'Сохранить' })
@@ -894,6 +1045,7 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
           {([
             { id: 'info' as const, name: 'Профиль', icon: Users },
             { id: 'edit' as const, name: 'Изменить', icon: Pencil },
+            ...(isGlobal ? [{ id: 'orgs' as const, name: 'Организации', icon: Globe }] : []),
             { id: 'role' as const, name: 'Роль', icon: ShieldCheck },
             { id: 'password' as const, name: 'Пароль', icon: Lock },
           ]).map(tab => {
@@ -1031,6 +1183,104 @@ function UserDetailModal({ user, roles, onClose, onChangeRole, onChangeStatus, o
                 {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
                 Сохранить
               </Button>
+            </div>
+          )}
+
+          {activeSection === 'orgs' && (
+            <div className="space-y-4">
+              {orgsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {memberships.map(org => (
+                      <div key={org.id} className="flex items-center gap-3 p-3 rounded-xl border border-border">
+                        <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-foreground truncate">{org.name}</span>
+                            {org.is_primary && <Badge className="text-[10px] bg-primary/10 text-primary">Основная</Badge>}
+                          </div>
+                          {org.department_name && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{org.department_name}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <select
+                            value={org.org_role}
+                            onChange={e => changeOrgRole(org, e.target.value)}
+                            disabled={orgBusy}
+                            className={cn(
+                              'text-xs font-medium rounded-md px-2 py-1 border-0 cursor-pointer disabled:opacity-50',
+                              ORG_ROLE_SELECT_COLORS[org.org_role] || ORG_ROLE_SELECT_COLORS.employee
+                            )}
+                          >
+                            <option value="employee">Сотрудник</option>
+                            <option value="manager">Руководитель</option>
+                            <option value="hr">HR</option>
+                            <option value="admin">Администратор</option>
+                          </select>
+                          {!org.is_primary && (
+                            <Button variant="outline" size="sm" disabled={orgBusy} onClick={() => makePrimary(org)}>
+                              Сделать основной
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={orgBusy || memberships.length <= 1}
+                            title={memberships.length <= 1 ? 'Пользователь должен состоять хотя бы в одной организации' : undefined}
+                            onClick={() => removeMembership(org)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    {memberships.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">Пользователь не состоит ни в одной организации</p>
+                    )}
+                  </div>
+                  {availableOrgs.length > 0 && (
+                    <div className="pt-4 border-t border-border space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium mb-1.5">Организация</label>
+                          <select
+                            value={addOrgId}
+                            onChange={e => setAddOrgId(e.target.value)}
+                            className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
+                          >
+                            <option value="">Выбрать...</option>
+                            {availableOrgs.map(o => (
+                              <option key={o.id} value={o.id}>{o.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1.5">Роль в организации</label>
+                          <select
+                            value={addOrgRole}
+                            onChange={e => setAddOrgRole(e.target.value)}
+                            className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
+                          >
+                            <option value="employee">Сотрудник</option>
+                            <option value="manager">Руководитель</option>
+                            <option value="hr">HR</option>
+                            <option value="admin">Администратор</option>
+                          </select>
+                        </div>
+                      </div>
+                      <Button className="w-full" disabled={!addOrgId || orgBusy} onClick={addMembership}>
+                        {orgBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Plus className="h-4 w-4 mr-1.5" />}
+                        Добавить в организацию
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
