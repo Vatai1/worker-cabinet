@@ -85,6 +85,40 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   res.json(result.rows)
 }))
 
+/**
+ * @swagger
+ * /organizations/tree:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: Все активные организации системы (для глобальной иерархии)
+ *     description: 'Доступно для ролей: hr, admin, superadmin'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список организаций
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Organization' }
+ */
+router.get('/tree', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), asyncHandler(async (req, res) => {
+  const result = await query(`
+    SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
+           o.is_active, o.created_at, o.head_id, o.parent_id,
+           po.name as parent_name,
+           h.first_name as head_first_name, h.last_name as head_last_name,
+           (SELECT COUNT(*) FROM user_organizations WHERE org_id = o.id AND is_active = true) as member_count
+    FROM organizations o
+    LEFT JOIN organizations po ON o.parent_id = po.id
+    LEFT JOIN users h ON o.head_id = h.id
+    WHERE o.is_active = true
+    ORDER BY o.name
+  `)
+  res.json(result.rows)
+}))
+
 async function validateOrgParent(parentId, orgId) {
   if (parentId === null || parentId === undefined) return
   const parentResult = await query('SELECT id FROM organizations WHERE id = $1', [parentId])

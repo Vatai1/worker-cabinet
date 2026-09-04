@@ -1070,6 +1070,8 @@ async function runMigrations() {
         CONSTRAINT single_row CHECK (id = 1)
       )
     `).catch(e => console.log('  - hr_hierarchy:', e.message))
+    await db.query('ALTER TABLE hr_hierarchy DROP CONSTRAINT IF EXISTS single_row').catch(e => console.log('  - hr_hierarchy single_row:', e.message))
+    await db.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_hr_hierarchy_org ON hr_hierarchy (organization_id)').catch(e => console.log('  - uq_hr_hierarchy_org:', e.message))
     console.log('  ✓ hr_hierarchy')
 
     await db.query(`

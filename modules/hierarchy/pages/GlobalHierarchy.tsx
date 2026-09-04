@@ -175,7 +175,7 @@ function mergeSavedLayout(orgs: OrgItem[], saved: { nodes?: Node[]; edges?: Edge
   return refreshOrgNodes(orgs, saved.nodes, saved.viewport ?? null)
 }
 
-function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => void }) {
+function OrgHierarchyViewer({ org, editableOrgId, onClose }: { org: OrgItem; editableOrgId?: number; onClose: () => void }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges] = useEdgesState<Edge>([])
   const [loading, setLoading] = useState(true)
@@ -198,7 +198,7 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
           fetch(`${API_BASE_URL}/hierarchy`, {
             headers: { ...getAuthHeaders(), 'X-Organization-Id': String(org.id) },
           }),
-          fetch(`${API_BASE_URL}/organizations`, { headers: getAuthHeaders() }),
+          fetch(`${API_BASE_URL}/organizations/tree`, { headers: getAuthHeaders() }),
         ])
         if (!hierRes.ok) throw new Error('Не удалось загрузить иерархию')
         const { data } = await hierRes.json()
@@ -302,10 +302,12 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
               {org.name}
             </Button>
           )}
-          <Button size="sm" onClick={() => setEditing(true)}>
-            <Pencil className="h-4 w-4 mr-1.5" />
-            Редактировать
-          </Button>
+          {(editableOrgId === undefined || currentOrg.id === editableOrgId) && (
+            <Button size="sm" onClick={() => setEditing(true)}>
+              <Pencil className="h-4 w-4 mr-1.5" />
+              Редактировать
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
@@ -351,9 +353,11 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
 interface Props {
   fullscreen?: boolean
   onClose?: () => void
+  editScopeOrgId?: number
 }
 
-export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
+export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId }: Props) {
+  const restricted = editScopeOrgId !== undefined
   const [orgs, setOrgs] = useState<OrgItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -393,7 +397,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
     const load = async () => {
       try {
         const [orgRes, layoutRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/organizations`, { headers: getAuthHeaders() }),
+          fetch(`${API_BASE_URL}/organizations/tree`, { headers: getAuthHeaders() }),
           fetch(`${API_BASE_URL}/hierarchy/global`, { headers: getAuthHeaders() }),
         ])
         if (!orgRes.ok) throw new Error('Не удалось загрузить организации')
@@ -617,16 +621,20 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
             Глобальная иерархия
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Все учреждения системы. Перетащите организации в группы, нажмите на учреждение, чтобы посмотреть его иерархию.
+            {restricted
+              ? 'Все учреждения системы. Нажмите на организацию, чтобы посмотреть её иерархию. Редактирование доступно только для вашей организации.'
+              : 'Все учреждения системы. Перетащите организации в группы, нажмите на учреждение, чтобы посмотреть его иерархию.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Учреждений: {orgs.length}</span>
           {savedLabel && <span className="text-xs text-green-600 dark:text-green-400">Сохранено</span>}
-          <Button size="sm" variant="outline" onClick={save} disabled={saving}>
-            <Save className="h-4 w-4 mr-1.5" />
-            {saving ? 'Сохранение...' : 'Сохранить'}
-          </Button>
+          {!restricted && (
+            <Button size="sm" variant="outline" onClick={save} disabled={saving}>
+              <Save className="h-4 w-4 mr-1.5" />
+              {saving ? 'Сохранение...' : 'Сохранить'}
+            </Button>
+          )}
           {fullscreen && onClose && (
             <Button size="sm" variant="outline" onClick={onClose}>
               <X className="h-4 w-4" />
@@ -635,6 +643,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
         </div>
       </div>
       <div className="relative flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+        {!restricted && (
         <div className="w-52 flex-shrink-0 border-r border-border p-4 space-y-3">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             Элементы
@@ -670,6 +679,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
             Инструкция
           </Button>
         </div>
+        )}
         <div className="flex-1 relative" style={{ minHeight: 0 }}>
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center z-10">
@@ -686,12 +696,13 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
               nodeTypes={orgNodeTypes}
               onNodesChange={onNodesChange}
               onNodeClick={onNodeClick}
-              onNodeContextMenu={onNodeContextMenu}
-              onNodeDragStart={onNodeDragStart}
-              onNodeDragStop={onNodeDragStop}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
+              onNodeContextMenu={restricted ? undefined : onNodeContextMenu}
+              onNodeDragStart={restricted ? undefined : onNodeDragStart}
+              onNodeDragStop={restricted ? undefined : onNodeDragStop}
+              onDrop={restricted ? undefined : onDrop}
+              onDragOver={restricted ? undefined : onDragOver}
               onInit={handleInit}
+              nodesDraggable={!restricted}
               nodesConnectable={false}
               edgesReconnectable={false}
               deleteKeyCode={null}
@@ -794,7 +805,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose }: Props) {
         })()}
       </div>
       {selectedOrg && (
-        <OrgHierarchyViewer org={selectedOrg} onClose={() => setSelectedOrg(null)} />
+        <OrgHierarchyViewer org={selectedOrg} editableOrgId={editScopeOrgId} onClose={() => setSelectedOrg(null)} />
       )}
     </div>
   )

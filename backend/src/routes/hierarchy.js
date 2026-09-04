@@ -294,6 +294,11 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
  *     summary: Получить организационную структуру
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: X-Organization-Id
+ *         schema: { type: integer }
+ *         description: 'Для ролей hr, admin, superadmin — читать структуру указанной организации (просмотр глобальной иерархии); для остальных ролей заголовок игнорируется'
  *     responses:
  *       200:
  *         description: Данные иерархии (ReactFlow)
@@ -313,8 +318,12 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
  */
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { text, values } = orgScopedQuery('SELECT data, updated_at, updated_by FROM hr_hierarchy WHERE id = 1', [], req)
-    const result = await query(text, values)
+    const headerOrg = parseInt(req.headers['x-organization-id'])
+    const canReadAnyOrg = ['hr', 'admin', 'superadmin'].includes(req.user.role)
+    const targetOrgId = canReadAnyOrg && headerOrg ? headerOrg : (req.org?.org_id ?? null)
+    const result = targetOrgId
+      ? await query('SELECT data, updated_at, updated_by FROM hr_hierarchy WHERE organization_id = $1', [targetOrgId])
+      : { rows: [] }
     if (result.rows.length === 0) {
       const deptResult = await query(
         `SELECT d.id, d.name, d.parent_id, d.parent_user_id,
@@ -325,9 +334,9 @@ router.get('/', authenticateToken, async (req, res) => {
                 (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
          FROM departments d
          LEFT JOIN users m ON d.manager_id = m.id
-         LEFT JOIN users pu ON d.parent_user_id = pu.id${req.org ? ' WHERE d.organization_id = $1' : ''}
+         LEFT JOIN users pu ON d.parent_user_id = pu.id${targetOrgId ? ' WHERE d.organization_id = $1' : ''}
          ORDER BY d.name`,
-        req.org ? [req.org.org_id] : []
+        targetOrgId ? [targetOrgId] : []
       )
       const auto = buildAutoHierarchy(deptResult.rows)
       return res.json({ data: auto, updated_at: null, updated_by: null })
@@ -372,6 +381,10 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
   if (!nodes || !edges) {
     return res.status(400).json({ error: 'Поля nodes и edges обязательны' })
   }
+  const orgId = currentOrgId(req)
+  if (!orgId) {
+    return res.status(400).json({ error: 'Не выбрана организация' })
+  }
 
   let parentChanges
   try {
@@ -391,13 +404,13 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
     const data = JSON.stringify({ nodes, edges, viewport: viewport ?? DEFAULT_DATA.viewport })
     const result = await client.query(
       `INSERT INTO hr_hierarchy (id, data, updated_at, updated_by, organization_id)
-       VALUES (1, $1, NOW(), $2, $3)
-       ON CONFLICT (id) DO UPDATE
+       VALUES ($4, $1, NOW(), $2, $3)
+       ON CONFLICT (organization_id) DO UPDATE
          SET data = EXCLUDED.data,
              updated_at = EXCLUDED.updated_at,
              updated_by = EXCLUDED.updated_by
        RETURNING updated_at`,
-      [data, req.user.id, currentOrgId(req)]
+      [data, req.user.id, orgId, orgId]
     )
 
     for (const { deptId, parentId, parentUserId, vacParentSeesChild, vacChildSeesParent } of parentChanges.deptChanges) {

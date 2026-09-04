@@ -5,6 +5,7 @@ import {
   Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Wrench, Send,
 } from 'lucide-react'
 import { useModulesStore } from '@/shared/store/modulesStore'
+import { useOrgStore } from '@/shared/store/orgStore'
 import { HRSurveys } from '@/modules/surveys/pages/HRSurveys'
 import { HROnboarding } from '@/modules/onboarding/pages/HROnboarding'
 import { HRVacationCalendar } from '@/modules/vacation/pages/HRVacationCalendar'
@@ -12,7 +13,7 @@ import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
 import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { HRTimesheet } from '@/modules/timesheet/pages/HRTimesheet'
 import { HRInstitution } from '@/modules/institution/pages/HRInstitution'
-const HRHierarchy = lazy(() => import('@/modules/hierarchy/pages/HRHierarchy').then(m => ({ default: m.HRHierarchy })))
+const GlobalHierarchy = lazy(() => import('@/modules/hierarchy/pages/GlobalHierarchy').then(m => ({ default: m.GlobalHierarchy })))
 const HRDocTemplates = lazy(() => import('@/modules/documents/pages/HRDocTemplates').then(m => ({ default: m.HRDocTemplates })))
 const HRMailing = lazy(() => import('@/modules/mailing/pages/HRMailing').then(m => ({ default: m.HRMailing })))
 const HRPositionsTab = () => <DictionariesTab variant="hr" initialTab="positions" />
@@ -63,6 +64,7 @@ const TOP_NAV_TABS = ['mailing', 'timesheet', 'hierarchy', 'doc-templates'] as c
 export function HRPanel() {
   const [activeTab, setActiveTab] = useState<TabId>('surveys')
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+  const currentOrgId = useOrgStore((s) => s.currentOrgId)
   const prevTabRef = useRef<TabId>('surveys')
 
   const switchTab = (tab: TabId) => {
@@ -167,7 +169,7 @@ export function HRPanel() {
               {safeActiveTab === 'timesheet' && <HRTimesheet />}
               {safeActiveTab === 'hierarchy' && isModuleEnabled('hierarchy') && (
                 <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-                  <HRHierarchy fullscreen onClose={() => switchTab(prevTabRef.current)} />
+                  <GlobalHierarchy fullscreen editScopeOrgId={currentOrgId ?? undefined} onClose={() => switchTab(prevTabRef.current)} />
                 </Suspense>
               )}
               {safeActiveTab === 'doc-templates' && isModuleEnabled('documents') && (
