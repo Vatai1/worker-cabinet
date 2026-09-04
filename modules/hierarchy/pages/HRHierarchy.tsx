@@ -113,6 +113,11 @@ function buildRootOrgNode(baseNodes: Node[], org: ChildOrgItem, savedPos?: { x: 
   } as Node
 }
 
+function animateOrgReveal(inst: ReactFlowInstance, target: { x: number; y: number; zoom: number }) {
+  inst.setViewport({ x: target.x, y: target.y, zoom: Math.min(target.zoom * 1.9, 2.4) })
+  setTimeout(() => inst.setViewport(target, { duration: 520 }), 40)
+}
+
 function buildOrgOverlay(
   baseNodes: Node[],
   self: ChildOrgItem | null,
@@ -1217,7 +1222,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
         setEdges([...((data.edges ?? []) as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })), ...overlay.edges])
         if (data.viewport) {
           if (rfInstanceRef.current) {
-            rfInstanceRef.current.setViewport(data.viewport)
+            animateOrgReveal(rfInstanceRef.current, data.viewport)
           } else {
             pendingViewportRef.current = data.viewport
           }
@@ -1459,7 +1464,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
   const handleInit = useCallback((inst: ReactFlowInstance) => {
     rfInstanceRef.current = inst
     if (pendingViewportRef.current) {
-      inst.setViewport(pendingViewportRef.current)
+      animateOrgReveal(inst, pendingViewportRef.current)
       pendingViewportRef.current = null
     }
   }, [])
@@ -1493,8 +1498,24 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
     if (!onOpenOrg) return
     const targetOrgId = Number(String(node.id).replace('org-', ''))
     if (!targetOrgId) return
-    runAfterLeaveGuarded(() => onOpenOrg(targetOrgId))
-  }, [onOpenOrg, runAfterLeaveGuarded])
+    if (dirty) {
+      runAfterLeaveGuarded(() => onOpenOrg(targetOrgId))
+      return
+    }
+    const inst = rfInstanceRef.current
+    if (!inst) {
+      onOpenOrg(targetOrgId)
+      return
+    }
+    const w = node.measured?.width ?? 240
+    const h = node.measured?.height ?? 130
+    const z = Math.min(Math.max(inst.getViewport().zoom * 1.6, 1.3), 2)
+    inst.setViewport(
+      { x: window.innerWidth / 2 - (node.position.x + w / 2) * z, y: window.innerHeight / 2 - (node.position.y + h / 2) * z, zoom: z },
+      { duration: 340 },
+    )
+    setTimeout(() => onOpenOrg(targetOrgId), 350)
+  }, [onOpenOrg, dirty, runAfterLeaveGuarded])
 
   const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
     e.preventDefault()
@@ -1692,7 +1713,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
     <div
       className={cn(
         'flex flex-col overflow-hidden rounded-2xl border border-border shadow-sm bg-card',
-        fullscreen && 'fixed inset-0 z-50 rounded-none border-0',
+        fullscreen && 'fixed inset-0 z-50 rounded-none border-0 animate-in fade-in duration-200',
       )}
       style={fullscreen ? undefined : { height: 'calc(100vh - 140px)', minHeight: '500px' }}
     >
@@ -2114,6 +2135,6 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onB
 
 export { DepartmentNode, EmployeeNode, TextNode, GroupNode, nodeTypes, EditableEdge, edgeTypes }
 export { SelectDepartmentModal, SelectEmployeeModal, TextInputModal }
-export { ChildOrgNode, buildOrgOverlay }
+export { ChildOrgNode, buildOrgOverlay, animateOrgReveal }
 export type { Department, DeptEmployee }
 export { SaveSnapshotContext, EDGE_STYLE, EDGE_MARKER, NODE_COLORS }

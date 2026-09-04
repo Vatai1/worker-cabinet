@@ -24,7 +24,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
-import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, HRHierarchy, ChildOrgNode, buildOrgOverlay } from '@/modules/hierarchy/pages/HRHierarchy'
+import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, HRHierarchy, ChildOrgNode, buildOrgOverlay, animateOrgReveal } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
   id: number
@@ -182,7 +182,6 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
   const [currentOrg, setCurrentOrg] = useState<OrgItem>(org)
   const [editing, setEditing] = useState(() => (canEditOrg ? canEditOrg(org.id) : false))
   const [navStack, setNavStack] = useState<OrgItem[]>([])
-  const [hasSavedViewport, setHasSavedViewport] = useState(false)
   const orgListRef = useRef<OrgItem[]>([])
   const viewerRfRef = useRef<ReactFlowInstance | null>(null)
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
@@ -206,6 +205,13 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
       return s.slice(0, -1)
     })
   }, [canEditOrg])
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/organizations/tree`, { headers: getAuthHeaders() })
+      .then(r => (r.ok ? r.json() : []))
+      .then((all: OrgItem[]) => { if (Array.isArray(all)) orgListRef.current = all })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (editing) return
@@ -237,10 +243,11 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
         )
         setNodes([...overlay.nodes, ...contentNodes])
         setEdges([...(data.edges || []).map((e: Edge) => ({ ...e, type: undefined })), ...overlay.edges])
-        setHasSavedViewport(!!data.viewport)
         if (data.viewport) {
-          if (viewerRfRef.current) viewerRfRef.current.setViewport(data.viewport)
+          if (viewerRfRef.current) animateOrgReveal(viewerRfRef.current, data.viewport)
           else pendingViewportRef.current = data.viewport
+        } else if (viewerRfRef.current) {
+          viewerRfRef.current.fitView({ duration: 550, padding: 0.15 })
         }
       } catch (err) {
         setError(getErrorMessage(err))
@@ -262,8 +269,11 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
   const handleViewerInit = useCallback((inst: ReactFlowInstance) => {
     viewerRfRef.current = inst
     if (pendingViewportRef.current) {
-      inst.setViewport(pendingViewportRef.current)
+      const target = pendingViewportRef.current
       pendingViewportRef.current = null
+      animateOrgReveal(inst, target)
+    } else {
+      inst.fitView({ duration: 550, padding: 0.15 })
     }
   }, [])
 
@@ -296,7 +306,7 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
   }
 
   const content = (
-    <div className="fixed inset-0 z-50 flex flex-col bg-card">
+    <div className="fixed inset-0 z-50 flex flex-col bg-card animate-in fade-in duration-200">
       <div className="px-6 py-4 border-b border-border flex-shrink-0 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
@@ -347,7 +357,6 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
             edgesReconnectable={false}
             deleteKeyCode={null}
             connectionMode={ConnectionMode.Loose}
-            fitView={!hasSavedViewport}
             minZoom={0.1}
             proOptions={{ hideAttribution: true }}
           >
