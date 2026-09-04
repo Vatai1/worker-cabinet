@@ -956,9 +956,10 @@ type EdgeContextMenu = { edgeId: string; x: number; y: number }
 interface Props {
   fullscreen?: boolean
   onClose?: () => void
+  orgId?: number
 }
 
-export function HRHierarchy({ fullscreen = false, onClose }: Props) {
+export function HRHierarchy({ fullscreen = false, onClose, orgId }: Props) {
   const { darkMode } = useUIStore()
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)
@@ -1025,10 +1026,12 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
     onEdgesChange(changes)
   }, [onEdgesChange, saveSnapshot])
 
+  const orgHeaders = useCallback((): Record<string, string> => (orgId != null ? { 'X-Organization-Id': String(orgId) } : {}), [orgId])
+
   useEffect(() => {
     const loadHierarchy = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/hierarchy`, { headers: getAuthHeaders() })
+        const res = await fetch(`${API_BASE_URL}/hierarchy`, { headers: { ...getAuthHeaders(), ...orgHeaders() } })
         if (!res.ok) throw new Error('Не удалось загрузить иерархию')
         const { data } = await res.json()
         if (data.nodes) setNodes(data.nodes)
@@ -1045,16 +1048,22 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       } finally {
         setHierarchyLoading(false)
       }
-    }
-    loadHierarchy()
-  }, [setNodes, setEdges])
+      }
+      loadHierarchy()
+      }, [setNodes, setEdges, orgHeaders])
 
   useEffect(() => {
     const load = async () => {
       try {
-        await useDepartmentsStore.getState().fetchDepartments()
-        const data = useDepartmentsStore.getState().departments as Department[]
-        setDepartments(data)
+        if (orgId != null) {
+          const res = await fetch(`${API_BASE_URL}/departments`, { headers: { ...getAuthHeaders(), 'X-Organization-Id': String(orgId) } })
+          if (!res.ok) throw new Error('Не удалось загрузить отделы')
+          setDepartments(await res.json())
+        } else {
+          await useDepartmentsStore.getState().fetchDepartments()
+          const data = useDepartmentsStore.getState().departments as Department[]
+          setDepartments(data)
+        }
       } catch (err) {
         setError(getErrorMessage(err))
       } finally {
@@ -1062,7 +1071,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       }
     }
     load()
-  }, [])
+  }, [orgId])
 
   const onConnect = useCallback((params: Connection) => {
     const inst = rfInstanceRef.current
@@ -1413,7 +1422,7 @@ export function HRHierarchy({ fullscreen = false, onClose }: Props) {
       const nodesClean = n.map(x => ({ ...x, selected: false }))
       const res = await fetch(`${API_BASE_URL}/hierarchy`, {
         method: 'PUT',
-        headers: getAuthHeadersWithContentType(),
+        headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
         body: JSON.stringify({ nodes: nodesClean, edges: e, viewport }),
       })
       if (!res.ok) {

@@ -367,7 +367,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.put('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), async (req, res) => {
   const { nodes, edges, viewport } = req.body
   if (!nodes || !edges) {
     return res.status(400).json({ error: 'Поля nodes и edges обязательны' })

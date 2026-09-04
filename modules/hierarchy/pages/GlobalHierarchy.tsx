@@ -25,7 +25,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
-import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, EDGE_STYLE } from '@/modules/hierarchy/pages/HRHierarchy'
+import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, EDGE_STYLE, HRHierarchy } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
   id: number
@@ -181,6 +181,7 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentOrg, setCurrentOrg] = useState<OrgItem>(org)
+  const [editing, setEditing] = useState(false)
   const orgListRef = useRef<OrgItem[]>([])
   const currentOrgRef = useRef(currentOrg)
   useEffect(() => { currentOrgRef.current = currentOrg }, [currentOrg])
@@ -257,10 +258,10 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
   }, [currentOrg.id, setNodes, setEdges])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !editing) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, editing])
 
   const viewerNodeTypes = { ...hierarchyNodeTypes, organization: OrganizationNode }
 
@@ -271,6 +272,16 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
     const target = orgListRef.current.find(o => o.id === orgId)
     if (target) setCurrentOrg(target)
   }, [currentOrg.id])
+
+  if (editing) {
+    return (
+      <HRHierarchy
+        fullscreen
+        orgId={currentOrg.id}
+        onClose={() => setEditing(false)}
+      />
+    )
+  }
 
   const content = (
     <div className="fixed inset-0 z-50 flex flex-col bg-card">
@@ -291,6 +302,10 @@ function OrgHierarchyViewer({ org, onClose }: { org: OrgItem; onClose: () => voi
               {org.name}
             </Button>
           )}
+          <Button size="sm" onClick={() => setEditing(true)}>
+            <Pencil className="h-4 w-4 mr-1.5" />
+            Редактировать
+          </Button>
           <Button size="sm" variant="outline" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
