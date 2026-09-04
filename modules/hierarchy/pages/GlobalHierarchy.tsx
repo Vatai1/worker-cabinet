@@ -208,6 +208,7 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
   }, [canEditOrg])
 
   useEffect(() => {
+    if (editing) return
     const org = currentOrgRef.current
     const load = async () => {
       setLoading(true)
@@ -248,7 +249,7 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
       }
     }
     load()
-  }, [currentOrg.id, setNodes, setEdges])
+  }, [currentOrg.id, editing, setNodes, setEdges])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !editing) onClose() }
