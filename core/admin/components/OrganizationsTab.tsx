@@ -9,7 +9,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import {
-  Building2, Plus, X, Search, Loader2, AlertTriangle,
+  Building2, Plus, X, Search, Loader2, AlertTriangle, Save,
   Users, FolderOpen, Boxes, Settings as SettingsIcon, ChevronLeft, ExternalLink,
 } from 'lucide-react'
 
@@ -394,6 +394,9 @@ function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; 
   const [members, setMembers] = useState<OrgMember[]>([])
   const [savingField, setSavingField] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [editName, setEditName] = useState(org.name)
+
+  useEffect(() => { setEditName(org.name) }, [org.id, org.name])
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -442,6 +445,26 @@ function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; 
     finally { setSavingField(false) }
   }
 
+  const saveName = async () => {
+    const trimmed = editName.trim()
+    if (!trimmed || trimmed === org.name) return
+    setSavingField(true)
+    setSaveError(null)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${org.id}`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ name: trimmed }),
+      })
+      if (res.ok) {
+        onUpdated({ name: trimmed })
+      } else {
+        const data = await res.json()
+        setSaveError(data.error || 'Ошибка')
+      }
+    } catch (err) { setSaveError(getErrorMessage(err)) }
+    finally { setSavingField(false) }
+  }
+
   const headName = org.head_id
     ? (members.find((m) => m.id === org.head_id)
         ? `${members.find((m) => m.id === org.head_id)!.last_name} ${members.find((m) => m.id === org.head_id)!.first_name}`
@@ -452,7 +475,6 @@ function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; 
     : null
 
   const rows: { label: string; value: string | null }[] = [
-    { label: 'Название', value: org.name },
     { label: 'Slug', value: org.slug },
     { label: 'ИНН', value: org.inn },
     { label: 'Адрес', value: org.address },
@@ -495,6 +517,16 @@ function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; 
       )}
 
       <div className="rounded-xl border border-border/50 divide-y divide-border/40">
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <span className="text-sm text-muted-foreground shrink-0">Наименование учреждения</span>
+          <Input
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            placeholder="Наименование учреждения"
+            className="h-8 max-w-[60%] text-sm"
+            disabled={savingField}
+          />
+        </div>
         {rows.map((row) => (
           <div key={row.label} className="flex items-center justify-between px-4 py-2.5">
             <span className="text-sm text-muted-foreground">{row.label}</span>
@@ -540,9 +572,13 @@ function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; 
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-between items-center gap-2">
         <Button variant={org.is_active ? 'outline' : 'default'} onClick={onToggleActive}>
           {org.is_active ? 'Деактивировать' : 'Активировать'}
+        </Button>
+        <Button onClick={saveName} disabled={savingField || !editName.trim() || editName.trim() === org.name}>
+          {savingField ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          {savingField ? 'Сохранение...' : 'Сохранить'}
         </Button>
       </div>
     </div>
