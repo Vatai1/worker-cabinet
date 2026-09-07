@@ -80,14 +80,12 @@ export function PlannedVacationCard({ start, end, createdAt, status }: Props) {
     const elapsed = createdDate ? diffDays(today, createdDate) : 0
     const remaining = diffDays(startDate, today)
     progress = createdDate && total > 0 ? clamp01(elapsed / total) * 100 : 0
-    labelElapsed = `Прошло ${elapsed} ${daysWord(elapsed)}`
     labelRemaining = `Осталось ${remaining} ${daysWord(remaining)}`
     countdown = <>Осталось <b className="font-bold text-foreground">{remaining}</b> {daysWord(remaining)} до начала отпуска</>
   } else if (during) {
     const totalV = diffDays(endDate, startDate) + 1
     const leftV = diffDays(endDate, today) + 1
     progress = clamp01(diffDays(today, startDate) / totalV) * 100
-    labelElapsed = `Прошло ${totalV - leftV + 1} ${daysWord(totalV - leftV + 1)}`
     labelRemaining = `До конца ${leftV} ${daysWord(leftV)}`
     countdown = <>Отпуск идёт, осталось <b className="font-bold text-foreground">{leftV}</b> {daysWord(leftV)}</>
   } else {
@@ -95,7 +93,6 @@ export function PlannedVacationCard({ start, end, createdAt, status }: Props) {
     labelElapsed = `Завершён ${fmt(endDate, true)}`
     countdown = <>Отпуск завершён</>
   }
-
   return (
     <div className="w-full max-w-[520px] border border-border rounded-xl p-5 bg-card max-[560px]:p-4">
       <div className="flex items-center gap-3 mb-[18px]">
