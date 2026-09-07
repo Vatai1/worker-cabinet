@@ -27,6 +27,7 @@ interface DbVacationRequest {
   last_name?: string | null
   middle_name?: string | null
   position?: string | null
+  department_id?: number | string | null
   department_name?: string | null
   avatar?: string | null
   gender?: 'male' | 'female' | 'other' | null
@@ -91,6 +92,7 @@ const mapDbRequestToApi = (dbRequest: DbVacationRequest): VacationRequest => ({
   userMiddleName: dbRequest.middle_name ?? undefined,
   userPosition: dbRequest.position || '',
   userDepartment: dbRequest.department_name || '',
+  departmentId: dbRequest.department_id?.toString(),
   userAvatar: dbRequest.avatar || undefined,
   userGender: dbRequest.gender || undefined,
   startDate: formatLocalDate(dbRequest.start_date),

@@ -38,19 +38,7 @@ const REQUEST_STATUS_OPTIONS = [
   { value: VacationRequestStatus.CANCELLED_BY_MANAGER, label: 'Отменено руководителем' },
 ]
 
-const REQUEST_STATUS_LABELS: Record<VacationRequestStatus, string> = Object.fromEntries(
-  REQUEST_STATUS_OPTIONS.map((o) => [o.value, o.label])
-) as Record<VacationRequestStatus, string>
-
-const REQUEST_STATUS_BADGES: Record<VacationRequestStatus, 'warning' | 'success' | 'destructive' | 'secondary'> = {
-  [VacationRequestStatus.ON_APPROVAL]: 'warning',
-  [VacationRequestStatus.APPROVED]: 'success',
-  [VacationRequestStatus.REJECTED]: 'destructive',
-  [VacationRequestStatus.CANCELLED_BY_EMPLOYEE]: 'secondary',
-  [VacationRequestStatus.CANCELLED_BY_MANAGER]: 'secondary',
-}
-
-const EMPTY_REQUEST_FILTERS = { departmentId: '', status: '', year: '', vacationType: '' }
+const EMPTY_REQUEST_FILTERS = { departmentId: '', status: '', vacationType: '' }
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -101,6 +89,7 @@ export function Vacation() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([])
+  const [calendarDeptRequests, setCalendarDeptRequests] = useState<VacationRequest[] | null>(null)
   const currentOrgId = useOrgStore((s) => s.currentOrgId)
 
   useEffect(() => {
@@ -124,20 +113,14 @@ export function Vacation() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.departmentId, user?.role, year])
 
-  const serverVacationFilters = useMemo(() => ({
-    status: reqFilters.status || undefined,
-    year: reqFilters.year ? Number(reqFilters.year) : undefined,
-    vacationType: reqFilters.vacationType || undefined,
-  }), [reqFilters.status, reqFilters.year, reqFilters.vacationType])
-
   const reloadRequests = useCallback(() => {
     if (!user) return
     if (hasAnyRoleSync('admin') && !hasAnyRoleSync('manager', 'hr')) {
-      fetchAllRequests({ departmentId: reqFilters.departmentId || undefined, ...serverVacationFilters })
+      fetchAllRequests()
     } else {
-      fetchDepartmentRequests(reqFilters.departmentId || user.departmentId || '1', serverVacationFilters)
+      fetchDepartmentRequests(user.departmentId || '1')
     }
-  }, [user, reqFilters.departmentId, serverVacationFilters, fetchAllRequests, fetchDepartmentRequests])
+  }, [user, fetchAllRequests, fetchDepartmentRequests])
 
   useEffect(() => {
     reloadRequests()
@@ -157,27 +140,22 @@ export function Vacation() {
     return () => clearTimeout(t)
   }, [search])
 
+  useEffect(() => {
+    if (!reqFilters.departmentId) {
+      setCalendarDeptRequests(null)
+      return
+    }
+    let cancelled = false
+    vacationApi.getDepartmentRequests(reqFilters.departmentId)
+      .then((data) => { if (!cancelled) setCalendarDeptRequests(data) })
+      .catch(() => { if (!cancelled) setCalendarDeptRequests([]) })
+    return () => { cancelled = true }
+  }, [reqFilters.departmentId, currentOrgId])
+
   const resetFilters = () => {
     setReqFilters(EMPTY_REQUEST_FILTERS)
     setSearch('')
   }
-
-  const visibleRequests = useMemo(() => {
-    if (!debouncedSearch) return departmentRequests
-    return departmentRequests.filter((r) =>
-      `${r.userLastName} ${r.userFirstName} ${r.userMiddleName ?? ''}`.toLowerCase().includes(debouncedSearch)
-    )
-  }, [departmentRequests, debouncedSearch])
-
-  const yearOptions = useMemo(() => {
-    const years = new Set<number>([new Date().getFullYear()])
-    departmentRequests.forEach((r) => {
-      const y = new Date(r.startDate).getFullYear()
-      if (!isNaN(y)) years.add(y)
-    })
-    if (reqFilters.year) years.add(Number(reqFilters.year))
-    return [...years].sort((a, b) => b - a)
-  }, [departmentRequests, reqFilters.year])
 
   const handleApprove = async (requestId: string) => {
     if (!user) return
@@ -480,14 +458,27 @@ export function Vacation() {
 
 
   const calendarRequests = useMemo(() => {
-    if (calendarView === 'personal') return currentUserRequests
-    const base = calendarView === 'connections' ? connectionsRequests : departmentRequests
+    const base = reqFilters.departmentId
+      ? calendarDeptRequests ?? []
+      : calendarView === 'personal'
+        ? currentUserRequests
+        : calendarView === 'connections'
+          ? connectionsRequests
+          : departmentRequests
     const merged = [...base]
-    currentUserRequests.forEach(r => {
-      if (!merged.some(m => m.id === r.id)) merged.push(r)
+    if (!reqFilters.departmentId && calendarView !== 'personal') {
+      currentUserRequests.forEach(r => {
+        if (!merged.some(m => m.id === r.id)) merged.push(r)
+      })
+    }
+    return merged.filter(r => {
+      if (reqFilters.departmentId && r.departmentId !== reqFilters.departmentId) return false
+      if (reqFilters.status && r.status !== reqFilters.status) return false
+      if (reqFilters.vacationType && r.vacationType !== reqFilters.vacationType) return false
+      if (debouncedSearch && !`${r.userLastName} ${r.userFirstName} ${r.userMiddleName ?? ''}`.toLowerCase().includes(debouncedSearch)) return false
+      return true
     })
-    return merged
-  }, [departmentRequests, connectionsRequests, currentUserRequests, calendarView])
+  }, [departmentRequests, connectionsRequests, currentUserRequests, calendarView, calendarDeptRequests, reqFilters, debouncedSearch])
 
   const handlePrevYear = () => setYear((y) => y - 1)
   const handleNextYear = () => setYear((y) => y + 1)
@@ -762,6 +753,51 @@ export function Vacation() {
               </button>
             </div>
           </div>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <select
+              value={reqFilters.departmentId}
+              onChange={(e) => setReqFilters((f) => ({ ...f, departmentId: e.target.value }))}
+              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Все отделы</option>
+              {departments.map((d) => (
+                <option key={d.id} value={String(d.id)}>{d.name}</option>
+              ))}
+            </select>
+            <select
+              value={reqFilters.status}
+              onChange={(e) => setReqFilters((f) => ({ ...f, status: e.target.value }))}
+              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Все статусы</option>
+              {REQUEST_STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <select
+              value={reqFilters.vacationType}
+              onChange={(e) => setReqFilters((f) => ({ ...f, vacationType: e.target.value }))}
+              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Все типы</option>
+              {Object.entries(VACATION_TYPES).map(([code, info]) => (
+                <option key={code} value={code}>{info.name}</option>
+              ))}
+            </select>
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по ФИО"
+                className="w-full border border-input bg-background rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <Button variant="outline" size="sm" onClick={resetFilters}>
+              <RotateCcw className="w-4 h-4 mr-1.5" />
+              Сбросить
+            </Button>
+          </div>
           <YearCalendar
             year={year}
             requests={calendarRequests}
@@ -872,112 +908,6 @@ export function Vacation() {
           </div>
         </Card>
       )}
-
-      <Card className="section-card">
-        <div className="p-6">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <span className="p-2 bg-primary/10 rounded-lg">
-              <Search className="w-5 h-5 text-primary" />
-            </span>
-            Заявки на отпуска
-          </h2>
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <select
-              value={reqFilters.departmentId}
-              onChange={(e) => setReqFilters((f) => ({ ...f, departmentId: e.target.value }))}
-              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Все отделы</option>
-              {departments.map((d) => (
-                <option key={d.id} value={String(d.id)}>{d.name}</option>
-              ))}
-            </select>
-            <select
-              value={reqFilters.status}
-              onChange={(e) => setReqFilters((f) => ({ ...f, status: e.target.value }))}
-              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Все статусы</option>
-              {REQUEST_STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            <select
-              value={reqFilters.year}
-              onChange={(e) => setReqFilters((f) => ({ ...f, year: e.target.value }))}
-              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Все годы</option>
-              {yearOptions.map((y) => (
-                <option key={y} value={String(y)}>{y}</option>
-              ))}
-            </select>
-            <select
-              value={reqFilters.vacationType}
-              onChange={(e) => setReqFilters((f) => ({ ...f, vacationType: e.target.value }))}
-              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Все типы</option>
-              {Object.entries(VACATION_TYPES).map(([code, info]) => (
-                <option key={code} value={code}>{info.name}</option>
-              ))}
-            </select>
-            <div className="relative flex-1 min-w-[180px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск по ФИО"
-                className="w-full border border-input bg-background rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <Button variant="outline" size="sm" onClick={resetFilters}>
-              <RotateCcw className="w-4 h-4 mr-1.5" />
-              Сбросить
-            </Button>
-          </div>
-          {loading ? (
-            <div className="flex items-center justify-center py-8"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
-          ) : visibleRequests.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">Нет заявок</div>
-          ) : (
-            <div className="space-y-3">
-              {visibleRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className="border-2 border-border rounded-2xl p-4 hover:border-primary/30 hover:shadow-md transition-all duration-300 cursor-pointer"
-                  onClick={() => handleOpenDetailModal(request)}
-                >
-                  <div className="flex items-center gap-4">
-                    <Avatar className="w-10 h-10 rounded-xl shrink-0">
-                      <AvatarImage src={request.userAvatar || generateAvatarUrl(request.userId, request.userGender)} alt={`${request.userLastName} ${request.userFirstName}`} />
-                      <AvatarFallback className="rounded-xl bg-primary/10 text-primary font-bold">
-                        {request.userFirstName[0]}{request.userLastName[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="font-bold text-sm">
-                        {request.userLastName} {request.userFirstName}
-                      </div>
-                      <div className="text-xs text-muted-foreground">{request.userPosition}</div>
-                      <div className="text-xs mt-1 text-foreground/70">
-                        {VACATION_TYPES[request.vacationType]?.name ?? 'Отпуск'}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
-                        {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
-                      </div>
-                    </div>
-                    <Badge variant={REQUEST_STATUS_BADGES[request.status]}>
-                      {REQUEST_STATUS_LABELS[request.status]}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Card>
 
       <Card>
         <div

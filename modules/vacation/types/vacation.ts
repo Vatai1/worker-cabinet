@@ -76,6 +76,7 @@ export interface VacationRequest {
   userMiddleName?: string
   userPosition: string
   userDepartment: string
+  departmentId?: string
   userAvatar?: string
   userGender?: 'male' | 'female' | 'other'
   departmentManagerId?: string
