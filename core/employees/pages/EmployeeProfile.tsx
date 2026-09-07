@@ -4,8 +4,8 @@ import { toast } from 'sonner'
 
 import { Button } from '@/shared/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
-import { Badge } from '@/shared/components/ui/Badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
+import { PlannedVacationCard } from '@/shared/components/vacation/PlannedVacationCard'
 import { AddProjectModal, type Project } from '@/core/admin/components/modals/AddProjectModal'
 import { SkillsCard } from '@/modules/skills/components/SkillsCard'
 import { useAuthStore } from '@/core/auth/store/authStore'
@@ -490,7 +490,7 @@ export function EmployeeProfile() {
       </Card>
 
       {isModuleEnabled('vacation') && (
-        <PlannedVacationsCard userId={id!} />
+        <PlannedVacationsBlock userId={id!} />
       )}
 
       <Card className="hover-lift stagger-6 animate-slide-up">
@@ -577,24 +577,22 @@ interface PlannedVacation {
   id: number
   start_date: string
   end_date: string
-  duration: number
   status: 'approved' | 'on_approval'
-  vacation_type: string | null
-  vacation_type_name: string | null
+  created_at?: string
 }
 
-function PlannedVacationsCard({ userId }: { userId: string }) {
-  const [vacations, setVacations] = useState<PlannedVacation[] | null>(null)
+function PlannedVacationsBlock({ userId }: { userId: string }) {
+  const [nearest, setNearest] = useState<PlannedVacation | null>(null)
 
   useEffect(() => {
     let cancelled = false
     apiGet<PlannedVacation[]>(`/vacation/upcoming/${userId}`)
-      .then((data) => { if (!cancelled) setVacations(data) })
+      .then((data) => { if (!cancelled) setNearest(data[0] ?? null) })
       .catch(() => {})
     return () => { cancelled = true }
   }, [userId])
 
-  if (vacations === null) return null
+  if (!nearest) return null
 
   return (
     <Card className="hover-lift stagger-5 animate-slide-up">
@@ -607,28 +605,12 @@ function PlannedVacationsCard({ userId }: { userId: string }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {vacations.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Нет запланированных отпусков</p>
-        ) : (
-          <div className="space-y-1">
-            {vacations.map((v) => (
-              <div key={v.id} className="flex items-center justify-between gap-3 text-sm py-2 border-b border-border/30 last:border-0">
-                <span className="font-medium">
-                  {formatDate(v.start_date)} — {formatDate(v.end_date)}
-                  <span className="text-muted-foreground font-normal"> ({v.duration} дн.)</span>
-                </span>
-                <span className="flex items-center gap-2 shrink-0">
-                  {v.vacation_type && v.vacation_type !== 'annual_paid' && v.vacation_type_name && (
-                    <span className="text-xs text-muted-foreground">{v.vacation_type_name}</span>
-                  )}
-                  <Badge variant={v.status === 'approved' ? 'success' : 'warning'}>
-                    {v.status === 'approved' ? 'Согласовано' : 'На согласовании'}
-                  </Badge>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        <PlannedVacationCard
+          start={nearest.start_date}
+          end={nearest.end_date}
+          createdAt={nearest.created_at}
+          status={nearest.status}
+        />
       </CardContent>
     </Card>
   )

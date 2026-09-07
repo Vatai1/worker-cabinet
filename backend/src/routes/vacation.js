@@ -423,7 +423,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
  *   get:
  *     tags: [Vacation]
  *     summary: Запланированные отпуска сотрудника
- *     description: 'Предстоящие заявки (start_date >= сегодня) со статусами approved и on_approval, отсортированы по start_date ASC. Доступно: сам сотрудник, его руководитель (users.manager_id), роли hr, admin, superadmin'
+ *     description: 'Предстоящие заявки (approved и on_approval, start_date >= сегодня) и текущие approved-отпуска (start_date <= сегодня <= end_date), отсортированы по start_date ASC. Доступно: сам сотрудник, его руководитель (users.manager_id), роли hr, admin, superadmin'
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -448,6 +448,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
  *                   status: { type: string, enum: [approved, on_approval] }
  *                   vacation_type: { type: string, nullable: true }
  *                   vacation_type_name: { type: string, nullable: true }
+ *                   created_at: { type: string, format: date-time }
  *       400:
  *         description: Некорректный идентификатор
  *         content:
@@ -478,11 +479,13 @@ router.get('/upcoming/:userId', authenticateToken, async (req, res) => {
       params.push(req.org.org_id)
     }
     const result = await query(
-      `SELECT vr.id, vr.start_date, vr.end_date, vr.duration, rs.code as status, vt.code as vacation_type, vt.name as vacation_type_name
+      `SELECT vr.id, vr.start_date, vr.end_date, vr.duration, vr.created_at, rs.code as status, vt.code as vacation_type, vt.name as vacation_type_name
        FROM vacation_requests vr
        JOIN request_statuses rs ON vr.status_id = rs.id
        LEFT JOIN vacation_types vt ON vr.vacation_type_id = vt.id
-       WHERE vr.user_id = $1 AND rs.code IN ('approved', 'on_approval') AND vr.start_date >= CURRENT_DATE${orgClause}
+       WHERE vr.user_id = $1
+         AND rs.code IN ('approved', 'on_approval')
+         AND (vr.start_date >= CURRENT_DATE OR (vr.end_date >= CURRENT_DATE AND rs.code = 'approved'))${orgClause}
        ORDER BY vr.start_date ASC
        LIMIT 10`,
       params

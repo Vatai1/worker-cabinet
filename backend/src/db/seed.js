@@ -350,6 +350,32 @@ async function seed() {
     }
     console.log(`  ✓ ${requestsCreated} vacation requests`)
 
+    const ivanov = (await query("SELECT id FROM users WHERE email = 'ivanov@example.com'")).rows[0]
+    if (ivanov) {
+      const futureStart = new Date(Date.now() + 30 * 86400000)
+      const futureEnd = new Date(Date.now() + 36 * 86400000)
+      const ivanovResult = await query(
+        `INSERT INTO vacation_requests
+           (user_id, start_date, end_date, duration, vacation_type_id, status_id, reviewed_at, reviewed_by, created_at)
+         VALUES ($1, $2, $3, 7, $4, $5, NOW(), $6, NOW() - INTERVAL '10 days')
+         RETURNING id`,
+        [
+          ivanov.id,
+          futureStart.toISOString().split('T')[0],
+          futureEnd.toISOString().split('T')[0],
+          typeIdAnnual,
+          statusApproved,
+          managers[0]?.id ?? ivanov.id,
+        ]
+      )
+      await query(
+        `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, changed_at)
+         VALUES ($1, $2, $3, NOW())`,
+        [ivanovResult.rows[0].id, statusApproved, managers[0]?.id ?? ivanov.id]
+      )
+      console.log('  ✓ guaranteed future approved request for ivanov@example.com')
+    }
+
     console.log('Creating company projects...')
     const PROJECT_NAMES = [
       'Миграция на микросервисы', 'Внедрение CI/CD', 'Редизайн корпоративного портала',
