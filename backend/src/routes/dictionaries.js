@@ -134,6 +134,9 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
   const { name, manager_id, description, parent_id } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
 
+  const orgId = currentOrgId(req)
+  if (!orgId) throw new ValidationError('Не выбрана организация')
+
   const existing = await query(
     ...orgScopedQuery('SELECT id FROM departments WHERE name = $1', [name.trim()], req)
   )
@@ -149,11 +152,11 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
     }
   }
 
-  await validateDepartmentParent(parent_id ?? null, null, currentOrgId(req), req)
+  await validateDepartmentParent(parent_id ?? null, null, orgId, req)
 
   const result = await query(
     'INSERT INTO departments (name, manager_id, description, parent_id, organization_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, manager_id, description, parent_id',
-    [name.trim(), manager_id || null, description?.trim() || null, parent_id ?? null, currentOrgId(req)]
+    [name.trim(), manager_id || null, description?.trim() || null, parent_id ?? null, orgId]
   )
   res.status(201).json(result.rows[0])
 }))

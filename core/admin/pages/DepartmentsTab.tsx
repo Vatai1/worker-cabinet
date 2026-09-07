@@ -4,6 +4,7 @@ import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { useOrgStore } from '@/shared/store/orgStore'
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
@@ -25,6 +26,10 @@ const DEPT_GRADIENTS = [
 ]
 
 export function DepartmentsTab() {
+  const orgHeaders = (): Record<string, string> => {
+    const orgId = useOrgStore.getState().currentOrgId
+    return orgId != null ? { 'X-Organization-Id': String(orgId) } : {}
+  }
   const [departments, setDepartments] = useState<{ id: number; name: string; manager_id: number | null; manager_name: string | null; manager_position: string | null; employee_count: string; vacation_requests_blocked: boolean; description: string | null; parent_id: number | null; parent_name: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -76,7 +81,7 @@ export function DepartmentsTab() {
     if (!confirmed) return
     try {
       const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments`, {
-        method: 'POST', headers: getAuthHeadersWithContentType(),
+        method: 'POST', headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
         body: JSON.stringify({ name: newName.trim(), manager_id: newManagerId, parent_id: newParentId }),
       })
       if (res.ok) { setShowCreate(false); setNewName(''); setNewManagerId(null); setNewManagerName(''); setNewParentId(null); fetchDepartments() }
@@ -92,7 +97,7 @@ export function DepartmentsTab() {
       if (editManagerId) body.manager_id = editManagerId
       else body.manager_id = null
       const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${id}`, {
-        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        method: 'PUT', headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
         body: JSON.stringify(body),
       })
       if (res.ok) { setEditingId(null); fetchDepartments() }
@@ -105,7 +110,7 @@ export function DepartmentsTab() {
     if (!confirmed) return
     try {
       await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${id}`, {
-        method: 'DELETE', headers: getAuthHeaders(),
+        method: 'DELETE', headers: { ...getAuthHeaders(), ...orgHeaders() },
       })
       fetchDepartments()
     } catch {}
