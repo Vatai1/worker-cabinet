@@ -133,6 +133,7 @@ export function Vacation() {
   useEffect(() => {
     setReqFilters(EMPTY_REQUEST_FILTERS)
     setSearch('')
+    setCalendarView('department')
   }, [currentOrgId])
 
   useEffect(() => {
@@ -155,6 +156,7 @@ export function Vacation() {
   const resetFilters = () => {
     setReqFilters(EMPTY_REQUEST_FILTERS)
     setSearch('')
+    setCalendarView('department')
   }
 
   const handleApprove = async (requestId: string) => {
@@ -716,44 +718,16 @@ export function Vacation() {
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
-          <div className="flex items-center justify-center mb-4">
-            <div className="inline-flex items-center rounded-lg border border-border bg-muted/30 p-0.5 gap-0.5">
-              <button
-                type="button"
-                onClick={() => setCalendarView('department')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  calendarView === 'department'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Отдел
-              </button>
-              <button
-                type="button"
-                onClick={() => setCalendarView('connections')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  calendarView === 'connections'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Связи
-              </button>
-              <button
-                type="button"
-                onClick={() => setCalendarView('personal')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  calendarView === 'personal'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Мои отпуска
-              </button>
-            </div>
-          </div>
           <div className="flex flex-wrap items-center gap-2 mb-4">
+            <select
+              value={calendarView}
+              onChange={(e) => setCalendarView(e.target.value as 'department' | 'personal' | 'connections')}
+              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="department">Отдел</option>
+              <option value="connections">Связи</option>
+              <option value="personal">Мои отпуска</option>
+            </select>
             <select
               value={reqFilters.departmentId}
               onChange={(e) => setReqFilters((f) => ({ ...f, departmentId: e.target.value }))}
