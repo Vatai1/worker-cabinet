@@ -1,9 +1,10 @@
-﻿import { useEffect, useState, useMemo } from 'react'
+﻿import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
+import { useOrgStore } from '@/shared/store/orgStore'
 import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
@@ -15,18 +16,41 @@ import { VacationHistoryModal } from '@/modules/vacation/components/modals/Vacat
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { RestrictionModal } from '@/modules/vacation/components/modals/RestrictionModal'
 import { VacationTransferModal } from '@/modules/vacation/components/modals/VacationTransferModal'
-import { VacationRequestStatus, VacationType } from '@/shared/types'
+import { VacationRequestStatus, VacationType, VACATION_TYPES } from '@/shared/types'
 import type { VacationRequest, VacationBalance, VacationRestriction, VacationValidationError, VacationEmployee } from '@/shared/types'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
+import { apiGet } from '@/shared/lib/apiClient'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
 import { hasAnyRole, hasAnyRoleSync } from '@/shared/lib/permissions'
-import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon, UserCheck } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon, UserCheck, Search, RotateCcw } from 'lucide-react'
 import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
 import { VacationTransferApplicationModal } from '@/modules/vacation/components/modals/VacationTransferApplicationModal'
+
+const REQUEST_STATUS_OPTIONS = [
+  { value: VacationRequestStatus.ON_APPROVAL, label: 'На согласовании' },
+  { value: VacationRequestStatus.APPROVED, label: 'Согласовано' },
+  { value: VacationRequestStatus.REJECTED, label: 'Отклонено' },
+  { value: VacationRequestStatus.CANCELLED_BY_EMPLOYEE, label: 'Отменено сотрудником' },
+  { value: VacationRequestStatus.CANCELLED_BY_MANAGER, label: 'Отменено руководителем' },
+]
+
+const REQUEST_STATUS_LABELS: Record<VacationRequestStatus, string> = Object.fromEntries(
+  REQUEST_STATUS_OPTIONS.map((o) => [o.value, o.label])
+) as Record<VacationRequestStatus, string>
+
+const REQUEST_STATUS_BADGES: Record<VacationRequestStatus, 'warning' | 'success' | 'destructive' | 'secondary'> = {
+  [VacationRequestStatus.ON_APPROVAL]: 'warning',
+  [VacationRequestStatus.APPROVED]: 'success',
+  [VacationRequestStatus.REJECTED]: 'destructive',
+  [VacationRequestStatus.CANCELLED_BY_EMPLOYEE]: 'secondary',
+  [VacationRequestStatus.CANCELLED_BY_MANAGER]: 'secondary',
+}
+
+const EMPTY_REQUEST_FILTERS = { departmentId: '', status: '', year: '', vacationType: '' }
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -73,6 +97,11 @@ export function Vacation() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
   const [pickerEmployees, setPickerEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
+  const [reqFilters, setReqFilters] = useState(EMPTY_REQUEST_FILTERS)
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([])
+  const currentOrgId = useOrgStore((s) => s.currentOrgId)
 
   useEffect(() => {
     if (user) {
@@ -81,13 +110,6 @@ export function Vacation() {
 
       if (isManager) {
         fetchRestrictions(user.departmentId || '1')
-        if (hasAnyRoleSync('manager', 'hr')) {
-          fetchDepartmentRequests(user.departmentId || '1')
-        } else {
-          fetchAllRequests()
-        }
-      } else {
-        fetchDepartmentRequests(user.departmentId || '1')
       }
 
       if (user.departmentId) {
@@ -102,12 +124,67 @@ export function Vacation() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.departmentId, user?.role, year])
 
+  const serverVacationFilters = useMemo(() => ({
+    status: reqFilters.status || undefined,
+    year: reqFilters.year ? Number(reqFilters.year) : undefined,
+    vacationType: reqFilters.vacationType || undefined,
+  }), [reqFilters.status, reqFilters.year, reqFilters.vacationType])
+
+  const reloadRequests = useCallback(() => {
+    if (!user) return
+    if (hasAnyRoleSync('admin') && !hasAnyRoleSync('manager', 'hr')) {
+      fetchAllRequests({ departmentId: reqFilters.departmentId || undefined, ...serverVacationFilters })
+    } else {
+      fetchDepartmentRequests(reqFilters.departmentId || user.departmentId || '1', serverVacationFilters)
+    }
+  }, [user, reqFilters.departmentId, serverVacationFilters, fetchAllRequests, fetchDepartmentRequests])
+
+  useEffect(() => {
+    reloadRequests()
+  }, [reloadRequests])
+
+  useEffect(() => {
+    apiGet<Array<{ id: number; name: string }>>('/departments').then(setDepartments).catch(() => {})
+  }, [currentOrgId])
+
+  useEffect(() => {
+    setReqFilters(EMPTY_REQUEST_FILTERS)
+    setSearch('')
+  }, [currentOrgId])
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const resetFilters = () => {
+    setReqFilters(EMPTY_REQUEST_FILTERS)
+    setSearch('')
+  }
+
+  const visibleRequests = useMemo(() => {
+    if (!debouncedSearch) return departmentRequests
+    return departmentRequests.filter((r) =>
+      `${r.userLastName} ${r.userFirstName} ${r.userMiddleName ?? ''}`.toLowerCase().includes(debouncedSearch)
+    )
+  }, [departmentRequests, debouncedSearch])
+
+  const yearOptions = useMemo(() => {
+    const years = new Set<number>([new Date().getFullYear()])
+    departmentRequests.forEach((r) => {
+      const y = new Date(r.startDate).getFullYear()
+      if (!isNaN(y)) years.add(y)
+    })
+    if (reqFilters.year) years.add(Number(reqFilters.year))
+    return [...years].sort((a, b) => b - a)
+  }, [departmentRequests, reqFilters.year])
+
   const handleApprove = async (requestId: string) => {
     if (!user) return
     try {
       await approveRequest(requestId, user.id)
       fetchUserRequests(user.id)
-      fetchDepartmentRequests(user.departmentId || '1')
+      reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
     }
@@ -119,7 +196,7 @@ export function Vacation() {
     try {
       await rejectRequest(requestId, user.id, reason)
       fetchUserRequests(user.id)
-      fetchDepartmentRequests(user.departmentId || '1')
+      reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
     }
@@ -795,6 +872,112 @@ export function Vacation() {
           </div>
         </Card>
       )}
+
+      <Card className="section-card">
+        <div className="p-6">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <span className="p-2 bg-primary/10 rounded-lg">
+              <Search className="w-5 h-5 text-primary" />
+            </span>
+            Заявки на отпуска
+          </h2>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <select
+              value={reqFilters.departmentId}
+              onChange={(e) => setReqFilters((f) => ({ ...f, departmentId: e.target.value }))}
+              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Все отделы</option>
+              {departments.map((d) => (
+                <option key={d.id} value={String(d.id)}>{d.name}</option>
+              ))}
+            </select>
+            <select
+              value={reqFilters.status}
+              onChange={(e) => setReqFilters((f) => ({ ...f, status: e.target.value }))}
+              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Все статусы</option>
+              {REQUEST_STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <select
+              value={reqFilters.year}
+              onChange={(e) => setReqFilters((f) => ({ ...f, year: e.target.value }))}
+              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Все годы</option>
+              {yearOptions.map((y) => (
+                <option key={y} value={String(y)}>{y}</option>
+              ))}
+            </select>
+            <select
+              value={reqFilters.vacationType}
+              onChange={(e) => setReqFilters((f) => ({ ...f, vacationType: e.target.value }))}
+              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Все типы</option>
+              {Object.entries(VACATION_TYPES).map(([code, info]) => (
+                <option key={code} value={code}>{info.name}</option>
+              ))}
+            </select>
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по ФИО"
+                className="w-full border border-input bg-background rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <Button variant="outline" size="sm" onClick={resetFilters}>
+              <RotateCcw className="w-4 h-4 mr-1.5" />
+              Сбросить
+            </Button>
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-8"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
+          ) : visibleRequests.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">Нет заявок</div>
+          ) : (
+            <div className="space-y-3">
+              {visibleRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="border-2 border-border rounded-2xl p-4 hover:border-primary/30 hover:shadow-md transition-all duration-300 cursor-pointer"
+                  onClick={() => handleOpenDetailModal(request)}
+                >
+                  <div className="flex items-center gap-4">
+                    <Avatar className="w-10 h-10 rounded-xl shrink-0">
+                      <AvatarImage src={request.userAvatar || generateAvatarUrl(request.userId, request.userGender)} alt={`${request.userLastName} ${request.userFirstName}`} />
+                      <AvatarFallback className="rounded-xl bg-primary/10 text-primary font-bold">
+                        {request.userFirstName[0]}{request.userLastName[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="font-bold text-sm">
+                        {request.userLastName} {request.userFirstName}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{request.userPosition}</div>
+                      <div className="text-xs mt-1 text-foreground/70">
+                        {VACATION_TYPES[request.vacationType]?.name ?? 'Отпуск'}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
+                        {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
+                      </div>
+                    </div>
+                    <Badge variant={REQUEST_STATUS_BADGES[request.status]}>
+                      {REQUEST_STATUS_LABELS[request.status]}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
 
       <Card>
         <div

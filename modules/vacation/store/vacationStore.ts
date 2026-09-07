@@ -29,10 +29,10 @@ interface VacationStore {
   loading: boolean
   error: string | null
 
-  fetchAllRequests: () => Promise<void>
+  fetchAllRequests: (filters?: { departmentId?: string; year?: number; status?: string; vacationType?: string }) => Promise<void>
   fetchConnectionRequests: () => Promise<void>
   fetchUserRequests: (userId: string) => Promise<void>
-  fetchDepartmentRequests: (departmentId: string) => Promise<void>
+  fetchDepartmentRequests: (departmentId: string, filters?: { status?: string; year?: number; vacationType?: string }) => Promise<void>
   fetchBalance: (userId: string, year: number) => Promise<VacationBalance>
   fetchRestrictions: (departmentId: string) => Promise<void>
 
@@ -80,10 +80,10 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
       loading: false,
       error: null,
 
-      fetchAllRequests: async () => {
+      fetchAllRequests: async (filters) => {
         set({ loading: true, error: null })
         try {
-          const data = await vacationApi.getAllRequests()
+          const data = await vacationApi.getAllRequests(filters)
           set({ departmentRequests: data, loading: false })
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при загрузке заявок'), loading: false })
@@ -110,10 +110,10 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         }
       },
       
-      fetchDepartmentRequests: async (departmentId: string) => {
+      fetchDepartmentRequests: async (departmentId, filters) => {
         set({ loading: true, error: null })
         try {
-          const data = await vacationApi.getDepartmentRequests(departmentId)
+          const data = await vacationApi.getDepartmentRequests(departmentId, filters)
           set({ departmentRequests: data, loading: false })
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при загрузке заявок отдела'), loading: false })

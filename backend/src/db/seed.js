@@ -311,8 +311,9 @@ async function seed() {
     const statusCancelled = statusMap['cancelled_by_employee']
 
     let requestsCreated = 0
-    const yearStart = new Date('2025-01-01')
-    const yearEnd = new Date('2025-12-31')
+    const currentYear = new Date().getFullYear()
+    const yearStart = new Date(`${currentYear - 1}-01-01`)
+    const yearEnd = new Date(`${currentYear}-12-31`)
 
     for (const u of allUsers.rows) {
       const reqCount = randomInt(0, 3)

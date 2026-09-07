@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { Button } from '@/shared/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
+import { Badge } from '@/shared/components/ui/Badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { AddProjectModal, type Project } from '@/core/admin/components/modals/AddProjectModal'
 import { SkillsCard } from '@/modules/skills/components/SkillsCard'
@@ -14,7 +15,7 @@ import { hasAnyRole } from '@/shared/lib/permissions'
 import {
   Mail, Phone, Building2, Briefcase,
   User, Target, ChevronLeft, Sparkles,
-  Clock, FolderKanban, Plus, MapPin, UserCheck, Star,
+  Clock, FolderKanban, Plus, MapPin, UserCheck, Star, CalendarDays,
 } from 'lucide-react'
 
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -488,7 +489,11 @@ export function EmployeeProfile() {
         </CardContent>
       </Card>
 
-      <Card className="hover-lift stagger-5 animate-slide-up">
+      {isModuleEnabled('vacation') && (
+        <PlannedVacationsCard userId={id!} />
+      )}
+
+      <Card className="hover-lift stagger-6 animate-slide-up">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
@@ -565,6 +570,67 @@ export function EmployeeProfile() {
         onAdd={handleAddProject}
       />
     </div>
+  )
+}
+
+interface PlannedVacation {
+  id: number
+  start_date: string
+  end_date: string
+  duration: number
+  status: 'approved' | 'on_approval'
+  vacation_type: string | null
+  vacation_type_name: string | null
+}
+
+function PlannedVacationsCard({ userId }: { userId: string }) {
+  const [vacations, setVacations] = useState<PlannedVacation[] | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    apiGet<PlannedVacation[]>(`/vacation/upcoming/${userId}`)
+      .then((data) => { if (!cancelled) setVacations(data) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [userId])
+
+  if (vacations === null) return null
+
+  return (
+    <Card className="hover-lift stagger-5 animate-slide-up">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
+            <CalendarDays className="h-4 w-4 text-primary" />
+          </div>
+          Запланированные отпуска
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {vacations.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Нет запланированных отпусков</p>
+        ) : (
+          <div className="space-y-1">
+            {vacations.map((v) => (
+              <div key={v.id} className="flex items-center justify-between gap-3 text-sm py-2 border-b border-border/30 last:border-0">
+                <span className="font-medium">
+                  {formatDate(v.start_date)} — {formatDate(v.end_date)}
+                  <span className="text-muted-foreground font-normal"> ({v.duration} дн.)</span>
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  {v.vacation_type && v.vacation_type !== 'annual_paid' && v.vacation_type_name && (
+                    <span className="text-xs text-muted-foreground">{v.vacation_type_name}</span>
+                  )}
+                  <Badge variant={v.status === 'approved' ? 'success' : 'warning'}>
+                    {v.status === 'approved' ? 'Согласовано' : 'На согласовании'}
+                  </Badge>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

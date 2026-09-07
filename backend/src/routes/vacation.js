@@ -211,7 +211,7 @@ function extractYear(date) {
  *         schema: { type: integer }
  *       - in: query
  *         name: status
- *         schema: { type: string, enum: [pending, approved, rejected, cancelled] }
+ *         schema: { type: string, enum: [on_approval, approved, rejected, cancelled_by_employee, cancelled_by_manager] }
  *       - in: query
  *         name: departmentId
  *         schema: { type: integer }
@@ -222,6 +222,10 @@ function extractYear(date) {
  *       - in: query
  *         name: year
  *         schema: { type: integer }
+ *       - in: query
+ *         name: vacationType
+ *         schema: { type: string }
+ *         description: 'Код типа отпуска (annual_paid, unpaid, ...)'
  *     responses:
  *       200:
  *         description: Список заявок
@@ -233,7 +237,7 @@ function extractYear(date) {
  */
 router.get('/requests', authenticateToken, async (req, res) => {
   try {
-    const { userId, status, departmentId, year, scope } = req.query
+    const { userId, status, departmentId, year, scope, vacationType } = req.query
     const user = req.user
 
     let whereClause = 'WHERE 1=1'
@@ -299,6 +303,11 @@ router.get('/requests', authenticateToken, async (req, res) => {
     if (year) {
       whereClause += ' AND EXTRACT(YEAR FROM vr.start_date) = $' + (params.length + 1)
       params.push(year)
+    }
+
+    if (vacationType) {
+      whereClause += ' AND vt.code = $' + (params.length + 1)
+      params.push(vacationType)
     }
 
     const sql = `
@@ -405,6 +414,82 @@ router.get('/requests', authenticateToken, async (req, res) => {
     res.json(requests)
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch vacation requests' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/upcoming/{userId}:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Запланированные отпуска сотрудника
+ *     description: 'Предстоящие заявки (start_date >= сегодня) со статусами approved и on_approval, отсортированы по start_date ASC. Доступно: сам сотрудник, его руководитель (users.manager_id), роли hr, admin, superadmin'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Список запланированных отпусков
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: integer }
+ *                   start_date: { type: string, format: date }
+ *                   end_date: { type: string, format: date }
+ *                   duration: { type: integer }
+ *                   status: { type: string, enum: [approved, on_approval] }
+ *                   vacation_type: { type: string, nullable: true }
+ *                   vacation_type_name: { type: string, nullable: true }
+ *       400:
+ *         description: Некорректный идентификатор
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Нет доступа к отпускам сотрудника
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+router.get('/upcoming/:userId', authenticateToken, async (req, res) => {
+  try {
+    const targetUserId = parseInt(req.params.userId)
+    if (isNaN(targetUserId)) {
+      return res.status(400).json({ error: 'Некорректный идентификатор пользователя' })
+    }
+    if (targetUserId !== req.user.id && !['hr', 'admin', 'superadmin'].includes(req.user.role)) {
+      const managerCheck = await query('SELECT 1 FROM users WHERE id = $1 AND manager_id = $2', [targetUserId, req.user.id])
+      if (managerCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'Нет доступа к отпускам сотрудника' })
+      }
+    }
+    const params = [targetUserId]
+    let orgClause = ''
+    if (req.org) {
+      orgClause = ' AND vr.organization_id = $2'
+      params.push(req.org.org_id)
+    }
+    const result = await query(
+      `SELECT vr.id, vr.start_date, vr.end_date, vr.duration, rs.code as status, vt.code as vacation_type, vt.name as vacation_type_name
+       FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       LEFT JOIN vacation_types vt ON vr.vacation_type_id = vt.id
+       WHERE vr.user_id = $1 AND rs.code IN ('approved', 'on_approval') AND vr.start_date >= CURRENT_DATE${orgClause}
+       ORDER BY vr.start_date ASC
+       LIMIT 10`,
+      params
+    )
+    res.json(result.rows)
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось загрузить запланированные отпуска' })
   }
 })
 

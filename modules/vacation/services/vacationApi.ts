@@ -120,10 +120,12 @@ const mapDbRequestToApi = (dbRequest: DbVacationRequest): VacationRequest => ({
 })
 
 export const vacationApi = {
-  async getAllRequests(filters?: { departmentId?: string; year?: number; scope?: 'connections' }): Promise<VacationRequest[]> {
+  async getAllRequests(filters?: { departmentId?: string; year?: number; status?: string; vacationType?: string; scope?: 'connections' }): Promise<VacationRequest[]> {
     const params = new URLSearchParams()
     if (filters?.departmentId) params.set('departmentId', filters.departmentId)
     if (filters?.year) params.set('year', filters.year.toString())
+    if (filters?.status) params.set('status', filters.status)
+    if (filters?.vacationType) params.set('vacationType', filters.vacationType)
     if (filters?.scope) params.set('scope', filters.scope)
     const query = params.toString() ? `?${params.toString()}` : ''
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests${query}`, {
@@ -149,8 +151,12 @@ export const vacationApi = {
     return data.map(mapDbRequestToApi)
   },
 
-  async getDepartmentRequests(departmentId: string): Promise<VacationRequest[]> {
-    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests?departmentId=${departmentId}`, {
+  async getDepartmentRequests(departmentId: string, filters?: { status?: string; year?: number; vacationType?: string }): Promise<VacationRequest[]> {
+    const params = new URLSearchParams({ departmentId })
+    if (filters?.status) params.set('status', filters.status)
+    if (filters?.year) params.set('year', filters.year.toString())
+    if (filters?.vacationType) params.set('vacationType', filters.vacationType)
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests?${params.toString()}`, {
       headers: getAuthHeadersWithContentType(),
     })
     const data = await handleResponse(response)
