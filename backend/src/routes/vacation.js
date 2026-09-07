@@ -202,7 +202,7 @@ function extractYear(date) {
  *   get:
  *     tags: [Vacation]
  *     summary: Получить список заявок на отпуск
- *     description: 'Сотрудник видит свои заявки, approved-заявки своего отдела, заявки отделов-кураторств (если vac_parent_sees_child) и approved-заявки родителя (если vac_child_sees_parent)'
+ *     description: 'Сотрудник видит свои заявки, approved-заявки всей организации и заявки по связям иерархии (кураторства, родители, подчинённые); руководитель — также заявки, которые согласовывает'
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -275,7 +275,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       }
     } else {
       if (user.role === 'employee') {
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)})`
         params.push(user.id)
       } else if (user.role === 'manager') {
         const substExists = await isSubstitutionEnabled(req)
@@ -290,7 +290,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
                 AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
             )`
           : ''
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userParentSeesChildVacations(params.length + 1)}${substExists})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userParentSeesChildVacations(params.length + 1)}${substExists})`
         params.push(user.id)
       }
     }
