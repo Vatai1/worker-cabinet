@@ -955,16 +955,17 @@ function EdgeSettingsModal({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type VacationVisibility = { childSeesParent: boolean; parentSeesChild: boolean }
+type VacationVisibility = { childSeesParent: boolean; parentSeesChild: boolean; parentApproves?: boolean }
 
 function ParentEdgeSettingsModal({ edge, onConfirm, onClose }: {
   edge: Edge
-  onConfirm: (childSeesParent: boolean, parentSeesChild: boolean) => void
+  onConfirm: (childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean) => void
   onClose: () => void
 }) {
   const vis = (edge.data as { vacationVisibility?: Partial<VacationVisibility> } | undefined)?.vacationVisibility
   const [childSeesParent, setChildSeesParent] = useState(vis?.childSeesParent ?? true)
   const [parentSeesChild, setParentSeesChild] = useState(vis?.parentSeesChild ?? true)
+  const [parentApproves, setParentApproves] = useState(vis?.parentApproves ?? true)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -987,10 +988,19 @@ function ParentEdgeSettingsModal({ edge, onConfirm, onClose }: {
             <p className="text-sm font-medium">Родитель видит отпуска подчинённых</p>
             <Switch checked={parentSeesChild} onCheckedChange={setParentSeesChild} />
           </div>
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Родитель согласовывает отпуска подчинённых</p>
+              {!parentApproves && (
+                <p className="text-xs text-muted-foreground mt-1">Согласование уйдёт на уровень выше</p>
+              )}
+            </div>
+            <Switch checked={parentApproves} onCheckedChange={setParentApproves} />
+          </div>
         </div>
         <div className="px-6 py-3 border-t border-border flex gap-2">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(childSeesParent, parentSeesChild)}>
+          <Button className="flex-1" onClick={() => onConfirm(childSeesParent, parentSeesChild, parentApproves)}>
             Сохранить
           </Button>
         </div>
@@ -1545,11 +1555,11 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     setEdgeContextMenu(null)
   }, [setEdges, saveSnapshot])
 
-  const saveParentEdgeSettings = useCallback((childSeesParent: boolean, parentSeesChild: boolean) => {
+  const saveParentEdgeSettings = useCallback((childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean) => {
     if (!parentEdgeId) return
     saveSnapshot()
     setEdges(eds => eds.map(e => e.id === parentEdgeId
-      ? { ...e, data: { ...(e.data as Record<string, unknown>), vacationVisibility: { childSeesParent, parentSeesChild } } }
+      ? { ...e, data: { ...(e.data as Record<string, unknown>), vacationVisibility: { childSeesParent, parentSeesChild, parentApproves } } }
       : e))
     setParentEdgeId(null)
   }, [parentEdgeId, saveSnapshot, setEdges])

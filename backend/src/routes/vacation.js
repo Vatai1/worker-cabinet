@@ -29,11 +29,11 @@ async function resolveApproverId(userId, orgId, req) {
   const visitedDepts = new Set()
   while (deptId && !visitedDepts.has(deptId)) {
     visitedDepts.add(deptId)
-    const deptResult = await query('SELECT manager_id, parent_id, parent_user_id FROM departments WHERE id = $1', [deptId])
+    const deptResult = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves FROM departments WHERE id = $1', [deptId])
     const dept = deptResult.rows[0]
     if (!dept) break
     if (dept.manager_id !== null && dept.manager_id !== userId) return dept.manager_id
-    if (dept.parent_user_id !== null && dept.parent_user_id !== userId) return dept.parent_user_id
+    if (dept.parent_user_id !== null && dept.parent_user_id !== userId && dept.vac_parent_approves !== false) return dept.parent_user_id
     deptId = dept.parent_id
   }
 

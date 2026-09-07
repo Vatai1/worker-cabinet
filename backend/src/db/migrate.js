@@ -1913,6 +1913,8 @@ async function migrateApprovalHierarchy(db) {
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS vac_child_sees_parent BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_parent_sees_child BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_child_sees_parent BOOLEAN NOT NULL DEFAULT true')
+    await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS vac_parent_approves BOOLEAN NOT NULL DEFAULT true')
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_parent_approves BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE organizations ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL')
     await db.query('CREATE INDEX IF NOT EXISTS idx_organizations_parent ON organizations(parent_id)')
     await db.query('ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS approver_id INTEGER REFERENCES users(id) ON DELETE SET NULL')
