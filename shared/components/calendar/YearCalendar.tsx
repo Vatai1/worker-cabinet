@@ -1,6 +1,7 @@
 ﻿import { useState, useMemo, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isWithinInterval } from 'date-fns'
 import { ru } from 'date-fns/locale'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { VacationRequest } from '@/shared/types'
 import { VacationRequestStatus } from '@/shared/types'
 import { cn } from '@/shared/lib/utils'
@@ -54,6 +55,7 @@ function getUserColor(userId: string): string {
 
 export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartDate, selectedEndDate, currentUserId, onTransfer }: YearCalendarProps) {
   const [hoverDate, setHoverDate] = useState<string | null>(null)
+  const [showLegend, setShowLegend] = useState(true)
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
@@ -319,9 +321,18 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
 
        {visibleRequests.length > 0 && (
           <div className="border rounded-lg p-4 bg-card">
-            <h3 className="font-semibold mb-3">Легенда</h3>
+            <button
+              type="button"
+              onClick={() => setShowLegend((v) => !v)}
+              className="w-full flex items-center justify-between gap-2 font-semibold hover:bg-muted rounded transition-colors -mx-1 px-1"
+            >
+              Легенда
+              {showLegend ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+            </button>
 
-             <div className="mb-3 grid grid-cols-3 gap-2 text-sm">
+            {showLegend && (
+              <>
+              <div className="mt-3 mb-3 grid grid-cols-3 gap-2 text-sm">
                <div className="flex items-center gap-2">
                  <div
                    className="w-6 h-6 rounded border"
@@ -355,6 +366,8 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                 )
               })}
             </div>
+              </>
+            )}
           </div>
         )}
 

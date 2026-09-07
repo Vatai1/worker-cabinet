@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useMemo, useCallback } from 'react'
+﻿import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/core/auth/store/authStore'
@@ -25,7 +25,8 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
-import { hasAnyRole, hasAnyRoleSync } from '@/shared/lib/permissions'
+import { Switch } from '@/shared/components/ui/Switch'
+import { hasAnyRole } from '@/shared/lib/permissions'
 import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon, UserCheck, Search, RotateCcw } from 'lucide-react'
 import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
 import { VacationTransferApplicationModal } from '@/modules/vacation/components/modals/VacationTransferApplicationModal'
@@ -45,12 +46,10 @@ export function Vacation() {
   const {
     currentUserRequests,
     departmentRequests,
-    connectionsRequests,
     loading,
     error,
     fetchAllRequests,
     fetchUserRequests,
-    fetchDepartmentRequests,
     fetchConnectionRequests,
     fetchBalance,
     fetchRestrictions,
@@ -77,7 +76,6 @@ export function Vacation() {
   const [showRestrictionModal, setShowRestrictionModal] = useState(false)
   const [showApplicationModal, setShowApplicationModal] = useState(false)
   const [showTransferApplicationModal, setShowTransferApplicationModal] = useState(false)
-  const [calendarView, setCalendarView] = useState<'department' | 'personal' | 'connections'>('department')
   const [restrictionWarnings, setRestrictionWarnings] = useState<VacationValidationError[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<VacationValidationError[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
@@ -86,6 +84,8 @@ export function Vacation() {
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
   const [pickerEmployees, setPickerEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
   const [reqFilters, setReqFilters] = useState(EMPTY_REQUEST_FILTERS)
+  const [myOnly, setMyOnly] = useState(false)
+  const deptTouched = useRef(false)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([])
@@ -115,26 +115,35 @@ export function Vacation() {
 
   const reloadRequests = useCallback(() => {
     if (!user) return
-    if (hasAnyRoleSync('admin') && !hasAnyRoleSync('manager', 'hr')) {
-      fetchAllRequests()
-    } else {
-      fetchDepartmentRequests(user.departmentId || '1')
-    }
-  }, [user, fetchAllRequests, fetchDepartmentRequests])
+    fetchAllRequests()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, currentOrgId, year, fetchAllRequests])
 
   useEffect(() => {
     reloadRequests()
   }, [reloadRequests])
 
   useEffect(() => {
+    fetchConnectionRequests()
+  }, [fetchConnectionRequests])
+
+  useEffect(() => {
     apiGet<Array<{ id: number; name: string }>>('/departments').then(setDepartments).catch(() => {})
   }, [currentOrgId])
 
   useEffect(() => {
-    setReqFilters(EMPTY_REQUEST_FILTERS)
+    deptTouched.current = false
+    setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentId: user?.departmentId || '' })
     setSearch('')
-    setCalendarView('department')
+    setMyOnly(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrgId])
+
+  useEffect(() => {
+    if (user?.departmentId && !deptTouched.current) {
+      setReqFilters((f) => (f.departmentId === user.departmentId ? f : { ...f, departmentId: user.departmentId! }))
+    }
+  }, [user?.id, user?.departmentId])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 300)
@@ -154,9 +163,10 @@ export function Vacation() {
   }, [reqFilters.departmentId, currentOrgId])
 
   const resetFilters = () => {
-    setReqFilters(EMPTY_REQUEST_FILTERS)
+    deptTouched.current = false
+    setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentId: user?.departmentId || '' })
     setSearch('')
-    setCalendarView('department')
+    setMyOnly(false)
   }
 
   const handleApprove = async (requestId: string) => {
@@ -292,7 +302,7 @@ export function Vacation() {
       setSelectedEndDate(null)
       setShowCreateFromCalendar(false)
       fetchUserRequests(user.id)
-      fetchDepartmentRequests(user.departmentId || '1')
+      reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
     }
@@ -329,7 +339,7 @@ export function Vacation() {
       })
       setShowCreateForm(false)
       fetchUserRequests(user.id)
-      fetchDepartmentRequests(user.departmentId || '1')
+      reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
     }
@@ -352,7 +362,7 @@ export function Vacation() {
       setAddingComment(null)
       setNewComment('')
       fetchUserRequests(user.id)
-      fetchDepartmentRequests(user.departmentId || '1')
+      reloadRequests()
     } catch (err) {
     }
   }
@@ -437,7 +447,7 @@ export function Vacation() {
       toast.success('Замещающий назначен')
       if (user) {
         fetchUserRequests(user.id)
-        fetchDepartmentRequests(user.departmentId || '1')
+        reloadRequests()
       }
     } catch (err: unknown) {
       toast.error(getErrorMessage(err))
@@ -450,7 +460,7 @@ export function Vacation() {
       toast.success('Замещающий удалён')
       if (user) {
         fetchUserRequests(user.id)
-        fetchDepartmentRequests(user.departmentId || '1')
+        reloadRequests()
       }
     } catch (err: unknown) {
       toast.error(getErrorMessage(err))
@@ -460,27 +470,26 @@ export function Vacation() {
 
 
   const calendarRequests = useMemo(() => {
-    const base = reqFilters.departmentId
-      ? calendarDeptRequests ?? []
-      : calendarView === 'personal'
-        ? currentUserRequests
-        : calendarView === 'connections'
-          ? connectionsRequests
-          : departmentRequests
+    const base = myOnly
+      ? currentUserRequests
+      : reqFilters.departmentId
+        ? calendarDeptRequests ?? []
+        : departmentRequests
     const merged = [...base]
-    if (!reqFilters.departmentId && calendarView !== 'personal') {
+    if (!myOnly && !reqFilters.departmentId) {
       currentUserRequests.forEach(r => {
         if (!merged.some(m => m.id === r.id)) merged.push(r)
       })
     }
     return merged.filter(r => {
+      if (myOnly) return true
       if (reqFilters.departmentId && r.departmentId !== reqFilters.departmentId) return false
       if (reqFilters.status && r.status !== reqFilters.status) return false
       if (reqFilters.vacationType && r.vacationType !== reqFilters.vacationType) return false
       if (debouncedSearch && !`${r.userLastName} ${r.userFirstName} ${r.userMiddleName ?? ''}`.toLowerCase().includes(debouncedSearch)) return false
       return true
     })
-  }, [departmentRequests, connectionsRequests, currentUserRequests, calendarView, calendarDeptRequests, reqFilters, debouncedSearch])
+  }, [departmentRequests, currentUserRequests, calendarDeptRequests, reqFilters, myOnly, debouncedSearch])
 
   const handlePrevYear = () => setYear((y) => y - 1)
   const handleNextYear = () => setYear((y) => y + 1)
@@ -492,10 +501,6 @@ export function Vacation() {
   useEffect(() => {
     if (isMySubstitutions) fetchMySubstitutions()
   }, [isMySubstitutions, fetchMySubstitutions])
-
-  useEffect(() => {
-    if (calendarView === 'connections') fetchConnectionRequests()
-  }, [calendarView, fetchConnectionRequests])
 
   const isManager = hasAnyRole('manager', 'hr', 'admin')
   const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id)
@@ -719,18 +724,20 @@ export function Vacation() {
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <select
-              value={calendarView}
-              onChange={(e) => setCalendarView(e.target.value as 'department' | 'personal' | 'connections')}
-              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="department">Отдел</option>
-              <option value="connections">Связи</option>
-              <option value="personal">Мои отпуска</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <Switch id="vacation-my-only" checked={myOnly} onCheckedChange={setMyOnly} />
+              <label htmlFor="vacation-my-only" className="text-sm font-medium cursor-pointer select-none">
+                Мои отпуска
+              </label>
+            </div>
+            {!myOnly && (
+              <>
             <select
               value={reqFilters.departmentId}
-              onChange={(e) => setReqFilters((f) => ({ ...f, departmentId: e.target.value }))}
+              onChange={(e) => {
+                deptTouched.current = true
+                setReqFilters((f) => ({ ...f, departmentId: e.target.value }))
+              }}
               className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Все отделы</option>
@@ -771,6 +778,8 @@ export function Vacation() {
               <RotateCcw className="w-4 h-4 mr-1.5" />
               Сбросить
             </Button>
+              </>
+            )}
           </div>
           <YearCalendar
             year={year}
