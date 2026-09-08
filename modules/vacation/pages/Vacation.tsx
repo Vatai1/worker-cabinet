@@ -29,25 +29,115 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avat
 import { hasAnyRole } from '@/shared/lib/permissions'
 import {
   ChevronLeft, ChevronRight, ChevronDown, FileText, Clock, CheckCircle2, CheckCircle,
-  UserCheck, Search, RotateCcw, Users, Info, XCircle,
+  UserCheck, Search, RotateCcw, Users, Info, XCircle, PieChart,
+  Calendar as CalendarIcon, Lightbulb,
 } from 'lucide-react'
 import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
 import { VacationTransferApplicationModal } from '@/modules/vacation/components/modals/VacationTransferApplicationModal'
 
 const REQUEST_STATUS_OPTIONS = [
-  { value: VacationRequestStatus.ON_APPROVAL, label: 'На согласовании' },
   { value: VacationRequestStatus.APPROVED, label: 'Согласовано' },
-  { value: VacationRequestStatus.REJECTED, label: 'Отклонено' },
-  { value: VacationRequestStatus.CANCELLED_BY_EMPLOYEE, label: 'Отменено сотрудником' },
-  { value: VacationRequestStatus.CANCELLED_BY_MANAGER, label: 'Отменено руководителем' },
+  { value: VacationRequestStatus.ON_APPROVAL, label: 'На согласовании' },
 ]
 
-const EMPTY_REQUEST_FILTERS = { departmentId: '', status: '', vacationType: '' }
+const EMPTY_REQUEST_FILTERS: { departmentIds: string[]; statuses: string[]; vacationTypes: string[] } = { departmentIds: [], statuses: [], vacationTypes: [] }
 
 type VacationTab = 'mine' | 'team' | 'approvals' | 'requests' | 'history'
 type CalendarScope = 'mine' | 'team'
 
-const selectClass = 'border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring'
+const selectClass = 'h-9 border border-[#E7E9F2] rounded-[10px] bg-white text-[13px] text-[#191D30] py-2 pl-3 pr-8 focus:outline-none focus:border-[#A5A8F5] focus:shadow-[0_0_0_3px_rgba(79,70,229,.12)]'
+
+const selectArrowStyle: React.CSSProperties = {
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A7F94' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'right 12px center',
+  backgroundSize: '10px 6px',
+}
+
+interface MultiSelectOption {
+  value: string
+  label: string
+}
+
+function MultiSelectDropdown({
+  options,
+  selected,
+  onChange,
+  placeholder,
+  countLabel,
+}: {
+  options: MultiSelectOption[]
+  selected: string[]
+  onChange: (values: string[]) => void
+  placeholder: string
+  countLabel: string
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const toggle = (value: string) => {
+    onChange(selected.includes(value) ? selected.filter((x) => x !== value) : [...selected, value])
+  }
+
+  const label = selected.length === 0
+    ? placeholder
+    : selected.length === 1
+      ? options.find((o) => o.value === selected[0])?.label ?? placeholder
+      : `${countLabel}: ${selected.length}`
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(selectClass, 'flex min-w-[150px] max-w-[200px] items-center text-left')}
+        style={selectArrowStyle}
+      >
+        <span className="truncate">{label}</span>
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1.5 max-h-64 w-60 overflow-y-auto rounded-[10px] border border-[#E7E9F2] bg-white p-1.5 shadow-[0_10px_26px_-8px_rgba(23,26,43,.25)]">
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="mb-1 w-full rounded-[8px] px-2.5 py-1.5 text-left text-[13px] font-medium text-[#4F46E5] hover:bg-[#F1F2F8]"
+          >
+            {placeholder}
+          </button>
+          {options.map((o) => {
+            const checked = selected.includes(o.value)
+            return (
+              <label
+                key={o.value}
+                className="flex cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[13px] text-[#191D30] hover:bg-[#F8F9FC]"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(o.value)}
+                  className="h-3.5 w-3.5 shrink-0 rounded border-[#E7E9F2] text-[#4F46E5] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30"
+                />
+                <span className="truncate">{o.label}</span>
+              </label>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -146,7 +236,7 @@ export function Vacation() {
 
   useEffect(() => {
     deptTouched.current = false
-    setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentId: user?.departmentId || '' })
+    setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentIds: user?.departmentId ? [user.departmentId] : [] })
     setSearch('')
     setCalendarScope('mine')
     setActiveTab('mine')
@@ -155,7 +245,11 @@ export function Vacation() {
 
   useEffect(() => {
     if (user?.departmentId && !deptTouched.current) {
-      setReqFilters((f) => (f.departmentId === user.departmentId ? f : { ...f, departmentId: user.departmentId! }))
+      setReqFilters((f) =>
+        f.departmentIds.length === 1 && f.departmentIds[0] === user.departmentId
+          ? f
+          : { ...f, departmentIds: [user.departmentId!] }
+      )
     }
   }, [user?.id, user?.departmentId])
 
@@ -165,16 +259,21 @@ export function Vacation() {
   }, [search])
 
   useEffect(() => {
-    if (!reqFilters.departmentId) {
+    if (reqFilters.departmentIds.length === 0) {
       setCalendarDeptRequests(null)
       return
     }
     let cancelled = false
-    vacationApi.getDepartmentRequests(reqFilters.departmentId)
-      .then((data) => { if (!cancelled) setCalendarDeptRequests(data) })
+    Promise.all(reqFilters.departmentIds.map((id) => vacationApi.getDepartmentRequests(id)))
+      .then((results) => {
+        if (cancelled) return
+        const merged = new Map<string, VacationRequest>()
+        results.flat().forEach((r) => merged.set(r.id, r))
+        setCalendarDeptRequests(Array.from(merged.values()))
+      })
       .catch(() => { if (!cancelled) setCalendarDeptRequests([]) })
     return () => { cancelled = true }
-  }, [reqFilters.departmentId, currentOrgId])
+  }, [reqFilters.departmentIds, currentOrgId])
 
   useEffect(() => {
     if (!autoExpandedRef.current && expandedRequestId === null && currentUserRequests.length > 0) {
@@ -185,8 +284,10 @@ export function Vacation() {
 
   const resetFilters = () => {
     deptTouched.current = false
-    setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentId: user?.departmentId || '' })
+    setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentIds: user?.departmentId ? [user.departmentId] : [] })
     setSearch('')
+    setYear(new Date().getFullYear())
+    toast.success('Фильтры сброшены')
   }
 
   const handleTabClick = (tab: VacationTab) => {
@@ -299,6 +400,8 @@ export function Vacation() {
 
     departmentRequests.forEach((otherRequest) => {
       if (otherRequest.id === request.id) return
+      if (!request.departmentId || !otherRequest.departmentId) return
+      if (otherRequest.departmentId !== request.departmentId) return
       if (otherRequest.status !== VacationRequestStatus.APPROVED &&
           otherRequest.status !== VacationRequestStatus.ON_APPROVAL) return
 
@@ -497,26 +600,29 @@ export function Vacation() {
   const calendarRequests = useMemo(() => {
     const base = calendarScope === 'mine'
       ? currentUserRequests
-      : reqFilters.departmentId
+      : reqFilters.departmentIds.length > 0
         ? calendarDeptRequests ?? []
         : departmentRequests
     const merged = [...base]
-    if (calendarScope === 'team' && !reqFilters.departmentId) {
+    if (calendarScope === 'team' && reqFilters.departmentIds.length === 0) {
       currentUserRequests.forEach(r => {
         if (!merged.some(m => m.id === r.id)) merged.push(r)
       })
     }
     return merged.filter(r => {
       if (calendarScope === 'mine') return true
-      if (reqFilters.departmentId && r.departmentId !== reqFilters.departmentId) return false
-      if (reqFilters.status && r.status !== reqFilters.status) return false
-      if (reqFilters.vacationType && r.vacationType !== reqFilters.vacationType) return false
+      if (reqFilters.departmentIds.length > 0 && (!r.departmentId || !reqFilters.departmentIds.includes(r.departmentId))) return false
+      if (reqFilters.statuses.length > 0 && !reqFilters.statuses.includes(r.status)) return false
+      if (reqFilters.vacationTypes.length > 0 && !reqFilters.vacationTypes.includes(r.vacationType)) return false
       return true
     })
   }, [departmentRequests, currentUserRequests, calendarDeptRequests, reqFilters, calendarScope])
 
-  const handlePrevYear = () => setYear((y) => y - 1)
-  const handleNextYear = () => setYear((y) => y + 1)
+  const currentActualYear = new Date().getFullYear()
+  const minCalendarYear = currentActualYear - 1
+  const maxCalendarYear = currentActualYear + 1
+  const handlePrevYear = () => setYear((y) => Math.max(minCalendarYear, y - 1))
+  const handleNextYear = () => setYear((y) => Math.min(maxCalendarYear, y + 1))
 
   const location = useLocation()
   const isMySubstitutions = location.pathname.includes('my-substitutions')
@@ -597,141 +703,165 @@ export function Vacation() {
   ]
 
   const calendarSection = (
-    <Card>
-      <div className="p-5 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-semibold">Календарь отпусков</h2>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={handlePrevYear}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <span className="text-sm font-semibold min-w-[56px] text-center">{year}</span>
-            <Button variant="outline" size="icon" onClick={handleNextYear}>
-              <ChevronRight className="w-4 h-4" />
-            </Button>
+    <div
+      className="rounded-2xl border border-[#E7E9F2] bg-white p-[22px]"
+      style={{ boxShadow: '0 1px 2px rgba(23,26,43,.05), 0 8px 24px -12px rgba(23,26,43,.08)' }}
+    >
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[#EEF0FE] text-[#4F46E5]">
+            <CalendarIcon className="h-[18px] w-[18px]" />
           </div>
+          <h2 className="text-[16.5px] font-bold text-[#191D30]">Календарь отпусков</h2>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-full border border-border bg-muted/40 p-0.5">
-            <button
-              type="button"
-              onClick={() => setCalendarScope('mine')}
-              className={cn('rounded-full px-3 py-1 text-xs font-medium transition-colors', calendarScope === 'mine' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
-            >
-              Мои отпуска
-            </button>
-            <button
-              type="button"
-              onClick={() => setCalendarScope('team')}
-              className={cn('rounded-full px-3 py-1 text-xs font-medium transition-colors', calendarScope === 'team' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
-            >
-              Вся команда
-            </button>
-          </div>
-          <select
-            value={reqFilters.departmentId}
-            onChange={(e) => {
-              deptTouched.current = true
-              setReqFilters((f) => ({ ...f, departmentId: e.target.value }))
-            }}
-            className={selectClass}
+        <div className="flex items-center gap-[2px] rounded-[10px] border border-[#E7E9F2] bg-white p-[3px]">
+          <button
+            type="button"
+            onClick={handlePrevYear}
+            disabled={year <= minCalendarYear}
+            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#7A7F94] transition-colors hover:bg-[#F1F2F8] disabled:opacity-40 disabled:hover:bg-transparent"
           >
-            <option value="">Все отделы</option>
-            {departments.map((d) => (
-              <option key={d.id} value={String(d.id)}>{d.name}</option>
-            ))}
-          </select>
-          {isManager && (
-            <select
-              value={reqFilters.status}
-              onChange={(e) => setReqFilters((f) => ({ ...f, status: e.target.value }))}
-              className={selectClass}
-            >
-              <option value="">Все статусы</option>
-              {REQUEST_STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          )}
-          {isManager && (
-            <select
-              value={reqFilters.vacationType}
-              onChange={(e) => setReqFilters((f) => ({ ...f, vacationType: e.target.value }))}
-              className={selectClass}
-            >
-              <option value="">Все типы</option>
-              {Object.entries(VACATION_TYPES).map(([code, info]) => (
-                <option key={code} value={code}>{info.name}</option>
-              ))}
-            </select>
-          )}
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по ФИО"
-              className="w-full border border-input bg-background rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <Button variant="outline" size="sm" onClick={resetFilters}>
-            <RotateCcw className="w-4 h-4 mr-1.5" />
-            Сбросить
-          </Button>
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="min-w-[46px] text-center text-[14px] font-bold text-[#191D30]">{year}</span>
+          <button
+            type="button"
+            onClick={handleNextYear}
+            disabled={year >= maxCalendarYear}
+            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#7A7F94] transition-colors hover:bg-[#F1F2F8] disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
+      </div>
 
-        {(selectedStartDate || selectedEndDate) && (
-          <div className="flex items-center gap-3 text-xs">
-            {selectedStartDate && !selectedEndDate && (
-              <span className="text-primary">Выбрана дата: {new Date(selectedStartDate).toLocaleDateString('ru-RU')}</span>
+      <div className="mb-3 flex flex-wrap items-center gap-[10px] rounded-xl border border-[#E7E9F2] bg-[#F8F9FC] p-[13px]">
+        <div className="inline-flex items-center gap-0 rounded-[10px] border border-[#E7E9F2] bg-white p-[3px]">
+          <button
+            type="button"
+            onClick={() => setCalendarScope('mine')}
+            className={cn(
+              'rounded-[8px] px-[14px] py-[7px] text-[13px] font-semibold transition-colors',
+              calendarScope === 'mine' ? 'bg-[#4F46E5] text-white shadow-[0_2px_6px_-1px_rgba(79,70,229,.4)]' : 'text-[#7A7F94]'
             )}
-            {selectedStartDate && selectedEndDate && (
-              <span className="text-emerald-600">
-                Период: {new Date(selectedStartDate).toLocaleDateString('ru-RU')} — {new Date(selectedEndDate).toLocaleDateString('ru-RU')}
-              </span>
+          >
+            Мои отпуска
+          </button>
+          <button
+            type="button"
+            onClick={() => setCalendarScope('team')}
+            className={cn(
+              'rounded-[8px] px-[14px] py-[7px] text-[13px] font-semibold transition-colors',
+              calendarScope === 'team' ? 'bg-[#4F46E5] text-white shadow-[0_2px_6px_-1px_rgba(79,70,229,.4)]' : 'text-[#7A7F94]'
             )}
+          >
+            Вся команда
+          </button>
+        </div>
+        {calendarScope === 'team' && (
+          <>
+            <MultiSelectDropdown
+              options={departments.map((d) => ({ value: String(d.id), label: d.name }))}
+              selected={reqFilters.departmentIds}
+              onChange={(ids) => {
+                deptTouched.current = true
+                setReqFilters((f) => ({ ...f, departmentIds: ids }))
+              }}
+              placeholder="Все отделы"
+              countLabel="Отделов"
+            />
+            {isManager && (
+              <MultiSelectDropdown
+                options={REQUEST_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                selected={reqFilters.statuses}
+                onChange={(values) => setReqFilters((f) => ({ ...f, statuses: values }))}
+                placeholder="Все статусы"
+                countLabel="Статусов"
+              />
+            )}
+            {isManager && (
+              <MultiSelectDropdown
+                options={Object.entries(VACATION_TYPES).map(([code, info]) => ({ value: code, label: info.name }))}
+                selected={reqFilters.vacationTypes}
+                onChange={(values) => setReqFilters((f) => ({ ...f, vacationTypes: values }))}
+                placeholder="Все типы"
+                countLabel="Типов"
+              />
+            )}
+            <div className="flex h-9 items-center gap-2 rounded-[10px] border border-[#E7E9F2] bg-white px-3 transition-shadow focus-within:border-[#A5A8F5] focus-within:shadow-[0_0_0_3px_rgba(79,70,229,.12)]">
+              <Search className="h-[15px] w-[15px] shrink-0 text-[#A6AABD]" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по ФИО"
+                className="w-[170px] border-0 bg-transparent text-[13px] text-[#191D30] placeholder:text-[#A6AABD] focus:outline-none focus:ring-0"
+              />
+            </div>
             <button
-              onClick={() => handleDateRangeSelect(null, null)}
-              className="text-muted-foreground hover:text-foreground underline"
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[#E7E9F2] bg-white px-[15px] py-[9px] text-[13px] font-semibold text-[#7A7F94] transition-colors hover:border-[#CFD3E4] hover:text-[#565B72]"
             >
-              Очистить выбор
+              <RotateCcw className="h-[14px] w-[14px]" />
+              Сбросить
             </button>
-          </div>
-        )}
-
-        <p className="text-xs text-muted-foreground">Наведите курсор на день, чтобы увидеть, кто отдыхает</p>
-
-        <YearCalendar
-          year={year}
-          requests={calendarRequests}
-          searchQuery={debouncedSearch}
-          onDateRangeSelect={vacationBlocked ? () => {} : handleDateRangeSelect}
-          selectedStartDate={selectedStartDate}
-          selectedEndDate={selectedEndDate}
-          currentUserId={user?.id}
-          onTransfer={handleTransferClick}
-          showHeader={false}
-          showLegend={false}
-        />
-
-        {showCreateFromCalendar && selectedStartDate && selectedEndDate && (
-          <CreateVacationModal
-            isOpen={showCreateFromCalendar}
-            startDate={selectedStartDate}
-            endDate={selectedEndDate}
-            onClose={handleCloseModal}
-            onSubmit={handleCreateFromModal}
-            loading={loading}
-            balance={balance ?? undefined}
-            userId={user?.id}
-            restrictionWarnings={restrictionWarningsCalendar}
-            onCheckRestrictions={handleCheckRestrictionsCalendar}
-            showSubstitutes={useModulesStore.getState().isModuleEnabled('substitution')}
-          />
+          </>
         )}
       </div>
-    </Card>
+
+      <div className="mx-[2px] mb-[14px] flex items-center gap-2">
+        <Lightbulb className="h-[14px] w-[14px] shrink-0 text-[#D97706]" />
+        <p className="text-[12.5px] text-[#7A7F94]">Наведите курсор на день, чтобы увидеть, кто отдыхает. Полосатые дни — заявления на согласовании</p>
+      </div>
+
+      {(selectedStartDate || selectedEndDate) && (
+        <div className="mb-3 flex items-center gap-3 text-xs">
+          {selectedStartDate && !selectedEndDate && (
+            <span className="text-primary">Выбрана дата: {new Date(selectedStartDate).toLocaleDateString('ru-RU')}</span>
+          )}
+          {selectedStartDate && selectedEndDate && (
+            <span className="text-emerald-600">
+              Период: {new Date(selectedStartDate).toLocaleDateString('ru-RU')} — {new Date(selectedEndDate).toLocaleDateString('ru-RU')}
+            </span>
+          )}
+          <button
+            onClick={() => handleDateRangeSelect(null, null)}
+            className="text-muted-foreground hover:text-foreground underline"
+          >
+            Очистить выбор
+          </button>
+        </div>
+      )}
+
+      <YearCalendar
+        year={year}
+        requests={calendarRequests}
+        searchQuery={debouncedSearch}
+        onDateRangeSelect={vacationBlocked ? () => {} : handleDateRangeSelect}
+        selectedStartDate={selectedStartDate}
+        selectedEndDate={selectedEndDate}
+        currentUserId={user?.id}
+        onTransfer={handleTransferClick}
+        showHeader={false}
+        showLegend={false}
+      />
+
+      {showCreateFromCalendar && selectedStartDate && selectedEndDate && (
+        <CreateVacationModal
+          isOpen={showCreateFromCalendar}
+          startDate={selectedStartDate}
+          endDate={selectedEndDate}
+          onClose={handleCloseModal}
+          onSubmit={handleCreateFromModal}
+          loading={loading}
+          balance={balance ?? undefined}
+          userId={user?.id}
+          restrictionWarnings={restrictionWarningsCalendar}
+          onCheckRestrictions={handleCheckRestrictionsCalendar}
+          showSubstitutes={useModulesStore.getState().isModuleEnabled('substitution')}
+        />
+      )}
+    </div>
   )
 
   return (
@@ -788,49 +918,75 @@ export function Vacation() {
       {activeTab === 'mine' && (
         <div className="space-y-6">
           {balance && (
-            <Card>
-              <div className="p-5">
-                <h2 className="text-base font-semibold mb-4">Баланс отпускных дней</h2>
-                <div className="grid grid-cols-1 divide-y divide-border rounded-lg border border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                  <div className="p-4 text-center">
-                    <div className="text-3xl font-bold">{balance.totalDays}</div>
-                    <div className="text-sm text-muted-foreground mt-1">Всего накоплено</div>
+            <div
+              className="rounded-2xl border border-[#E7E9F2] bg-white p-[22px]"
+              style={{ boxShadow: '0 1px 2px rgba(23,26,43,.05), 0 8px 24px -12px rgba(23,26,43,.08)' }}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[#EEF0FE] text-[#4F46E5]">
+                    <PieChart className="h-[18px] w-[18px]" />
                   </div>
-                  <div className="p-4 text-center">
-                    <div className="text-3xl font-bold">{balance.usedDays}</div>
-                    <div className="text-sm text-muted-foreground mt-1">Использовано</div>
-                  </div>
-                  <div className="p-4 text-center">
-                    <div className="text-3xl font-bold text-primary">{balance.availableDays}</div>
-                    <div className="text-sm text-muted-foreground mt-1">Доступно к запросу</div>
-                  </div>
+                  <h2 className="text-[16.5px] font-bold text-[#191D30]">Баланс отпускных дней</h2>
                 </div>
+                <span className="text-[12.5px] font-semibold text-[#A6AABD]">{year} год</span>
+              </div>
 
-                <div className="mt-4">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-                    <span>Использовано {balance.usedDays} из {balance.totalDays}</span>
-                    <span>{balance.availableDays} дн. осталось</span>
+              <div className="grid grid-cols-3">
+                <div className="px-[26px] text-center">
+                  <div className="flex items-baseline justify-center">
+                    <span className="text-[36px] font-extrabold leading-[1.1] tracking-[-0.02em] text-[#191D30]">{balance.totalDays}</span>
+                    <span className="ml-1 text-sm font-semibold text-[#A6AABD]">дн.</span>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-300"
-                      style={{ width: `${balance.totalDays > 0 ? Math.min(100, (balance.usedDays / balance.totalDays) * 100) : 0}%` }}
-                    />
-                  </div>
+                  <div className="mt-[3px] text-[13px] font-medium text-[#7A7F94]">Всего накоплено</div>
                 </div>
-
-                <div className="mt-4 flex items-start gap-2 rounded-lg bg-primary/5 px-4 py-3 text-sm">
-                  <Info className="h-4 w-4 shrink-0 text-primary mt-0.5" />
-                  {balance.travelAvailable ? (
-                    <span>Проезд доступен{balance.travelAvailableUntil ? ` до ${new Date(balance.travelAvailableUntil).toLocaleDateString('ru-RU')}` : ''}</span>
-                  ) : balance.travelNextAvailableDate ? (
-                    <span>Проезд недоступен до {new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')}</span>
-                  ) : (
-                    <span>Неиспользованные дни отпуска переносятся на следующий год согласно графику отпусков.</span>
-                  )}
+                <div className="border-l border-[#E7E9F2] px-[26px] text-center">
+                  <div className="flex items-baseline justify-center">
+                    <span className="text-[36px] font-extrabold leading-[1.1] tracking-[-0.02em] text-[#D97706]">{balance.usedDays}</span>
+                    <span className="ml-1 text-sm font-semibold text-[#A6AABD]">дн.</span>
+                  </div>
+                  <div className="mt-[3px] text-[13px] font-medium text-[#7A7F94]">Использовано</div>
+                </div>
+                <div className="border-l border-[#E7E9F2] px-[26px] text-center">
+                  <div className="flex items-baseline justify-center">
+                    <span className="text-[36px] font-extrabold leading-[1.1] tracking-[-0.02em] text-[#0B915F]">{balance.availableDays}</span>
+                    <span className="ml-1 text-sm font-semibold text-[#A6AABD]">дн.</span>
+                  </div>
+                  <div className="mt-[3px] text-[13px] font-medium text-[#7A7F94]">Доступно к запросу</div>
                 </div>
               </div>
-            </Card>
+
+              <div className="mt-5">
+                <div className="h-[10px] w-full rounded-full bg-[#EEF0F6]">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${balance.totalDays > 0 ? Math.min(100, (balance.usedDays / balance.totalDays) * 100) : 0}%`,
+                      background: 'linear-gradient(90deg, #4F46E5, #8B7CF6)',
+                    }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[12.5px] text-[#7A7F94]">
+                  <span>Использовано: {balance.usedDays}</span>
+                  <span>Осталось: {balance.availableDays} из {balance.totalDays}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-[#C7EDDA] bg-[#E9F8F1] px-[14px] py-[11px] text-[13px] text-[#0B7A55]">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                {(() => {
+                  const transferUntil = balance.travelAvailableUntil || balance.travelNextAvailableDate
+                  return transferUntil ? (
+                    <span>
+                      Неиспользованные дни можно перенести на следующий год до{' '}
+                      <strong className="font-bold">{new Date(transferUntil).toLocaleDateString('ru-RU')}</strong>
+                    </span>
+                  ) : (
+                    <span>Неиспользованные дни отпуска переносятся на следующий год согласно графику отпусков.</span>
+                  )
+                })()}
+              </div>
+            </div>
           )}
 
           {calendarSection}
@@ -1079,7 +1235,7 @@ export function Vacation() {
             </div>
             <div className="p-5">
               <DepartmentBalanceTable
-                departmentId={reqFilters.departmentId || user?.departmentId || ''}
+                departmentId={reqFilters.departmentIds[0] || user?.departmentId || ''}
                 year={year}
                 currentUserId={user?.id}
               />
