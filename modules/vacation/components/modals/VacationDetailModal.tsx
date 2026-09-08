@@ -50,7 +50,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 animate-scale-in">
+      <div data-testid="vacation-detail-modal" className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 animate-scale-in">
         <div className="p-6 border-b flex justify-between items-center">
           <h2 className="text-xl font-semibold">Детали отпуска</h2>
           <button

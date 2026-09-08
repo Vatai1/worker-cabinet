@@ -5,6 +5,7 @@
   VacationFormData,
   VacationValidationError,
   VacationSubstitution,
+  DepartmentBalanceEntry,
 } from '@/shared/types'
 import { VacationType, VacationRequestStatus } from '@/shared/types'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -56,6 +57,17 @@ interface DbVacationRequest {
   approver_id?: number | string | null
   substitutes?: VacationRequest['substitutes']
   delegated_to?: VacationRequest['delegated_to']
+}
+
+interface DbDepartmentBalance {
+  user_id?: number | string
+  first_name?: string | null
+  last_name?: string | null
+  avatar?: string | null
+  gender?: 'male' | 'female' | 'other' | null
+  total_days?: number | null
+  used_days?: number | null
+  available_days?: number | null
 }
 
 const handleResponse = async (response: Response) => {
@@ -330,6 +342,23 @@ export const vacationApi = {
       headers: getAuthHeadersWithContentType(),
     })
     return handleResponse(response)
+  },
+
+  async getDepartmentBalances(departmentId: string, year: number): Promise<DepartmentBalanceEntry[]> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/balances?departmentId=${departmentId}&year=${year}`, {
+      headers: getAuthHeadersWithContentType(),
+    })
+    const data: DbDepartmentBalance[] = await handleResponse(response)
+    return data.map((row) => ({
+      userId: row.user_id?.toString() ?? '',
+      firstName: row.first_name || '',
+      lastName: row.last_name || '',
+      avatar: row.avatar || undefined,
+      gender: row.gender || undefined,
+      totalDays: row.total_days ?? 0,
+      usedDays: row.used_days ?? 0,
+      availableDays: row.available_days ?? 0,
+    }))
   },
 
 }

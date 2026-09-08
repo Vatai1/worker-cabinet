@@ -221,4 +221,15 @@ export interface VacationEmployee {
   department_name?: string | null
 }
 
+export interface DepartmentBalanceEntry {
+  userId: string
+  firstName: string
+  lastName: string
+  avatar?: string
+  gender?: 'male' | 'female' | 'other'
+  totalDays: number
+  usedDays: number
+  availableDays: number
+}
+
 

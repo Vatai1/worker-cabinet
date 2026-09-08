@@ -250,6 +250,11 @@ async function seed() {
     }
     console.log('  ✓ cross-org memberships (admin→mindit hr, petrov→mindit manager)')
 
+    if (petrovUser.rows.length > 0 && devDept) {
+      await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [petrovUser.rows[0].id, devDept])
+      console.log('  ✓ petrov@example.com set as manager of Отдел разработки')
+    }
+
     const ORG_USERS = [
       { email: 'volkov@crct.ru', orgId: crctId, orgRole: 'manager' },
       { email: 'morozova@crct.ru', orgId: crctId, orgRole: 'employee' },
@@ -374,6 +379,38 @@ async function seed() {
         [ivanovResult.rows[0].id, statusApproved, managers[0]?.id ?? ivanov.id]
       )
       console.log('  ✓ guaranteed future approved request for ivanov@example.com')
+
+      await query(
+        'UPDATE vacation_balances SET total_days = 28, used_days = 17, available_days = 11, reserved_days = 0 WHERE user_id = $1',
+        [ivanov.id]
+      )
+      console.log('  ✓ guaranteed balance 28/17/11 for ivanov@example.com')
+    }
+
+    if (petrovUser.rows.length > 0) {
+      const petrovId = petrovUser.rows[0].id
+      const approvalCandidates = (await query(
+        "SELECT id FROM users WHERE department_id = $1 AND id != $2 AND email IN ('morozova@crct.ru', 'kuznetsov@crct.ru')",
+        [devDept, petrovId]
+      )).rows
+      for (let i = 0; i < approvalCandidates.length; i++) {
+        const candidateId = approvalCandidates[i].id
+        const start = new Date(Date.now() + (15 + i * 10) * 86400000)
+        const end = new Date(start.getTime() + 4 * 86400000)
+        const pendingResult = await query(
+          `INSERT INTO vacation_requests
+             (user_id, start_date, end_date, duration, vacation_type_id, status_id, approver_id, created_at)
+           VALUES ($1, $2, $3, 5, $4, $5, $6, NOW() - INTERVAL '2 days')
+           RETURNING id`,
+          [candidateId, start.toISOString().split('T')[0], end.toISOString().split('T')[0], typeIdAnnual, statusOnApproval, petrovId]
+        )
+        await query(
+          `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, changed_at)
+           VALUES ($1, $2, $3, NOW())`,
+          [pendingResult.rows[0].id, statusOnApproval, candidateId]
+        )
+      }
+      console.log(`  ✓ ${approvalCandidates.length} guaranteed on_approval requests for petrov@example.com to review`)
     }
 
     console.log('Creating company projects...')

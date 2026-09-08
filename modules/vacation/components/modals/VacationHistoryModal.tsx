@@ -1,18 +1,15 @@
-﻿import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { getVacationRequestStatusBadge } from '@/modules/vacation/data/mockVacationData'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
 import type { VacationRequest } from '@/shared/types'
 import { X, Calendar, FileText, Filter, RotateCcw } from 'lucide-react'
 
-interface VacationHistoryModalProps {
-  isOpen: boolean
+interface VacationHistoryListProps {
   requests: VacationRequest[]
-  onClose: () => void
 }
 
-export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHistoryModalProps) {
-  useModalOpen(isOpen)
+export function VacationHistoryList({ requests }: VacationHistoryListProps) {
   const [selectedYear, setSelectedYear] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
 
@@ -34,7 +31,7 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
     let filtered = [...requests]
 
     if (selectedYear !== 'all') {
-      filtered = filtered.filter(request => 
+      filtered = filtered.filter(request =>
         new Date(request.startDate).getFullYear().toString() === selectedYear
       )
     }
@@ -43,13 +40,199 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
       filtered = filtered.filter(request => request.status === selectedStatus)
     }
 
-    return filtered.sort((a, b) => 
+    return filtered.sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
   }, [requests, selectedYear, selectedStatus])
 
-  const hasActiveFilters = selectedYear !== 'all' || 
+  const hasActiveFilters = selectedYear !== 'all' ||
                           selectedStatus !== 'all'
+
+  return (
+    <div className="flex flex-col">
+      <div className="p-4 border-b flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {hasActiveFilters
+            ? `Найдено: ${filteredRequests.length} из ${requests.length}`
+            : `Всего заявок: ${requests.length}`
+          }
+        </p>
+      </div>
+
+      <div className="p-4 border-b bg-muted/50">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">Фильтры</span>
+          {hasActiveFilters && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={clearFilters}
+              className="text-xs"
+            >
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Сбросить
+            </Button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1">Год</label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="w-full border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="all">Все года</option>
+              {years.map(year => (
+                <option key={year} value={year.toString()}>{year}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1">Статус</label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="w-full border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="all">Все статусы</option>
+              <option value="on_approval">На согласовании</option>
+              <option value="approved">Согласовано</option>
+              <option value="rejected">Не согласовано</option>
+              <option value="cancelled_by_employee">Отменено сотрудником</option>
+              <option value="cancelled_by_manager">Отменено руководителем</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {filteredRequests.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            {hasActiveFilters
+              ? 'По выбранным фильтрам ничего не найдено'
+              : 'История отпусков пуста'
+            }
+          </div>
+        ) : (
+          filteredRequests.map((request) => {
+            const statusBadge = getVacationRequestStatusBadge(request.status)
+            return (
+              <div key={request.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Создано: {new Date(request.createdAt).toLocaleDateString('ru-RU')}{' '}
+                        {new Date(request.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadge.className}`}
+                      >
+                        {statusBadge.label}
+                      </span>
+                    </div>
+
+                    <div className="mb-2">
+                      <span className="font-semibold">
+                        {request.vacationType === 'annual_paid'
+                          ? 'Ежегодный отпуск'
+                          : request.vacationType === 'unpaid'
+                          ? 'Без сохранения ЗП'
+                          : request.vacationType === 'educational'
+                          ? 'Учебный отпуск'
+                          : request.vacationType === 'maternity'
+                          ? 'Отпуск по беременности и родам'
+                          : request.vacationType === 'child_care'
+                          ? 'Отпуск по уходу за ребёнком'
+                          : request.vacationType === 'additional'
+                          ? 'Дополнительный отпуск'
+                          : request.vacationType === 'veteran'
+                          ? 'Ветеранский отпуск'
+                          : 'Другой'}
+                      </span>
+                    </div>
+
+                    <div className="text-sm text-foreground mb-2">
+                      <span className="font-medium">
+                        {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
+                        {new Date(request.endDate).toLocaleDateString('ru-RU')}
+                      </span>
+                      <span className="ml-2 text-muted-foreground">
+                        ({request.duration} {request.duration === 1 ? 'день' : request.duration >= 2 && request.duration <= 4 ? 'дня' : 'дней'})
+                      </span>
+                    </div>
+
+                    {request.comment && (
+                      <div className="text-sm text-muted-foreground mb-2 flex items-start gap-2">
+                        <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <span className="flex-1">Комментарий: {request.comment}</span>
+                      </div>
+                    )}
+
+                    {request.hasTravel && (
+                      <div className="text-sm text-blue-600 mb-2">
+                        ✈️ С проездом{request.travelDestination && ` до ${request.travelDestination}`}
+                      </div>
+                    )}
+
+                    {(request.rejectionReason || request.cancellationReason) && (
+                      <div className="text-sm text-red-600 mb-2">
+                        Причина: {request.rejectionReason || request.cancellationReason}
+                      </div>
+                    )}
+
+                    {request.statusHistory && request.statusHistory.length > 0 && (
+                      <div className="text-xs text-muted-foreground mt-2 pt-2 border-t">
+                        <div className="font-medium mb-1">История изменений:</div>
+                        <div className="space-y-1">
+                          {request.statusHistory.map((history, index) => (
+                            <div key={index} className="flex flex-col">
+                              <div className="flex justify-between">
+                                <span>
+                                  {getVacationRequestStatusBadge(history.status).label}
+                                  {history.comment && ` (${history.comment})`}
+                                </span>
+                                <span>
+                                  {history.changedAt
+                                    ? `${new Date(history.changedAt).toLocaleDateString('ru-RU')} ${new Date(history.changedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                                    : 'Дата не указана'
+                                  }
+                                </span>
+                              </div>
+                              {history.changedByName && (
+                                <div className="text-muted-foreground text-xs mt-0.5">
+                                  {history.changedByName}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
+interface VacationHistoryModalProps {
+  isOpen: boolean
+  requests: VacationRequest[]
+  onClose: () => void
+}
+
+export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHistoryModalProps) {
+  useModalOpen(isOpen)
 
   if (!isOpen) return null
 
@@ -57,15 +240,7 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-card rounded-lg shadow-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col animate-scale-in">
         <div className="p-6 border-b flex justify-between items-center bg-card">
-          <div>
-            <h2 className="text-xl font-semibold">История отпусков</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              {hasActiveFilters 
-                ? `Найдено: ${filteredRequests.length} из ${requests.length}`
-                : `Всего заявок: ${requests.length}`
-              }
-            </p>
-          </div>
+          <h2 className="text-xl font-semibold">История отпусков</h2>
           <button
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground"
@@ -74,171 +249,8 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
           </button>
         </div>
 
-        {/* Фильтры */}
-        <div className="p-4 border-b bg-muted/50">
-          <div className="flex items-center gap-2 mb-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Фильтры</span>
-            {hasActiveFilters && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={clearFilters}
-                className="text-xs"
-              >
-                <RotateCcw className="h-3 w-3 mr-1" />
-                Сбросить
-              </Button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Фильтр по году */}
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Год</label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="w-full border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="all">Все года</option>
-                {years.map(year => (
-                  <option key={year} value={year.toString()}>{year}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Фильтр по статусу */}
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Статус</label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="all">Все статусы</option>
-                <option value="on_approval">На согласовании</option>
-                <option value="approved">Согласовано</option>
-                <option value="rejected">Не согласовано</option>
-                <option value="cancelled_by_employee">Отменено сотрудником</option>
-                <option value="cancelled_by_manager">Отменено руководителем</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Список заявок */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {filteredRequests.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {hasActiveFilters 
-                ? 'По выбранным фильтрам ничего не найдено'
-                : 'История отпусков пуста'
-              }
-            </div>
-          ) : (
-            filteredRequests.map((request) => {
-              const statusBadge = getVacationRequestStatusBadge(request.status)
-              return (
-                <div key={request.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-<Calendar className="h-4 w-4 text-muted-foreground" />
-                         <span className="text-sm text-muted-foreground">
-                          Создано: {new Date(request.createdAt).toLocaleDateString('ru-RU')}{' '}
-                          {new Date(request.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadge.className}`}
-                        >
-                          {statusBadge.label}
-                        </span>
-                      </div>
-                      
-                      <div className="mb-2">
-                        <span className="font-semibold">
-                          {request.vacationType === 'annual_paid'
-                            ? 'Ежегодный отпуск'
-                            : request.vacationType === 'unpaid'
-                            ? 'Без сохранения ЗП'
-                            : request.vacationType === 'educational'
-                            ? 'Учебный отпуск'
-                            : request.vacationType === 'maternity'
-                            ? 'Отпуск по беременности и родам'
-                            : request.vacationType === 'child_care'
-                            ? 'Отпуск по уходу за ребёнком'
-                            : request.vacationType === 'additional'
-                            ? 'Дополнительный отпуск'
-                            : request.vacationType === 'veteran'
-                            ? 'Ветеранский отпуск'
-                            : 'Другой'}
-                        </span>
-                      </div>
-
-                      <div className="text-sm text-foreground mb-2">
-                        <span className="font-medium">
-                          {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
-                          {new Date(request.endDate).toLocaleDateString('ru-RU')}
-                        </span>
-                        <span className="ml-2 text-muted-foreground">
-                          ({request.duration} {request.duration === 1 ? 'день' : request.duration >= 2 && request.duration <= 4 ? 'дня' : 'дней'})
-                        </span>
-                      </div>
-
-                      {request.comment && (
-                        <div className="text-sm text-muted-foreground mb-2 flex items-start gap-2">
-                          <FileText className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                          <span className="flex-1">Комментарий: {request.comment}</span>
-                        </div>
-                      )}
-
-                      {request.hasTravel && (
-                        <div className="text-sm text-blue-600 mb-2">
-                          ✈️ С проездом{request.travelDestination && ` до ${request.travelDestination}`}
-                        </div>
-                      )}
-
-                      {(request.rejectionReason || request.cancellationReason) && (
-                        <div className="text-sm text-red-600 mb-2">
-                          Причина: {request.rejectionReason || request.cancellationReason}
-                        </div>
-                      )}
-
-                      {request.statusHistory && request.statusHistory.length > 0 && (
-                        <div className="text-xs text-muted-foreground mt-2 pt-2 border-t">
-                          <div className="font-medium mb-1">История изменений:</div>
-                          <div className="space-y-1">
-                            {request.statusHistory.map((history, index) => (
-                              <div key={index} className="flex flex-col">
-                                <div className="flex justify-between">
-                                  <span>
-                                    {getVacationRequestStatusBadge(history.status).label}
-                                    {history.comment && ` (${history.comment})`}
-                                  </span>
-                                  <span>
-                                    {history.changedAt 
-                                      ? `${new Date(history.changedAt).toLocaleDateString('ru-RU')} ${new Date(history.changedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
-                                      : 'Дата не указана'
-                                    }
-                                  </span>
-                                </div>
-                                {history.changedByName && (
-                                  <div className="text-muted-foreground text-xs mt-0.5">
-                                    {history.changedByName}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })
-          )}
+        <div className="flex-1 overflow-y-auto">
+          <VacationHistoryList requests={requests} />
         </div>
 
         <div className="p-6 border-t bg-muted/50">

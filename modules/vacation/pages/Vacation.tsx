@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/core/auth/store/authStore'
@@ -9,10 +9,11 @@ import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { YearCalendar } from '@/shared/components/calendar/YearCalendar'
+import { VacationLegend } from '@/shared/components/calendar/VacationLegend'
+import { DepartmentBalanceTable } from '@/modules/vacation/components/DepartmentBalanceTable'
+import { VacationHistoryList } from '@/modules/vacation/components/modals/VacationHistoryModal'
 import { CreateVacationModal } from '@/modules/vacation/components/modals/CreateVacationModal'
-import { CreateVacationFormModal } from '@/modules/vacation/components/modals/CreateVacationFormModal'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
-import { VacationHistoryModal } from '@/modules/vacation/components/modals/VacationHistoryModal'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { RestrictionModal } from '@/modules/vacation/components/modals/RestrictionModal'
 import { VacationTransferModal } from '@/modules/vacation/components/modals/VacationTransferModal'
@@ -23,11 +24,13 @@ import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { apiGet } from '@/shared/lib/apiClient'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
-import { Switch } from '@/shared/components/ui/Switch'
 import { hasAnyRole } from '@/shared/lib/permissions'
-import { ChevronLeft, ChevronRight, FileText, Sparkles, Clock, CheckCircle2, HourglassIcon, UserCheck, Search, RotateCcw } from 'lucide-react'
+import {
+  ChevronLeft, ChevronRight, ChevronDown, FileText, Clock, CheckCircle2, CheckCircle,
+  UserCheck, Search, RotateCcw, Users, Info, XCircle,
+} from 'lucide-react'
 import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
 import { VacationTransferApplicationModal } from '@/modules/vacation/components/modals/VacationTransferApplicationModal'
 
@@ -40,6 +43,11 @@ const REQUEST_STATUS_OPTIONS = [
 ]
 
 const EMPTY_REQUEST_FILTERS = { departmentId: '', status: '', vacationType: '' }
+
+type VacationTab = 'mine' | 'team' | 'approvals' | 'requests' | 'history'
+type CalendarScope = 'mine' | 'team'
+
+const selectClass = 'border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring'
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -58,16 +66,15 @@ export function Vacation() {
   } = useVacationStore()
 
   const [balance, setBalance] = useState<VacationBalance | null>(null)
-  const [showCreateForm, setShowCreateForm] = useState(false)
   const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null)
   const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null)
   const [showCreateFromCalendar, setShowCreateFromCalendar] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [detailRequest, setDetailRequest] = useState<VacationRequest | null>(null)
-  const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null)
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null)
+  const autoExpandedRef = useRef(false)
   const [myRequestsExpanded, setMyRequestsExpanded] = useState(true)
   const [addingComment, setAddingComment] = useState<string | null>(null)
   const [newComment, setNewComment] = useState('')
@@ -76,7 +83,6 @@ export function Vacation() {
   const [showRestrictionModal, setShowRestrictionModal] = useState(false)
   const [showApplicationModal, setShowApplicationModal] = useState(false)
   const [showTransferApplicationModal, setShowTransferApplicationModal] = useState(false)
-  const [restrictionWarnings, setRestrictionWarnings] = useState<VacationValidationError[]>([])
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<VacationValidationError[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
   const [vacationBlocked, setVacationBlocked] = useState(false)
@@ -84,13 +90,20 @@ export function Vacation() {
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
   const [pickerEmployees, setPickerEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
   const [reqFilters, setReqFilters] = useState(EMPTY_REQUEST_FILTERS)
-  const [myOnly, setMyOnly] = useState(false)
+  const [activeTab, setActiveTab] = useState<VacationTab>('mine')
+  const [calendarScope, setCalendarScope] = useState<CalendarScope>('mine')
+  const [leavingApprovalIds, setLeavingApprovalIds] = useState<Set<string>>(new Set())
+  const [rejectingApprovalId, setRejectingApprovalId] = useState<string | null>(null)
+  const [approvalRejectReason, setApprovalRejectReason] = useState('')
   const deptTouched = useRef(false)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([])
   const [calendarDeptRequests, setCalendarDeptRequests] = useState<VacationRequest[] | null>(null)
   const currentOrgId = useOrgStore((s) => s.currentOrgId)
+
+  const isManager = hasAnyRole('manager', 'hr', 'admin')
+  const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id)
 
   useEffect(() => {
     if (user) {
@@ -135,7 +148,8 @@ export function Vacation() {
     deptTouched.current = false
     setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentId: user?.departmentId || '' })
     setSearch('')
-    setMyOnly(false)
+    setCalendarScope('mine')
+    setActiveTab('mine')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrgId])
 
@@ -162,11 +176,23 @@ export function Vacation() {
     return () => { cancelled = true }
   }, [reqFilters.departmentId, currentOrgId])
 
+  useEffect(() => {
+    if (!autoExpandedRef.current && expandedRequestId === null && currentUserRequests.length > 0) {
+      autoExpandedRef.current = true
+      setExpandedRequestId(currentUserRequests[0].id)
+    }
+  }, [currentUserRequests, expandedRequestId])
+
   const resetFilters = () => {
     deptTouched.current = false
     setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentId: user?.departmentId || '' })
     setSearch('')
-    setMyOnly(false)
+  }
+
+  const handleTabClick = (tab: VacationTab) => {
+    setActiveTab(tab)
+    if (tab === 'mine') setCalendarScope('mine')
+    if (tab === 'team') setCalendarScope('team')
   }
 
   const handleApprove = async (requestId: string) => {
@@ -176,7 +202,9 @@ export function Vacation() {
       fetchUserRequests(user.id)
       reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
-    } catch (err) {
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err))
+      throw err
     }
   }
 
@@ -188,8 +216,51 @@ export function Vacation() {
       fetchUserRequests(user.id)
       reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
-    } catch (err) {
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err))
+      throw err
     }
+  }
+
+  const handleApproveCard = (request: VacationRequest) => {
+    setLeavingApprovalIds((prev) => new Set(prev).add(request.id))
+    setTimeout(() => {
+      handleApprove(request.id)
+        .then(() => toast.success('Заявка одобрена'))
+        .catch(() => {})
+        .finally(() => {
+          setLeavingApprovalIds((prev) => {
+            const next = new Set(prev)
+            next.delete(request.id)
+            return next
+          })
+        })
+    }, 250)
+  }
+
+  const handleRejectCardToggle = (requestId: string) => {
+    setRejectingApprovalId((prev) => (prev === requestId ? null : requestId))
+    setApprovalRejectReason('')
+  }
+
+  const handleRejectCardConfirm = (request: VacationRequest) => {
+    const reason = approvalRejectReason.trim()
+    if (!reason) return
+    setRejectingApprovalId(null)
+    setApprovalRejectReason('')
+    setLeavingApprovalIds((prev) => new Set(prev).add(request.id))
+    setTimeout(() => {
+      handleReject(request.id, reason)
+        .then(() => toast.success('Заявка отклонена'))
+        .catch(() => {})
+        .finally(() => {
+          setLeavingApprovalIds((prev) => {
+            const next = new Set(prev)
+            next.delete(request.id)
+            return next
+          })
+        })
+    }, 250)
   }
 
   const handleCancelClick = (requestId: string) => {
@@ -228,7 +299,7 @@ export function Vacation() {
 
     departmentRequests.forEach((otherRequest) => {
       if (otherRequest.id === request.id) return
-      if (otherRequest.status !== VacationRequestStatus.APPROVED && 
+      if (otherRequest.status !== VacationRequestStatus.APPROVED &&
           otherRequest.status !== VacationRequestStatus.ON_APPROVAL) return
 
       const otherStart = new Date(otherRequest.startDate)
@@ -312,39 +383,6 @@ export function Vacation() {
     setShowCreateFromCalendar(false)
   }
 
-  const handleCreateFromForm = async (data: {
-    startDate: string
-    endDate: string
-    vacationType: VacationType
-    hasTravel: boolean
-    travelDestination?: string
-    travelChildren?: Array<{ fullName: string; birthDate: string }>
-    comment: string
-    referenceDocument?: string
-    substitute_ids?: number[]
-  }) => {
-    if (!user) return
-
-    try {
-      await useVacationStore.getState().createRequest(user.id, {
-        startDate: data.startDate,
-        endDate: data.endDate,
-        vacationType: data.vacationType,
-        comment: data.comment,
-        hasTravel: data.hasTravel,
-        travelDestination: data.travelDestination,
-        travelChildren: data.travelChildren,
-        referenceDocument: data.referenceDocument,
-        substitute_ids: data.substitute_ids,
-      })
-      setShowCreateForm(false)
-      fetchUserRequests(user.id)
-      reloadRequests()
-      fetchBalance(user.id, year).then(setBalance)
-    } catch (err) {
-    }
-  }
-
   const handleCloseDetailModal = () => {
     setShowDetailModal(false)
     setDetailRequest(null)
@@ -402,17 +440,6 @@ export function Vacation() {
     return Array.from(uniqueUsers.values())
   }
 
-  const handleCheckRestrictions = async (userId: string, data: { startDate: string; endDate: string }) => {
-    const warnings = await useVacationStore.getState().checkRestrictions(userId, {
-      startDate: data.startDate,
-      endDate: data.endDate,
-      vacationType: VacationType.ANNUAL_PAID,
-      comment: '',
-      hasTravel: false,
-    })
-    setRestrictionWarnings(warnings)
-  }
-
   const handleCheckRestrictionsCalendar = async (userId: string, data: { startDate: string; endDate: string }) => {
     const warnings = await useVacationStore.getState().checkRestrictions(userId, {
       startDate: data.startDate,
@@ -467,29 +494,26 @@ export function Vacation() {
     }
   }
 
-
-
   const calendarRequests = useMemo(() => {
-    const base = myOnly
+    const base = calendarScope === 'mine'
       ? currentUserRequests
       : reqFilters.departmentId
         ? calendarDeptRequests ?? []
         : departmentRequests
     const merged = [...base]
-    if (!myOnly && !reqFilters.departmentId) {
+    if (calendarScope === 'team' && !reqFilters.departmentId) {
       currentUserRequests.forEach(r => {
         if (!merged.some(m => m.id === r.id)) merged.push(r)
       })
     }
     return merged.filter(r => {
-      if (myOnly) return true
+      if (calendarScope === 'mine') return true
       if (reqFilters.departmentId && r.departmentId !== reqFilters.departmentId) return false
       if (reqFilters.status && r.status !== reqFilters.status) return false
       if (reqFilters.vacationType && r.vacationType !== reqFilters.vacationType) return false
-      if (debouncedSearch && !`${r.userLastName} ${r.userFirstName} ${r.userMiddleName ?? ''}`.toLowerCase().includes(debouncedSearch)) return false
       return true
     })
-  }, [departmentRequests, currentUserRequests, calendarDeptRequests, reqFilters, myOnly, debouncedSearch])
+  }, [departmentRequests, currentUserRequests, calendarDeptRequests, reqFilters, calendarScope])
 
   const handlePrevYear = () => setYear((y) => y - 1)
   const handleNextYear = () => setYear((y) => y + 1)
@@ -502,25 +526,32 @@ export function Vacation() {
     if (isMySubstitutions) fetchMySubstitutions()
   }, [isMySubstitutions, fetchMySubstitutions])
 
-  const isManager = hasAnyRole('manager', 'hr', 'admin')
-  const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id)
+  const pendingApprovals = departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
+
+  const myRequests = useMemo(() =>
+    [...currentUserRequests]
+      .filter((r) =>
+        r.status === VacationRequestStatus.ON_APPROVAL ||
+        r.status === VacationRequestStatus.APPROVED ||
+        r.status === VacationRequestStatus.REJECTED
+      )
+      .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()),
+    [currentUserRequests]
+  )
+
+  const getReviewerName = (request: VacationRequest) => {
+    const entry = [...(request.statusHistory || [])].reverse().find((h) => h.status === request.status)
+    return entry?.changedByName
+  }
 
   if (isMySubstitutions) {
     return (
       <div className="space-y-6 animate-fade-in">
-        <div className="relative overflow-hidden gradient-primary text-white rounded-xl animate-slide-up">
-          <div className="relative z-10 p-6">
-            <div className="flex items-center gap-2 mb-1">
-              <UserCheck className="h-3.5 w-3.5 text-white/60" />
-              <span className="text-white/40 text-[10px] font-medium uppercase tracking-wider">
-                Замещение
-              </span>
-            </div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Мои замещения</h1>
-            <p className="mt-1 text-white/50 text-sm">
-              Сотрудники, которых вы замещаете на время отпуска
-            </p>
-          </div>
+        <div className="page-header">
+          <h1 className="text-xl font-semibold tracking-tight">Мои замещения</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Сотрудники, которых вы замещаете на время отпуска
+          </p>
         </div>
 
         {mySubstitutions.length === 0 ? (
@@ -557,93 +588,161 @@ export function Vacation() {
     )
   }
 
+  const tabs: Array<{ id: VacationTab; label: string; badge?: number }> = [
+    { id: 'mine', label: 'Мои отпуска' },
+    { id: 'team', label: 'Команда' },
+    ...(isManager ? [{ id: 'approvals' as VacationTab, label: 'Согласование', badge: pendingApprovals.length }] : []),
+    { id: 'requests', label: 'Заявления' },
+    { id: 'history', label: 'История' },
+  ]
+
+  const calendarSection = (
+    <Card>
+      <div className="p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold">Календарь отпусков</h2>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={handlePrevYear}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-sm font-semibold min-w-[56px] text-center">{year}</span>
+            <Button variant="outline" size="icon" onClick={handleNextYear}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-full border border-border bg-muted/40 p-0.5">
+            <button
+              type="button"
+              onClick={() => setCalendarScope('mine')}
+              className={cn('rounded-full px-3 py-1 text-xs font-medium transition-colors', calendarScope === 'mine' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+            >
+              Мои отпуска
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarScope('team')}
+              className={cn('rounded-full px-3 py-1 text-xs font-medium transition-colors', calendarScope === 'team' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+            >
+              Вся команда
+            </button>
+          </div>
+          <select
+            value={reqFilters.departmentId}
+            onChange={(e) => {
+              deptTouched.current = true
+              setReqFilters((f) => ({ ...f, departmentId: e.target.value }))
+            }}
+            className={selectClass}
+          >
+            <option value="">Все отделы</option>
+            {departments.map((d) => (
+              <option key={d.id} value={String(d.id)}>{d.name}</option>
+            ))}
+          </select>
+          {isManager && (
+            <select
+              value={reqFilters.status}
+              onChange={(e) => setReqFilters((f) => ({ ...f, status: e.target.value }))}
+              className={selectClass}
+            >
+              <option value="">Все статусы</option>
+              {REQUEST_STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          )}
+          {isManager && (
+            <select
+              value={reqFilters.vacationType}
+              onChange={(e) => setReqFilters((f) => ({ ...f, vacationType: e.target.value }))}
+              className={selectClass}
+            >
+              <option value="">Все типы</option>
+              {Object.entries(VACATION_TYPES).map(([code, info]) => (
+                <option key={code} value={code}>{info.name}</option>
+              ))}
+            </select>
+          )}
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск по ФИО"
+              className="w-full border border-input bg-background rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={resetFilters}>
+            <RotateCcw className="w-4 h-4 mr-1.5" />
+            Сбросить
+          </Button>
+        </div>
+
+        {(selectedStartDate || selectedEndDate) && (
+          <div className="flex items-center gap-3 text-xs">
+            {selectedStartDate && !selectedEndDate && (
+              <span className="text-primary">Выбрана дата: {new Date(selectedStartDate).toLocaleDateString('ru-RU')}</span>
+            )}
+            {selectedStartDate && selectedEndDate && (
+              <span className="text-emerald-600">
+                Период: {new Date(selectedStartDate).toLocaleDateString('ru-RU')} — {new Date(selectedEndDate).toLocaleDateString('ru-RU')}
+              </span>
+            )}
+            <button
+              onClick={() => handleDateRangeSelect(null, null)}
+              className="text-muted-foreground hover:text-foreground underline"
+            >
+              Очистить выбор
+            </button>
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">Наведите курсор на день, чтобы увидеть, кто отдыхает</p>
+
+        <YearCalendar
+          year={year}
+          requests={calendarRequests}
+          searchQuery={debouncedSearch}
+          onDateRangeSelect={vacationBlocked ? () => {} : handleDateRangeSelect}
+          selectedStartDate={selectedStartDate}
+          selectedEndDate={selectedEndDate}
+          currentUserId={user?.id}
+          onTransfer={handleTransferClick}
+          showHeader={false}
+          showLegend={false}
+        />
+
+        {showCreateFromCalendar && selectedStartDate && selectedEndDate && (
+          <CreateVacationModal
+            isOpen={showCreateFromCalendar}
+            startDate={selectedStartDate}
+            endDate={selectedEndDate}
+            onClose={handleCloseModal}
+            onSubmit={handleCreateFromModal}
+            loading={loading}
+            balance={balance ?? undefined}
+            userId={user?.id}
+            restrictionWarnings={restrictionWarningsCalendar}
+            onCheckRestrictions={handleCheckRestrictionsCalendar}
+            showSubstitutes={useModulesStore.getState().isModuleEnabled('substitution')}
+          />
+        )}
+      </div>
+    </Card>
+  )
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="relative overflow-hidden gradient-primary text-white rounded-xl animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10 p-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="h-3.5 w-3.5 text-white/60" />
-                <span className="text-white/40 text-[10px] font-medium uppercase tracking-wider">
-                  {isManager ? 'Управление' : 'Личный кабинет'}
-                </span>
-              </div>
-              <h1 className="text-2xl font-extrabold tracking-tight">Отпуск</h1>
-              <p className="mt-1 text-white/50 text-sm">
-                {isManager ? 'Управление отпусками сотрудников' : 'Управление вашими отпусками'}
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="flex flex-wrap gap-2">
-                {balance && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-                    <Clock className="h-3 w-3 text-white/50" />
-                    {balance.availableDays} дн. доступно
-                  </div>
-                )}
-                {currentUserRequests.filter(r => r.status === VacationRequestStatus.ON_APPROVAL).length > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-amber-400/20 backdrop-blur-sm border border-amber-400/20 px-2.5 py-1 text-[11px] font-medium text-amber-100">
-                    <HourglassIcon className="h-3 w-3 text-amber-300/70" />
-                    {currentUserRequests.filter(r => r.status === VacationRequestStatus.ON_APPROVAL).length} на согласовании
-                  </div>
-                )}
-                {currentUserRequests.filter(r => r.status === VacationRequestStatus.APPROVED).length > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-emerald-400/20 backdrop-blur-sm border border-emerald-400/20 px-2.5 py-1 text-[11px] font-medium text-emerald-100">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-300/70" />
-                    {currentUserRequests.filter(r => r.status === VacationRequestStatus.APPROVED).length} согласовано
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {isManager && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
-                    onClick={() => setShowRestrictionModal(true)}
-                  >
-                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                    Пересечения
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
-                  onClick={() => setShowApplicationModal(true)}
-                >
-                  <FileText className="w-3.5 h-3.5 mr-1.5" />
-                  Заявление
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
-                  onClick={() => setShowTransferApplicationModal(true)}
-                >
-                  <FileText className="w-3.5 h-3.5 mr-1.5" />
-                  Перенос
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
-                  onClick={() => setShowHistoryModal(true)}
-                >
-                  <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  История
-                </Button>
-              </div>
-            </div>
-          </div>
+      <div className="relative overflow-hidden gradient-primary text-white rounded-lg animate-slide-up">
+        <div className="relative z-10 px-6 py-8">
+          <span className="text-[11px] font-medium uppercase tracking-widest text-white/60">Управление · Отпуска</span>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">Отпуск</h1>
+          <p className="mt-2 text-sm text-white/70">
+            {isManager ? 'Управление отпусками сотрудников' : 'Управление вашими отпусками'}
+          </p>
         </div>
       </div>
 
@@ -653,58 +752,8 @@ export function Vacation() {
         </div>
       )}
 
-      {balance && (
-        <Card className="section-card overflow-hidden">
-          <div className="p-6 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <span className="p-2 bg-primary/10 rounded-lg">
-                <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </span>
-              Баланс отпускных дней
-            </h2>
-            <div className="grid grid-cols-3 gap-6">
-              <div className="text-center p-4 rounded-xl bg-card border border-border/50 hover-lift stagger-1">
-                <div className="text-4xl font-bold text-gradient">{balance.totalDays}</div>
-                <div className="text-sm text-muted-foreground mt-2 font-medium">Всего дней</div>
-              </div>
-              <div className="text-center p-4 rounded-xl bg-card border border-border/50 hover-lift stagger-2">
-                <div className="text-4xl font-bold text-gradient">{balance.usedDays}</div>
-                <div className="text-sm text-muted-foreground mt-2 font-medium">Использовано</div>
-              </div>
-              <div className="text-center p-4 rounded-xl bg-card border border-border/50 hover-lift stagger-3">
-                <div className="text-4xl font-bold text-gradient">{balance.availableDays}</div>
-                <div className="text-sm text-muted-foreground mt-2 font-medium">Доступно</div>
-              </div>
-            </div>
-            {balance.travelAvailable ? (
-              <div className="mt-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="font-semibold">
-                    Проезд доступен{balance.travelAvailableUntil ? ` до ${new Date(balance.travelAvailableUntil).toLocaleDateString('ru-RU')}` : ''}
-                  </span>
-                </div>
-              </div>
-            ) : balance.travelNextAvailableDate ? (
-              <div className="mt-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="font-semibold">Проезд недоступен до {new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')}</span>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </Card>
-      )}
-
       {vacationBlocked && (
-        <div className="rounded-xl border-2 border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 flex items-center gap-2">
+        <div className="rounded-lg border-2 border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 flex items-center gap-2">
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
           </svg>
@@ -712,437 +761,465 @@ export function Vacation() {
         </div>
       )}
 
-      <Card className="section-card">
-        <div className="p-6">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Button variant="outline" size="icon" onClick={handlePrevYear}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <span className="text-lg font-semibold min-w-[60px] text-center">{year}</span>
-            <Button variant="outline" size="icon" onClick={handleNextYear}>
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <div className="flex items-center gap-2">
-              <Switch id="vacation-my-only" checked={myOnly} onCheckedChange={setMyOnly} />
-              <label htmlFor="vacation-my-only" className="text-sm font-medium cursor-pointer select-none">
-                Мои отпуска
-              </label>
+      <div className="flex flex-wrap gap-1.5 border-b border-border pb-3">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => handleTabClick(tab.id)}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
+              activeTab === tab.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+          >
+            {tab.label}
+            {typeof tab.badge === 'number' && tab.badge > 0 && (
+              <span className={cn(
+                'inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[11px] font-semibold',
+                activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary'
+              )}>
+                {tab.badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'mine' && (
+        <div className="space-y-6">
+          {balance && (
+            <Card>
+              <div className="p-5">
+                <h2 className="text-base font-semibold mb-4">Баланс отпускных дней</h2>
+                <div className="grid grid-cols-1 divide-y divide-border rounded-lg border border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                  <div className="p-4 text-center">
+                    <div className="text-3xl font-bold">{balance.totalDays}</div>
+                    <div className="text-sm text-muted-foreground mt-1">Всего накоплено</div>
+                  </div>
+                  <div className="p-4 text-center">
+                    <div className="text-3xl font-bold">{balance.usedDays}</div>
+                    <div className="text-sm text-muted-foreground mt-1">Использовано</div>
+                  </div>
+                  <div className="p-4 text-center">
+                    <div className="text-3xl font-bold text-primary">{balance.availableDays}</div>
+                    <div className="text-sm text-muted-foreground mt-1">Доступно к запросу</div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+                    <span>Использовано {balance.usedDays} из {balance.totalDays}</span>
+                    <span>{balance.availableDays} дн. осталось</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{ width: `${balance.totalDays > 0 ? Math.min(100, (balance.usedDays / balance.totalDays) * 100) : 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-start gap-2 rounded-lg bg-primary/5 px-4 py-3 text-sm">
+                  <Info className="h-4 w-4 shrink-0 text-primary mt-0.5" />
+                  {balance.travelAvailable ? (
+                    <span>Проезд доступен{balance.travelAvailableUntil ? ` до ${new Date(balance.travelAvailableUntil).toLocaleDateString('ru-RU')}` : ''}</span>
+                  ) : balance.travelNextAvailableDate ? (
+                    <span>Проезд недоступен до {new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU')}</span>
+                  ) : (
+                    <span>Неиспользованные дни отпуска переносятся на следующий год согласно графику отпусков.</span>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {calendarSection}
+
+          <VacationLegend departmentId={user?.departmentId || ''} year={year} currentUserId={user?.id} />
+
+          <Card>
+            <div
+              className="p-5 cursor-pointer flex items-center justify-between gap-4"
+              onClick={() => setMyRequestsExpanded(!myRequestsExpanded)}
+            >
+              <h2 className="text-base font-semibold">Мои заявки</h2>
+              <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform duration-200', myRequestsExpanded && 'rotate-180')} />
             </div>
-            {!myOnly && (
-              <>
-            <select
-              value={reqFilters.departmentId}
-              onChange={(e) => {
-                deptTouched.current = true
-                setReqFilters((f) => ({ ...f, departmentId: e.target.value }))
-              }}
-              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            <div
+              className="grid transition-[grid-template-rows] duration-300 ease-out"
+              style={{ gridTemplateRows: myRequestsExpanded ? '1fr' : '0fr' }}
             >
-              <option value="">Все отделы</option>
-              {departments.map((d) => (
-                <option key={d.id} value={String(d.id)}>{d.name}</option>
-              ))}
-            </select>
-            <select
-              value={reqFilters.status}
-              onChange={(e) => setReqFilters((f) => ({ ...f, status: e.target.value }))}
-              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Все статусы</option>
-              {REQUEST_STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            <select
-              value={reqFilters.vacationType}
-              onChange={(e) => setReqFilters((f) => ({ ...f, vacationType: e.target.value }))}
-              className="border border-input bg-background rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Все типы</option>
-              {Object.entries(VACATION_TYPES).map(([code, info]) => (
-                <option key={code} value={code}>{info.name}</option>
-              ))}
-            </select>
-            <div className="relative flex-1 min-w-[180px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск по ФИО"
-                className="w-full border border-input bg-background rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              <div className="min-h-0 overflow-hidden">
+                <div className="px-5 pb-5">
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
+                  ) : myRequests.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">Нет активных заявок</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {myRequests.map((request) => {
+                        const isExpanded = expandedRequestId === request.id
+                        const isAddingComment = addingComment === request.id
+                        const StatusIcon = request.status === VacationRequestStatus.APPROVED
+                          ? CheckCircle2
+                          : request.status === VacationRequestStatus.REJECTED
+                            ? XCircle
+                            : Clock
+                        const statusColor = request.status === VacationRequestStatus.APPROVED
+                          ? 'text-emerald-600 bg-emerald-500/15'
+                          : request.status === VacationRequestStatus.REJECTED
+                            ? 'text-red-600 bg-red-500/15'
+                            : 'text-amber-600 bg-amber-500/15'
+                        const reviewerName = getReviewerName(request)
+
+                        return (
+                          <div key={request.id} className="rounded-lg border border-border overflow-hidden transition-colors">
+                            <div
+                              className="p-4 cursor-pointer flex items-center justify-between gap-4 hover:bg-muted/40"
+                              onClick={() => {
+                                setExpandedRequestId(isExpanded ? null : request.id)
+                                if (isAddingComment) {
+                                  setAddingComment(null)
+                                }
+                              }}
+                            >
+                              <div className="flex items-center gap-4 flex-1 min-w-0">
+                                <div className={cn('p-2 rounded-lg shrink-0', statusColor)}>
+                                  <StatusIcon className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-semibold text-foreground/90 truncate">
+                                    {VACATION_TYPES[request.vacationType]?.name ?? 'Отпуск'}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
+                                    {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3 shrink-0">
+                                  {request.status === VacationRequestStatus.ON_APPROVAL && (
+                                    <Badge variant="warning">На согласовании</Badge>
+                                  )}
+                                  {request.status === VacationRequestStatus.APPROVED && (
+                                    <Badge variant="success">Согласовано</Badge>
+                                  )}
+                                  {request.status === VacationRequestStatus.REJECTED && (
+                                    <Badge variant="destructive">Отклонено</Badge>
+                                  )}
+                                  <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform duration-200', isExpanded && 'rotate-180')} />
+                                </div>
+                              </div>
+                            </div>
+                            <div
+                              className="grid transition-[grid-template-rows] duration-300 ease-out"
+                              style={{ gridTemplateRows: isExpanded ? '1fr' : '0fr' }}
+                            >
+                              <div className="min-h-0 overflow-hidden">
+                                <div className="p-4 pt-0 border-t border-border mt-2">
+                                  <div className="space-y-3 mt-4">
+                                    <div className="text-sm">
+                                      <span className="text-muted-foreground">Тип: </span>
+                                      {VACATION_TYPES[request.vacationType]?.name ?? 'Отпуск'}
+                                    </div>
+                                    {reviewerName && (
+                                      <div className="text-sm">
+                                        <span className="text-muted-foreground">Согласовал: </span>
+                                        {reviewerName}
+                                      </div>
+                                    )}
+                                    {request.comment && (
+                                      <div className="text-sm">
+                                        <span className="text-muted-foreground">Комментарий: </span>
+                                        {request.comment}
+                                      </div>
+                                    )}
+                                    {request.status === VacationRequestStatus.REJECTED && request.rejectionReason && (
+                                      <div className="text-sm text-red-600">
+                                        <span className="text-muted-foreground">Причина отказа: </span>
+                                        {request.rejectionReason}
+                                      </div>
+                                    )}
+                                    {request.hasTravel && (
+                                      <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                                        <div className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                                          ✈️ Проезд{request.travelDestination && ` → ${request.travelDestination}`}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {useModulesStore.getState().isModuleEnabled('substitution') && request.substitutes && request.substitutes.length > 0 && (
+                                      <div className="flex items-start gap-2">
+                                        <UserCheck className="w-4 h-4 text-muted-foreground mt-0.5" />
+                                        <div>
+                                          <div className="text-xs text-muted-foreground mb-1">Замещающие</div>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {request.substitutes.map((s) => (
+                                              <span key={s.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
+                                                {s.last_name} {s.first_name}
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => { e.stopPropagation(); handleRemoveSubstitute(request.id, s.id) }}
+                                                  className="hover:text-destructive"
+                                                >
+                                                  <XCircle className="w-3 h-3" />
+                                                </button>
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {useModulesStore.getState().isModuleEnabled('substitution') && showSubstitutePicker === request.id && (
+                                      <div className="max-h-40 overflow-y-auto border border-input rounded-lg">
+                                        {pickerEmployees.map((e) => (
+                                          <button
+                                            key={e.id}
+                                            type="button"
+                                            onClick={(ev) => { ev.stopPropagation(); handleAddSubstitute(request.id, e.id); setShowSubstitutePicker(null) }}
+                                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted text-sm text-left"
+                                          >
+                                            {e.last_name} {e.first_name}
+                                            {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {request.status !== VacationRequestStatus.REJECTED && (
+                                      <div className="flex flex-wrap gap-3 pt-2">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleAddCommentClick(request.id)
+                                          }}
+                                          disabled={loading}
+                                        >
+                                          Добавить комментарий
+                                        </Button>
+                                        {useModulesStore.getState().isModuleEnabled('substitution') && request.status === VacationRequestStatus.APPROVED && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={(e) => { e.stopPropagation(); handleOpenSubstitutePicker(request.id) }}
+                                            disabled={loading}
+                                          >
+                                            <UserCheck className="w-4 h-4 mr-1" />
+                                            Добавить замещающего
+                                          </Button>
+                                        )}
+                                        <Button
+                                          size="sm"
+                                          variant="destructive"
+                                          onClick={() => handleCancelClick(request.id)}
+                                          disabled={loading}
+                                          className="w-full sm:w-auto"
+                                        >
+                                          Отменить заявку
+                                        </Button>
+                                      </div>
+                                    )}
+                                    {isAddingComment && (
+                                      <div className="pt-3">
+                                        <textarea
+                                          className="w-full rounded-lg border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                          placeholder="Введите комментарий..."
+                                          value={newComment}
+                                          onChange={(e) => setNewComment(e.target.value)}
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        <div className="flex gap-2 mt-2">
+                                          <Button size="sm" onClick={() => handleAddCommentSubmit(request.id)}>
+                                            Сохранить
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => {
+                                              setAddingComment(null)
+                                              setNewComment('')
+                                            }}
+                                          >
+                                            Отмена
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {activeTab === 'team' && (
+        <div className="space-y-6">
+          {isManager && (
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setShowRestrictionModal(true)}>
+                <Users className="w-4 h-4 mr-1.5" />
+                Пересечения
+              </Button>
+            </div>
+          )}
+
+          {calendarSection}
+
+          <Card>
+            <div className="border-b border-border px-5 py-4">
+              <h2 className="text-base font-semibold">Сотрудники отдела</h2>
+            </div>
+            <div className="p-5">
+              <DepartmentBalanceTable
+                departmentId={reqFilters.departmentId || user?.departmentId || ''}
+                year={year}
+                currentUserId={user?.id}
               />
             </div>
-            <Button variant="outline" size="sm" onClick={resetFilters}>
-              <RotateCcw className="w-4 h-4 mr-1.5" />
-              Сбросить
-            </Button>
-              </>
-            )}
-          </div>
-          <YearCalendar
-            year={year}
-            requests={calendarRequests}
-            onDateRangeSelect={vacationBlocked ? () => {} : handleDateRangeSelect}
-            selectedStartDate={selectedStartDate}
-            selectedEndDate={selectedEndDate}
-            currentUserId={user?.id}
-            onTransfer={handleTransferClick}
-          />
-          {showCreateFromCalendar && selectedStartDate && selectedEndDate && (
-            <CreateVacationModal
-              isOpen={showCreateFromCalendar}
-              startDate={selectedStartDate}
-              endDate={selectedEndDate}
-              onClose={handleCloseModal}
-              onSubmit={handleCreateFromModal}
-              loading={loading}
-              balance={balance ?? undefined}
-              userId={user?.id}
-              restrictionWarnings={restrictionWarningsCalendar}
-              onCheckRestrictions={handleCheckRestrictionsCalendar}
-              showSubstitutes={useModulesStore.getState().isModuleEnabled('substitution')}
-            />
-          )}
+          </Card>
         </div>
-      </Card>
+      )}
 
-      {isDepartmentManager && departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL).length > 0 && (
-        <Card className="section-card">
-          <div className="p-6">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <span className="p-2 bg-primary/10 rounded-lg">
-                <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </span>
-              Заявки на согласовании
-            </h2>
+      {activeTab === 'approvals' && isManager && (
+        <Card>
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-5">
+              <h2 className="text-base font-semibold">Заявки на согласовании</h2>
+              {pendingApprovals.length > 0 && (
+                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">
+                  {pendingApprovals.length}
+                </span>
+              )}
+            </div>
             {loading ? (
               <div className="flex items-center justify-center py-8"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
+            ) : pendingApprovals.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <CheckCircle className="h-8 w-8 text-muted-foreground/40" />
+                <p className="mt-3 text-sm text-muted-foreground">Все заявки обработаны</p>
+              </div>
             ) : (
               <div className="space-y-3">
-                {departmentRequests
-                  .filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
-                  .map((request) => (
+                {pendingApprovals.map((request) => {
+                  const isLeaving = leavingApprovalIds.has(request.id)
+                  const isRejecting = rejectingApprovalId === request.id
+                  return (
                     <div
                       key={request.id}
-                      className="border-2 border-amber-500/20 rounded-2xl p-4 bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/40 transition-all duration-300 cursor-pointer"
-                      onClick={() => handleOpenDetailModal(request)}
+                      data-testid="approval-card"
+                      className={cn(
+                        'rounded-lg border border-border p-4 transition-all duration-[250ms] ease-out',
+                        isLeaving ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'
+                      )}
                     >
-                      <div className="flex items-center gap-4">
-                        <Avatar className="w-10 h-10 rounded-xl shrink-0">
-                          <AvatarImage src={request.userAvatar || generateAvatarUrl(request.userId, request.userGender)} alt={`${request.userLastName} ${request.userFirstName}`} />
-                          <AvatarFallback className="rounded-xl bg-primary/10 text-primary font-bold">
-                            {request.userFirstName[0]}{request.userLastName[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="font-bold text-sm">
-                            {request.userLastName} {request.userFirstName}
-                          </div>
-                          <div className="text-xs text-muted-foreground">{request.userPosition}</div>
-                          <div className="text-xs mt-1 text-foreground/70">
-                            {request.vacationType === 'annual_paid'
-                              ? 'Ежегодный оплачиваемый отпуск'
-                              : request.vacationType === 'unpaid'
-                              ? 'Отпуск без сохранения заработной платы'
-                              : request.vacationType === 'educational'
-                              ? 'Учебный отпуск'
-                              : request.vacationType === 'maternity'
-                              ? 'Отпуск по беременности и родам'
-                              : request.vacationType === 'child_care'
-                              ? 'Отпуск по уходу за ребёнком'
-                              : request.vacationType === 'additional'
-                              ? 'Дополнительный отпуск'
-                              : request.vacationType === 'veteran'
-                              ? 'Ветеранский отпуск'
-                              : 'Отпуск'}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
-                            {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
-                          </div>
-                          {request.delegated_to && (
-                            <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-600 dark:text-violet-400 text-xs font-medium">
-                              <UserCheck className="h-3 w-3" />
-                              Делегировано: {request.delegated_to.last_name} {request.delegated_to.first_name}
-                            </div>
-                          )}
-                        </div>
-                        <svg
-                          className="w-5 h-5 text-muted-foreground shrink-0"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                      <div className="flex flex-wrap items-center gap-4">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDetailModal(request)}
+                          className="flex flex-1 min-w-0 items-center gap-4 text-left"
                         >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
+                          <Avatar className="w-10 h-10 rounded-lg shrink-0">
+                            <AvatarImage src={request.userAvatar || generateAvatarUrl(request.userId, request.userGender)} alt={`${request.userLastName} ${request.userFirstName}`} />
+                            <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-semibold">
+                              {request.userFirstName[0]}{request.userLastName[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-sm">{request.userLastName} {request.userFirstName}</span>
+                              <Badge variant="warning">На согласовании</Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground">{request.userPosition}</div>
+                            <div className="text-xs mt-1 text-foreground/70">
+                              {VACATION_TYPES[request.vacationType]?.name ?? 'Отпуск'}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                              {new Date(request.startDate).toLocaleDateString('ru-RU')} — {new Date(request.endDate).toLocaleDateString('ru-RU')}
+                              <Badge variant="outline">{request.duration} дн.</Badge>
+                            </div>
+                          </div>
+                        </button>
+                        <div className="flex shrink-0 gap-2">
+                          <Button size="sm" onClick={(e) => { e.stopPropagation(); handleApproveCard(request) }}>
+                            Одобрить
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleRejectCardToggle(request.id) }}>
+                            Отклонить
+                          </Button>
+                        </div>
                       </div>
+                      {isRejecting && (
+                        <div className="mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
+                          <textarea
+                            autoFocus
+                            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            placeholder="Причина отклонения..."
+                            value={approvalRejectReason}
+                            onChange={(e) => setApprovalRejectReason(e.target.value)}
+                          />
+                          <div className="flex gap-2 mt-2">
+                            <Button size="sm" variant="destructive" onClick={() => handleRejectCardConfirm(request)} disabled={!approvalRejectReason.trim()}>
+                              Отклонить заявку
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleRejectCardToggle(request.id)}>
+                              Отмена
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                {departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
-                  .length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">Нет заявок на согласовании</div>
-                )}
+                  )
+                })}
               </div>
             )}
           </div>
         </Card>
       )}
 
-      <Card>
-        <div
-          className="p-6 cursor-pointer flex items-center justify-between gap-4"
-          onClick={() => setMyRequestsExpanded(!myRequestsExpanded)}
-        >
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <span className="p-2 bg-primary/10 rounded-lg">
-              <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </span>
-            Мои заявки
-          </h2>
-          <svg
-            className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${myRequestsExpanded ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      {activeTab === 'requests' && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setShowApplicationModal(true)}
+            className="flex items-start gap-4 rounded-lg border border-border bg-card p-5 text-left hover-lift transition-colors hover:border-primary/40"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+            <div className="p-2.5 rounded-lg bg-primary/10 shrink-0">
+              <FileText className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="font-semibold">Заявление на отпуск</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Ежегодный оплачиваемый отпуск</p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowTransferApplicationModal(true)}
+            className="flex items-start gap-4 rounded-lg border border-border bg-card p-5 text-left hover-lift transition-colors hover:border-primary/40"
+          >
+            <div className="p-2.5 rounded-lg bg-primary/10 shrink-0">
+              <FileText className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="font-semibold">Заявление на перенос</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Изменение дат существующего отпуска</p>
+            </div>
+          </button>
         </div>
-        <div
-          className={`overflow-hidden transition-all duration-300 ${myRequestsExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}
-        >
-          <div className="px-6 pb-6">
-            {loading ? (
-              <div className="flex items-center justify-center py-8"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
-            ) : currentUserRequests.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">Нет активных заявок</div>
-            ) : (
-              <div className="space-y-3">
-                {currentUserRequests
-                  .filter((r) =>
-                    r.status === VacationRequestStatus.ON_APPROVAL ||
-                    r.status === VacationRequestStatus.APPROVED
-                  )
-                  .map((request) => {
-                    const isExpanded = expandedRequestId === request.id
-                    const isAddingComment = addingComment === request.id
-                    return (
-                      <div key={request.id} className={`border-2 rounded-2xl overflow-hidden transition-all duration-300 ${
-                        request.status === VacationRequestStatus.APPROVED
-                          ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent'
-                          : 'border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent'
-                      } ${isExpanded ? 'shadow-lg hover:shadow-xl' : 'hover:shadow-md'}`}>
-                        <div
-                          className="p-4 cursor-pointer flex items-center justify-between gap-4"
-                          onClick={() => {
-                            setExpandedRequestId(isExpanded ? null : request.id)
-                            if (isAddingComment) {
-                              setAddingComment(null)
-                            }
-                          }}
-                        >
-                          <div className="flex items-center gap-4 flex-1">
-                            <div className={`p-2 rounded-xl ${request.status === VacationRequestStatus.APPROVED ? 'bg-emerald-500/15' : 'bg-amber-500/15'}`}>
-                              <svg className={`w-5 h-5 ${request.status === VacationRequestStatus.APPROVED ? 'text-emerald-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                {request.status === VacationRequestStatus.APPROVED ? (
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                ) : (
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                )}
-                              </svg>
-                            </div>
-                            <div className="flex-1">
-                              <div className="text-sm font-semibold text-foreground/80">
-                                {request.vacationType === 'annual_paid'
-                                  ? 'Ежегодный оплачиваемый отпуск'
-                                  : request.vacationType === 'unpaid'
-                                  ? 'Отпуск без сохранения заработной платы'
-                                  : request.vacationType === 'educational'
-                                  ? 'Учебный отпуск'
-                                  : request.vacationType === 'maternity'
-                                  ? 'Отпуск по беременности и родам'
-                                  : request.vacationType === 'child_care'
-                                  ? 'Отпуск по уходу за ребёнком'
-                                  : request.vacationType === 'additional'
-                                  ? 'Дополнительный отпуск'
-                                  : request.vacationType === 'veteran'
-                                  ? 'Ветеранский отпуск'
-                                  : 'Отпуск'}
-                              </div>
-                              <div className="text-xs text-muted-foreground mt-1">
-                                {new Date(request.startDate).toLocaleDateString('ru-RU')} -{' '}
-                                {new Date(request.endDate).toLocaleDateString('ru-RU')} ({request.duration} дней)
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {request.status === VacationRequestStatus.ON_APPROVAL && (
-                                <Badge variant="warning">На согласовании</Badge>
-                              )}
-                              {request.status === VacationRequestStatus.APPROVED && (
-                                <Badge variant="success">Согласовано</Badge>
-                              )}
-                              <svg
-                                className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </div>
-                          </div>
-                        </div>
-                        <div
-                          className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}
-                        >
-                          <div className="p-4 pt-0 border-t border-border/50 mt-2">
-                            <div className="space-y-3 mt-4">
-                              {request.comment && (
-                                <div className="flex items-start gap-2">
-                                  <svg className="w-4 h-4 text-muted-foreground mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                                  </svg>
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">Комментарий</div>
-                                    <div className="text-sm">{request.comment}</div>
-                                  </div>
-                                </div>
-                              )}
-                              {request.hasTravel && (
-                                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-blue-500/15 to-sky-500/15 border border-blue-500/20">
-                                  <svg className="w-5 h-5 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12l4-4m-4 4l4 4m10-4l-4-4m4 4l-4 4" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v4m0 10v4" />
-                                  </svg>
-                                  <div className="text-sm font-medium text-blue-700 dark:text-blue-400">
-                                    ✈️ Проезд{request.travelDestination && ` → ${request.travelDestination}`}
-                                  </div>
-                                </div>
-                              )}
-                              {useModulesStore.getState().isModuleEnabled('substitution') && request.substitutes && request.substitutes.length > 0 && (
-                                <div className="flex items-start gap-2">
-                                  <UserCheck className="w-4 h-4 text-muted-foreground mt-0.5" />
-                                  <div>
-                                    <div className="text-xs text-muted-foreground mb-1">Замещающие</div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {request.substitutes.map((s) => (
-                                        <span key={s.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
-                                          {s.last_name} {s.first_name}
-                                          <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); handleRemoveSubstitute(request.id, s.id) }}
-                                            className="hover:text-destructive"
-                                          >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                          </button>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                              {useModulesStore.getState().isModuleEnabled('substitution') && showSubstitutePicker === request.id && (
-                                <div className="max-h-40 overflow-y-auto border border-input rounded-lg">
-                                  {pickerEmployees.map((e) => (
-                                    <button
-                                      key={e.id}
-                                      type="button"
-                                      onClick={(ev) => { ev.stopPropagation(); handleAddSubstitute(request.id, e.id); setShowSubstitutePicker(null) }}
-                                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted text-sm text-left"
-                                    >
-                                      {e.last_name} {e.first_name}
-                                      {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                              <div className="flex flex-wrap gap-3 pt-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleAddCommentClick(request.id)
-                                  }}
-                                  disabled={loading}
-                                >
-                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                  </svg>
-                                  Добавить комментарий
-                                </Button>
-                                {useModulesStore.getState().isModuleEnabled('substitution') && request.status === VacationRequestStatus.APPROVED && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={(e) => { e.stopPropagation(); handleOpenSubstitutePicker(request.id) }}
-                                    disabled={loading}
-                                  >
-                                    <UserCheck className="w-4 h-4 mr-1" />
-                                    Добавить замещающего
-                                  </Button>
-                                )}
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => handleCancelClick(request.id)}
-                                  disabled={loading}
-                                  className="w-full sm:w-auto"
-                                >
-                                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                  Отменить заявку
-                                </Button>
-                              </div>
-                              {isAddingComment && (
-                                <div className="pt-3">
-                                  <textarea
-                                    className="w-full rounded-xl border-2 border-input bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    placeholder="Введите комментарий..."
-                                    value={newComment}
-                                    onChange={(e) => setNewComment(e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                  <div className="flex gap-2 mt-2">
-                                    <Button size="sm" onClick={() => handleAddCommentSubmit(request.id)}>
-                                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                      </svg>
-                                      Сохранить
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        setAddingComment(null)
-                                        setNewComment('')
-                                      }}
-                                    >
-                                      Отмена
-                                    </Button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-              </div>
-            )}
-          </div>
-        </div>
-      </Card>
+      )}
+
+      {activeTab === 'history' && (
+        <Card className="overflow-hidden">
+          <VacationHistoryList requests={isManager ? departmentRequests : currentUserRequests} />
+        </Card>
+      )}
 
       {showDetailModal && (
         <VacationDetailModal
@@ -1154,28 +1231,6 @@ export function Vacation() {
           loading={loading}
           intersectionWarnings={intersectionWarnings}
           onTransfer={detailRequest && user?.id === detailRequest?.userId && detailRequest?.status === VacationRequestStatus.APPROVED ? handleTransferClick : undefined}
-        />
-      )}
-
-      {showCreateForm && (
-        <CreateVacationFormModal
-          isOpen={showCreateForm}
-          onClose={() => setShowCreateForm(false)}
-          onSubmit={handleCreateFromForm}
-          loading={loading}
-          balance={balance ?? undefined}
-          restrictionWarnings={restrictionWarnings}
-          userId={user?.id}
-          onCheckRestrictions={handleCheckRestrictions}
-          showSubstitutes={useModulesStore.getState().isModuleEnabled('substitution')}
-        />
-      )}
-
-      {showHistoryModal && (
-        <VacationHistoryModal
-          isOpen={showHistoryModal}
-          requests={isManager ? departmentRequests : currentUserRequests}
-          onClose={() => setShowHistoryModal(false)}
         />
       )}
 

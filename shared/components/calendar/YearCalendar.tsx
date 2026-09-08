@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isWithinInterval } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -14,6 +14,9 @@ interface YearCalendarProps {
   selectedEndDate?: string | null
   currentUserId?: string
   onTransfer?: (request: VacationRequest) => void
+  searchQuery?: string
+  showHeader?: boolean
+  showLegend?: boolean
 }
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -45,7 +48,7 @@ const COLOR_MAP: Record<string, string> = {
   'bg-red-500': '#ef4444',
 }
 
-function getUserColor(userId: string): string {
+export function getUserColor(userId: string): string {
   let hash = 0
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash)
@@ -53,9 +56,20 @@ function getUserColor(userId: string): string {
   return COLORS[Math.abs(hash) % COLORS.length]
 }
 
-export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartDate, selectedEndDate, currentUserId, onTransfer }: YearCalendarProps) {
+export function YearCalendar({
+  year,
+  requests,
+  onDateRangeSelect,
+  selectedStartDate,
+  selectedEndDate,
+  currentUserId,
+  onTransfer,
+  searchQuery,
+  showHeader = true,
+  showLegend = true,
+}: YearCalendarProps) {
   const [hoverDate, setHoverDate] = useState<string | null>(null)
-  const [showLegend, setShowLegend] = useState(true)
+  const [showLegendExpanded, setShowLegendExpanded] = useState(true)
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
@@ -70,6 +84,8 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
     [requests]
   )
 
+  const normalizedSearch = searchQuery?.trim().toLowerCase() || ''
+
   const months = useMemo(() => {
     const months = []
     for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
@@ -77,10 +93,10 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
       const monthStart = startOfMonth(date)
       const monthEnd = endOfMonth(date)
       const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
-      
+
       const firstDayOfWeek = getDay(monthStart)
       const offset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
-      
+
       months.push({
         index: monthIndex,
         name: MONTHS[monthIndex],
@@ -105,10 +121,10 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
     if (!selectedStartDate) return false
     const start = new Date(selectedStartDate)
     const end = selectedEndDate ? new Date(selectedEndDate) : null
-    
+
     if (end) {
-      return isWithinInterval(date, { start, end }) || 
-             isSameDay(date, start) || 
+      return isWithinInterval(date, { start, end }) ||
+             isSameDay(date, start) ||
              isSameDay(date, end)
     }
     return isSameDay(date, start)
@@ -120,19 +136,19 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
     const end = new Date(hoverDate)
     const sortedStart = start < end ? start : end
     const sortedEnd = start < end ? end : start
-    
+
     return isWithinInterval(date, { start: sortedStart, end: sortedEnd })
   }
 
   const handleDateClick = (date: Date) => {
     const clickedDate = format(date, 'yyyy-MM-dd')
-    
+
     if (!selectedStartDate) {
       onDateRangeSelect?.(clickedDate, null)
     } else if (!selectedEndDate) {
       const start = new Date(selectedStartDate)
       const clicked = new Date(clickedDate)
-      
+
       if (clicked < start) {
         onDateRangeSelect?.(clickedDate, null)
       } else {
@@ -185,37 +201,41 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-semibold">Календарь отпусков {year}</h2>
-          {hasSelection && (
-            <button
-              onClick={clearSelection}
-              className="text-sm text-muted-foreground hover:text-foreground underline"
-            >
-              Очистить выбор
-            </button>
-          )}
-        </div>
-        {(selectedStartDate || selectedEndDate) && (
-          <div className="text-sm">
-            {selectedStartDate && !selectedEndDate && (
-              <span className="text-blue-600">
-                Выбрана дата: {format(new Date(selectedStartDate), 'dd.MM.yyyy', { locale: ru })}
-              </span>
-            )}
-            {selectedStartDate && selectedEndDate && (
-              <span className="text-green-600">
-                Период: {format(new Date(selectedStartDate), 'dd.MM.yyyy', { locale: ru })} - {format(new Date(selectedEndDate), 'dd.MM.yyyy', { locale: ru })}
-              </span>
+      {showHeader && (
+        <>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-4">
+              <h2 className="text-xl font-semibold">Календарь отпусков {year}</h2>
+              {hasSelection && (
+                <button
+                  onClick={clearSelection}
+                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                >
+                  Очистить выбор
+                </button>
+              )}
+            </div>
+            {(selectedStartDate || selectedEndDate) && (
+              <div className="text-sm">
+                {selectedStartDate && !selectedEndDate && (
+                  <span className="text-blue-600">
+                    Выбрана дата: {format(new Date(selectedStartDate), 'dd.MM.yyyy', { locale: ru })}
+                  </span>
+                )}
+                {selectedStartDate && selectedEndDate && (
+                  <span className="text-green-600">
+                    Период: {format(new Date(selectedStartDate), 'dd.MM.yyyy', { locale: ru })} - {format(new Date(selectedEndDate), 'dd.MM.yyyy', { locale: ru })}
+                  </span>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
 
-      <div className="text-sm text-muted-foreground">
-        💡 <strong>Подсказка:</strong> Дни с заявками на отпуск заштрихованы. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки.
-      </div>
+          <div className="text-sm text-muted-foreground">
+            💡 <strong>Подсказка:</strong> Дни с заявками на отпуск заштрихованы. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки.
+          </div>
+        </>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {months.map(month => (
@@ -223,18 +243,18 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
             <div className="text-center font-semibold mb-2 text-sm">
               {month.name}
             </div>
-            
+
             <div className="grid grid-cols-7 gap-1 text-xs">
               {WEEKDAYS.map(day => (
                 <div key={day} className="text-center text-muted-foreground font-medium p-1">
                   {day}
                 </div>
               ))}
-              
+
               {Array.from({ length: month.offset }).map((_, i) => (
                 <div key={`empty-${i}`} className="p-1" />
               ))}
-              
+
               {month.days.map(day => {
                 const vacations = getVacationsForDay(day)
                 const isSelected = isDateInSelection(day)
@@ -244,6 +264,12 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                 const hasVacation = vacations.length > 0
                 const visibleVacations = vacations.slice(0, 3)
                 const remainingCount = vacations.length > 3 ? vacations.length - 3 : 0
+                const isMineDay = !!currentUserId && vacations.some(v => v.userId === currentUserId)
+                const matchesSearch = !normalizedSearch || vacations.some(v =>
+                  `${v.userLastName} ${v.userFirstName} ${v.userMiddleName ?? ''}`.toLowerCase().includes(normalizedSearch)
+                )
+                const isDimmed = hasVacation && !isSelected && !matchesSearch
+                const isHoveringCell = hoverDate === dateStr
 
                 const bgLayers: string[] = []
                 if (hasVacation && !isSelected) {
@@ -273,7 +299,7 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                     onMouseEnter={() => setHoverDate(dateStr)}
                     onMouseLeave={() => setHoverDate(null)}
                     className={cn(
-                      'relative p-1 text-center cursor-pointer rounded transition-all',
+                      'relative h-[30px] flex flex-col items-center justify-center text-center cursor-pointer rounded transition-all',
                       isSelected
                         ? 'bg-blue-500 text-white hover:bg-blue-600'
                         : isHovered
@@ -282,13 +308,11 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                             ? 'bg-muted text-muted-foreground font-medium'
                             : hasVacation
                               ? 'font-semibold hover:bg-muted/30'
-                              : 'hover:bg-muted/50'
+                              : 'hover:bg-muted/50',
+                      isMineDay && !isSelected && 'ring-2 ring-primary font-bold',
+                      isDimmed && 'opacity-30'
                     )}
                     style={bgLayers.length > 0 ? { backgroundImage: bgLayers.join(', ') } : undefined}
-                    title={vacations.map(v => {
-                      const statusText = v.status === 'approved' ? '(одобрено)' : v.status === 'on_approval' ? '(на согласовании)' : `(${v.status})`
-                      return `${v.userLastName} ${v.userFirstName} ${statusText}`
-                    }).join(', ')}
                   >
                     <div className="relative">
                       <div className="text-xs relative z-10">{format(day, 'd')}</div>
@@ -311,6 +335,31 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
                         </div>
                       )}
                     </div>
+                    {hasVacation && isHoveringCell && (
+                      <div
+                        className="absolute left-1/2 top-full z-50 mt-1 w-48 -translate-x-1/2 rounded-lg border border-border bg-popover p-2 text-left shadow-lg"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="text-[11px] font-medium text-popover-foreground">
+                          {format(day, 'd MMMM yyyy', { locale: ru })}
+                        </div>
+                        <div className="mt-1 space-y-1">
+                          {vacations.map(v => (
+                            <div key={v.id} className="flex items-center justify-between gap-2 text-[11px]">
+                              <span className="truncate text-popover-foreground">{v.userLastName} {v.userFirstName}</span>
+                              <span className={cn(
+                                'shrink-0 rounded px-1 py-0.5 text-[10px] font-medium',
+                                v.status === VacationRequestStatus.APPROVED
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                              )}>
+                                {v.status === VacationRequestStatus.APPROVED ? 'Согласовано' : 'На согласовании'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -319,18 +368,18 @@ export function YearCalendar({ year, requests, onDateRangeSelect, selectedStartD
         ))}
       </div>
 
-       {visibleRequests.length > 0 && (
+       {showLegend && visibleRequests.length > 0 && (
           <div className="border rounded-lg p-4 bg-card">
             <button
               type="button"
-              onClick={() => setShowLegend((v) => !v)}
+              onClick={() => setShowLegendExpanded((v) => !v)}
               className="w-full flex items-center justify-between gap-2 font-semibold hover:bg-muted rounded transition-colors -mx-1 px-1"
             >
               Легенда
-              {showLegend ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+              {showLegendExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
             </button>
 
-            {showLegend && (
+            {showLegendExpanded && (
               <>
               <div className="mt-3 mb-3 grid grid-cols-3 gap-2 text-sm">
                <div className="flex items-center gap-2">

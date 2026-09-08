@@ -84,21 +84,20 @@ test.describe('Модуль Отпуск', () => {
       })
 
       test('открытие истории → список заявок', async ({ page }) => {
-        await page.getByRole('button', { name: /История/ }).click()
-        await expect(page.getByRole('heading', { name: 'История отпусков' })).toBeVisible({ timeout: 5000 })
-        await expect(page.getByText(/Всего заявок:/)).toBeVisible()
+        await page.getByRole('button', { name: 'История', exact: true }).click()
+        await expect(page.getByText(/Всего заявок:/)).toBeVisible({ timeout: 5000 })
       })
 
       test('фильтр по статусу', async ({ page }) => {
-        await page.getByRole('button', { name: /История/ }).click()
-        await expect(page.getByRole('heading', { name: 'История отпусков' })).toBeVisible({ timeout: 5000 })
+        await page.getByRole('button', { name: 'История', exact: true }).click()
+        await expect(page.getByText(/Всего заявок:/)).toBeVisible({ timeout: 5000 })
         await page.locator('select').nth(1).selectOption('approved')
         await expect(page.getByText(/Найдено:/)).toBeVisible()
       })
 
       test('фильтр по году + сброс', async ({ page }) => {
-        await page.getByRole('button', { name: /История/ }).click()
-        await expect(page.getByRole('heading', { name: 'История отпусков' })).toBeVisible({ timeout: 5000 })
+        await page.getByRole('button', { name: 'История', exact: true }).click()
+        await expect(page.getByText(/Всего заявок:/)).toBeVisible({ timeout: 5000 })
         await page.locator('select').first().selectOption({ index: 1 })
         await expect(page.getByRole('button', { name: /Сбросить/ })).toBeVisible()
         await page.getByRole('button', { name: /Сбросить/ }).click()
@@ -110,17 +109,18 @@ test.describe('Модуль Отпуск', () => {
       test.beforeEach(async ({ page }) => {
         await loginAs(page, 'employee')
         await page.goto('/vacation')
+        await page.getByRole('button', { name: 'Заявления', exact: true }).click()
       })
 
       test('открытие формы заявления', async ({ page }) => {
-        await page.getByRole('button', { name: /Заявление/ }).click()
+        await page.getByRole('button', { name: /Заявление на отпуск/ }).click()
         await expect(page.getByRole('heading', { name: 'Заявление на отпуск' })).toBeVisible({ timeout: 5000 })
         await expect(page.locator('label').filter({ hasText: /^Год$/ })).toBeVisible()
         await expect(page.locator('label').filter({ hasText: /Шаблон документа/ })).toBeVisible()
       })
 
       test('закрытие формы', async ({ page }) => {
-        await page.getByRole('button', { name: /Заявление/ }).click()
+        await page.getByRole('button', { name: /Заявление на отпуск/ }).click()
         await expect(page.getByRole('heading', { name: 'Заявление на отпуск' })).toBeVisible({ timeout: 5000 })
         await page.getByRole('button', { name: 'Отмена' }).click()
         await expect(page.getByRole('heading', { name: 'Заявление на отпуск' })).toHaveCount(0)
@@ -131,10 +131,11 @@ test.describe('Модуль Отпуск', () => {
       test.beforeEach(async ({ page }) => {
         await loginAs(page, 'employee')
         await page.goto('/vacation')
+        await page.getByRole('button', { name: 'Заявления', exact: true }).click()
       })
 
       test('открытие формы переноса', async ({ page }) => {
-        await page.getByRole('button', { name: /Перенос/ }).click()
+        await page.getByRole('button', { name: /Заявление на перенос/ }).click()
         await expect(page.getByRole('heading', { name: 'Заявление о переносе отпуска' })).toBeVisible({ timeout: 5000 })
       })
     })
@@ -147,6 +148,7 @@ test.describe('Модуль Отпуск', () => {
         await loginAs(page, 'manager')
         await page.goto('/vacation')
         await expect(page.getByRole('heading', { name: 'Отпуск', exact: true })).toBeVisible()
+        await page.getByRole('button', { name: 'Команда', exact: true }).click()
       })
 
       test('открытие модалки пересечений', async ({ page }) => {
@@ -181,13 +183,13 @@ test.describe('Модуль Отпуск', () => {
 
       test('календарь отдела', async ({ page }) => {
         await expect(page.getByRole('heading', { name: /Календарь отпусков/ })).toBeVisible()
-        await page.getByText('Легенда').scrollIntoViewIfNeeded()
-        await expect(page.getByText('Легенда')).toBeVisible({ timeout: 5000 })
+        await page.getByText('Сотрудники отдела').scrollIntoViewIfNeeded()
+        await expect(page.getByText('Сотрудники отдела')).toBeVisible({ timeout: 5000 })
       })
 
       test('переключение Отдел / Мои отпуска', async ({ page }) => {
-        const deptBtn = page.locator('main').getByRole('button', { name: 'Отдел' })
-        const myBtn = page.locator('main').getByRole('button', { name: 'Мои отпуска' })
+        const deptBtn = page.getByRole('button', { name: 'Вся команда' })
+        const myBtn = page.getByRole('button', { name: 'Мои отпуска', exact: true }).last()
 
         await deptBtn.click()
         await myBtn.click()
@@ -195,10 +197,10 @@ test.describe('Модуль Отпуск', () => {
       })
 
       test('навигация по годам', async ({ page }) => {
-        const heading = page.getByRole('heading', { name: /Календарь отпусков/ })
-        const before = await heading.textContent()
-        await page.getByText(before!.match(/\d+/)![0]).locator('..').locator('button').first().click()
-        const after = await heading.textContent()
+        const yearLabel = page.getByText(/^\d{4}$/).first()
+        const before = await yearLabel.textContent()
+        await yearLabel.locator('..').locator('button').first().click()
+        const after = await yearLabel.textContent()
         expect(before).not.toEqual(after)
       })
     })
@@ -209,6 +211,7 @@ test.describe('Модуль Отпуск', () => {
         await page.goto('/vacation')
         await expect(page.getByRole('heading', { name: 'Отпуск', exact: true })).toBeVisible()
         await page.waitForLoadState('networkidle')
+        await page.getByRole('button', { name: /Согласование/ }).click()
       })
 
       test('секция «Заявки на согласовании» видна', async ({ page }) => {
@@ -220,24 +223,22 @@ test.describe('Модуль Отпуск', () => {
       })
 
       test('клик по заявке отдела → детали', async ({ page }) => {
-        const section = page.getByRole('heading', { name: 'Заявки на согласовании' })
-        if (!(await section.isVisible({ timeout: 10000 }).catch(() => false))) {
+        const card = page.getByTestId('approval-card').first()
+        if (!(await card.isVisible({ timeout: 10000 }).catch(() => false))) {
           test.skip()
           return
         }
-        const card = section.locator('..').locator('.cursor-pointer').first()
-        await card.click()
+        await card.getByRole('button').first().click()
         await expect(page.getByRole('heading', { name: 'Детали отпуска' })).toBeVisible({ timeout: 5000 })
       })
 
       test('в деталях — ФИО, период, тип', async ({ page }) => {
-        const section = page.getByRole('heading', { name: 'Заявки на согласовании' })
-        if (!(await section.isVisible({ timeout: 10000 }).catch(() => false))) {
+        const card = page.getByTestId('approval-card').first()
+        if (!(await card.isVisible({ timeout: 10000 }).catch(() => false))) {
           test.skip()
           return
         }
-        const card = section.locator('..').locator('.cursor-pointer').first()
-        await card.click()
+        await card.getByRole('button').first().click()
         await expect(page.getByRole('heading', { name: 'Детали отпуска' })).toBeVisible({ timeout: 5000 })
         await expect(page.getByText('Сотрудник', { exact: true })).toBeVisible()
         await expect(page.getByText('Период отпуска')).toBeVisible()
@@ -245,37 +246,37 @@ test.describe('Модуль Отпуск', () => {
       })
 
       test('в деталях — кнопки согласовать/отклонить', async ({ page }) => {
-        const section = page.getByRole('heading', { name: 'Заявки на согласовании' })
-        if (!(await section.isVisible({ timeout: 10000 }).catch(() => false))) {
+        const card = page.getByTestId('approval-card').first()
+        if (!(await card.isVisible({ timeout: 10000 }).catch(() => false))) {
           test.skip()
           return
         }
-        const card = section.locator('..').locator('.cursor-pointer').first()
-        await card.click()
+        await card.getByRole('button').first().click()
+        const modal = page.getByTestId('vacation-detail-modal')
         await expect(page.getByRole('heading', { name: 'Детали отпуска' })).toBeVisible({ timeout: 5000 })
-        await expect(page.getByRole('button', { name: 'Согласовать' })).toBeVisible()
-        await expect(page.getByRole('button', { name: 'Отклонить' })).toBeVisible()
+        await expect(modal.getByRole('button', { name: 'Согласовать' })).toBeVisible()
+        await expect(modal.getByRole('button', { name: 'Отклонить' })).toBeVisible()
       })
 
       test('отклонение — ввод причины и отмена', async ({ page }) => {
-        const section = page.getByRole('heading', { name: 'Заявки на согласовании' })
-        if (!(await section.isVisible({ timeout: 10000 }).catch(() => false))) {
+        const card = page.getByTestId('approval-card').first()
+        if (!(await card.isVisible({ timeout: 10000 }).catch(() => false))) {
           test.skip()
           return
         }
-        const card = section.locator('..').locator('.cursor-pointer').first()
-        await card.click()
+        await card.getByRole('button').first().click()
+        const modal = page.getByTestId('vacation-detail-modal')
         await expect(page.getByRole('heading', { name: 'Детали отпуска' })).toBeVisible({ timeout: 5000 })
 
-        await page.getByRole('button', { name: 'Отклонить' }).click()
-        await expect(page.getByPlaceholder('Причина отклонения...')).toBeVisible()
-        await expect(page.getByRole('button', { name: 'Подтвердить' })).toBeDisabled()
+        await modal.getByRole('button', { name: 'Отклонить' }).click()
+        await expect(modal.getByPlaceholder('Причина отклонения...')).toBeVisible()
+        await expect(modal.getByRole('button', { name: 'Подтвердить' })).toBeDisabled()
 
-        await page.getByPlaceholder('Причина отклонения...').fill('Не хватает людей в отделе')
-        await expect(page.getByRole('button', { name: 'Подтвердить' })).toBeEnabled()
+        await modal.getByPlaceholder('Причина отклонения...').fill('Не хватает людей в отделе')
+        await expect(modal.getByRole('button', { name: 'Подтвердить' })).toBeEnabled()
 
-        await page.getByRole('button', { name: 'Отмена' }).click()
-        await expect(page.getByText('Согласовать')).toBeVisible()
+        await modal.getByRole('button', { name: 'Отмена' }).click()
+        await expect(modal.getByText('Согласовать')).toBeVisible()
       })
     })
   })
@@ -388,6 +389,7 @@ test.describe('Модуль Отпуск', () => {
         await page.goto('/vacation')
         await expect(page.getByRole('heading', { name: 'Отпуск', exact: true })).toBeVisible()
         await page.waitForLoadState('networkidle')
+        await page.getByRole('button', { name: /Согласование/ }).click()
       })
 
       test('секция «Заявки на согласовании» видна', async ({ page }) => {
@@ -399,13 +401,12 @@ test.describe('Модуль Отпуск', () => {
       })
 
       test('клик по заявке → детали', async ({ page }) => {
-        const section = page.getByRole('heading', { name: 'Заявки на согласовании' })
-        if (!(await section.isVisible({ timeout: 10000 }).catch(() => false))) {
+        const card = page.getByTestId('approval-card').first()
+        if (!(await card.isVisible({ timeout: 10000 }).catch(() => false))) {
           test.skip()
           return
         }
-        const card = section.locator('..').locator('.cursor-pointer').first()
-        await card.click()
+        await card.getByRole('button').first().click()
         await expect(page.getByRole('heading', { name: 'Детали отпуска' })).toBeVisible({ timeout: 5000 })
         await expect(page.getByText('Сотрудник', { exact: true })).toBeVisible()
         await expect(page.getByText('Период отпуска')).toBeVisible()
@@ -413,37 +414,37 @@ test.describe('Модуль Отпуск', () => {
       })
 
       test('в деталях — кнопки согласовать/отклонить', async ({ page }) => {
-        const section = page.getByRole('heading', { name: 'Заявки на согласовании' })
-        if (!(await section.isVisible({ timeout: 10000 }).catch(() => false))) {
+        const card = page.getByTestId('approval-card').first()
+        if (!(await card.isVisible({ timeout: 10000 }).catch(() => false))) {
           test.skip()
           return
         }
-        const card = section.locator('..').locator('.cursor-pointer').first()
-        await card.click()
+        await card.getByRole('button').first().click()
+        const modal = page.getByTestId('vacation-detail-modal')
         await expect(page.getByRole('heading', { name: 'Детали отпуска' })).toBeVisible({ timeout: 5000 })
-        await expect(page.getByRole('button', { name: 'Согласовать' })).toBeVisible()
-        await expect(page.getByRole('button', { name: 'Отклонить' })).toBeVisible()
+        await expect(modal.getByRole('button', { name: 'Согласовать' })).toBeVisible()
+        await expect(modal.getByRole('button', { name: 'Отклонить' })).toBeVisible()
       })
 
       test('отклонение — ввод причины и отмена', async ({ page }) => {
-        const section = page.getByRole('heading', { name: 'Заявки на согласовании' })
-        if (!(await section.isVisible({ timeout: 10000 }).catch(() => false))) {
+        const card = page.getByTestId('approval-card').first()
+        if (!(await card.isVisible({ timeout: 10000 }).catch(() => false))) {
           test.skip()
           return
         }
-        const card = section.locator('..').locator('.cursor-pointer').first()
-        await card.click()
+        await card.getByRole('button').first().click()
+        const modal = page.getByTestId('vacation-detail-modal')
         await expect(page.getByRole('heading', { name: 'Детали отпуска' })).toBeVisible({ timeout: 5000 })
 
-        await page.getByRole('button', { name: 'Отклонить' }).click()
-        await expect(page.getByPlaceholder('Причина отклонения...')).toBeVisible()
-        await expect(page.getByRole('button', { name: 'Подтвердить' })).toBeDisabled()
+        await modal.getByRole('button', { name: 'Отклонить' }).click()
+        await expect(modal.getByPlaceholder('Причина отклонения...')).toBeVisible()
+        await expect(modal.getByRole('button', { name: 'Подтвердить' })).toBeDisabled()
 
-        await page.getByPlaceholder('Причина отклонения...').fill('Не хватает людей в отделе')
-        await expect(page.getByRole('button', { name: 'Подтвердить' })).toBeEnabled()
+        await modal.getByPlaceholder('Причина отклонения...').fill('Не хватает людей в отделе')
+        await expect(modal.getByRole('button', { name: 'Подтвердить' })).toBeEnabled()
 
-        await page.getByRole('button', { name: 'Отмена' }).click()
-        await expect(page.getByText('Согласовать')).toBeVisible()
+        await modal.getByRole('button', { name: 'Отмена' }).click()
+        await expect(modal.getByText('Согласовать')).toBeVisible()
       })
     })
   })

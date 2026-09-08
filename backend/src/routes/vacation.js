@@ -674,6 +674,42 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
   }
 })
 
+router.get('/balances', authenticateToken, async (req, res) => {
+  try {
+    const { departmentId, year } = req.query
+    const targetYear = year ? parseInt(year) : new Date().getFullYear()
+    let deptId = departmentId ? parseInt(departmentId) : req.user.department_id
+
+    if (req.user.role === 'employee' && deptId !== req.user.department_id) {
+      deptId = req.user.department_id
+    }
+
+    if (!deptId) return res.json([])
+
+    const params = [deptId, targetYear]
+    let orgClause = ''
+    if (req.org) {
+      orgClause = ' AND vb.organization_id = $3'
+      params.push(req.org.org_id)
+    }
+
+    const result = await query(
+      `SELECT u.id as user_id, u.first_name, u.last_name, u.avatar, u.gender,
+              COALESCE(vb.total_days, 47) as total_days,
+              COALESCE(vb.used_days, 0) as used_days,
+              COALESCE(vb.available_days, 47) as available_days
+       FROM users u
+       LEFT JOIN vacation_balances vb ON vb.user_id = u.id AND vb.year = $2${orgClause}
+       WHERE u.department_id = $1 AND u.status = 'active'
+       ORDER BY u.last_name, u.first_name`,
+      params
+    )
+    res.json(result.rows)
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch vacation balances' })
+  }
+})
+
 /**
  * @swagger
  * /vacation/requests:
