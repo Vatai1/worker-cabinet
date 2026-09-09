@@ -113,13 +113,10 @@ test.describe('Модуль Опросы и Ассистент', () => {
     test.describe('UC-5: Создание опроса', () => {
       test.beforeEach(async ({ page }) => {
         await loginAs(page, 'admin')
-        await page.goto('/hr')
+        // Вкладка «Опросы» открывается через query-параметр ?tab= на
+        // роуте /hr (вынесена в общий сайдбар).
+        await page.goto('/hr?tab=surveys')
         await page.waitForTimeout(2000)
-        const surveyTab = page.getByRole('button', { name: /^Опросы/i })
-        if (await surveyTab.isVisible({ timeout: 10000 }).catch(() => false)) {
-          await surveyTab.click()
-          await page.waitForTimeout(1000)
-        }
       })
 
       test('видна кнопка «Создать опрос»', async ({ page }) => {

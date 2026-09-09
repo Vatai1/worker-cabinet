@@ -8,6 +8,7 @@ import { useOrgStore } from '@/shared/store/orgStore'
 import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
+import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
 import { YearCalendar } from '@/shared/components/calendar/YearCalendar'
 import { VacationLegend } from '@/shared/components/calendar/VacationLegend'
 import { DepartmentBalanceTable } from '@/modules/vacation/components/DepartmentBalanceTable'
@@ -15,10 +16,10 @@ import { VacationHistoryList } from '@/modules/vacation/components/modals/Vacati
 import { CreateVacationModal } from '@/modules/vacation/components/modals/CreateVacationModal'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
-import { RestrictionModal } from '@/modules/vacation/components/modals/RestrictionModal'
+import { VacationRestrictions } from '@/modules/vacation/components/VacationRestrictions'
 import { VacationTransferModal } from '@/modules/vacation/components/modals/VacationTransferModal'
 import { VacationRequestStatus, VacationType, VACATION_TYPES } from '@/shared/types'
-import type { VacationRequest, VacationBalance, VacationRestriction, VacationValidationError, VacationEmployee } from '@/shared/types'
+import type { VacationRequest, VacationBalance, VacationValidationError, VacationEmployee } from '@/shared/types'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { apiGet } from '@/shared/lib/apiClient'
@@ -29,7 +30,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avat
 import { hasAnyRole } from '@/shared/lib/permissions'
 import {
   ChevronLeft, ChevronRight, ChevronDown, FileText, Clock, CheckCircle2, CheckCircle,
-  UserCheck, Search, RotateCcw, Users, Info, XCircle, PieChart,
+  UserCheck, Search, RotateCcw, XCircle, PieChart,
   Calendar as CalendarIcon, Lightbulb,
 } from 'lucide-react'
 import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
@@ -42,102 +43,8 @@ const REQUEST_STATUS_OPTIONS = [
 
 const EMPTY_REQUEST_FILTERS: { departmentIds: string[]; statuses: string[]; vacationTypes: string[] } = { departmentIds: [], statuses: [], vacationTypes: [] }
 
-type VacationTab = 'mine' | 'team' | 'approvals' | 'requests' | 'history'
+type VacationTab = 'mine' | 'team' | 'approvals' | 'restrictions' | 'requests' | 'history'
 type CalendarScope = 'mine' | 'team'
-
-const selectClass = 'h-9 border border-[#E7E9F2] rounded-[10px] bg-white text-[13px] text-[#191D30] py-2 pl-3 pr-8 focus:outline-none focus:border-[#A5A8F5] focus:shadow-[0_0_0_3px_rgba(79,70,229,.12)]'
-
-const selectArrowStyle: React.CSSProperties = {
-  appearance: 'none',
-  WebkitAppearance: 'none',
-  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A7F94' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'right 12px center',
-  backgroundSize: '10px 6px',
-}
-
-interface MultiSelectOption {
-  value: string
-  label: string
-}
-
-function MultiSelectDropdown({
-  options,
-  selected,
-  onChange,
-  placeholder,
-  countLabel,
-}: {
-  options: MultiSelectOption[]
-  selected: string[]
-  onChange: (values: string[]) => void
-  placeholder: string
-  countLabel: string
-}) {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const toggle = (value: string) => {
-    onChange(selected.includes(value) ? selected.filter((x) => x !== value) : [...selected, value])
-  }
-
-  const label = selected.length === 0
-    ? placeholder
-    : selected.length === 1
-      ? options.find((o) => o.value === selected[0])?.label ?? placeholder
-      : `${countLabel}: ${selected.length}`
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(selectClass, 'flex min-w-[150px] max-w-[200px] items-center text-left')}
-        style={selectArrowStyle}
-      >
-        <span className="truncate">{label}</span>
-      </button>
-      {open && (
-        <div className="absolute z-20 mt-1.5 max-h-64 w-60 overflow-y-auto rounded-[10px] border border-[#E7E9F2] bg-white p-1.5 shadow-[0_10px_26px_-8px_rgba(23,26,43,.25)]">
-          <button
-            type="button"
-            onClick={() => onChange([])}
-            className="mb-1 w-full rounded-[8px] px-2.5 py-1.5 text-left text-[13px] font-medium text-[#4F46E5] hover:bg-[#F1F2F8]"
-          >
-            {placeholder}
-          </button>
-          {options.map((o) => {
-            const checked = selected.includes(o.value)
-            return (
-              <label
-                key={o.value}
-                className="flex cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[13px] text-[#191D30] hover:bg-[#F8F9FC]"
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(o.value)}
-                  className="h-3.5 w-3.5 shrink-0 rounded border-[#E7E9F2] text-[#4F46E5] focus:outline-none focus:ring-2 focus:ring-[#4F46E5]/30"
-                />
-                <span className="truncate">{o.label}</span>
-              </label>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export function Vacation() {
   const user = useAuthStore((state) => state.user)
@@ -170,7 +77,6 @@ export function Vacation() {
   const [newComment, setNewComment] = useState('')
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferRequest, setTransferRequest] = useState<VacationRequest | null>(null)
-  const [showRestrictionModal, setShowRestrictionModal] = useState(false)
   const [showApplicationModal, setShowApplicationModal] = useState(false)
   const [showTransferApplicationModal, setShowTransferApplicationModal] = useState(false)
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<VacationValidationError[]>([])
@@ -508,41 +414,6 @@ export function Vacation() {
     }
   }
 
-  const handleCreateRestriction = async (restriction: Omit<VacationRestriction, 'id' | 'departmentId' | 'createdAt' | 'createdBy' | 'createdByName'>) => {
-    if (!user) return
-    try {
-      await useVacationStore.getState().createRestriction(user.departmentId || '1', restriction)
-      await fetchRestrictions(user.departmentId || '1')
-    } catch (err) {
-    }
-  }
-
-  const handleDeleteRestriction = async (restrictionId: string) => {
-    try {
-      await useVacationStore.getState().deleteRestriction(restrictionId)
-      if (user) {
-        await fetchRestrictions(user.departmentId || '1')
-      }
-    } catch (err) {
-    }
-  }
-
-  const getDepartmentUsers = () => {
-    const uniqueUsers = new Map()
-    departmentRequests.forEach((request) => {
-      const key = `${request.userId}-${request.userLastName}-${request.userFirstName}`
-      if (!uniqueUsers.has(key)) {
-        uniqueUsers.set(key, {
-          id: request.userId,
-          firstName: request.userFirstName,
-          lastName: request.userLastName,
-          position: request.userPosition,
-        })
-      }
-    })
-    return Array.from(uniqueUsers.values())
-  }
-
   const handleCheckRestrictionsCalendar = async (userId: string, data: { startDate: string; endDate: string }) => {
     const warnings = await useVacationStore.getState().checkRestrictions(userId, {
       startDate: data.startDate,
@@ -698,51 +569,49 @@ export function Vacation() {
     { id: 'mine', label: 'Мои отпуска' },
     { id: 'team', label: 'Команда' },
     ...(isManager ? [{ id: 'approvals' as VacationTab, label: 'Согласование', badge: pendingApprovals.length }] : []),
+    ...(isManager ? [{ id: 'restrictions' as VacationTab, label: 'Пересечения' }] : []),
     { id: 'requests', label: 'Заявления' },
     { id: 'history', label: 'История' },
   ]
 
   const calendarSection = (
-    <div
-      className="rounded-2xl border border-[#E7E9F2] bg-white p-[22px]"
-      style={{ boxShadow: '0 1px 2px rgba(23,26,43,.05), 0 8px 24px -12px rgba(23,26,43,.08)' }}
-    >
+    <div className="rounded-2xl border border-border bg-card p-[22px] shadow-sm">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[#EEF0FE] text-[#4F46E5]">
+          <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-primary/10 text-primary">
             <CalendarIcon className="h-[18px] w-[18px]" />
           </div>
-          <h2 className="text-[16.5px] font-bold text-[#191D30]">Календарь отпусков</h2>
+          <h2 className="text-[16.5px] font-bold text-foreground">Календарь отпусков</h2>
         </div>
-        <div className="flex items-center gap-[2px] rounded-[10px] border border-[#E7E9F2] bg-white p-[3px]">
+        <div className="flex items-center gap-[2px] rounded-[10px] border border-border bg-card p-[3px]">
           <button
             type="button"
             onClick={handlePrevYear}
             disabled={year <= minCalendarYear}
-            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#7A7F94] transition-colors hover:bg-[#F1F2F8] disabled:opacity-40 disabled:hover:bg-transparent"
+            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="min-w-[46px] text-center text-[14px] font-bold text-[#191D30]">{year}</span>
+          <span className="min-w-[46px] text-center text-[14px] font-bold text-foreground">{year}</span>
           <button
             type="button"
             onClick={handleNextYear}
             disabled={year >= maxCalendarYear}
-            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#7A7F94] transition-colors hover:bg-[#F1F2F8] disabled:opacity-40 disabled:hover:bg-transparent"
+            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-[10px] rounded-xl border border-[#E7E9F2] bg-[#F8F9FC] p-[13px]">
-        <div className="inline-flex items-center gap-0 rounded-[10px] border border-[#E7E9F2] bg-white p-[3px]">
+      <div className="mb-3 flex flex-wrap items-center gap-[10px] rounded-xl border border-border bg-muted/40 p-[13px]">
+        <div className="inline-flex items-center gap-0 rounded-[10px] border border-border bg-card p-[3px]">
           <button
             type="button"
             onClick={() => setCalendarScope('mine')}
             className={cn(
               'rounded-[8px] px-[14px] py-[7px] text-[13px] font-semibold transition-colors',
-              calendarScope === 'mine' ? 'bg-[#4F46E5] text-white shadow-[0_2px_6px_-1px_rgba(79,70,229,.4)]' : 'text-[#7A7F94]'
+              calendarScope === 'mine' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             Мои отпуска
@@ -752,7 +621,7 @@ export function Vacation() {
             onClick={() => setCalendarScope('team')}
             className={cn(
               'rounded-[8px] px-[14px] py-[7px] text-[13px] font-semibold transition-colors',
-              calendarScope === 'team' ? 'bg-[#4F46E5] text-white shadow-[0_2px_6px_-1px_rgba(79,70,229,.4)]' : 'text-[#7A7F94]'
+              calendarScope === 'team' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             Вся команда
@@ -788,19 +657,19 @@ export function Vacation() {
                 countLabel="Типов"
               />
             )}
-            <div className="flex h-9 items-center gap-2 rounded-[10px] border border-[#E7E9F2] bg-white px-3 transition-shadow focus-within:border-[#A5A8F5] focus-within:shadow-[0_0_0_3px_rgba(79,70,229,.12)]">
-              <Search className="h-[15px] w-[15px] shrink-0 text-[#A6AABD]" />
+            <div className="flex h-9 items-center gap-2 rounded-[10px] border border-border bg-card px-3 transition-shadow focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/15">
+              <Search className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Поиск по ФИО"
-                className="w-[170px] border-0 bg-transparent text-[13px] text-[#191D30] placeholder:text-[#A6AABD] focus:outline-none focus:ring-0"
+                className="w-[170px] border-0 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
               />
             </div>
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[#E7E9F2] bg-white px-[15px] py-[9px] text-[13px] font-semibold text-[#7A7F94] transition-colors hover:border-[#CFD3E4] hover:text-[#565B72]"
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-card px-[15px] py-[9px] text-[13px] font-semibold text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
             >
               <RotateCcw className="h-[14px] w-[14px]" />
               Сбросить
@@ -810,8 +679,8 @@ export function Vacation() {
       </div>
 
       <div className="mx-[2px] mb-[14px] flex items-center gap-2">
-        <Lightbulb className="h-[14px] w-[14px] shrink-0 text-[#D97706]" />
-        <p className="text-[12.5px] text-[#7A7F94]">Наведите курсор на день, чтобы увидеть, кто отдыхает. Полосатые дни — заявления на согласовании</p>
+        <Lightbulb className="h-[14px] w-[14px] shrink-0 text-amber-500 dark:text-amber-400" />
+        <p className="text-[12.5px] text-muted-foreground">Наведите курсор на день, чтобы увидеть, кто отдыхает. Полосатые дни — заявления на согласовании</p>
       </div>
 
       {(selectedStartDate || selectedEndDate) && (
@@ -820,7 +689,7 @@ export function Vacation() {
             <span className="text-primary">Выбрана дата: {new Date(selectedStartDate).toLocaleDateString('ru-RU')}</span>
           )}
           {selectedStartDate && selectedEndDate && (
-            <span className="text-emerald-600">
+            <span className="text-emerald-600 dark:text-emerald-400">
               Период: {new Date(selectedStartDate).toLocaleDateString('ru-RU')} — {new Date(selectedEndDate).toLocaleDateString('ru-RU')}
             </span>
           )}
@@ -918,74 +787,55 @@ export function Vacation() {
       {activeTab === 'mine' && (
         <div className="space-y-6">
           {balance && (
-            <div
-              className="rounded-2xl border border-[#E7E9F2] bg-white p-[22px]"
-              style={{ boxShadow: '0 1px 2px rgba(23,26,43,.05), 0 8px 24px -12px rgba(23,26,43,.08)' }}
-            >
+            <div className="rounded-2xl border border-border bg-card p-[22px] shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[#EEF0FE] text-[#4F46E5]">
+                  <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-primary/10 text-primary">
                     <PieChart className="h-[18px] w-[18px]" />
                   </div>
-                  <h2 className="text-[16.5px] font-bold text-[#191D30]">Баланс отпускных дней</h2>
+                  <h2 className="text-[16.5px] font-bold text-foreground">Баланс отпускных дней</h2>
                 </div>
-                <span className="text-[12.5px] font-semibold text-[#A6AABD]">{year} год</span>
+                <span className="text-[12.5px] font-semibold text-muted-foreground">{year} год</span>
               </div>
 
               <div className="grid grid-cols-3">
                 <div className="px-[26px] text-center">
                   <div className="flex items-baseline justify-center">
-                    <span className="text-[36px] font-extrabold leading-[1.1] tracking-[-0.02em] text-[#191D30]">{balance.totalDays}</span>
-                    <span className="ml-1 text-sm font-semibold text-[#A6AABD]">дн.</span>
+                    <span className="text-[36px] font-extrabold leading-[1.1] tracking-[-0.02em] text-foreground">{balance.totalDays}</span>
+                    <span className="ml-1 text-sm font-semibold text-muted-foreground">дн.</span>
                   </div>
-                  <div className="mt-[3px] text-[13px] font-medium text-[#7A7F94]">Всего накоплено</div>
+                  <div className="mt-[3px] text-[13px] font-medium text-muted-foreground">Всего накоплено</div>
                 </div>
-                <div className="border-l border-[#E7E9F2] px-[26px] text-center">
+                <div className="border-l border-border px-[26px] text-center">
                   <div className="flex items-baseline justify-center">
-                    <span className="text-[36px] font-extrabold leading-[1.1] tracking-[-0.02em] text-[#D97706]">{balance.usedDays}</span>
-                    <span className="ml-1 text-sm font-semibold text-[#A6AABD]">дн.</span>
+                    <span className="text-[36px] font-extrabold leading-[1.1] tracking-[-0.02em] text-amber-600 dark:text-amber-400">{balance.usedDays}</span>
+                    <span className="ml-1 text-sm font-semibold text-muted-foreground">дн.</span>
                   </div>
-                  <div className="mt-[3px] text-[13px] font-medium text-[#7A7F94]">Использовано</div>
+                  <div className="mt-[3px] text-[13px] font-medium text-muted-foreground">Использовано</div>
                 </div>
-                <div className="border-l border-[#E7E9F2] px-[26px] text-center">
+                <div className="border-l border-border px-[26px] text-center">
                   <div className="flex items-baseline justify-center">
-                    <span className="text-[36px] font-extrabold leading-[1.1] tracking-[-0.02em] text-[#0B915F]">{balance.availableDays}</span>
-                    <span className="ml-1 text-sm font-semibold text-[#A6AABD]">дн.</span>
+                    <span className="text-[36px] font-extrabold leading-[1.1] tracking-[-0.02em] text-emerald-600 dark:text-emerald-400">{balance.availableDays}</span>
+                    <span className="ml-1 text-sm font-semibold text-muted-foreground">дн.</span>
                   </div>
-                  <div className="mt-[3px] text-[13px] font-medium text-[#7A7F94]">Доступно к запросу</div>
+                  <div className="mt-[3px] text-[13px] font-medium text-muted-foreground">Доступно к запросу</div>
                 </div>
               </div>
 
               <div className="mt-5">
-                <div className="h-[10px] w-full rounded-full bg-[#EEF0F6]">
+                <div className="h-[10px] w-full rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${balance.totalDays > 0 ? Math.min(100, (balance.usedDays / balance.totalDays) * 100) : 0}%`,
-                      background: 'linear-gradient(90deg, #4F46E5, #8B7CF6)',
-                    }}
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${balance.totalDays > 0 ? Math.min(100, (balance.usedDays / balance.totalDays) * 100) : 0}%` }}
                   />
                 </div>
-                <div className="mt-2 flex items-center justify-between text-[12.5px] text-[#7A7F94]">
+                <div className="mt-2 flex items-center justify-between text-[12.5px] text-muted-foreground">
                   <span>Использовано: {balance.usedDays}</span>
                   <span>Осталось: {balance.availableDays} из {balance.totalDays}</span>
                 </div>
               </div>
 
-              <div className="mt-4 flex items-start gap-2 rounded-xl border border-[#C7EDDA] bg-[#E9F8F1] px-[14px] py-[11px] text-[13px] text-[#0B7A55]">
-                <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                {(() => {
-                  const transferUntil = balance.travelAvailableUntil || balance.travelNextAvailableDate
-                  return transferUntil ? (
-                    <span>
-                      Неиспользованные дни можно перенести на следующий год до{' '}
-                      <strong className="font-bold">{new Date(transferUntil).toLocaleDateString('ru-RU')}</strong>
-                    </span>
-                  ) : (
-                    <span>Неиспользованные дни отпуска переносятся на следующий год согласно графику отпусков.</span>
-                  )
-                })()}
-              </div>
+
             </div>
           )}
 
@@ -1218,15 +1068,6 @@ export function Vacation() {
 
       {activeTab === 'team' && (
         <div className="space-y-6">
-          {isManager && (
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={() => setShowRestrictionModal(true)}>
-                <Users className="w-4 h-4 mr-1.5" />
-                Пересечения
-              </Button>
-            </div>
-          )}
-
           {calendarSection}
 
           <Card>
@@ -1243,6 +1084,8 @@ export function Vacation() {
           </Card>
         </div>
       )}
+
+      {activeTab === 'restrictions' && isManager && <VacationRestrictions />}
 
       {activeTab === 'approvals' && isManager && (
         <Card>
@@ -1400,17 +1243,6 @@ export function Vacation() {
           confirmText="Отменить"
           cancelText="Вернуться"
           loading={loading}
-        />
-      )}
-
-      {showRestrictionModal && (
-        <RestrictionModal
-          isOpen={showRestrictionModal}
-          restrictions={useVacationStore.getState().restrictions}
-          departmentUsers={getDepartmentUsers()}
-          onCreateRestriction={handleCreateRestriction}
-          onDeleteRestriction={handleDeleteRestriction}
-          onClose={() => setShowRestrictionModal(false)}
         />
       )}
 

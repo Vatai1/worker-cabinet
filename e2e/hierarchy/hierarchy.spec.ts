@@ -8,14 +8,14 @@ test.describe('Модуль Иерархия', () => {
     test.describe('UC-1: Просмотр оргструктуры', () => {
       test.beforeEach(async ({ page }) => {
         await loginAs(page, 'hr')
-        await page.goto('/hr')
-        await expect(page.getByRole('heading', { name: 'HR-панель' })).toBeVisible({ timeout: 10000 })
-        const tab = page.getByRole('button', { name: 'Иерархия' })
-        if (!(await tab.isVisible({ timeout: 10000 }).catch(() => false))) {
+        // Вкладка «Иерархия» открывается через query-параметр ?tab= на роуте
+        // /hr (в общий сайдбар вынесена как отдельный пункт навигации). Если
+        // модуль отключён, панель падает на первую доступную вкладку.
+        await page.goto('/hr?tab=hierarchy')
+        if (!(await page.locator('.react-flow').isVisible({ timeout: 10000 }).catch(() => false))) {
           test.skip()
           return
         }
-        await tab.click()
       })
 
       test('страница загружается, виден заголовок «Иерархия»', async ({ page }) => {
@@ -41,14 +41,14 @@ test.describe('Модуль Иерархия', () => {
     test.describe('UC-2: Элементы управления холстом', () => {
       test.beforeEach(async ({ page }) => {
         await loginAs(page, 'hr')
-        await page.goto('/hr')
-        await expect(page.getByRole('heading', { name: 'HR-панель' })).toBeVisible({ timeout: 10000 })
-        const tab = page.getByRole('button', { name: 'Иерархия' })
-        if (!(await tab.isVisible({ timeout: 10000 }).catch(() => false))) {
+        // Вкладка «Иерархия» открывается через query-параметр ?tab= на роуте
+        // /hr (в общий сайдбар вынесена как отдельный пункт навигации). Если
+        // модуль отключён, панель падает на первую доступную вкладку.
+        await page.goto('/hr?tab=hierarchy')
+        if (!(await page.locator('.react-flow').isVisible({ timeout: 10000 }).catch(() => false))) {
           test.skip()
           return
         }
-        await tab.click()
       })
 
       test('видны элементы управления (Controls)', async ({ page }) => {

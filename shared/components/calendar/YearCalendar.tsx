@@ -37,23 +37,39 @@ const COLORS = [
   'bg-red-500',
 ]
 
-const COLOR_MAP: Record<string, string> = {
-  'bg-blue-500': '#3b82f6',
-  'bg-green-500': '#22c55e',
-  'bg-purple-500': '#a855f7',
-  'bg-pink-500': '#ec4899',
-  'bg-orange-500': '#f97316',
-  'bg-teal-500': '#14b8a6',
-  'bg-indigo-500': '#6366f1',
-  'bg-red-500': '#ef4444',
-}
-
 export function getUserColor(userId: string): string {
   let hash = 0
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash)
   }
   return COLORS[Math.abs(hash) % COLORS.length]
+}
+
+const PARTICIPANT_COLORS = ['#10B981', '#F97316', '#EC4899', '#3B82F6', '#8B5CF6', '#F43F5E']
+
+export function getParticipantColor(userId: string, isMe: boolean): string {
+  if (isMe) return 'hsl(var(--primary))'
+  let hash = 0
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return PARTICIPANT_COLORS[Math.abs(hash) % PARTICIPANT_COLORS.length]
+}
+
+const RF_HOLIDAYS: Array<[number, number]> = [
+  [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [1, 6], [1, 7], [1, 8],
+  [2, 23], [3, 8], [5, 1], [5, 9], [6, 12], [11, 4],
+]
+
+function isPublicHoliday(date: Date): boolean {
+  const m = date.getMonth() + 1
+  const d = date.getDate()
+  return RF_HOLIDAYS.some(([hm, hd]) => hm === m && hd === d)
+}
+
+function isWeekendDay(date: Date): boolean {
+  const dow = getDay(date)
+  return dow === 0 || dow === 6
 }
 
 export function YearCalendar({
@@ -75,14 +91,6 @@ export function YearCalendar({
     y: number
     date: Date
   } | null>(null)
-
-  const visibleRequests = useMemo(() =>
-    requests.filter(r =>
-      r.status === VacationRequestStatus.APPROVED ||
-      r.status === VacationRequestStatus.ON_APPROVAL
-    ),
-    [requests]
-  )
 
   const normalizedSearch = searchQuery?.trim().toLowerCase() || ''
 
@@ -108,12 +116,14 @@ export function YearCalendar({
   }, [year])
 
   const getVacationsForDay = (date: Date) => {
-    return visibleRequests.filter(request => {
+    return requests.filter(request => {
       const start = new Date(request.startDate)
       const end = new Date(request.endDate)
-      return isWithinInterval(date, { start, end }) ||
+      const within = isWithinInterval(date, { start, end }) ||
              isSameDay(date, start) ||
              isSameDay(date, end)
+      if (!within) return false
+      return true
     })
   }
 
@@ -159,10 +169,6 @@ export function YearCalendar({
     }
   }
 
-  const clearSelection = () => {
-    onDateRangeSelect?.(null, null)
-  }
-
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>, date: Date) => {
     e.preventDefault()
     e.stopPropagation()
@@ -182,8 +188,6 @@ export function YearCalendar({
     setContextMenu(null)
     onTransfer?.(request)
   }
-
-  const hasSelection = selectedStartDate || selectedEndDate
 
   useEffect(() => {
     const handleClickOutside = () => {
@@ -206,9 +210,9 @@ export function YearCalendar({
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
               <h2 className="text-xl font-semibold">Календарь отпусков {year}</h2>
-              {hasSelection && (
+              {(selectedStartDate || selectedEndDate) && (
                 <button
-                  onClick={clearSelection}
+                  onClick={() => onDateRangeSelect?.(null, null)}
                   className="text-sm text-muted-foreground hover:text-foreground underline"
                 >
                   Очистить выбор
@@ -218,12 +222,12 @@ export function YearCalendar({
             {(selectedStartDate || selectedEndDate) && (
               <div className="text-sm">
                 {selectedStartDate && !selectedEndDate && (
-                  <span className="text-blue-600">
+                  <span className="text-primary">
                     Выбрана дата: {format(new Date(selectedStartDate), 'dd.MM.yyyy', { locale: ru })}
                   </span>
                 )}
                 {selectedStartDate && selectedEndDate && (
-                  <span className="text-green-600">
+                  <span className="text-emerald-600 dark:text-emerald-400">
                     Период: {format(new Date(selectedStartDate), 'dd.MM.yyyy', { locale: ru })} - {format(new Date(selectedEndDate), 'dd.MM.yyyy', { locale: ru })}
                   </span>
                 )}
@@ -237,54 +241,67 @@ export function YearCalendar({
         </>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid gap-[14px]" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(212px, 1fr))' }}>
         {months.map(month => (
-          <div key={month.index} className="border rounded-lg p-3 bg-card">
-            <div className="text-center font-semibold mb-2 text-sm">
+          <div
+            key={month.index}
+            data-testid="month-card"
+            className="rounded-xl border border-border bg-card p-[12px_12px_14px] transition-colors hover:border-muted-foreground/30"
+          >
+            <div className="mb-[10px] text-center text-[13px] font-bold text-foreground">
               {month.name}
             </div>
 
-            <div className="grid grid-cols-7 gap-1 text-xs">
+            <div className="grid grid-cols-7">
               {WEEKDAYS.map(day => (
-                <div key={day} className="text-center text-muted-foreground font-medium p-1">
+                <div key={day} className="mb-1 text-center text-[10.5px] font-semibold text-muted-foreground">
                   {day}
                 </div>
               ))}
+            </div>
 
+            <div className="grid grid-cols-7 gap-[3px]">
               {Array.from({ length: month.offset }).map((_, i) => (
-                <div key={`empty-${i}`} className="p-1" />
+                <div key={`empty-${i}`} className="h-[30px]" />
               ))}
 
               {month.days.map(day => {
                 const vacations = getVacationsForDay(day)
                 const isSelected = isDateInSelection(day)
                 const isHovered = !isSelected && isDateInHoverRange(day)
-                const isWeekend = getDay(day) === 0 || getDay(day) === 6
+                const weekend = isWeekendDay(day)
+                const holiday = isPublicHoliday(day)
                 const dateStr = format(day, 'yyyy-MM-dd')
                 const hasVacation = vacations.length > 0
                 const visibleVacations = vacations.slice(0, 3)
                 const remainingCount = vacations.length > 3 ? vacations.length - 3 : 0
                 const isMineDay = !!currentUserId && vacations.some(v => v.userId === currentUserId)
+                const hasApproved = vacations.some(v => v.status === VacationRequestStatus.APPROVED)
+                const hasPending = vacations.some(v => v.status === VacationRequestStatus.ON_APPROVAL)
                 const matchesSearch = !normalizedSearch || vacations.some(v =>
                   `${v.userLastName} ${v.userFirstName} ${v.userMiddleName ?? ''}`.toLowerCase().includes(normalizedSearch)
                 )
                 const isDimmed = hasVacation && !isSelected && !matchesSearch
                 const isHoveringCell = hoverDate === dateStr
 
-                const bgLayers: string[] = []
-                if (hasVacation && !isSelected) {
-                  visibleVacations
-                    .filter(v => v.status === VacationRequestStatus.ON_APPROVAL)
-                    .forEach(v => {
-                      const color = COLOR_MAP[getUserColor(v.userId)] || '#3b82f6'
-                      bgLayers.push(`repeating-linear-gradient(45deg, ${color}90 0px, ${color}90 2px, transparent 2px, transparent 6px)`)
-                    })
-                  const approvedVacations = visibleVacations.filter(v => v.status === VacationRequestStatus.APPROVED)
-                  if (approvedVacations.length > 0) {
-                    const color = COLOR_MAP[getUserColor(approvedVacations[0].userId)] || '#3b82f6'
-                    bgLayers.push(`linear-gradient(${color}30, ${color}30)`)
-                  }
+                let stateClass = 'text-foreground'
+                if (isMineDay) {
+                  stateClass = 'bg-primary/15 text-primary font-bold'
+                } else if (hasApproved) {
+                  stateClass = 'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 font-semibold'
+                } else if (hasPending) {
+                  stateClass = 'vac-pending-stripe text-amber-700 dark:text-amber-400 font-semibold'
+                } else if (holiday) {
+                  stateClass = 'bg-muted text-muted-foreground'
+                } else if (weekend) {
+                  stateClass = 'text-muted-foreground'
                 }
+
+                const liftShadow = '0 3px 8px -2px rgb(0 0 0 / 0.25)'
+                const mineRing = 'inset 0 0 0 1.5px hsl(var(--primary))'
+                let boxShadow: string | undefined
+                if (isMineDay) boxShadow = isHoveringCell ? `${mineRing}, ${liftShadow}` : mineRing
+                else if (isHoveringCell) boxShadow = liftShadow
 
                 return (
                   <div
@@ -296,68 +313,42 @@ export function YearCalendar({
                     onContextMenu={(e) => {
                       handleContextMenu(e, day)
                     }}
-                    onMouseEnter={() => setHoverDate(dateStr)}
-                    onMouseLeave={() => setHoverDate(null)}
+                    onMouseEnter={() => {
+                      setHoverDate(dateStr)
+                    }}
+                    onMouseLeave={() => {
+                      setHoverDate(null)
+                    }}
                     className={cn(
-                      'relative h-[30px] flex flex-col items-center justify-center text-center cursor-pointer rounded transition-all',
+                      'relative flex h-[30px] cursor-pointer items-center justify-center rounded-[7px] text-center text-[12px] font-medium transition-colors',
                       isSelected
-                        ? 'bg-blue-500 text-white hover:bg-blue-600'
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                         : isHovered
-                          ? 'bg-blue-200 dark:bg-blue-800'
-                          : isWeekend
-                            ? 'bg-muted text-muted-foreground font-medium'
-                            : hasVacation
-                              ? 'font-semibold hover:bg-muted/30'
-                              : 'hover:bg-muted/50',
-                      isMineDay && !isSelected && 'ring-2 ring-primary font-bold',
-                      isDimmed && 'opacity-30'
+                          ? 'bg-primary/20'
+                          : stateClass,
+                      isDimmed && 'opacity-[.22]'
                     )}
-                    style={bgLayers.length > 0 ? { backgroundImage: bgLayers.join(', ') } : undefined}
+                    style={{
+                      transform: isHoveringCell && !isSelected ? 'translateY(-1px)' : undefined,
+                      boxShadow: !isSelected ? boxShadow : undefined,
+                      zIndex: isHoveringCell ? 2 : undefined,
+                    }}
                   >
-                    <div className="relative">
-                      <div className="text-xs relative z-10">{format(day, 'd')}</div>
-                      {hasVacation && !isSelected && (
-                         <div className="absolute -bottom-1 left-0 right-0 flex justify-center gap-0.5">
-                           {visibleVacations.map(v => {
-                             const colorClass = getUserColor(v.userId)
-                             return (
-                               <div
-                                 key={v.id}
-                                 className={`w-1.5 h-1.5 rounded-full ${colorClass} ${v.status === 'on_approval' ? 'opacity-50' : ''}`}
-                               />
-                             )
-                           })}
-                         </div>
-                       )}
-                      {remainingCount > 0 && (
-                        <div className="absolute -bottom-1 -right-0.5 text-xs font-bold text-muted-foreground">
-                          +{remainingCount}
-                        </div>
-                      )}
-                    </div>
-                    {hasVacation && isHoveringCell && (
-                      <div
-                        className="absolute left-1/2 top-full z-50 mt-1 w-48 -translate-x-1/2 rounded-lg border border-border bg-popover p-2 text-left shadow-lg"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="text-[11px] font-medium text-popover-foreground">
-                          {format(day, 'd MMMM yyyy', { locale: ru })}
-                        </div>
-                        <div className="mt-1 space-y-1">
-                          {vacations.map(v => (
-                            <div key={v.id} className="flex items-center justify-between gap-2 text-[11px]">
-                              <span className="truncate text-popover-foreground">{v.userLastName} {v.userFirstName}</span>
-                              <span className={cn(
-                                'shrink-0 rounded px-1 py-0.5 text-[10px] font-medium',
-                                v.status === VacationRequestStatus.APPROVED
-                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                              )}>
-                                {v.status === VacationRequestStatus.APPROVED ? 'Согласовано' : 'На согласовании'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                    <span className="relative z-10">{format(day, 'd')}</span>
+                    {hasVacation && !isSelected && (
+                      <div className="absolute bottom-[3px] left-0 right-0 flex justify-center gap-[2px]">
+                        {visibleVacations.map(v => (
+                          <div
+                            key={v.id}
+                            className="h-1 w-1 rounded-full"
+                            style={{ backgroundColor: getParticipantColor(v.userId, v.userId === currentUserId) }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {remainingCount > 0 && (
+                      <div className="absolute -top-1 -right-1 text-[9px] font-bold text-muted-foreground">
+                        +{remainingCount}
                       </div>
                     )}
                   </div>
@@ -368,7 +359,7 @@ export function YearCalendar({
         ))}
       </div>
 
-       {showLegend && visibleRequests.length > 0 && (
+       {showLegend && requests.length > 0 && (
           <div className="border rounded-lg p-4 bg-card">
             <button
               type="button"
@@ -383,17 +374,11 @@ export function YearCalendar({
               <>
               <div className="mt-3 mb-3 grid grid-cols-3 gap-2 text-sm">
                <div className="flex items-center gap-2">
-                 <div
-                   className="w-6 h-6 rounded border"
-                   style={{ backgroundImage: 'linear-gradient(#3b82f630, #3b82f630)' }}
-                 />
+                 <div className="w-6 h-6 rounded border border-border bg-emerald-500/15 dark:bg-emerald-500/20" />
                  <span>Одобрено</span>
                </div>
                <div className="flex items-center gap-2">
-                 <div
-                   className="w-6 h-6 rounded border"
-                   style={{ backgroundImage: 'repeating-linear-gradient(45deg, #3b82f690 0px, #3b82f690 2px, transparent 2px, transparent 6px)' }}
-                 />
+                 <div className="w-6 h-6 rounded border border-border vac-pending-stripe" />
                  <span>На согласовании</span>
                </div>
                <div className="flex items-center gap-2">
@@ -404,8 +389,8 @@ export function YearCalendar({
 
             <h4 className="font-medium text-sm mb-2">Сотрудники</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-              {Array.from(new Set(visibleRequests.map(r => r.userId))).map(userId => {
-                const userRequests = visibleRequests.filter(r => r.userId === userId)
+              {Array.from(new Set(requests.map(r => r.userId))).map(userId => {
+                const userRequests = requests.filter(r => r.userId === userId)
                 const request = userRequests[0]
                 return (
                   <div key={userId} className="flex items-center gap-2 text-sm">
@@ -448,9 +433,12 @@ export function YearCalendar({
                           e.stopPropagation()
                           e.preventDefault()
                         }}
-                        className="w-full text-left px-2 py-2 text-sm hover:bg-blue-50 rounded flex items-center gap-2"
+                        className="w-full text-left px-2 py-2 text-sm hover:bg-muted rounded flex items-center gap-2"
                       >
-                        <div className={`w-2 h-2 rounded-full ${getUserColor(request.userId)}`} />
+                        <div
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: getParticipantColor(request.userId, request.userId === currentUserId) }}
+                        />
                         <span>{request.userLastName} {request.userFirstName}</span>
                       </button>
                       {request.userId === currentUserId && request.status === VacationRequestStatus.APPROVED && onTransfer && (
@@ -464,7 +452,7 @@ export function YearCalendar({
                             e.stopPropagation()
                             e.preventDefault()
                           }}
-                          className="w-full text-left px-2 py-2 text-sm hover:bg-muted rounded flex items-center gap-2 text-blue-600"
+                          className="w-full text-left px-2 py-2 text-sm hover:bg-muted rounded flex items-center gap-2 text-primary"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />

@@ -9,7 +9,10 @@ import {
   LayoutDashboard, User, FileText, FolderOpen, FolderKanban,
   LogOut, Menu, X, Users, Plane, Settings, Sun, Moon,
   ChevronDown, FileStack, Building2, ClipboardList,
-  Calendar, Shield, Bell, Crown, Bot, UserCheck,
+  Calendar, Bell, Crown, Bot, UserCheck,
+  Send, UserPlus, Network, Briefcase, Wrench,
+  Key, ShieldCheck, Boxes, Settings2, Package,
+  Activity, AlertCircle, Bug, Server, Palette,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -77,11 +80,25 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   ]},
 ]
 
+const getHRSectionItems = (): NavItem[] => [
+  { name: 'Опросы', href: '/hr?tab=surveys', icon: ClipboardList, module: 'surveys', section: 'HR' },
+  { name: 'Рассылка', href: '/hr?tab=mailing', icon: Send, module: 'mailing', section: 'HR' },
+  { name: 'Онбординг', href: '/hr?tab=onboarding', icon: UserPlus, module: 'onboarding', section: 'HR' },
+  { name: 'Табель', href: '/hr?tab=timesheet', icon: Calendar, module: 'timesheet', section: 'HR' },
+  { name: 'Отпуск', href: '/hr?tab=vacation', icon: Plane, module: 'vacation', section: 'HR' },
+  { name: 'Иерархия', href: '/hr?tab=hierarchy', icon: Network, module: 'hierarchy', section: 'HR' },
+  { name: 'Шаблоны документов', href: '/hr?tab=doc-templates', icon: FileText, module: 'documents', section: 'HR' },
+  { name: 'Учреждение', href: '/hr?tab=institution', icon: Building2, module: 'dictionaries', section: 'HR' },
+  { name: 'Отделы', href: '/hr?tab=hr_departments', icon: Building2, module: 'dictionaries', section: 'HR' },
+  { name: 'Должности', href: '/hr?tab=hr_positions', icon: Briefcase, module: 'dictionaries', section: 'HR' },
+  { name: 'Типы отпусков', href: '/hr?tab=hr_vacation_types', icon: Plane, module: 'vacation', section: 'HR' },
+  { name: 'Навыки', href: '/hr?tab=hr_skills', icon: Wrench, module: 'skills', section: 'HR' },
+]
+
 const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
-  { name: 'HR-панель', href: '/hr', icon: Users, section: 'Основное' },
   { name: 'Сотрудники', href: '/employees', icon: Users, section: 'Управление' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Управление' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
@@ -93,15 +110,42 @@ const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
     { name: 'Ваши документы', href: '/documents' },
   ]},
+  ...getHRSectionItems(),
 ]
 
-const getAdminNavigation = (userId?: string): NavItem[] => [
+// Пункты, скрытые от org-admin в AdminPanel.tsx (HIDDEN_FOR_ORG_ADMIN) — не
+// показываем их и в разделе «Настройки организации» в сайдбаре.
+const ORG_HIDDEN_ITEM_NAMES = new Set([
+  'Роли и доступы', 'Роли по должности', 'Учреждения', 'Иерархия',
+  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система',
+])
+
+const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg: boolean): NavItem[] => {
+  const items: NavItem[] = [
+    { name: 'Пользователи', href: `${basePath}?tab=users`, icon: Users, section },
+    { name: 'Роли и доступы', href: `${basePath}?tab=roles`, icon: Key, section },
+    { name: 'Роли по должности', href: `${basePath}?tab=role-mappings`, icon: ShieldCheck, section },
+    { name: 'Учреждения', href: `${basePath}?tab=organizations`, icon: Building2, section },
+    { name: 'Иерархия', href: `${basePath}?tab=global-hierarchy`, icon: Network, section },
+    { name: 'Модули', href: `${basePath}?tab=modules`, icon: Boxes, section },
+    { name: 'Настройки системы', href: `${basePath}?tab=settings`, icon: Settings2, section },
+    { name: 'Безопасность', href: `${basePath}?tab=security`, icon: ShieldCheck, section },
+    { name: 'Аудит', href: `${basePath}?tab=audit`, icon: Activity, section },
+    { name: 'Ошибки', href: `${basePath}?tab=errors`, icon: AlertCircle, section },
+    { name: 'Баг-репорты', href: `${basePath}?tab=bug-reports`, icon: Bug, section },
+    { name: 'Система', href: `${basePath}?tab=health`, icon: Server, section },
+    { name: 'Должности', href: `${basePath}?tab=dict_positions`, icon: Briefcase, section },
+    { name: 'Типы отпусков', href: `${basePath}?tab=dict_vacation`, icon: Plane, module: 'vacation', section },
+    { name: 'Навыки', href: `${basePath}?tab=dict_skills`, icon: Package, module: 'skills', section },
+    { name: 'Темы', href: `${basePath}?tab=appearance`, icon: Palette, section },
+  ]
+  return restrictToOrg ? items.filter((item) => !ORG_HIDDEN_ITEM_NAMES.has(item.name)) : items
+}
+
+const getAdminNavigation = (userId?: string, isSuper?: boolean): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
-  { name: 'Глобальная админ-панель', href: '/admin/global', icon: Shield, section: 'Основное', superAdminOnly: true },
-  { name: 'Админ панель учреждения', href: '/admin/org', icon: Building2, section: 'Основное', orgAdminOnly: true },
-  { name: 'HR-панель', href: '/hr', icon: Users, section: 'Основное' },
   { name: 'Сотрудники', href: '/employees', icon: Users, section: 'Управление' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Управление' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
@@ -113,6 +157,9 @@ const getAdminNavigation = (userId?: string): NavItem[] => [
   { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
     { name: 'Ваши документы', href: '/documents' },
   ]},
+  ...(isSuper ? getAdminSettingsItems('/admin/global', 'Глобальные настройки', false) : []),
+  ...getAdminSettingsItems('/admin/org', 'Настройки организации', true),
+  ...getHRSectionItems(),
 ]
 
 const roleLabels: Record<string, string> = {
@@ -132,6 +179,7 @@ export function Sidebar() {
   const isCrctSidebar = activeTheme === 'crct'
   const location = useLocation()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['Основное']))
 
   const isSuper = isSuperAdmin()
   const isAdminRole = hasAnyRole('admin')
@@ -139,8 +187,8 @@ export function Sidebar() {
   const navigation = useMemo(() => {
     const rawNavigation =
       user?.role === 'onboarding' ? getOnboardingNavigation() :
-      isSuper ? getAdminNavigation(user?.id) :
-      isAdminRole ? getAdminNavigation(user?.id) :
+      isSuper ? getAdminNavigation(user?.id, true) :
+      isAdminRole ? getAdminNavigation(user?.id, false) :
       hasAnyRole('hr') ? getHRNavigation(user?.id) :
       user?.role === 'manager' || hasAnyRole('manager') ? getManagerNavigation(user?.id) :
       getEmployeeNavigation(user?.id)
@@ -183,6 +231,27 @@ export function Sidebar() {
   }, [location.pathname, navigation, expandedItems])
 
   useEffect(() => {
+    for (const [sectionName, items] of sections.entries()) {
+      const isActiveSection = items.some((item) =>
+        location.pathname === item.href || item.children?.some((child) => location.pathname === child.href)
+      )
+      if (isActiveSection) {
+        setExpandedSections((prev) => (prev.has(sectionName) ? prev : new Set(prev).add(sectionName)))
+        break
+      }
+    }
+  }, [location.pathname, sections])
+
+  const toggleSection = (name: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 1024 && useUIStore.getState().sidebarOpen) {
         useUIStore.setState({ sidebarOpen: false })
@@ -219,6 +288,7 @@ export function Sidebar() {
           ? 'border-sidebar-border bg-sidebar-bg'
           : 'border-sidebar-border bg-sidebar-bg',
         openModals ? '-translate-x-full' : sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        'lg:translate-x-0',
         isCrctSidebar && 'sidebar-crct',
         !isCrctSidebar && 'sidebar-legacy'
       )}>
@@ -251,14 +321,30 @@ export function Sidebar() {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 pb-3">
-          {Array.from(sections.entries()).map(([sectionName, items]) => (
+          {Array.from(sections.entries()).map(([sectionName, items]) => {
+            const isSectionExpanded = expandedSections.has(sectionName)
+            return (
             <div key={sectionName} className="mb-3">
-              <div className="px-3 pt-3 pb-1.5">
+              <button
+                type="button"
+                onClick={() => toggleSection(sectionName)}
+                className="flex w-full items-center justify-between px-3 pt-3 pb-1.5 group"
+              >
                 <span className={cn(
                   'text-[10px] font-semibold uppercase tracking-[0.08em]',
                   isCrctSidebar ? 'text-white/40' : 'text-muted-foreground/50'
                 )}>{sectionName}</span>
-              </div>
+                <ChevronDown className={cn(
+                  'h-3 w-3 transition-transform duration-200',
+                  isCrctSidebar ? 'text-white/30 group-hover:text-white/50' : 'text-muted-foreground/40 group-hover:text-muted-foreground/70',
+                  isSectionExpanded && 'rotate-180'
+                )} />
+              </button>
+              <div className={cn(
+                'grid transition-all duration-300 ease-out',
+                isSectionExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+              )}>
+              <div className="overflow-hidden">
               <div className="space-y-0.5">
                 {items.map((item) => {
                   const Icon = item.icon
@@ -349,8 +435,11 @@ export function Sidebar() {
                   )
                 })}
               </div>
+              </div>
+              </div>
             </div>
-          ))}
+            )
+          })}
         </nav>
 
         <div className="relative border-t border-sidebar-border p-3">

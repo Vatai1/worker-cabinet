@@ -7,7 +7,7 @@
 - **Маршрут**: `/vacation`
 - **Иконка**: `Plane`
 - **Сортировка**: 10
-- **Описание**: Управление отпусками, балансы, заявления, ограничения
+- **Описание**: Управление отпусками, балансы, заявления, ограничения пересечений (вкладка «Пересечения» для manager/hr/admin)
 
 ## Файловая структура
 
@@ -20,15 +20,17 @@ modules/vacation/
 ├── pages/
 │   ├── Vacation.tsx
 │   └── HRVacationCalendar.tsx
-└── components/modals/
-    ├── VacationTransferApplicationModal.tsx
-    ├── VacationTransferModal.tsx
-    ├── VacationApplicationModal.tsx
-    ├── RestrictionModal.tsx
-    ├── VacationHistoryModal.tsx
-    ├── VacationDetailModal.tsx
-    ├── CreateVacationModal.tsx
-    └── CreateVacationFormModal.tsx
+└── components/
+    ├── DepartmentBalanceTable.tsx
+    ├── VacationRestrictions.tsx
+    └── modals/
+        ├── VacationTransferApplicationModal.tsx
+        ├── VacationTransferModal.tsx
+        ├── VacationApplicationModal.tsx
+        ├── VacationHistoryModal.tsx
+        ├── VacationDetailModal.tsx
+        ├── CreateVacationModal.tsx
+        └── CreateVacationFormModal.tsx
 ```
 
 ## API эндпоинты

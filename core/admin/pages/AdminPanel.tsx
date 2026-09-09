@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
@@ -288,16 +289,11 @@ interface Props {
 }
 
 export function AdminPanel({ mode = 'global' }: Props) {
-  const [activeTab, setActiveTab] = useState<TabId>('users')
+  const [searchParams, setSearchParams] = useSearchParams()
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const [apiVersion, setApiVersion] = useState<string | null>(null)
   const isGlobalMode = mode === 'global'
   const prevTabRef = useRef<TabId>('users')
-
-  const switchTab = (tab: TabId) => {
-    if (tab !== 'global-hierarchy') prevTabRef.current = tab
-    setActiveTab(tab)
-  }
 
   useEffect(() => {
     fetchWithRetry(`${API_BASE_URL}/version`, { headers: getAuthHeaders() })
@@ -319,30 +315,18 @@ export function AdminPanel({ mode = 'global' }: Props) {
     .filter((group) => group.tabs.length > 0)
 
   const allTabs = filteredGroups.flatMap((g) => g.tabs)
+  const requestedTab = searchParams.get('tab') as TabId | null
+  const activeTab = (requestedTab && allTabs.some((t) => t.id === requestedTab) ? requestedTab : allTabs[0]?.id) ?? 'users'
   const activeTabInfo = allTabs.find((t) => t.id === activeTab)
+
+  useEffect(() => {
+    if (activeTab !== 'global-hierarchy') prevTabRef.current = activeTab
+  }, [activeTab])
+
+  const closeHierarchy = () => setSearchParams(prevTabRef.current ? { tab: prevTabRef.current } : {})
 
   const orgStore = useOrgStore()
   const currentOrg = orgStore.organizations.find((o) => o.id === orgStore.currentOrgId)
-
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
-    try {
-      const raw = document.cookie
-        .split('; ')
-        .find((r) => r.startsWith('admin_collapsed='))
-        ?.split('=')[1]
-      if (raw) return new Set(JSON.parse(decodeURIComponent(raw)))
-    } catch {}
-    return new Set()
-  })
-
-  const toggleGroup = (label: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev)
-      next.has(label) ? next.delete(label) : next.add(label)
-      document.cookie = `admin_collapsed=${encodeURIComponent(JSON.stringify([...next]))}; path=/; max-age=31536000; SameSite=Lax`
-      return next
-    })
-  }
 
   return (
     <div className="space-y-6">
@@ -378,93 +362,35 @@ export function AdminPanel({ mode = 'global' }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
-        <nav className="space-y-3">
-          {filteredGroups.map((group) => {
-            const collapsed = collapsedGroups.has(group.label)
-            return (
-            <div key={group.label}>
-              <button
-                onClick={() => toggleGroup(group.label)}
-                className="flex items-center gap-1.5 w-full px-3 mb-1.5 group/g"
-              >
-                <ChevronRight className={cn(
-                  'h-3 w-3 text-muted-foreground/50 transition-transform duration-200',
-                  !collapsed && 'rotate-90',
-                )} />
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/50 group-hover/g:text-muted-foreground/70 transition-colors select-none">
-                  {group.label}
-                </p>
-              </button>
-              {!collapsed && (
-              <div className="space-y-0.5 bg-card rounded-xl border border-border/40 p-1.5">
-                {group.tabs.map((tab) => {
-                  const Icon = tab.icon
-                  const isActive = activeTab === tab.id
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => switchTab(tab.id)}
-                      className={cn(
-                        'group flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-left transition-all duration-200',
-                        isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                      )}
-                    >
-                      <Icon className={cn(
-                        'h-4 w-4 shrink-0 transition-colors',
-                        isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
-                      )} />
-                      <div className="min-w-0 flex-1">
-                        <p className={cn(
-                          'text-sm font-medium truncate transition-colors',
-                          isActive ? 'text-primary-foreground' : '',
-                        )}>
-                          {tab.name}
-                        </p>
-                      </div>
-                      {isActive && <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground/60 shrink-0" />}
-                    </button>
-                  )
-                })}
-              </div>
-              )}
+      <div className="min-w-0">
+        {activeTabInfo && activeTab !== 'global-hierarchy' && (
+          <div className="flex items-center gap-3 mb-4">
+            <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', activeTabInfo.color)}>
+              <activeTabInfo.icon className="h-4 w-4" />
             </div>
-            )
-          })}
-        </nav>
-
-        <div className="min-w-0">
-          {activeTabInfo && (
-            <div className="flex items-center gap-3 mb-4">
-              <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', activeTabInfo.color)}>
-                <activeTabInfo.icon className="h-4 w-4" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">{activeTabInfo.name}</h2>
-                <p className="text-xs text-muted-foreground">{activeTabInfo.description}</p>
-              </div>
+            <div>
+              <h2 className="text-lg font-semibold">{activeTabInfo.name}</h2>
+              <p className="text-xs text-muted-foreground">{activeTabInfo.description}</p>
             </div>
-          )}
-          {activeTab === 'users' && <UsersTab mode={mode} />}
-          {activeTab === 'roles' && <RolesTab />}
-          {activeTab === 'role-mappings' && <AdminRoleMappings />}
-          {activeTab === 'departments' && <DepartmentsTab />}
-          {activeTab === 'settings' && <SettingsTab />}
-          {activeTab === 'audit' && <AuditTab />}
-          {activeTab === 'health' && <HealthTab />}
-          {activeTab === 'errors' && <ErrorsTab />}
-          {activeTab === 'security' && <SecurityTab />}
-          {activeTab === 'organizations' && <OrganizationsTab />}
-          {activeTab === 'global-hierarchy' && <GlobalHierarchy fullscreen onClose={() => switchTab(prevTabRef.current)} />}
-          {activeTab === 'dict_positions' && <DictionariesTab initialTab="positions" />}
-          {activeTab === 'dict_vacation' && <DictionariesTab initialTab="vacationTypes" />}
-          {activeTab === 'dict_skills' && <DictionariesTab initialTab="skills" />}
-          {activeTab === 'modules' && <ModulesTab mode={mode} />}
-          {activeTab === 'appearance' && <AppearanceTab />}
-          {activeTab === 'bug-reports' && <AdminBugReports />}
-        </div>
+          </div>
+        )}
+        {activeTab === 'users' && <UsersTab mode={mode} />}
+        {activeTab === 'roles' && <RolesTab />}
+        {activeTab === 'role-mappings' && <AdminRoleMappings />}
+        {activeTab === 'departments' && <DepartmentsTab />}
+        {activeTab === 'settings' && <SettingsTab />}
+        {activeTab === 'audit' && <AuditTab />}
+        {activeTab === 'health' && <HealthTab />}
+        {activeTab === 'errors' && <ErrorsTab />}
+        {activeTab === 'security' && <SecurityTab />}
+        {activeTab === 'organizations' && <OrganizationsTab />}
+        {activeTab === 'global-hierarchy' && <GlobalHierarchy fullscreen onClose={closeHierarchy} />}
+        {activeTab === 'dict_positions' && <DictionariesTab initialTab="positions" />}
+        {activeTab === 'dict_vacation' && <DictionariesTab initialTab="vacationTypes" />}
+        {activeTab === 'dict_skills' && <DictionariesTab initialTab="skills" />}
+        {activeTab === 'modules' && <ModulesTab mode={mode} />}
+        {activeTab === 'appearance' && <AppearanceTab />}
+        {activeTab === 'bug-reports' && <AdminBugReports />}
       </div>
     </div>
   )

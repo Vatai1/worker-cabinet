@@ -77,10 +77,9 @@ test.describe('Администрирование и Табель', () => {
   test.describe('UC-2: Админка — Модули', () => {
     test.beforeEach(async ({ page }) => {
       await loginAs(page, 'admin')
-      await page.goto('/admin')
-      await page.waitForLoadState('networkidle')
-      // Открываем вкладку «Модули» в навигации админки.
-      await main(page).getByRole('button', { name: 'Модули', exact: true }).click()
+      // Вкладки админки открываются через query-параметр ?tab=, а не через
+      // внутреннюю навигацию панели (перенесена в общий сайдбар).
+      await page.goto('/admin/org?tab=modules')
       await page.waitForLoadState('networkidle')
     })
 
@@ -116,10 +115,9 @@ test.describe('Администрирование и Табель', () => {
   test.describe('UC-3: Админка — Справочники', () => {
     test.beforeEach(async ({ page }) => {
       await loginAs(page, 'admin')
-      await page.goto('/admin')
-      await page.waitForLoadState('networkidle')
-      // Открываем вкладку «Справочники».
-      await main(page).getByRole('button', { name: 'Справочники', exact: true }).click()
+      // Вкладки админки открываются через query-параметр ?tab=, а не через
+      // внутреннюю навигацию панели (перенесена в общий сайдбар).
+      await page.goto('/admin/org?tab=dict_positions')
       await page.waitForLoadState('networkidle')
     })
 
@@ -176,10 +174,9 @@ test.describe('Администрирование и Табель', () => {
   test.describe('UC-4: Админка — Настройки', () => {
     test.beforeEach(async ({ page }) => {
       await loginAs(page, 'admin')
-      await page.goto('/admin')
-      await page.waitForLoadState('networkidle')
-      // Открываем вкладку «Настройки».
-      await main(page).getByRole('button', { name: 'Настройки', exact: true }).click()
+      // Вкладки админки открываются через query-параметр ?tab=, а не через
+      // внутреннюю навигацию панели (перенесена в общий сайдбар).
+      await page.goto('/admin/org?tab=settings')
       await page.waitForLoadState('networkidle')
     })
 

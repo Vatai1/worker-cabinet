@@ -48,14 +48,11 @@ function projectCard(page: Page): Locator {
 }
 
 /**
- * Вкладка «Онбординг» в HR-панели — кнопка/таб/ссылка внутри основного
- * контента. Может отсутствовать, если модуль онбординга выключен.
+ * Заголовок раздела онбординга внутри HR-панели. Отсутствует, если модуль
+ * онбординга выключен (панель падает на первую доступную вкладку).
  */
 function onboardingTab(page: Page): Locator {
-  return main(page)
-    .getByRole('button', { name: /^Онбординг/i })
-    .or(main(page).getByRole('tab', { name: /^Онбординг/i }))
-    .or(main(page).getByRole('link', { name: /^Онбординг/i }))
+  return main(page).getByRole('heading', { name: 'Управление онбордингом', exact: true })
 }
 
 test.describe('Проекты, Опросы, Онбординг', () => {
@@ -254,15 +251,10 @@ test.describe('Проекты, Опросы, Онбординг', () => {
   test.describe('UC-5: HR Онбординг', () => {
     test.beforeEach(async ({ page }) => {
       await loginAs(page, 'admin')
-      await page.goto('/hr')
-      await page.waitForTimeout(2000)
-
-      // Открываем вкладку «Онбординг», если она видна.
-      const tab = onboardingTab(page)
-      if (await isVisible(tab, 10000)) {
-        await tab.first().click()
-        await page.waitForTimeout(1000)
-      }
+      // Вкладка «Онбординг» открывается через query-параметр ?tab= на
+      // роуте /hr (вынесена в общий сайдбар).
+      await page.goto('/hr?tab=onboarding')
+      await page.waitForTimeout(1500)
     })
 
     test('вкладка «Онбординг» доступна в HR-панели', async ({ page }) => {

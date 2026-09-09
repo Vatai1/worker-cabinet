@@ -84,8 +84,7 @@ describe('Vacation API', () => {
         body: JSON.stringify({
           type: 'pair',
           departmentId: dept.id,
-          user1Id: employeeUser.id,
-          user2Id: managerUser.id,
+          employeeIds: [employeeUser.id, managerUser.id],
         }),
       })
       assert.ok(res.status === 201 || res.status === 400)

@@ -198,6 +198,11 @@
   .stagger-6 { animation-delay: 0.3s; }
   .stagger-8 { animation-delay: 0.4s; }
 
+  @keyframes appear {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
   @keyframes slideUp {
     from { opacity: 0; transform: translateY(16px); }
     to { opacity: 1; transform: translateY(0); }
@@ -209,6 +214,10 @@
   @keyframes scaleIn {
     from { opacity: 0; transform: scale(0.95); }
     to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes tooltipIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   @keyframes float {
     0%, 100% { transform: translateY(0); }
@@ -327,5 +336,36 @@
     --sidebar-hover: 228 22% 14%;
     --sidebar-active-bg: 250 95% 68% / 0.12;
     --sidebar-active-text: 250 95% 68%;
+  }
+
+  .vac-pending-stripe {
+    background-image: repeating-linear-gradient(-45deg, rgb(217 119 6 / 0.12) 0 4px, rgb(217 119 6 / 0.22) 4px 8px);
+  }
+  .dark .vac-pending-stripe {
+    background-image: repeating-linear-gradient(-45deg, rgb(251 191 36 / 0.14) 0 4px, rgb(251 191 36 / 0.26) 4px 8px);
+  }
+
+  .dept-chip-bg {
+    background-color: hsl(var(--dept-hue) 80% 94%);
+    color: hsl(var(--dept-hue) 55% 40%);
+  }
+  .dark .dept-chip-bg {
+    background-color: hsl(var(--dept-hue) 40% 20%);
+    color: hsl(var(--dept-hue) 70% 72%);
+  }
+  .dept-chip-dot {
+    background-color: hsl(var(--dept-hue) 70% 58%);
+  }
+  .dark .dept-chip-dot {
+    background-color: hsl(var(--dept-hue) 65% 62%);
+  }
+
+  .vac-card-appear {
+    animation: appear 0.18s ease backwards;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .vac-card-appear {
+      animation: none;
+    }
   }
 }

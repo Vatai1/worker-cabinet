@@ -2366,12 +2366,11 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [departmentId, type]
+ *             required: [departmentId, type, employeeIds]
  *             properties:
  *               departmentId: { type: integer }
  *               type: { type: string, enum: [pair, group] }
- *               user1Id: { type: integer }
- *               user2Id: { type: integer }
+ *               employeeIds: { type: array, items: { type: integer } }
  *               maxConcurrent: { type: integer }
  *               description: { type: string }
  *     responses:
@@ -2380,36 +2379,46 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
  */
 router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   try {
-    const { departmentId, type, user1Id, user2Id, maxConcurrent, description } = req.body
+    const { departmentId, type, employeeIds: rawEmployeeIds, maxConcurrent, description } = req.body
     const createdBy = req.user.id
 
     if (!departmentId || !type) {
       return res.status(400).json({ error: 'Укажите departmentId и type' })
     }
 
+    const deptId = parseInt(departmentId)
+    if (Number.isNaN(deptId)) {
+      return res.status(400).json({ error: 'Некорректный departmentId' })
+    }
+
+    const parsedIds = Array.isArray(rawEmployeeIds)
+      ? rawEmployeeIds.map(id => parseInt(id)).filter(id => !Number.isNaN(id))
+      : []
+
     let employeeIds = []
     let maxConc = maxConcurrent || null
 
     if (type === 'pair') {
-      if (!user1Id || !user2Id) {
-        return res.status(400).json({ error: 'Для парного ограничения укажите user1Id и user2Id' })
+      if (parsedIds.length !== 2) {
+        return res.status(400).json({ error: 'Для парного ограничения выберите ровно двух сотрудников' })
       }
-      employeeIds = [parseInt(user1Id), parseInt(user2Id)]
+      employeeIds = [parsedIds[0], parsedIds[1]]
       maxConc = null
     } else if (type === 'group') {
+      if (parsedIds.length < 2) {
+        return res.status(400).json({ error: 'Для группового ограничения выберите минимум двух сотрудников' })
+      }
+      employeeIds = parsedIds
       maxConc = maxConcurrent || 1
-      const deptUsers = await query(
-        'SELECT id FROM users WHERE department_id = $1',
-        [departmentId]
-      )
-      employeeIds = deptUsers.rows.map(u => u.id)
+    } else {
+      return res.status(400).json({ error: 'Некорректный тип ограничения' })
     }
 
     const result = await query(
       `INSERT INTO vacation_restrictions (department_id, restriction_type, employee_ids, max_concurrent, description, created_by, organization_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [departmentId, type, employeeIds, maxConc, description || null, createdBy, currentOrgId(req)]
+      [deptId, type, employeeIds, maxConc, description || null, createdBy, currentOrgId(req)]
     )
 
     const r = result.rows[0]
@@ -2536,6 +2545,9 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
     const violations = []
 
     for (const restriction of restrictions.rows) {
+      const memberIds = (restriction.employee_ids || []).map(id => parseInt(id))
+      if (!memberIds.includes(parseInt(userId))) continue
+
       if (restriction.restriction_type === 'pair') {
         const otherUserId = restriction.employee_ids.find(id => id !== parseInt(userId))
         if (!otherUserId) continue

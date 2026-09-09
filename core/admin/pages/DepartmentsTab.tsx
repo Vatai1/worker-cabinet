@@ -1,40 +1,91 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
+import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useOrgStore } from '@/shared/store/orgStore'
-import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
-import { Input } from '@/shared/components/ui/Input'
-import { Badge } from '@/shared/components/ui/Badge'
+import { toast } from 'sonner'
 import {
-  Building2, Users, Plus, Trash2, Edit3, Check, X,
-  AlertTriangle, Loader2, Search,
+  Building2, Users, UserX, Plus, Trash2, Pencil, X,
+  AlertTriangle, Loader2, Search, MoreVertical,
 } from 'lucide-react'
 
-const DEPT_GRADIENTS = [
-  'from-blue-500 to-indigo-600',
-  'from-emerald-500 to-teal-600',
-  'from-amber-500 to-orange-600',
-  'from-pink-500 to-rose-600',
-  'from-violet-500 to-purple-600',
-  'from-cyan-500 to-blue-600',
-  'from-red-500 to-rose-600',
-  'from-sky-500 to-cyan-600',
-]
+interface Dept {
+  id: number
+  name: string
+  manager_id: number | null
+  manager_name: string | null
+  manager_position: string | null
+  employee_count: string
+  vacation_requests_blocked: boolean
+  description: string | null
+  parent_id: number | null
+  parent_name: string | null
+}
+
+type SortKey = 'name' | 'count'
+
+const hueFromString = (s: string) => {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h)
+  return Math.abs(h) % 360
+}
+
+const pluralRu = (n: number, one: string, few: string, many: string) => {
+  const a = n % 10
+  const b = n % 100
+  if (a === 1 && b !== 11) return one
+  if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return few
+  return many
+}
 
 export function DepartmentsTab() {
   const orgHeaders = (): Record<string, string> => {
     const orgId = useOrgStore.getState().currentOrgId
     return orgId != null ? { 'X-Organization-Id': String(orgId) } : {}
   }
-  const [departments, setDepartments] = useState<{ id: number; name: string; manager_id: number | null; manager_name: string | null; manager_position: string | null; employee_count: string; vacation_requests_blocked: boolean; description: string | null; parent_id: number | null; parent_name: string | null }[]>([])
+
+  const [departments, setDepartments] = useState<Dept[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<SortKey>('name')
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null)
+
+  const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [formName, setFormName] = useState('')
+  const [formManagerId, setFormManagerId] = useState<number | null>(null)
+  const [formManagerName, setFormManagerName] = useState('')
+  const [formParentId, setFormParentId] = useState<number | null>(null)
+  const [showPicker, setShowPicker] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useModalOpen(modalMode !== null)
+
   useEffect(() => { fetchDepartments() }, [])
+
+  useEffect(() => {
+    if (openMenuId === null) return
+    const close = () => setOpenMenuId(null)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [openMenuId])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setOpenMenuId(null)
+      if (showPicker) setShowPicker(false)
+      else closeModal()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [showPicker])
 
   const fetchDepartments = async () => {
     setLoading(true)
@@ -43,19 +94,6 @@ export function DepartmentsTab() {
       if (res.ok) setDepartments(await res.json())
     } catch {} finally { setLoading(false) }
   }
-
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newManagerId, setNewManagerId] = useState<number | null>(null)
-  const [newManagerName, setNewManagerName] = useState('')
-  const [newParentId, setNewParentId] = useState<number | null>(null)
-  const [showPicker, setShowPicker] = useState<'create' | number | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editManagerId, setEditManagerId] = useState<number | null>(null)
-  const [editManagerName, setEditManagerName] = useState('')
-  const [editParentId, setEditParentId] = useState<number | null>(null)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [search, setSearch] = useState('')
 
   const descendantsOf = (rootId: number) => {
     const children = new Map<number, number[]>()
@@ -75,241 +113,365 @@ export function DepartmentsTab() {
     return result
   }
 
-  const createDept = async () => {
-    if (!newName.trim()) { setError('Название обязательно'); return }
-    const confirmed = await confirmDialog({ title: 'Создать отдел', message: `Создать отдел «${newName.trim()}»?`, confirmText: 'Создать' })
-    if (!confirmed) return
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments`, {
-        method: 'POST', headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
-        body: JSON.stringify({ name: newName.trim(), manager_id: newManagerId, parent_id: newParentId }),
-      })
-      if (res.ok) { setShowCreate(false); setNewName(''); setNewManagerId(null); setNewManagerName(''); setNewParentId(null); fetchDepartments() }
-      else { const data = await res.json(); setError(data.error || 'Ошибка') }
-    } catch (err) { setError(getErrorMessage(err)) }
+  const openCreate = () => {
+    setModalMode('create')
+    setEditingId(null)
+    setFormName('')
+    setFormManagerId(null)
+    setFormManagerName('')
+    setFormParentId(null)
+    setError(null)
   }
 
-  const updateDept = async (id: number) => {
-    const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Сохранить изменения для отдела «${editName.trim()}»?`, confirmText: 'Сохранить' })
-    if (!confirmed) return
-    try {
-      const body: Record<string, unknown> = { name: editName.trim(), parent_id: editParentId }
-      if (editManagerId) body.manager_id = editManagerId
-      else body.manager_id = null
-      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${id}`, {
-        method: 'PUT', headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
-        body: JSON.stringify(body),
-      })
-      if (res.ok) { setEditingId(null); fetchDepartments() }
-      else { const data = await res.json(); setError(data.error || 'Ошибка') }
-    } catch (err) { setError(getErrorMessage(err)) }
+  const openEdit = (dept: Dept) => {
+    setModalMode('edit')
+    setEditingId(dept.id)
+    setFormName(dept.name)
+    setFormManagerId(dept.manager_id)
+    setFormManagerName(dept.manager_name || '')
+    setFormParentId(dept.parent_id)
+    setError(null)
   }
 
-  const deleteDept = async (id: number, name: string) => {
-    const confirmed = await confirmDialog({ title: 'Удалить отдел', message: `Удалить отдел «${name}»? Сотрудники будут отвязаны от отдела.`, confirmText: 'Удалить', variant: 'danger' })
+  const closeModal = () => {
+    setModalMode(null)
+    setEditingId(null)
+    setShowPicker(false)
+  }
+
+  const submitForm = async () => {
+    const name = formName.trim()
+    if (!name) { setError('Название обязательно'); return }
+    setSaving(true)
+    try {
+      if (modalMode === 'edit' && editingId != null) {
+        const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${editingId}`, {
+          method: 'PUT', headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
+          body: JSON.stringify({ name, parent_id: formParentId, manager_id: formManagerId ?? null }),
+        })
+        if (res.ok) {
+          toast.success(`«${name}» — изменения сохранены`)
+          closeModal()
+          fetchDepartments()
+        } else {
+          const data = await res.json()
+          setError(data.error || 'Ошибка')
+        }
+      } else {
+        const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments`, {
+          method: 'POST', headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
+          body: JSON.stringify({ name, manager_id: formManagerId, parent_id: formParentId }),
+        })
+        if (res.ok) {
+          toast.success(`«${name}» добавлен`)
+          closeModal()
+          fetchDepartments()
+        } else {
+          const data = await res.json()
+          setError(data.error || 'Ошибка')
+        }
+      }
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeDept = async (dept: Dept) => {
+    const confirmed = await confirmDialog({
+      title: 'Удалить отдел',
+      message: `Удалить отдел «${dept.name}»? Сотрудники будут отвязаны от отдела.`,
+      confirmText: 'Удалить',
+      variant: 'danger',
+    })
     if (!confirmed) return
     try {
-      await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${id}`, {
+      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${dept.id}`, {
         method: 'DELETE', headers: { ...getAuthHeaders(), ...orgHeaders() },
       })
-      fetchDepartments()
-    } catch {}
-  }
-
-  const startEdit = (dept: typeof departments[0]) => {
-    setEditingId(dept.id)
-    setEditName(dept.name)
-    setEditManagerId(dept.manager_id)
-    setEditManagerName(dept.manager_name || '')
-    setEditParentId(dept.parent_id)
+      if (res.ok) {
+        toast.success(`«${dept.name}» удалён`)
+        fetchDepartments()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'Не удалось удалить отдел')
+      }
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    }
   }
 
   const pickUser = (userId: number, userName: string) => {
-    if (showPicker === 'create') {
-      setNewManagerId(userId)
-      setNewManagerName(userName)
-    } else if (typeof showPicker === 'number') {
-      setEditManagerId(userId)
-      setEditManagerName(userName)
-    }
-    setShowPicker(null)
+    setFormManagerId(userId)
+    setFormManagerName(userName)
+    setShowPicker(false)
   }
+
+  const stats = useMemo(() => {
+    const total = departments.length
+    const people = departments.reduce((s, d) => s + (Number(d.employee_count) || 0), 0)
+    const managers = departments.filter(d => d.manager_name).length
+    return { total, people, managers }
+  }, [departments])
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const list = q
+      ? departments.filter(d => `${d.name} ${d.manager_name || ''}`.toLowerCase().includes(q))
+      : [...departments]
+    list.sort((a, b) => sort === 'name'
+      ? a.name.localeCompare(b.name, 'ru')
+      : (Number(b.employee_count) || 0) - (Number(a.employee_count) || 0) || a.name.localeCompare(b.name, 'ru'))
+    return list
+  }, [departments, search, sort])
+
+  const excludedParents = editingId != null
+    ? new Set([editingId, ...descendantsOf(editingId)])
+    : new Set<number>()
 
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
   }
 
-  const filteredDepartments = search.trim()
-    ? departments.filter(d => d.name.toLowerCase().includes(search.toLowerCase()) || (d.manager_name || '').toLowerCase().includes(search.toLowerCase()))
-    : departments
-
   return (
     <div className="space-y-4">
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+      {error && !modalMode && (
+        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
           <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Поиск отдела..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+      <div className="flex flex-wrap gap-2.5">
+        {[
+          { b: stats.total, label: pluralRu(stats.total, 'отдел', 'отдела', 'отделов') },
+          { b: stats.people, label: pluralRu(stats.people, 'сотрудник', 'сотрудника', 'сотрудников') },
+          { b: stats.managers, label: pluralRu(stats.managers, 'руководитель', 'руководителя', 'руководителей') },
+        ].map((s, i) => (
+          <div key={i} className="flex min-w-[120px] flex-col gap-0.5 rounded-xl border border-border bg-card px-4 py-2.5">
+            <b className="text-lg font-bold leading-tight">{s.b}</b>
+            <span className="text-xs text-muted-foreground">{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Поиск отдела или руководителя…"
+            className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+          />
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">{filteredDepartments.length} из {departments.length}</span>
-          <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4 mr-1" /> Новый отдел</Button>
+        <select
+          value={sort}
+          onChange={e => setSort(e.target.value as SortKey)}
+          className="rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
+        >
+          <option value="name">По алфавиту</option>
+          <option value="count">По количеству сотрудников</option>
+        </select>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="whitespace-nowrap text-sm text-muted-foreground">
+            Показано {visible.length} из {departments.length}
+          </span>
+          <Button onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Новый отдел</Button>
         </div>
       </div>
 
-      {showCreate && (
-        <Card className="border-dashed border-primary/40">
-          <CardContent className="pt-5 space-y-3">
-            <Input placeholder="Название отдела" value={newName} onChange={e => setNewName(e.target.value)} />
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground shrink-0">Руководитель:</span>
-              <button
-                onClick={() => setShowPicker('create')}
-                className="flex-1 flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-background text-sm hover:bg-muted/30 transition-colors"
+      {visible.length === 0 ? (
+        <div className="py-16 text-center text-sm text-muted-foreground">
+          <b className="mb-1 block text-[15px] text-foreground">
+            {departments.length === 0 ? 'Нет отделов' : 'Отделы не найдены'}
+          </b>
+          {departments.length === 0 ? 'Создайте первый отдел' : 'Измените запрос или создайте новый отдел'}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {visible.map((d) => {
+            const hue = hueFromString(d.name)
+            const count = Number(d.employee_count) || 0
+            return (
+              <article
+                key={d.id}
+                className="flex items-center gap-3.5 rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-muted-foreground/30"
               >
-                <span className={newManagerName ? 'text-foreground' : 'text-muted-foreground'}>
-                  {newManagerName || 'Выбрать руководителя...'}
-                </span>
-                {newManagerId && (
-                  <button onClick={e => { e.stopPropagation(); setNewManagerId(null); setNewManagerName('') }} className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground shrink-0">Подразделение (родитель):</span>
-              <select
-                value={newParentId ?? ''}
-                onChange={e => setNewParentId(e.target.value ? Number(e.target.value) : null)}
-                className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="">—</option>
-                {departments.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={createDept} disabled={!newName.trim()}>Создать</Button>
-              <Button variant="outline" onClick={() => { setShowCreate(false); setNewName(''); setNewManagerId(null); setNewManagerName(''); setNewParentId(null) }}>Отмена</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="space-y-3">
-        {filteredDepartments.map((dept) => {
-          const gradient = DEPT_GRADIENTS[dept.id % DEPT_GRADIENTS.length]
-          const excludedParents = new Set([dept.id, ...descendantsOf(dept.id)])
-          return (
-          <Card key={dept.id} className="group relative overflow-hidden">
-            <CardContent className="pt-5">
-              {editingId === dept.id ? (
-                <div className="space-y-3">
-                  <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Название" />
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground shrink-0">Рук.:</span>
-                    <button
-                      onClick={() => setShowPicker(dept.id)}
-                      className="flex-1 flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm hover:bg-muted/30 transition-colors"
-                    >
-                      <span className={editManagerName ? 'text-foreground' : 'text-muted-foreground'}>
-                        {editManagerName || 'Выбрать...'}
-                      </span>
-                      {editManagerId && (
-                        <button onClick={e => { e.stopPropagation(); setEditManagerId(null); setEditManagerName('') }} className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground shrink-0">Родитель:</span>
-                    <select
-                      value={editParentId ?? ''}
-                      onChange={e => setEditParentId(e.target.value ? Number(e.target.value) : null)}
-                      className="flex-1 px-2.5 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    >
-                      <option value="">—</option>
-                      {departments.filter(d => !excludedParents.has(d.id)).map(d => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => updateDept(dept.id)}><Check className="h-3.5 w-3.5 mr-1" />Сохранить</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Отмена</Button>
-                  </div>
+                <div
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
+                  style={{ background: `hsl(${hue} 80% 94%)`, color: `hsl(${hue} 55% 38%)` }}
+                >
+                  <Building2 className="h-5 w-5" />
                 </div>
-              ) : (
-                <div className="flex items-center gap-4">
-                  <div className={cn('p-3 rounded-2xl bg-gradient-to-br text-white shrink-0 shadow-md', gradient)}>
-                    <Building2 className="h-6 w-6" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-foreground text-base">{dept.name}</h3>
-                      {dept.parent_name && (
-                        <Badge className="text-[10px] bg-muted text-muted-foreground border-transparent">в составе: {dept.parent_name}</Badge>
-                      )}
-                    </div>
-                    {dept.manager_name ? (
-                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                        <Users className="h-3.5 w-3.5 shrink-0" />
-                        <span className="font-medium text-foreground/80">{dept.manager_name}</span>
-                        {dept.manager_position && (
-                          <>
-                            <span className="text-muted-foreground/40">·</span>
-                            <span className="truncate">{dept.manager_position}</span>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
-                        <Users className="h-3.5 w-3.5" />
-                        Без руководителя
-                      </p>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-[14.5px] font-semibold leading-snug [overflow-wrap:anywhere]">{d.name}</h3>
+                    {d.parent_name && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        в составе: {d.parent_name}
+                      </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <Badge className="text-[11px] bg-primary/10 text-primary">{dept.employee_count} чел.</Badge>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => startEdit(dept)} className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground">
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => deleteDept(dept.id, dept.name)} className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                  {d.manager_name ? (
+                    <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                      <Users className="h-3.5 w-3.5 shrink-0" />
+                      <span className="font-medium text-foreground/80">{d.manager_name}</span>
+                      {d.manager_position && (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span className="truncate">{d.manager_position}</span>
+                        </>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-muted-foreground/70">
+                      <UserX className="h-3.5 w-3.5 shrink-0" /> Руководитель не назначен
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <span className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold',
+                    count === 0 ? 'bg-muted text-muted-foreground/60' : 'bg-primary/10 text-primary',
+                  )}>
+                    <Users className="h-3 w-3" /> {count} чел.
+                  </span>
+
+                  <div className="relative">
+                    <button
+                      aria-haspopup="true"
+                      aria-expanded={openMenuId === d.id}
+                      aria-label={`Действия: ${d.name}`}
+                      onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === d.id ? null : d.id) }}
+                      className={cn(
+                        'grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                        openMenuId === d.id && 'bg-muted text-foreground',
+                      )}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                    {openMenuId === d.id && (
+                      <div
+                        role="menu"
+                        onClick={e => e.stopPropagation()}
+                        className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[180px] rounded-xl border border-border bg-card p-1.5 shadow-xl"
+                      >
+                        <button
+                          role="menuitem"
+                          onClick={() => { setOpenMenuId(null); openEdit(d) }}
+                          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium hover:bg-muted"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Редактировать
+                        </button>
+                        <button
+                          role="menuitem"
+                          onClick={() => { setOpenMenuId(null); removeDept(d) }}
+                          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Удалить
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-          )
-        })}
-      </div>
-
-      {departments.length === 0 && !showCreate && (
-        <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
-          <Building2 className="h-10 w-10 opacity-20" />
-          <p className="text-sm">Нет отделов</p>
-          <Button size="sm" onClick={() => setShowCreate(true)}><Plus className="h-3.5 w-3.5 mr-1" />Создать первый</Button>
+              </article>
+            )
+          })}
         </div>
       )}
 
-      {showPicker !== null && (
-        <UserPickerModal
-          onSelect={pickUser}
-          onClose={() => setShowPicker(null)}
-        />
+      {modalMode && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-5"
+          onClick={closeModal}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={modalMode === 'edit' ? 'Редактировать отдел' : 'Новый отдел'}
+            onClick={e => e.stopPropagation()}
+            className="w-full max-w-[440px] rounded-2xl border border-border bg-card p-6 shadow-2xl"
+          >
+            <h3 className="mb-4 text-base font-bold">
+              {modalMode === 'edit' ? 'Редактировать отдел' : 'Новый отдел'}
+            </h3>
+
+            {error && (
+              <div className="mb-3 flex items-center gap-2 rounded-lg bg-destructive/10 p-2.5 text-[13px] text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+              </div>
+            )}
+
+            <form
+              onSubmit={e => { e.preventDefault(); submitForm() }}
+              className="space-y-3.5"
+            >
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[12.5px] font-semibold text-muted-foreground">Название</span>
+                <input
+                  autoFocus
+                  value={formName}
+                  onChange={e => setFormName(e.target.value)}
+                  maxLength={120}
+                  placeholder="Например, Отдел исследований"
+                  className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+                />
+              </label>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[12.5px] font-semibold text-muted-foreground">Руководитель</span>
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/40"
+                >
+                  <span className={formManagerName ? 'text-foreground' : 'text-muted-foreground'}>
+                    {formManagerName || 'Не назначен'}
+                  </span>
+                  {formManagerId != null && (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setFormManagerId(null); setFormManagerName('') }}
+                      className="rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </button>
+              </div>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[12.5px] font-semibold text-muted-foreground">Подразделение (родитель)</span>
+                <select
+                  value={formParentId ?? ''}
+                  onChange={e => setFormParentId(e.target.value ? Number(e.target.value) : null)}
+                  className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+                >
+                  <option value="">—</option>
+                  {departments.filter(d => !excludedParents.has(d.id)).map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex justify-end gap-2.5 pt-1">
+                <Button type="button" variant="outline" onClick={closeModal}>Отмена</Button>
+                <Button type="submit" disabled={!formName.trim() || saving}>
+                  {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                  {modalMode === 'edit' ? 'Сохранить' : 'Добавить'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showPicker && (
+        <UserPickerModal onSelect={pickUser} onClose={() => setShowPicker(false)} />
       )}
     </div>
   )
@@ -341,7 +503,7 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
   })
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">

@@ -20,7 +20,7 @@ test.describe('Модуль Отпуск', () => {
       })
 
       test('выбор дат на календаре → форма создания', async ({ page }) => {
-        const decSection = page.locator('div.border.rounded-lg').filter({ hasText: 'Декабрь' }).first()
+        const decSection = page.getByTestId('month-card').filter({ hasText: 'Декабрь' }).first()
         const decCells = decSection.locator('[data-date-cell]')
         await decCells.nth(14).click()
         await expect(page.getByText(/Выбрана дата:/)).toBeVisible({ timeout: 3000 })
@@ -29,7 +29,7 @@ test.describe('Модуль Отпуск', () => {
       })
 
       test('заполнение формы и отправка заявки', async ({ page }) => {
-        const decSection = page.locator('div.border.rounded-lg').filter({ hasText: 'Декабрь' }).first()
+        const decSection = page.getByTestId('month-card').filter({ hasText: 'Декабрь' }).first()
         const decCells = decSection.locator('[data-date-cell]')
         await decCells.nth(14).click()
         await decCells.nth(19).click()
@@ -43,7 +43,7 @@ test.describe('Модуль Отпуск', () => {
       })
 
       test('учебный отпуск — справка обязательна', async ({ page }) => {
-        const decSection = page.locator('div.border.rounded-lg').filter({ hasText: 'Декабрь' }).first()
+        const decSection = page.getByTestId('month-card').filter({ hasText: 'Декабрь' }).first()
         const decCells = decSection.locator('[data-date-cell]')
         await decCells.nth(14).click()
         await decCells.nth(19).click()
@@ -286,30 +286,24 @@ test.describe('Модуль Отпуск', () => {
     test.describe('UC-1: Управление шаблонами документов', () => {
       test.beforeEach(async ({ page }) => {
         await loginAs(page, 'admin')
-        await page.goto('/hr')
+        // Вкладка «Шаблоны документов» открывается через query-параметр
+        // ?tab= на роуте /hr (вынесена в общий сайдбар).
+        await page.goto('/hr?tab=doc-templates')
         await page.waitForTimeout(2000)
-        const dictTab = page.getByRole('button', { name: /Справочники/i })
-        if (await dictTab.isVisible({ timeout: 10000 }).catch(() => false)) {
-          await dictTab.click()
-          await page.waitForTimeout(500)
-        }
       })
 
       test('список шаблонов загружается', async ({ page }) => {
         if (await page.getByText('Что-то пошло не так').isVisible().catch(() => false)) { test.skip(); return }
-        await page.getByRole('button', { name: /Шаблоны документов/i }).click({ timeout: 5000 }).catch(() => {})
         await expect(page.getByText('Шаблон123').first()).toBeVisible({ timeout: 5000 })
       })
 
       test('видна кнопка «Добавить»', async ({ page }) => {
         if (await page.getByText('Что-то пошло не так').isVisible().catch(() => false)) { test.skip(); return }
-        await page.getByRole('button', { name: /Шаблоны документов/i }).click({ timeout: 5000 }).catch(() => {})
         await expect(page.getByRole('button', { name: /Добавить/ }).first()).toBeVisible({ timeout: 5000 })
       })
 
       test('открытие формы добавления шаблона', async ({ page }) => {
         if (await page.getByText('Что-то пошло не так').isVisible().catch(() => false)) { test.skip(); return }
-        await page.getByRole('button', { name: /Шаблоны документов/i }).click({ timeout: 5000 }).catch(() => {})
         const addBtn = page.getByRole('button', { name: /Добавить/ }).first()
         if (!(await addBtn.isVisible({ timeout: 10000 }).catch(() => false))) { test.skip(); return }
         await addBtn.click()
@@ -319,7 +313,6 @@ test.describe('Модуль Отпуск', () => {
 
       test('форма добавления — выбор назначения', async ({ page }) => {
         if (await page.getByText('Что-то пошло не так').isVisible().catch(() => false)) { test.skip(); return }
-        await page.getByRole('button', { name: /Шаблоны документов/i }).click({ timeout: 5000 }).catch(() => {})
         const addBtn = page.getByRole('button', { name: /Добавить/ }).first()
         if (!(await addBtn.isVisible({ timeout: 10000 }).catch(() => false))) { test.skip(); return }
         await addBtn.click()
@@ -331,7 +324,6 @@ test.describe('Модуль Отпуск', () => {
 
       test('закрытие формы добавления', async ({ page }) => {
         if (await page.getByText('Что-то пошло не так').isVisible().catch(() => false)) { test.skip(); return }
-        await page.getByRole('button', { name: /Шаблоны документов/i }).click({ timeout: 5000 }).catch(() => {})
         const addBtn = page.getByRole('button', { name: /Добавить/ }).first()
         if (!(await addBtn.isVisible({ timeout: 10000 }).catch(() => false))) { test.skip(); return }
         await addBtn.click()
@@ -344,13 +336,9 @@ test.describe('Модуль Отпуск', () => {
     test.describe('UC-2: Запрет отпусков по отделам', () => {
       test.beforeEach(async ({ page }) => {
         await loginAs(page, 'admin')
-        await page.goto('/hr')
-        if (!(await page.getByText('Что-то пошло не так').isVisible().catch(() => false))) {
-          const vacationTab = page.getByRole('button', { name: /^Отпуск/i })
-          if (await vacationTab.isVisible({ timeout: 10000 }).catch(() => false)) {
-            await vacationTab.click()
-          }
-        }
+        // Вкладка «Отпуск» открывается через query-параметр ?tab= на роуте
+        // /hr (вынесена в общий сайдбар).
+        await page.goto('/hr?tab=vacation')
       })
 
       test('список отделов с блокировкой', async ({ page }) => {
