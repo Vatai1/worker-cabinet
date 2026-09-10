@@ -32,6 +32,8 @@ import {
   SelectEmployeeModal,
   TextInputModal,
   SaveSnapshotContext,
+  ConfirmLeaveModal,
+  ConfirmDeleteNodeModal,
   EDGE_STYLE,
   EDGE_MARKER,
   NODE_COLORS,
@@ -59,6 +61,9 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [edgeContextMenu, setEdgeContextMenu] = useState<EdgeContextMenu | null>(null)
   const [editingNode, setEditingNode] = useState<{ id: string; type: 'department' | 'employee' | 'text' } | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const [confirmLeave, setConfirmLeave] = useState(false)
+  const [confirmDeleteNode, setConfirmDeleteNode] = useState<{ nodeId: string; edgeCount: number } | null>(null)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -70,6 +75,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
 
   const saveSnapshot = useCallback(() => {
     if (isRestoringRef.current) return
+    setDirty(true)
     const inst = rfInstanceRef.current
     if (!inst) return
     historyRef.current = [...historyRef.current.slice(-49), { nodes: inst.getNodes(), edges: inst.getEdges() }]
@@ -87,6 +93,8 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.code === 'KeyZ')) {
+        const t = e.target as HTMLElement | null
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
         e.preventDefault()
         undo()
       }
@@ -94,6 +102,16 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [undo])
+
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   useEffect(() => {
     const load = async () => {
@@ -107,6 +125,8 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
           if (rfInstanceRef.current) rfInstanceRef.current.setViewport(data.viewport)
           else pendingViewportRef.current = data.viewport
         }
+        historyRef.current = []
+        setDirty(false)
       } catch (err) {
         setError(getErrorMessage(err))
       } finally {
@@ -308,6 +328,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
         throw new Error(d.error || 'Не удалось сохранить иерархию отдела')
       }
       setSavedLabel(true)
+      setDirty(false)
       setTimeout(() => setSavedLabel(false), 2000)
     } catch (err) {
       setError(getErrorMessage(err))
@@ -316,12 +337,30 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
     }
   }
 
+  const handleBack = useCallback(() => {
+    if (dirty) {
+      setConfirmLeave(true)
+      return
+    }
+    onClose()
+  }, [dirty, onClose])
+
+  const requestDeleteNode = useCallback((nodeId: string) => {
+    setContextMenu(null)
+    const edgeCount = edges.filter((e) => e.source === nodeId || e.target === nodeId).length
+    if (edgeCount > 0) {
+      setConfirmDeleteNode({ nodeId, edgeCount })
+    } else {
+      deleteNode(nodeId)
+    }
+  }, [edges, deleteNode])
+
   return (
     <div className="absolute inset-0 z-20 flex flex-col bg-card">
       {/* Header */}
       <div className="px-6 py-3 border-b border-border flex items-center gap-3 flex-shrink-0">
         <button
-          onClick={onClose}
+          onClick={handleBack}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -426,7 +465,8 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
             onReconnectEnd={onReconnectEnd}
             connectionMode={ConnectionMode.Loose}
             colorMode={darkMode ? 'dark' : 'light'}
-            deleteKeyCode="Delete"
+            deleteKeyCode={null}
+            proOptions={{ hideAttribution: true }}
             fitView
             fitViewOptions={{ maxZoom: 1 }}
           >
@@ -557,12 +597,27 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
           </button>
           <div className="h-px bg-border mx-2" />
           <button
-            onClick={() => deleteNode(contextMenu.nodeId)}
+            onClick={() => requestDeleteNode(contextMenu.nodeId)}
             className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
           >
             Удалить
           </button>
         </div>
+      )}
+
+      {confirmDeleteNode && (
+        <ConfirmDeleteNodeModal
+          edgeCount={confirmDeleteNode.edgeCount}
+          onConfirm={() => { deleteNode(confirmDeleteNode.nodeId); setConfirmDeleteNode(null) }}
+          onClose={() => setConfirmDeleteNode(null)}
+        />
+      )}
+
+      {confirmLeave && (
+        <ConfirmLeaveModal
+          onConfirm={() => { setConfirmLeave(false); onClose() }}
+          onClose={() => setConfirmLeave(false)}
+        />
       )}
     </div>
   )

@@ -53,6 +53,7 @@ interface DeptEmployee {
   position: string
   departmentName?: string
   departmentId?: number
+  managerId?: number | null
 }
 
 interface OrgMemberRow {
@@ -62,6 +63,7 @@ interface OrgMemberRow {
   position: string | null
   department_id: number | null
   department_name: string | null
+  manager_id: number | null
 }
 
 interface ChildOrgItem {
@@ -957,12 +959,84 @@ function EdgeSettingsModal({
 
 type VacationVisibility = { childSeesParent: boolean; parentSeesChild: boolean; parentApproves?: boolean }
 
-function ParentEdgeSettingsModal({ edge, onConfirm, onClose }: {
+function validateGraphEdges(nodes: Node[], edges: Edge[]): string | null {
+  const deptIdByNode = new Map<string, number>()
+  const nameByDept = new Map<number, string>()
+  const userIdByNode = new Map<string, number>()
+  const nameByUser = new Map<number, string>()
+  for (const n of nodes) {
+    const d = (n.data ?? {}) as Record<string, unknown>
+    if (n.type === 'department' && d.id != null) {
+      const id = Number(d.id)
+      deptIdByNode.set(n.id, id)
+      nameByDept.set(id, String(d.name || `Отдел #${id}`))
+    } else if (n.type === 'employee' && d.id != null) {
+      const id = Number(d.id)
+      userIdByNode.set(n.id, id)
+      nameByUser.set(id, `${String(d.lastName || '')} ${String(d.firstName || '')}`.trim() || `Пользователь #${id}`)
+    }
+  }
+
+  const deptParents = new Map<number, Set<number>>()
+  const deptCurator = new Map<number, number>()
+  const empParent = new Map<number, number>()
+
+  for (const e of edges) {
+    if ((e.data as { relation?: string } | undefined)?.relation === 'plain') continue
+    const sD = deptIdByNode.get(e.source)
+    const tD = deptIdByNode.get(e.target)
+    const sU = userIdByNode.get(e.source)
+    const tU = userIdByNode.get(e.target)
+    if (sD != null && tD != null) {
+      if (!deptParents.has(tD)) deptParents.set(tD, new Set())
+      deptParents.get(tD)!.add(sD)
+    } else if (sU != null && tD != null) {
+      const ex = deptCurator.get(tD)
+      if (ex != null && ex !== sU) return `У отдела может быть только один родитель: ${nameByDept.get(tD)}`
+      deptCurator.set(tD, sU)
+    } else if (sU != null && tU != null && sU !== tU) {
+      const ex = empParent.get(tU)
+      if (ex != null && ex !== sU) return `У сотрудника может быть только один родитель: ${nameByUser.get(tU)}`
+      empParent.set(tU, sU)
+    }
+  }
+
+  for (const [childDept, parents] of deptParents) {
+    if (parents.size > 1 || deptCurator.has(childDept)) {
+      return `У отдела может быть только один родитель: ${nameByDept.get(childDept)}`
+    }
+  }
+
+  for (const childUser of empParent.keys()) {
+    const seen = new Set<number>()
+    let cur: number | null | undefined = childUser
+    while (cur != null && !seen.has(cur)) { seen.add(cur); cur = empParent.get(cur) ?? null }
+    if (cur != null) return 'Цикл в иерархии сотрудников'
+  }
+
+  for (const childDept of deptParents.keys()) {
+    const seen = new Set<number>()
+    let cur: number | null | undefined = childDept
+    while (cur != null && !seen.has(cur)) {
+      seen.add(cur)
+      const p = deptParents.get(cur)
+      cur = p && p.size > 0 ? [...p][0] : null
+    }
+    if (cur != null) return 'Цикл в иерархии отделов'
+  }
+
+  return null
+}
+
+function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onClose }: {
   edge: Edge
+  sourceType?: string
+  targetType?: string
   onConfirm: (childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean) => void
   onClose: () => void
 }) {
   const vis = (edge.data as { vacationVisibility?: Partial<VacationVisibility> } | undefined)?.vacationVisibility
+  const isEmpToEmp = sourceType === 'employee' && targetType === 'employee'
   const [childSeesParent, setChildSeesParent] = useState(vis?.childSeesParent ?? true)
   const [parentSeesChild, setParentSeesChild] = useState(vis?.parentSeesChild ?? true)
   const [parentApproves, setParentApproves] = useState(vis?.parentApproves ?? true)
@@ -988,19 +1062,21 @@ function ParentEdgeSettingsModal({ edge, onConfirm, onClose }: {
             <p className="text-sm font-medium">Родитель видит отпуска подчинённых</p>
             <Switch checked={parentSeesChild} onCheckedChange={setParentSeesChild} />
           </div>
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-            <div>
-              <p className="text-sm font-medium">Родитель согласовывает отпуска подчинённых</p>
-              {!parentApproves && (
-                <p className="text-xs text-muted-foreground mt-1">Согласование уйдёт на уровень выше</p>
-              )}
+          {!isEmpToEmp && (
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+              <div>
+                <p className="text-sm font-medium">Родитель согласовывает отпуска подчинённых</p>
+                {!parentApproves && (
+                  <p className="text-xs text-muted-foreground mt-1">Согласование уйдёт на уровень выше</p>
+                )}
+              </div>
+              <Switch checked={parentApproves} onCheckedChange={setParentApproves} />
             </div>
-            <Switch checked={parentApproves} onCheckedChange={setParentApproves} />
-          </div>
+          )}
         </div>
         <div className="px-6 py-3 border-t border-border flex gap-2">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(childSeesParent, parentSeesChild, parentApproves)}>
+          <Button className="flex-1" onClick={() => onConfirm(childSeesParent, parentSeesChild, isEmpToEmp ? true : parentApproves)}>
             Сохранить
           </Button>
         </div>
@@ -1149,6 +1225,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
   const [confirmDeleteEdgeId, setConfirmDeleteEdgeId] = useState<string | null>(null)
   const [confirmDeleteNode, setConfirmDeleteNode] = useState<string | null>(null)
   const [confirmLeave, setConfirmLeave] = useState(false)
+  const [pendingSaveNames, setPendingSaveNames] = useState<string[] | null>(null)
   const [showInstruction, setShowInstruction] = useState(false)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
@@ -1185,11 +1262,14 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     setNodes(snapshot.nodes)
     setEdges(snapshot.edges)
     isRestoringRef.current = false
+    if (historyRef.current.length === 0) setDirty(false)
   }, [setNodes, setEdges])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.code === 'KeyZ')) {
+        const t = e.target as HTMLElement | null
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
         e.preventDefault()
         undo()
       }
@@ -1275,6 +1355,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             position: u.position ?? '',
             departmentName: u.department_name ?? undefined,
             departmentId: u.department_id ?? undefined,
+            managerId: u.manager_id ?? null,
           })))
         }
       } catch {
@@ -1657,7 +1738,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     return () => document.removeEventListener('click', close)
   }, [contextMenu, edgeContextMenu])
 
-  const save = async () => {
+  const performSave = async () => {
     const inst = rfInstanceRef.current
     if (!inst) return
     setSaving(true)
@@ -1677,17 +1758,57 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
         body: JSON.stringify({ nodes: nodesClean, edges: edgesClean, viewport, orgPositions }),
       })
       if (!res.ok) {
-        const d = await res.json()
+        const d = await res.json().catch(() => ({}))
         throw new Error(d.error || 'Не удалось сохранить иерархию')
       }
       setSavedLabel(true)
       setDirty(false)
       setTimeout(() => setSavedLabel(false), 2000)
     } catch (err) {
-      setError(getErrorMessage(err))
+      toast.error(getErrorMessage(err))
     } finally {
       setSaving(false)
     }
+  }
+
+  const save = async () => {
+    const inst = rfInstanceRef.current
+    if (!inst) return
+    const { nodes: n, edges: e } = inst.toObject()
+    const nodesClean = n.filter(x => x.type !== 'organization')
+    const edgesClean = e.filter(x => !String(x.source).startsWith('org-') && !String(x.target).startsWith('org-'))
+
+    const validationError = validateGraphEdges(nodesClean, edgesClean)
+    if (validationError) {
+      toast.error('Схема не сохранена: ' + validationError)
+      return
+    }
+
+    const empNodeIds = new Set(nodesClean.filter(x => x.type === 'employee').map(x => Number((x.data as { id?: number })?.id)))
+    const hasIncomingParent = new Set<number>()
+    for (const ed of edgesClean) {
+      if ((ed.data as { relation?: string } | undefined)?.relation === 'plain') continue
+      const src = nodesClean.find(x => x.id === ed.source)
+      const tgt = nodesClean.find(x => x.id === ed.target)
+      if (src?.type === 'employee' && tgt?.type === 'employee') {
+        const tId = Number((tgt.data as { id?: number })?.id)
+        if (!Number.isNaN(tId)) hasIncomingParent.add(tId)
+      }
+    }
+    const managerById = new Map(orgMembers.map(m => [m.id, m.managerId ?? null]))
+    const nameById = new Map(orgMembers.map(m => [m.id, `${m.last_name} ${m.first_name}`.trim()]))
+    const cleared: string[] = []
+    for (const uid of empNodeIds) {
+      if (Number.isNaN(uid) || hasIncomingParent.has(uid)) continue
+      if (managerById.get(uid)) cleared.push(nameById.get(uid) || `#${uid}`)
+    }
+
+    if (cleared.length > 0) {
+      setPendingSaveNames(cleared)
+      return
+    }
+
+    performSave()
   }
 
   const requestClose = useCallback(() => {
@@ -1880,6 +2001,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             connectionMode={ConnectionMode.Loose}
             colorMode={darkMode ? 'dark' : 'light'}
             deleteKeyCode={null}
+            proOptions={{ hideAttribution: true }}
             fitView
             fitViewOptions={{ maxZoom: 1 }}
           >
@@ -1985,6 +2107,26 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
         />
       )}
 
+      {pendingSaveNames && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
+            <div className="flex items-center gap-2 px-6 py-4 border-b border-border">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              <h2 className="text-lg font-semibold">Очистка руководителя</h2>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-sm text-muted-foreground">
+                Будет очищен руководитель у {pendingSaveNames.length}&nbsp;сотрудник(ов): {pendingSaveNames.join(', ')}. Продолжить?
+              </p>
+            </div>
+            <div className="px-6 py-3 border-t border-border flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setPendingSaveNames(null)}>Отмена</Button>
+              <Button className="flex-1" onClick={() => { setPendingSaveNames(null); performSave() }}>Продолжить</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit modals */}
       {editingNode?.type === 'department' && (() => {
         const n = nodes.find(n => n.id === editingNode.id)
@@ -2075,6 +2217,8 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
         return (
           <ParentEdgeSettingsModal
             edge={e}
+            sourceType={nodes.find(n => n.id === e.source)?.type}
+            targetType={nodes.find(n => n.id === e.target)?.type}
             onConfirm={saveParentEdgeSettings}
             onClose={() => setParentEdgeId(null)}
           />
@@ -2179,6 +2323,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
 
 export { DepartmentNode, EmployeeNode, TextNode, GroupNode, nodeTypes, EditableEdge, edgeTypes }
 export { SelectDepartmentModal, SelectEmployeeModal, TextInputModal }
+export { ConfirmLeaveModal, ConfirmDeleteNodeModal }
 export { ChildOrgNode, buildOrgOverlay, animateOrgReveal }
 export type { Department, DeptEmployee }
 export { SaveSnapshotContext, EDGE_STYLE, EDGE_MARKER, NODE_COLORS }

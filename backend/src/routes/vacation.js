@@ -26,16 +26,30 @@ async function getEmpName(userId) {
 
 async function resolveApproverId(userId, orgId, req) {
   const userResult = await query('SELECT department_id FROM users WHERE id = $1', [userId])
-  let deptId = userResult.rows[0]?.department_id || null
+  const ownDeptId = userResult.rows[0]?.department_id || null
   const visitedDepts = new Set()
-  while (deptId && !visitedDepts.has(deptId)) {
-    visitedDepts.add(deptId)
-    const deptResult = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves FROM departments WHERE id = $1', [deptId])
-    const dept = deptResult.rows[0]
-    if (!dept) break
-    if (dept.manager_id !== null && dept.manager_id !== userId) return dept.manager_id
-    if (dept.parent_user_id !== null && dept.parent_user_id !== userId && dept.vac_parent_approves !== false) return dept.parent_user_id
-    deptId = dept.parent_id
+
+  if (ownDeptId && !visitedDepts.has(ownDeptId)) {
+    visitedDepts.add(ownDeptId)
+    const dRes = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves FROM departments WHERE id = $1', [ownDeptId])
+    const d = dRes.rows[0]
+    if (d) {
+      if (d.manager_id !== null && d.manager_id !== userId) return d.manager_id
+      const parentsAllowed = d.vac_parent_approves !== false
+      if (parentsAllowed && d.parent_user_id !== null && d.parent_user_id !== userId) return d.parent_user_id
+      if (parentsAllowed) {
+        let pId = d.parent_id
+        while (pId && !visitedDepts.has(pId)) {
+          visitedDepts.add(pId)
+          const pRes = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves FROM departments WHERE id = $1', [pId])
+          const p = pRes.rows[0]
+          if (!p) break
+          if (p.manager_id !== null && p.manager_id !== userId) return p.manager_id
+          if (p.vac_parent_approves !== false && p.parent_user_id !== null && p.parent_user_id !== userId) return p.parent_user_id
+          pId = p.parent_id
+        }
+      }
+    }
   }
 
   const visitedOrgs = new Set()

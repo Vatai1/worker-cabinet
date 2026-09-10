@@ -44,6 +44,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
+  { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
   { name: 'Отдел', icon: Building2, section: 'Работа', children: [
     { name: 'Отпуск', href: '/vacation', module: 'vacation' },
     { name: 'Сотрудники', href: '/employees' },
@@ -64,6 +65,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/leader', icon: Users, section: 'Основное' },
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
+  { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
   { name: 'Отдел', icon: Building2, section: 'Управление', children: [
     { name: 'Табель', href: '/leader/timesheet', module: 'timesheet' },
     { name: 'Отпуск', href: '/vacation', module: 'vacation' },
@@ -100,6 +102,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
+  { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
   { name: 'Сотрудники', href: '/employees', icon: Users, section: 'Управление' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Управление' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
@@ -149,6 +152,7 @@ const getAdminNavigation = (userId?: string, isSuper?: boolean): NavItem[] => [
   { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
+  { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
   { name: 'Сотрудники', href: '/employees', icon: Users, section: 'Управление' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Управление' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },

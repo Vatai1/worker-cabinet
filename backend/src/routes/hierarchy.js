@@ -318,12 +318,17 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
  *                     viewport: { type: object }
  *                 updated_at: { type: string, format: date-time, nullable: true }
  *                 updated_by: { type: integer, nullable: true }
+ *       400:
+ *         description: Организация не выбрана (нет X-Organization-Id и активной организации)
  */
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const headerOrg = parseInt(req.headers['x-organization-id'])
     const canReadAnyOrg = ['hr', 'admin', 'superadmin'].includes(req.user.role)
     const targetOrgId = canReadAnyOrg && headerOrg ? headerOrg : (req.org?.org_id ?? null)
+    if (!targetOrgId) {
+      return res.status(400).json({ error: 'Не выбрана организация' })
+    }
     const result = targetOrgId
       ? await query('SELECT data, updated_at, updated_by FROM hr_hierarchy WHERE organization_id = $1', [targetOrgId])
       : { rows: [] }
@@ -495,7 +500,7 @@ router.get('/global', authenticateToken, async (req, res) => {
  * /hierarchy/global:
  *   put:
  *     tags: [Hierarchy]
- *     summary: Сохранить глобальную иерархию организаций (hr/admin/superadmin)
+ *     summary: 'Сохранить глобальную иерархию организаций (роли: superadmin)'
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -514,7 +519,7 @@ router.get('/global', authenticateToken, async (req, res) => {
  *       400:
  *         description: Ошибка валидации
  */
-router.put('/global', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), async (req, res) => {
+router.put('/global', authenticateToken, authorizeRoles('superadmin'), async (req, res) => {
   const { nodes, edges, viewport } = req.body
   if (!nodes || !edges) {
     return res.status(400).json({ error: 'Поля nodes и edges обязательны' })
@@ -601,6 +606,12 @@ router.get('/department/:id', authenticateToken, async (req, res) => {
  *     responses:
  *       200:
  *         description: Иерархия сохранена
+ *       400:
+ *         description: Не выбрана организация или отсутствуют nodes/edges
+ *       403:
+ *         description: Отдел принадлежит другой организации
+ *       404:
+ *         description: Отдел не найден
  */
 router.put('/department/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   const { id } = req.params
@@ -609,6 +620,17 @@ router.put('/department/:id', authenticateToken, authorizeRoles('hr', 'admin'), 
     return res.status(400).json({ error: 'Поля nodes и edges обязательны' })
   }
   try {
+    const deptRow = await query('SELECT id, organization_id FROM departments WHERE id = $1', [id])
+    if (deptRow.rows.length === 0) {
+      return res.status(404).json({ error: 'Отдел не найден' })
+    }
+    const orgId = currentOrgId(req)
+    if (!orgId) {
+      return res.status(400).json({ error: 'Не выбрана организация' })
+    }
+    if (deptRow.rows[0].organization_id !== orgId) {
+      return res.status(403).json({ error: 'Нет доступа к этому отделу' })
+    }
     const data = JSON.stringify({ nodes, edges, viewport: viewport ?? DEFAULT_DATA.viewport })
     const result = await query(
       `INSERT INTO department_hierarchy (department_id, data, updated_at, updated_by, organization_id)

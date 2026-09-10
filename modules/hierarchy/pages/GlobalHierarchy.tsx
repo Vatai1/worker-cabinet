@@ -25,7 +25,7 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { useUIStore } from '@/shared/store/uiStore'
-import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, HRHierarchy, ChildOrgNode, buildOrgOverlay, animateOrgReveal } from '@/modules/hierarchy/pages/HRHierarchy'
+import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, HRHierarchy, ChildOrgNode, buildOrgOverlay, animateOrgReveal, ConfirmLeaveModal } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
   id: number
@@ -406,6 +406,8 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
   const [savedLabel, setSavedLabel] = useState(false)
   const [showInstruction, setShowInstruction] = useState(false)
   const [pendingNest, setPendingNest] = useState<{ orgId: number; orgName: string; targetId: number; targetName: string; prevPosition: { x: number; y: number } } | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const [confirmLeave, setConfirmLeave] = useState(false)
   const darkMode = useUIStore((s) => s.darkMode)
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null)
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
@@ -414,6 +416,14 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
   const onNodeDragStart = useCallback((_: unknown, node: Node) => {
     dragStartPosRef.current.set(node.id, { x: node.position.x, y: node.position.y })
   }, [])
+
+  const requestClose = useCallback(() => {
+    if (dirty) {
+      setConfirmLeave(true)
+      return
+    }
+    onClose?.()
+  }, [dirty, onClose])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -424,10 +434,20 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
 
   useEffect(() => {
     if (!fullscreen || !onClose) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !selectedOrg && !pendingDrop && !editingNode && !showInstruction && !pendingNest) onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !selectedOrg && !pendingDrop && !editingNode && !showInstruction && !pendingNest && !confirmLeave) requestClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen, onClose, selectedOrg, pendingDrop, editingNode, showInstruction, pendingNest])
+  }, [fullscreen, onClose, selectedOrg, pendingDrop, editingNode, showInstruction, pendingNest, confirmLeave, requestClose])
+
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
 
   useEffect(() => {
     const load = async () => {
@@ -452,6 +472,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
         const merged = mergeSavedLayout(orgList, saved)
         setNodes(merged.nodes)
         setEdges(merged.edges)
+        setDirty(false)
         if (merged.viewport) {
           if (rfInstanceRef.current) {
             rfInstanceRef.current.setViewport(merged.viewport)
@@ -495,6 +516,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
   }, [])
 
   const onNodeDragStop = useCallback((_: unknown, draggedNode: Node) => {
+    setDirty(true)
     if (draggedNode.type !== 'organization') return
     const inst = rfInstanceRef.current
     if (!inst) return
@@ -545,8 +567,11 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
 
   const confirmNest = useCallback(() => {
     if (!pendingNest) return
-    const { orgId, targetId } = pendingNest
+    const { orgId, targetId, prevPosition } = pendingNest
     setPendingNest(null)
+    const restorePosition = () => {
+      setNodes(nds => nds.map(n => n.id === `org-${orgId}` ? { ...n, position: prevPosition } : n))
+    }
     fetch(`${API_BASE_URL}/organizations/${orgId}`, {
       method: 'PUT',
       headers: getAuthHeadersWithContentType(),
@@ -554,14 +579,20 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
     }).then(async res => {
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(d.error || 'Ошибка')
+        toast.error(d.error || 'Не удалось перенести организацию')
+        restorePosition()
+        return
       }
       const updatedOrgs = orgs.map(o => o.id === orgId ? { ...o, parent_id: targetId } : o)
       setOrgs(updatedOrgs)
       setNodes(prev => refreshOrgNodes(updatedOrgs, prev, null).nodes)
       setEdges([])
+      setDirty(true)
       toast('Организация перенесена внутрь родительской')
-    }).catch(() => toast('Не удалось перенести организацию'))
+    }).catch(() => {
+      toast.error('Не удалось перенести организацию')
+      restorePosition()
+    })
   }, [pendingNest, orgs, setNodes, setEdges])
 
   useEffect(() => {
@@ -605,6 +636,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
           position: pendingDrop.position,
           data: { text: title },
         } as Node])
+    setDirty(true)
     setPendingDrop(null)
   }
 
@@ -613,11 +645,13 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
     setNodes(nds => nds.map(n => n.id === editingNode.id
       ? { ...n, data: editingNode.type === 'group' ? { ...n.data, title } : { ...n.data, text: title } }
       : n))
+    setDirty(true)
     setEditingNode(null)
   }
 
   const deleteNode = (nodeId: string) => {
     setNodes(nds => nds.filter(n => n.id !== nodeId))
+    setDirty(true)
     setContextMenu(null)
   }
 
@@ -634,13 +668,14 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
         body: JSON.stringify({ nodes: nodesClean, edges: e, viewport }),
       })
       if (!res.ok) {
-        const d = await res.json()
+        const d = await res.json().catch(() => ({}))
         throw new Error(d.error || 'Не удалось сохранить глобальную иерархию')
       }
       setSavedLabel(true)
+      setDirty(false)
       setTimeout(() => setSavedLabel(false), 2000)
     } catch (err) {
-      setError(getErrorMessage(err))
+      toast.error('Не удалось сохранить глобальную иерархию: ' + getErrorMessage(err))
     } finally {
       setSaving(false)
     }
@@ -676,7 +711,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
             </Button>
           )}
           {fullscreen && onClose && (
-            <Button size="sm" variant="outline" onClick={onClose}>
+            <Button size="sm" variant="outline" onClick={requestClose}>
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -845,6 +880,12 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
           )
         })()}
       </div>
+      {confirmLeave && (
+        <ConfirmLeaveModal
+          onConfirm={() => { setConfirmLeave(false); onClose?.() }}
+          onClose={() => setConfirmLeave(false)}
+        />
+      )}
       {selectedOrg && (
         <OrgHierarchyViewer org={selectedOrg} canEditOrg={canEditOrg} onClose={() => setSelectedOrg(null)} />
       )}
