@@ -769,6 +769,7 @@ type EdgeDraft = {
   strokeColor: string
   lineStyle: 'solid' | 'dashed'
   note: string
+  vacationVisibility?: Partial<VacationVisibility>
 }
 
 function EdgeSettingsModal({
@@ -778,7 +779,7 @@ function EdgeSettingsModal({
   onClose,
 }: {
   draft: EdgeDraft
-  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed') => void
+  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed', vacationVisibility: VacationVisibility | undefined) => void
   onDelete?: () => void
   onClose: () => void
 }) {
@@ -788,9 +789,18 @@ function EdgeSettingsModal({
   const [strokeColor, setStrokeColor] = useState(draft.strokeColor)
   const [lineStyle, setLineStyle] = useState<'solid' | 'dashed'>(draft.lineStyle)
   const [note, setNote] = useState(draft.note)
+  const [childSeesParent, setChildSeesParent] = useState(draft.vacationVisibility?.childSeesParent ?? true)
+  const [parentSeesChild, setParentSeesChild] = useState(draft.vacationVisibility?.parentSeesChild ?? true)
+  const [parentApproves, setParentApproves] = useState(draft.vacationVisibility?.parentApproves ?? true)
   const parentAvailable = draft.sourceType !== 'text' && draft.targetType !== 'text' &&
     (draft.sourceType === 'department' || draft.targetType === 'department' || (draft.sourceType === 'employee' && draft.targetType === 'employee'))
   const effectiveRelation: EdgeRelation = parentAvailable ? relation : 'plain'
+  const isEmpToEmp = draft.sourceType === 'employee' && draft.targetType === 'employee'
+  const vacationApplicable = effectiveRelation === 'parent' && draft.sourceType !== 'text' && draft.targetType !== 'text'
+  const buildVacationVisibility = (): VacationVisibility | undefined =>
+    effectiveRelation === 'parent'
+      ? { childSeesParent, parentSeesChild, parentApproves: isEmpToEmp ? true : parentApproves }
+      : undefined
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -928,6 +938,30 @@ function EdgeSettingsModal({
               <line x1="0" y1="4" x2="200" y2="4" stroke={strokeColor} strokeWidth={strokeWidth} strokeLinecap="round" />
             </svg>
           </div>
+          {vacationApplicable && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Видимость отпусков</p>
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+                <p className="text-sm font-medium">Отпуск родителя виден подчинённым</p>
+                <Switch checked={childSeesParent} onCheckedChange={setChildSeesParent} />
+              </div>
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+                <p className="text-sm font-medium">Родитель видит отпуска подчинённых</p>
+                <Switch checked={parentSeesChild} onCheckedChange={setParentSeesChild} />
+              </div>
+              {!isEmpToEmp && (
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">Родитель согласовывает отпуска подчинённых</p>
+                    {!parentApproves && (
+                      <p className="text-xs text-muted-foreground mt-1">Согласование уйдёт на уровень выше</p>
+                    )}
+                  </div>
+                  <Switch checked={parentApproves} onCheckedChange={setParentApproves} />
+                </div>
+              )}
+            </div>
+          )}
           <div className="space-y-1.5">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Примечание</p>
             <textarea
@@ -946,7 +980,7 @@ function EdgeSettingsModal({
             </Button>
           )}
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(effectiveRelation, parentIsSource, note, strokeWidth, strokeColor, lineStyle)}>
+          <Button className="flex-1" onClick={() => onConfirm(effectiveRelation, parentIsSource, note, strokeWidth, strokeColor, lineStyle, buildVacationVisibility())}>
             Сохранить
           </Button>
         </div>
@@ -1226,6 +1260,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
   const [confirmDeleteNode, setConfirmDeleteNode] = useState<string | null>(null)
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [pendingSaveNames, setPendingSaveNames] = useState<string[] | null>(null)
+  const versionRef = useRef<number>(0)
   const [showInstruction, setShowInstruction] = useState(false)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
@@ -1298,7 +1333,9 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
           fetch(`${API_BASE_URL}/organizations/tree`, { headers: getAuthHeaders() }).catch(() => null),
         ])
         if (!res.ok) throw new Error('Не удалось загрузить иерархию')
-        const { data } = await res.json()
+        const payload = await res.json()
+        const { data } = payload
+        versionRef.current = typeof payload.version === 'number' ? payload.version : 0
         const baseNodes: Node[] = data.nodes ?? []
         const savedOrgPositions = (data.orgPositions ?? {}) as Record<string, { x: number; y: number }>
         const scopeOrgId = orgId ?? useOrgStore.getState().currentOrgId
@@ -1449,10 +1486,11 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     const s = nodeOf(edge.source)
     const t = nodeOf(edge.target)
     if (!s || !t) return
-    const data = edge.data as { relation?: EdgeRelation; note?: string; lineStyle?: 'solid' | 'dashed' } | undefined
+    const data = edge.data as { relation?: EdgeRelation; note?: string; lineStyle?: 'solid' | 'dashed'; vacationVisibility?: Partial<VacationVisibility> } | undefined
     setEdgeDraft({
       mode: 'edit',
       edgeId: edge.id,
+      vacationVisibility: data?.vacationVisibility,
       source: edge.source,
       target: edge.target,
       sourceHandle: edge.sourceHandle ?? null,
@@ -1470,10 +1508,11 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     })
   }, [])
 
-  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed') => {
+  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed', vacationVisibility: VacationVisibility | undefined) => {
     const d = edgeDraft
     if (!d) return
     saveSnapshot()
+    const visData = relation === 'parent' && vacationVisibility ? { vacationVisibility } : {}
     const personDept = relation === 'parent' && d.sourceType !== d.targetType &&
       (d.sourceType === 'employee' || d.targetType === 'employee') &&
       (d.sourceType === 'department' || d.targetType === 'department')
@@ -1502,20 +1541,25 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
           type: 'editable',
           style,
           markerEnd: marker,
-          data: { relation, note, lineStyle },
+          data: { relation, note, lineStyle, ...visData },
         } as Edge, eds)
       }
-      return eds.map(e => e.id !== d.edgeId ? e : ({
-        ...e,
-        source,
-        target,
-        sourceHandle: sourceHandle ?? undefined,
-        targetHandle: targetHandle ?? undefined,
-        style,
-        markerEnd: marker,
-        markerStart: undefined,
-        data: { ...(e.data as Record<string, unknown>), relation, note, lineStyle },
-      } as Edge))
+      return eds.map(e => {
+        if (e.id !== d.edgeId) return e
+        const base = { ...(e.data as Record<string, unknown>) }
+        delete base.vacationVisibility
+        return {
+          ...e,
+          source,
+          target,
+          sourceHandle: sourceHandle ?? undefined,
+          targetHandle: targetHandle ?? undefined,
+          style,
+          markerEnd: marker,
+          markerStart: undefined,
+          data: { ...base, relation, note, lineStyle, ...visData },
+        } as Edge
+      })
     })
     setEdgeDraft(null)
   }, [edgeDraft, saveSnapshot, setEdges])
@@ -1755,12 +1799,18 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       const res = await fetch(`${API_BASE_URL}/hierarchy`, {
         method: 'PUT',
         headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
-        body: JSON.stringify({ nodes: nodesClean, edges: edgesClean, viewport, orgPositions }),
+        body: JSON.stringify({ nodes: nodesClean, edges: edgesClean, viewport, orgPositions, baseVersion: versionRef.current }),
       })
+      if (res.status === 409) {
+        toast.error('Схема была изменена другим пользователем. Обновите страницу')
+        return
+      }
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
         throw new Error(d.error || 'Не удалось сохранить иерархию')
       }
+      const d = await res.json().catch(() => ({}))
+      if (typeof d.version === 'number') versionRef.current = d.version
       setSavedLabel(true)
       setDirty(false)
       setTimeout(() => setSavedLabel(false), 2000)
@@ -2028,9 +2078,9 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
           onClose={() => setShowInstruction(false)}
           items={[
             { title: 'Добавление элементов', text: 'Перетащите блок из панели слева на холст. Для отдела или сотрудника откроется окно выбора. Описание и группа добавляются сразу.' },
-            { title: 'Связи', text: 'Потяните от точки на краю блока к другому блоку. Клик по связи открывает настройки: тип, кто родитель, толщину, цвет и примечание.' },
+            { title: 'Связи', text: 'Потяните от точки на краю блока к другому блоку. Клик по связи открывает все настройки, включая видимость и согласование отпусков.' },
             { title: 'Родительские связи', text: 'Отдел ↔ отдел задаёт структуру подразделений, сотрудник ↔ отдел назначает куратора, сотрудник ↔ сотрудник — личного руководителя. С текстовыми блоками родительская связь недоступна.' },
-            { title: 'Видимость отпусков', text: 'ПКМ по родительской связи → «Настройки родительской связи»: «Родитель видит отпуска подчинённых» и «Отпуск родителя виден подчинённым». Флаги применяются к отпускам после сохранения.' },
+            { title: 'Видимость отпусков', text: 'В настройках родительской связи: «Родитель видит отпуска подчинённых», «Отпуск родителя виден подчинённым» и «Родитель согласовывает отпуска подчинённых». Флаги применяются после сохранения. Дублирующий вход — ПКМ по связи.' },
             { title: 'Точки опоры', text: 'Выделите связь: точки на линии можно тянуть, «+» добавляет точку, двойной клик по точке удаляет её. Линия рисуется кривой Безье.' },
             { title: 'Группы и описание', text: 'Пунктирные рамки объединяют элементы визуально, текстовые блоки служат для заметок. Редактирование и удаление — через ПКМ.' },
             { title: 'Сохранение и отмена', text: 'Кнопка «Сохранить» записывает схему. Ctrl+Z — отменить последнее действие. Удаление блоков и связей требует подтверждения, а выход с несохранёнными изменениями предупреждает.' },

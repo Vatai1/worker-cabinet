@@ -1855,6 +1855,9 @@ async function runMigrations() {
     await db.query(`ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS real_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`).catch(() => {})
     console.log('  ✓ test contour (users.is_test, departments.is_test, audit_log.real_user_id)')
 
+    await db.query(`ALTER TABLE hr_hierarchy ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1`).catch(() => {})
+    console.log('  ✓ hr_hierarchy.version (optimistic locking)')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
 

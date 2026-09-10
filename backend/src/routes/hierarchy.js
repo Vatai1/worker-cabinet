@@ -318,6 +318,9 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
  *                     viewport: { type: object }
  *                 updated_at: { type: string, format: date-time, nullable: true }
  *                 updated_by: { type: integer, nullable: true }
+ *                 version:
+ *                   type: integer
+ *                   description: 'Текущая версия сохранённой схемы; 0 если строки нет (авто-дерево). Передаётся обратно в PUT как baseVersion.'
  *       400:
  *         description: Организация не выбрана (нет X-Organization-Id и активной организации)
  */
@@ -330,7 +333,7 @@ router.get('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Не выбрана организация' })
     }
     const result = targetOrgId
-      ? await query('SELECT data, updated_at, updated_by FROM hr_hierarchy WHERE organization_id = $1', [targetOrgId])
+      ? await query('SELECT data, updated_at, updated_by, version FROM hr_hierarchy WHERE organization_id = $1', [targetOrgId])
       : { rows: [] }
     if (result.rows.length === 0) {
       const deptResult = await query(
@@ -348,7 +351,7 @@ router.get('/', authenticateToken, async (req, res) => {
         targetOrgId ? [targetOrgId] : []
       )
       const auto = buildAutoHierarchy(deptResult.rows)
-      return res.json({ data: auto, updated_at: null, updated_by: null })
+      return res.json({ data: auto, updated_at: null, updated_by: null, version: 0 })
     }
     res.json(result.rows[0])
   } catch (error) {
@@ -371,7 +374,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [nodes, edges]
+ *             required: [nodes, edges, baseVersion]
  *             properties:
  *               nodes: { type: array, items: { type: object } }
  *               edges: { type: array, items: { type: object } }
@@ -379,19 +382,30 @@ router.get('/', authenticateToken, async (req, res) => {
  *               orgPositions:
  *                 type: object
  *                 description: 'Позиции карточек организаций на схеме (orgPositions[orgId] = {x, y})'
+ *               baseVersion:
+ *                 type: integer
+ *                 description: 'Версия схемы, полученная из GET /hierarchy (0 для авто-дерева). Обязательно. Оптимистическая блокировка.'
  *     responses:
  *       200:
- *         description: 'Структура сохранена; рёбра с relation=parent (или без relation) между department-нодами применены к departments.parent_id (source = родитель), между employee- и department-нодой — к departments.parent_user_id (сотрудник = куратор отдела); relation=plain игнорируется'
+ *         description: 'Структура сохранена; в ответе updated_at и новая version (version = предыдущая + 1, свежая строка = 1); рёбра relation=parent применены к departments.parent_id / parent_user_id, relation=plain игнорируется'
  *       400:
- *         description: 'Ошибка валидации рёбер (второй родитель, цикл, чужая организация) — сейв отклонён целиком'
+ *         description: 'Ошибка валидации рёбер (второй родитель, цикл, чужая организация) либо не передана baseVersion — сейв отклонён целиком'
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       409:
+ *         description: 'Конфликт версий (code=HIERARCHY_VERSION_CONFLICT) — схема изменена другим пользователем, нужно перезагрузить'
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), async (req, res) => {
-  const { nodes, edges, viewport, orgPositions } = req.body
+  const { nodes, edges, viewport, orgPositions, baseVersion } = req.body
   if (!nodes || !edges) {
     return res.status(400).json({ error: 'Поля nodes и edges обязательны' })
+  }
+  if (typeof baseVersion !== 'number' || !Number.isFinite(baseVersion)) {
+    return res.status(400).json({ error: 'Не передана версия схемы' })
   }
   const orgId = currentOrgId(req)
   if (!orgId) {
@@ -413,6 +427,18 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
   try {
     await client.query('BEGIN')
 
+    const existing = await client.query(
+      'SELECT version FROM hr_hierarchy WHERE organization_id = $1 FOR UPDATE',
+      [orgId]
+    )
+    if (existing.rows.length > 0 && existing.rows[0].version !== baseVersion) {
+      await client.query('ROLLBACK').catch(() => {})
+      return res.status(409).json({
+        error: 'Схема была изменена другим пользователем. Обновите страницу',
+        code: 'HIERARCHY_VERSION_CONFLICT',
+      })
+    }
+
     const data = JSON.stringify({
       nodes,
       edges,
@@ -425,8 +451,9 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
        ON CONFLICT (organization_id) DO UPDATE
          SET data = EXCLUDED.data,
              updated_at = EXCLUDED.updated_at,
-             updated_by = EXCLUDED.updated_by
-       RETURNING updated_at`,
+             updated_by = EXCLUDED.updated_by,
+             version = hr_hierarchy.version + 1
+       RETURNING updated_at, version`,
       [data, req.user.id, orgId, orgId]
     )
 
@@ -447,7 +474,7 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
     }
 
     await client.query('COMMIT')
-    res.json({ updated_at: result.rows[0].updated_at })
+    res.json({ updated_at: result.rows[0].updated_at, version: result.rows[0].version })
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {})
     console.error('PUT /hierarchy error:', error)

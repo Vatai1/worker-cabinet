@@ -175,13 +175,13 @@ function mergeSavedLayout(orgs: OrgItem[], saved: { nodes?: Node[]; edges?: Edge
   return refreshOrgNodes(orgs, saved.nodes, saved.viewport ?? null)
 }
 
-function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEditOrg?: (orgId: number) => boolean; onClose: () => void }) {
+function OrgHierarchyViewer({ org, canEditOrg, autoEdit = false, onClose }: { org: OrgItem; canEditOrg?: (orgId: number) => boolean; autoEdit?: boolean; onClose: () => void }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges] = useEdgesState<Edge>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentOrg, setCurrentOrg] = useState<OrgItem>(org)
-  const [editing, setEditing] = useState(() => (canEditOrg ? canEditOrg(org.id) : false))
+  const [editing, setEditing] = useState(() => (autoEdit && canEditOrg ? canEditOrg(org.id) : false))
   const [navStack, setNavStack] = useState<OrgItem[]>([])
   const darkMode = useUIStore((s) => s.darkMode)
   const orgListRef = useRef<OrgItem[]>([])
@@ -190,7 +190,7 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
   const currentOrgRef = useRef(currentOrg)
   useEffect(() => { currentOrgRef.current = currentOrg }, [currentOrg])
 
-  useEffect(() => { setCurrentOrg(org); setEditing(canEditOrg ? canEditOrg(org.id) : false); setNavStack([]) }, [org, canEditOrg])
+  useEffect(() => { setCurrentOrg(org); setEditing(autoEdit && canEditOrg ? canEditOrg(org.id) : false); setNavStack([]) }, [org, canEditOrg, autoEdit])
 
   const navigateTo = useCallback((target: OrgItem, keepEditing: boolean) => {
     setNavStack(s => [...s, currentOrgRef.current])
@@ -397,6 +397,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedOrg, setSelectedOrg] = useState<OrgItem | null>(null)
+  const [viewerAutoEdit, setViewerAutoEdit] = useState(false)
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges] = useEdgesState<Edge>([])
   const [pendingDrop, setPendingDrop] = useState<{ type: 'group' | 'text'; position: { x: number; y: number } } | null>(null)
@@ -462,7 +463,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
         setOrgs(orgList)
         if (initialOrgId != null) {
           const own = orgList.find(o => o.id === initialOrgId)
-          if (own) setSelectedOrg(own)
+          if (own) { setViewerAutoEdit(true); setSelectedOrg(own) }
         }
         let saved: { nodes?: Node[]; edges?: Edge[]; viewport?: { x: number; y: number; zoom: number } } | null = null
         if (layoutRes.ok) {
@@ -506,7 +507,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
     if (node.type !== 'organization') return
     const orgId = Number(String(node.id).replace('org-', ''))
     const org = orgs.find((o) => o.id === orgId)
-    if (org) setSelectedOrg(org)
+    if (org) { setViewerAutoEdit(false); setSelectedOrg(org) }
   }, [orgs])
 
   const onNodeContextMenu = useCallback<NodeMouseHandler>((e, node) => {
@@ -599,7 +600,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
     const openOrg = (e: Event) => {
       const orgId = (e as CustomEvent<number>).detail
       const org = orgs.find(o => o.id === orgId)
-      if (org) setSelectedOrg(org)
+      if (org) { setViewerAutoEdit(false); setSelectedOrg(org) }
     }
     window.addEventListener('wc-open-org', openOrg as EventListener)
     return () => window.removeEventListener('wc-open-org', openOrg as EventListener)
@@ -887,7 +888,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
         />
       )}
       {selectedOrg && (
-        <OrgHierarchyViewer org={selectedOrg} canEditOrg={canEditOrg} onClose={() => setSelectedOrg(null)} />
+        <OrgHierarchyViewer org={selectedOrg} canEditOrg={canEditOrg} autoEdit={viewerAutoEdit} onClose={() => setSelectedOrg(null)} />
       )}
     </div>
   )
