@@ -32,7 +32,7 @@ import {
   ConnectionMode,
   NodeResizer,
 } from '@xyflow/react'
-import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeft, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle, BookOpen } from 'lucide-react'
+import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeft, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle, BookOpen, Plus, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { Switch } from '@/shared/components/ui/Switch'
@@ -1262,6 +1262,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
   const [pendingSaveNames, setPendingSaveNames] = useState<string[] | null>(null)
   const versionRef = useRef<number>(0)
   const [showInstruction, setShowInstruction] = useState(false)
+  const [offCanvasOpen, setOffCanvasOpen] = useState(false)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -1616,6 +1617,31 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     } as Node])
     setPendingDrop(null)
   }
+
+  const offCanvasDepts = useMemo(() => {
+    const onCanvas = new Set(
+      nodes.filter(n => n.type === 'department').map(n => Number((n.data as { id?: number } | undefined)?.id))
+    )
+    return departments.filter(d => !onCanvas.has(d.id))
+  }, [departments, nodes])
+
+  const addDepartmentsToCanvas = useCallback((depts: Department[]) => {
+    if (depts.length === 0) return
+    saveSnapshot()
+    const base = nodes.filter(n => n.type !== 'organization')
+    const maxX = base.length ? Math.max(...base.map(n => n.position?.x ?? 0)) : 0
+    const minY = base.length ? Math.min(...base.map(n => n.position?.y ?? 0)) : 0
+    const stamp = Date.now()
+    setNodes(nds => [
+      ...nds,
+      ...depts.map((dept, i) => ({
+        id: `department-${dept.id}-${stamp}-${i}`,
+        type: 'department',
+        position: { x: maxX + 340 * (i + 1), y: minY },
+        data: { id: dept.id, name: dept.name, employeeCount: dept.employee_count, managerName: dept.manager_name, description: '' },
+      } as Node)),
+    ])
+  }, [nodes, setNodes, saveSnapshot])
 
   const handleSelectEmployee = (emp: DeptEmployee, description: string) => {
     if (!pendingDrop) return
@@ -2004,6 +2030,50 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
           <p className="text-[10px] text-muted-foreground leading-relaxed pt-1">
             Рёбра между отделами задают подразделения (родителей)
           </p>
+
+          {offCanvasDepts.length > 0 && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setOffCanvasOpen(o => !o)}
+                className="flex w-full items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 hover:text-muted-foreground"
+              >
+                <ChevronDown className={cn('h-3 w-3 transition-transform', !offCanvasOpen && '-rotate-90')} />
+                Не на схеме ({offCanvasDepts.length})
+              </button>
+              {offCanvasOpen && (
+                <div className="mt-1.5 space-y-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 w-full text-[11px]"
+                    onClick={() => addDepartmentsToCanvas(offCanvasDepts)}
+                  >
+                    Добавить все
+                  </Button>
+                  <div className="max-h-[200px] space-y-1 overflow-y-auto">
+                    {offCanvasDepts.slice(0, 10).map(d => (
+                      <div key={d.id} className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5">
+                        <span className="flex-1 truncate text-xs">{d.name}</span>
+                        <button
+                          type="button"
+                          title="Добавить на канвас"
+                          onClick={() => addDepartmentsToCanvas([d])}
+                          className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {offCanvasDepts.length > 10 && (
+                    <p className="pl-1 text-[10px] text-muted-foreground">…и ещё {offCanvasDepts.length - 10}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <Button variant="outline" size="sm" className="w-full" onClick={() => setShowInstruction(true)}>
             <BookOpen className="h-4 w-4 mr-1.5" />
             Инструкция
