@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Repeat, ChevronDown, LogIn, Loader2 } from 'lucide-react'
+import { Repeat, ChevronDown, LogIn, Loader2, Undo2 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { apiGet, apiPost } from '@/shared/lib/apiClient'
 import { isSuperAdmin } from '@/shared/lib/permissions'
@@ -28,40 +28,48 @@ interface TestDataResp {
   active: { previewRole: string | null; isImpersonated: boolean; impersonatedUserId: number | null }
 }
 
+export async function stopImpersonation() {
+  await apiPost('/auth/impersonate/stop')
+  window.location.reload()
+}
+
 export function TestSwitcher({ isCrct }: { isCrct?: boolean }) {
   const [open, setOpen] = useState(false)
   const [data, setData] = useState<TestDataResp | null>(null)
   const [busy, setBusy] = useState(false)
   const isImpersonated = useAuthStore((s) => s.isImpersonated)
   const previewRole = useAuthStore((s) => s.previewRole)
+  const user = useAuthStore((s) => s.user)
 
   useEffect(() => {
     if (!open || data) return
-    apiGet<TestDataResp>('/admin/test-data').then(setData).catch(() => {})
+    apiGet<TestDataResp>('/auth/test/state').then(setData).catch(() => {})
   }, [open, data])
 
-  if ((!isSuperAdmin() && !previewRole) || isImpersonated) return null
+  if (!isSuperAdmin() && !previewRole && !isImpersonated) return null
 
-  const pickRole = async (role: string | null) => {
+  const run = async (fn: () => Promise<unknown>) => {
     setBusy(true)
     try {
-      if (role) await apiPost('/admin/test/preview-role', { role })
-      else await apiPost('/auth/impersonate/stop')
+      await fn()
       window.location.reload()
     } catch {
       setBusy(false)
     }
   }
 
-  const loginAs = async (userId: number) => {
-    setBusy(true)
-    try {
-      await apiPost('/admin/test/impersonate', { userId })
-      window.location.reload()
-    } catch {
-      setBusy(false)
-    }
-  }
+  const pickRole = (role: string | null) =>
+    run(() => (role ? apiPost('/auth/test/preview-role', { role }) : apiPost('/auth/impersonate/stop')))
+
+  const loginAs = (userId: number) => run(() => apiPost('/auth/test/impersonate', { userId }))
+
+  const triggerLabel = isImpersonated
+    ? `Тест: ${user?.lastName ?? ''} ${user?.firstName ?? ''}`.trim()
+    : previewRole
+      ? `Превью роли: ${previewRole}`
+      : 'Тест-контур'
+
+  const activeUserId = isImpersonated ? Number(user?.id) : null
 
   return (
     <div className="relative">
@@ -70,7 +78,7 @@ export function TestSwitcher({ isCrct }: { isCrct?: boolean }) {
         onClick={() => setOpen((v) => !v)}
         className={cn(
           'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors',
-          previewRole
+          isImpersonated || previewRole
             ? isCrct ? 'text-white' : 'text-primary'
             : isCrct
               ? 'text-white/50 hover:bg-white/5 hover:text-white/80'
@@ -78,12 +86,24 @@ export function TestSwitcher({ isCrct }: { isCrct?: boolean }) {
         )}
       >
         <Repeat className="h-3.5 w-3.5 shrink-0" />
-        <span className="flex-1 text-left truncate">{previewRole ? `Превью роли: ${previewRole}` : 'Тест-контур'}</span>
+        <span className="flex-1 text-left truncate">{triggerLabel}</span>
         <ChevronDown className={cn('h-3 w-3 shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
         <div className="absolute bottom-full left-0 z-50 mb-1 w-64 space-y-3 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-lg">
+          {isImpersonated && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => run(() => apiPost('/auth/impersonate/stop'))}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md bg-amber-500/15 px-2 py-1.5 text-[11px] font-medium text-amber-700 hover:bg-amber-500/25 disabled:opacity-50 dark:text-amber-400"
+            >
+              <Undo2 className="h-3 w-3" />
+              Выйти из тест-режима
+            </button>
+          )}
+
           <div>
             <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Роль</p>
             <div className="flex flex-wrap gap-1">
@@ -105,7 +125,7 @@ export function TestSwitcher({ isCrct }: { isCrct?: boolean }) {
               ))}
               <button
                 type="button"
-                disabled={busy || !previewRole}
+                disabled={busy || (!previewRole && !isImpersonated)}
                 onClick={() => pickRole(null)}
                 className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/70 disabled:opacity-40"
               >
@@ -129,22 +149,32 @@ export function TestSwitcher({ isCrct }: { isCrct?: boolean }) {
               <div className="space-y-1">
                 {data.users
                   .filter((u) => u.status === 'active')
-                  .map((u) => (
-                    <div key={u.id} className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/50">
-                      <span className="flex-1 truncate text-xs">
-                        {u.last_name} {u.first_name} <span className="text-muted-foreground">· {u.role}</span>
-                      </span>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => loginAs(u.id)}
-                        className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                  .map((u) => {
+                    const current = u.id === activeUserId
+                    return (
+                      <div
+                        key={u.id}
+                        className={cn('flex items-center gap-2 rounded-md px-2 py-1', current ? 'bg-primary/10' : 'hover:bg-muted/50')}
                       >
-                        <LogIn className="h-3 w-3" />
-                        Войти
-                      </button>
-                    </div>
-                  ))}
+                        <span className="flex-1 truncate text-xs">
+                          {u.last_name} {u.first_name} <span className="text-muted-foreground">· {u.role}</span>
+                        </span>
+                        {current ? (
+                          <span className="text-[10px] font-medium text-primary">активен</span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => loginAs(u.id)}
+                            className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+                          >
+                            <LogIn className="h-3 w-3" />
+                            {isImpersonated ? 'Сменить' : 'Войти'}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
               </div>
             )}
           </div>
@@ -164,8 +194,7 @@ export function ImpersonationBanner() {
   const stop = async () => {
     setBusy(true)
     try {
-      await apiPost('/auth/impersonate/stop')
-      window.location.reload()
+      await stopImpersonation()
     } catch {
       setBusy(false)
     }

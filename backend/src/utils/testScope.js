@@ -3,6 +3,38 @@ import { query } from '../config/database.js'
 
 export const TEST_PREVIEW_ROLES = ['employee', 'manager', 'hr', 'admin', 'onboarding']
 
+export const TEST_DEPT_NAME = 'TEST Отдел'
+
+export const TEST_USERS = [
+  { email: 'test.employee@wc.test', role: 'employee', first_name: 'Тест', last_name: 'Сотрудник', position: 'Тестовый сотрудник', org_role: 'employee' },
+  { email: 'test.manager@wc.test', role: 'manager', first_name: 'Тест', last_name: 'Руководитель', position: 'Тестовый руководитель', org_role: 'manager' },
+  { email: 'test.hr@wc.test', role: 'hr', first_name: 'Тест', last_name: 'HR', position: 'Тестовый HR', org_role: 'hr' },
+  { email: 'test.admin@wc.test', role: 'admin', first_name: 'Тест', last_name: 'Админ', position: 'Тестовый администратор', org_role: 'admin' },
+]
+
+export const TEST_USER_EMAILS = TEST_USERS.map((u) => u.email)
+
+export async function getTestDataState(req) {
+  const department = (await query(
+    `SELECT id, name, organization_id, is_test FROM departments WHERE name = $1 AND is_test = true ORDER BY id LIMIT 1`,
+    [TEST_DEPT_NAME]
+  )).rows[0] || null
+  const users = (await query(
+    `SELECT id, email, role, first_name, last_name, position, status, department_id
+     FROM users WHERE is_test = true AND email = ANY($1) ORDER BY id`,
+    [TEST_USER_EMAILS]
+  )).rows
+  return {
+    department,
+    users,
+    active: {
+      previewRole: req?.previewRole || null,
+      isImpersonated: !!req?.impersonatedTestUser,
+      impersonatedUserId: req?.impersonatedTestUser ? req.user.id : null,
+    },
+  }
+}
+
 function secret() {
   return process.env.JWT_SECRET || 'dev-secret'
 }

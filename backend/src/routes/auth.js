@@ -7,7 +7,7 @@ import { authLimiter } from '../middleware/rateLimiter.js'
 import { validateLogin, validateRegister, sanitizeInput } from '../middleware/validation.js'
 import { asyncHandler, ValidationError, UnauthorizedError } from '../middleware/errors.js'
 import { authenticateToken, logScopes } from '../middleware/auth.js'
-import { isRealSuperadmin } from '../utils/testScope.js'
+import { isRealSuperadmin, signValue, testCookieOptions, TEST_PREVIEW_ROLES, getTestDataState } from '../utils/testScope.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
 import { getAuthSettings } from '../config/authSettings.js'
 
@@ -315,6 +315,11 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
     })
 }))
 
+function requireRealSuper(req, res, next) {
+  if (isRealSuperadmin(req)) return next()
+  throw new UnauthorizedError('Недоступно')
+}
+
 router.post('/impersonate/stop', authenticateToken, asyncHandler(async (req, res) => {
   if (!isRealSuperadmin(req) && !req.impersonatedTestUser) {
     throw new UnauthorizedError('Недоступно')
@@ -323,6 +328,29 @@ router.post('/impersonate/stop', authenticateToken, asyncHandler(async (req, res
   res.clearCookie('imp_user', opts)
   res.clearCookie('preview_role', opts)
   res.json({ success: true })
+}))
+
+router.get('/test/state', authenticateToken, requireRealSuper, asyncHandler(async (req, res) => {
+  res.json(await getTestDataState(req))
+}))
+
+router.post('/test/preview-role', authenticateToken, requireRealSuper, asyncHandler(async (req, res) => {
+  const role = String(req.body?.role || '')
+  if (!TEST_PREVIEW_ROLES.includes(role)) throw new ValidationError('Некорректная роль')
+  res.cookie('preview_role', signValue(role), testCookieOptions(req))
+  res.clearCookie('imp_user', { path: '/' })
+  res.json({ success: true, previewRole: role })
+}))
+
+router.post('/test/impersonate', authenticateToken, requireRealSuper, asyncHandler(async (req, res) => {
+  const userId = parseInt(req.body?.userId, 10)
+  if (!Number.isInteger(userId)) throw new ValidationError('userId обязателен')
+  const target = (await query(`SELECT id, is_test, status FROM users WHERE id = $1`, [userId])).rows[0]
+  if (!target || target.is_test !== true) throw new ValidationError('Пользователь не является тестовым')
+  if (target.status !== 'active') throw new ValidationError('Тестовый пользователь деактивирован')
+  res.cookie('imp_user', signValue(String(userId)), testCookieOptions(req))
+  res.clearCookie('preview_role', { path: '/' })
+  res.json({ success: true, userId })
 }))
 
 router.get('/me', authenticateToken, asyncHandler(async (req, res) => {

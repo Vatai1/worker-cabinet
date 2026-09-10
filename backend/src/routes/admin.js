@@ -6,7 +6,7 @@ import { authenticateToken, authorizeRoles, authorizeGlobalRoles } from '../midd
 import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '../middleware/errors.js'
 import { query, getClient } from '../config/database.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
-import { signValue, testCookieOptions, requireRealSuperadmin, TEST_PREVIEW_ROLES, excludeTest } from '../utils/testScope.js'
+import { requireRealSuperadmin, excludeTest, TEST_DEPT_NAME, TEST_USERS, TEST_USER_EMAILS, getTestDataState } from '../utils/testScope.js'
 import { getActiveWsCount } from '../config/ws.js'
 import { createRequire } from 'module'
 import path from 'path'
@@ -2249,38 +2249,8 @@ router.delete('/role-mappings/:id', authorizeRoles('admin', 'superadmin'), async
 
 // ===================== TEST CONTOUR =====================
 
-const TEST_DEPT_NAME = 'TEST Отдел'
-const TEST_USERS = [
-  { email: 'test.employee@wc.test', role: 'employee', first_name: 'Тест', last_name: 'Сотрудник', position: 'Тестовый сотрудник', org_role: 'employee' },
-  { email: 'test.manager@wc.test', role: 'manager', first_name: 'Тест', last_name: 'Руководитель', position: 'Тестовый руководитель', org_role: 'manager' },
-  { email: 'test.hr@wc.test', role: 'hr', first_name: 'Тест', last_name: 'HR', position: 'Тестовый HR', org_role: 'hr' },
-  { email: 'test.admin@wc.test', role: 'admin', first_name: 'Тест', last_name: 'Админ', position: 'Тестовый администратор', org_role: 'admin' },
-]
-const TEST_EMAILS = TEST_USERS.map((u) => u.email)
-
-async function testDataState() {
-  const department = (await query(
-    `SELECT id, name, organization_id, is_test FROM departments WHERE name = $1 AND is_test = true ORDER BY id LIMIT 1`,
-    [TEST_DEPT_NAME]
-  )).rows[0] || null
-  const users = (await query(
-    `SELECT id, email, role, first_name, last_name, position, status, department_id
-     FROM users WHERE is_test = true AND email = ANY($1) ORDER BY id`,
-    [TEST_EMAILS]
-  )).rows
-  return { department, users }
-}
-
 router.get('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) => {
-  const state = await testDataState()
-  res.json({
-    ...state,
-    active: {
-      previewRole: req.previewRole || null,
-      isImpersonated: !!req.impersonatedTestUser,
-      impersonatedUserId: req.impersonatedTestUser ? req.user.id : null,
-    },
-  })
+  res.json(await getTestDataState(req))
 }))
 
 router.post('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) => {
@@ -2339,6 +2309,7 @@ router.post('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) =
       created.push({ id: u.id, ...tu })
     }
     const mgr = created.find((c) => c.role === 'manager')
+    const emp = created.find((c) => c.role === 'employee')
     if (mgr) {
       await client.query(`UPDATE departments SET manager_id = $1 WHERE id = $2`, [mgr.id, deptId])
       await client.query(
@@ -2346,8 +2317,43 @@ router.post('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) =
         [mgr.id, deptId]
       )
     }
+
+    if (emp) {
+      await client.query(
+        `INSERT INTO vacation_balances (user_id, total_days, used_days, available_days, reserved_days, organization_id)
+         SELECT $1, 28, 0, 28, 0, $2
+         WHERE NOT EXISTS (SELECT 1 FROM vacation_balances WHERE user_id = $1 AND organization_id = $2)`,
+        [emp.id, orgId]
+      )
+      const hasReq = await client.query(
+        `SELECT 1 FROM vacation_requests WHERE user_id = $1 AND transfer_reason IS NULL LIMIT 1`,
+        [emp.id]
+      )
+      if (hasReq.rows.length === 0) {
+        const vt = (await client.query(
+          `SELECT id FROM vacation_types WHERE organization_id = $1 ORDER BY id LIMIT 1`,
+          [orgId]
+        )).rows[0]
+        const stId = (await client.query(`SELECT id FROM request_statuses WHERE code = 'on_approval'`)).rows[0]
+        if (vt && stId) {
+          const start = new Date(Date.now() + 21 * 86400000).toISOString().slice(0, 10)
+          const end = new Date(Date.now() + 25 * 86400000).toISOString().slice(0, 10)
+          const vrRes = await client.query(
+            `INSERT INTO vacation_requests (user_id, start_date, end_date, duration, vacation_type_id, status_id, approver_id, organization_id, created_at)
+             VALUES ($1, $2, $3, 5, $4, $5, $6, $7, NOW() - INTERVAL '1 day') RETURNING id`,
+            [emp.id, start, end, vt.id, stId.id, mgr ? mgr.id : null, orgId]
+          )
+          await client.query(
+            `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, organization_id)
+             VALUES ($1, $2, $3, $4)`,
+            [vrRes.rows[0].id, stId.id, emp.id, orgId]
+          ).catch(() => {})
+        }
+      }
+    }
+
     await client.query('COMMIT')
-    res.status(201).json(await testDataState())
+    res.status(201).json(await getTestDataState(req))
   } catch (e) {
     await client.query('ROLLBACK')
     throw e
@@ -2357,27 +2363,8 @@ router.post('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) =
 }))
 
 router.delete('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) => {
-  await query(`UPDATE users SET status = 'inactive' WHERE is_test = true AND email = ANY($1)`, [TEST_EMAILS])
-  res.json(await testDataState())
-}))
-
-router.post('/test/preview-role', requireRealSuperadmin, asyncHandler(async (req, res) => {
-  const role = String(req.body?.role || '')
-  if (!TEST_PREVIEW_ROLES.includes(role)) throw new ValidationError('Некорректная роль')
-  res.cookie('preview_role', signValue(role), testCookieOptions(req))
-  res.clearCookie('imp_user', { path: '/' })
-  res.json({ success: true, previewRole: role })
-}))
-
-router.post('/test/impersonate', requireRealSuperadmin, asyncHandler(async (req, res) => {
-  const userId = parseInt(req.body?.userId, 10)
-  if (!Number.isInteger(userId)) throw new ValidationError('userId обязателен')
-  const target = (await query(`SELECT id, is_test, status FROM users WHERE id = $1`, [userId])).rows[0]
-  if (!target || target.is_test !== true) throw new ValidationError('Пользователь не является тестовым')
-  if (target.status !== 'active') throw new ValidationError('Тестовый пользователь деактивирован')
-  res.cookie('imp_user', signValue(String(userId)), testCookieOptions(req))
-  res.clearCookie('preview_role', { path: '/' })
-  res.json({ success: true, userId })
+  await query(`UPDATE users SET status = 'inactive' WHERE is_test = true AND email = ANY($1)`, [TEST_USER_EMAILS])
+  res.json(await getTestDataState(req))
 }))
 
 export default router

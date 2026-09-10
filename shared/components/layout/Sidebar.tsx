@@ -7,7 +7,7 @@ import { useThemeStore } from '@/shared/theme/themeStore'
 import { cn } from '@/shared/lib/utils'
 import {
   LayoutDashboard, User, FileText, FolderOpen, FolderKanban,
-  LogOut, Menu, X, Users, Plane, Settings, Sun, Moon,
+  LogOut, Menu, X, Users, Plane, Settings, Sun, Moon, Undo2,
   ChevronDown, Building2, ClipboardList,
   Calendar, Bell, Crown, Bot, UserCheck,
   Send, UserPlus, Network, Briefcase, Wrench,
@@ -20,7 +20,7 @@ import { Logo } from '@/shared/components/brand/Logo'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
 import { BugReportButton } from '@/shared/components/BugReportButton'
-import { TestSwitcher } from '@/shared/components/TestSwitcher'
+import { TestSwitcher, stopImpersonation } from '@/shared/components/TestSwitcher'
 
 export interface NavItem {
   name: string
@@ -279,7 +279,13 @@ export function Sidebar() {
     )
   }
 
+  const isImpersonated = useAuthStore((s) => s.isImpersonated)
+
   const handleLogout = () => {
+    if (isImpersonated) {
+      void stopImpersonation()
+      return
+    }
     void logout()
   }
 
@@ -512,8 +518,14 @@ export function Sidebar() {
                 <p className={cn('truncate text-[11px]', isCrctSidebar ? 'text-white/40' : 'text-muted-foreground/70')}>{roleLabels[user?.role ?? 'employee']}</p>
               </div>
             </div>
-            <Button variant="ghost" size="icon" className={cn('h-7 w-7 shrink-0 transition-colors duration-200', isCrctSidebar ? 'text-white/40 hover:text-red-300' : 'text-muted-foreground/50 hover:text-destructive')} onClick={handleLogout}>
-              <LogOut className="h-3.5 w-3.5" />
+            <Button
+              variant="ghost"
+              size="icon"
+              title={isImpersonated ? 'Выйти из тест-режима' : 'Выйти'}
+              className={cn('h-7 w-7 shrink-0 transition-colors duration-200', isCrctSidebar ? 'text-white/40 hover:text-red-300' : 'text-muted-foreground/50 hover:text-destructive')}
+              onClick={handleLogout}
+            >
+              {isImpersonated ? <Undo2 className="h-3.5 w-3.5" /> : <LogOut className="h-3.5 w-3.5" />}
             </Button>
           </div>
         </div>
