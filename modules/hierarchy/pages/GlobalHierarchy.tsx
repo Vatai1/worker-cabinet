@@ -24,6 +24,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { useUIStore } from '@/shared/store/uiStore'
 import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, HRHierarchy, ChildOrgNode, buildOrgOverlay, animateOrgReveal } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
@@ -182,6 +183,7 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
   const [currentOrg, setCurrentOrg] = useState<OrgItem>(org)
   const [editing, setEditing] = useState(() => (canEditOrg ? canEditOrg(org.id) : false))
   const [navStack, setNavStack] = useState<OrgItem[]>([])
+  const darkMode = useUIStore((s) => s.darkMode)
   const orgListRef = useRef<OrgItem[]>([])
   const viewerRfRef = useRef<ReactFlowInstance | null>(null)
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
@@ -365,6 +367,7 @@ function OrgHierarchyViewer({ org, canEditOrg, onClose }: { org: OrgItem; canEdi
             edgesReconnectable={false}
             deleteKeyCode={null}
             connectionMode={ConnectionMode.Loose}
+            colorMode={darkMode ? 'dark' : 'light'}
             minZoom={0.1}
             proOptions={{ hideAttribution: true }}
           >
@@ -403,6 +406,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
   const [savedLabel, setSavedLabel] = useState(false)
   const [showInstruction, setShowInstruction] = useState(false)
   const [pendingNest, setPendingNest] = useState<{ orgId: number; orgName: string; targetId: number; targetName: string; prevPosition: { x: number; y: number } } | null>(null)
+  const darkMode = useUIStore((s) => s.darkMode)
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null)
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
   const dragStartPosRef = useRef<Map<string, { x: number; y: number }>>(new Map())
@@ -743,6 +747,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
               edgesReconnectable={false}
               deleteKeyCode={null}
               connectionMode={ConnectionMode.Loose}
+              colorMode={darkMode ? 'dark' : 'light'}
               fitView
               fitViewOptions={{ maxZoom: 1 }}
               minZoom={0.1}
