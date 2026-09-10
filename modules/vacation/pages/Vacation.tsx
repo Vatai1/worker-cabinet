@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
@@ -33,8 +33,6 @@ import {
   UserCheck, Search, RotateCcw, XCircle, PieChart,
   Calendar as CalendarIcon, Lightbulb,
 } from 'lucide-react'
-import { VacationApplicationModal } from '@/modules/vacation/components/modals/VacationApplicationModal'
-import { VacationTransferApplicationModal } from '@/modules/vacation/components/modals/VacationTransferApplicationModal'
 
 const REQUEST_STATUS_OPTIONS = [
   { value: VacationRequestStatus.APPROVED, label: 'Согласовано' },
@@ -77,8 +75,6 @@ export function Vacation() {
   const [newComment, setNewComment] = useState('')
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferRequest, setTransferRequest] = useState<VacationRequest | null>(null)
-  const [showApplicationModal, setShowApplicationModal] = useState(false)
-  const [showTransferApplicationModal, setShowTransferApplicationModal] = useState(false)
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<VacationValidationError[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
   const [vacationBlocked, setVacationBlocked] = useState(false)
@@ -496,6 +492,7 @@ export function Vacation() {
   const handleNextYear = () => setYear((y) => Math.min(maxCalendarYear, y + 1))
 
   const location = useLocation()
+  const navigate = useNavigate()
   const isMySubstitutions = location.pathname.includes('my-substitutions')
   const { mySubstitutions, fetchMySubstitutions } = useVacationStore()
 
@@ -1187,7 +1184,7 @@ export function Vacation() {
         <div className="grid gap-4 sm:grid-cols-2">
           <button
             type="button"
-            onClick={() => setShowApplicationModal(true)}
+            onClick={() => navigate('/vacation/application')}
             className="flex items-start gap-4 rounded-lg border border-border bg-card p-5 text-left hover-lift transition-colors hover:border-primary/40"
           >
             <div className="p-2.5 rounded-lg bg-primary/10 shrink-0">
@@ -1200,7 +1197,7 @@ export function Vacation() {
           </button>
           <button
             type="button"
-            onClick={() => setShowTransferApplicationModal(true)}
+            onClick={() => navigate('/vacation/transfer-application')}
             className="flex items-start gap-4 rounded-lg border border-border bg-card p-5 text-left hover-lift transition-colors hover:border-primary/40"
           >
             <div className="p-2.5 rounded-lg bg-primary/10 shrink-0">
@@ -1246,19 +1243,6 @@ export function Vacation() {
         />
       )}
 
-      {showApplicationModal && (
-        <VacationApplicationModal
-          open={showApplicationModal}
-          onClose={() => setShowApplicationModal(false)}
-          defaultYear={year}
-        />
-      )}
-      {showTransferApplicationModal && (
-        <VacationTransferApplicationModal
-          open={showTransferApplicationModal}
-          onClose={() => setShowTransferApplicationModal(false)}
-        />
-      )}
 
       {showTransferModal && transferRequest && (
         <VacationTransferModal
