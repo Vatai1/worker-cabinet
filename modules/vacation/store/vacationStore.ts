@@ -26,6 +26,9 @@ interface VacationStore {
   departmentRequests: VacationRequest[]
   connectionsRequests: VacationRequest[]
 
+  calendarVersion: number
+  bumpCalendarVersion: () => void
+
   loading: boolean
   error: string | null
 
@@ -76,7 +79,10 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
       currentUserRequests: [],
       departmentRequests: [],
       connectionsRequests: [],
-      
+
+      calendarVersion: 0,
+      bumpCalendarVersion: () => set({ calendarVersion: Date.now() }),
+
       loading: false,
       error: null,
 
@@ -253,6 +259,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             loading: false,
           }))
 
+          get().bumpCalendarVersion()
+
           return newRequest
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при создании заявки'), loading: false })
@@ -277,6 +285,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             ),
             loading: false,
           }))
+
+          get().bumpCalendarVersion()
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при отмене заявки'), loading: false })
           throw error
@@ -300,6 +310,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             ),
             loading: false,
           }))
+
+          get().bumpCalendarVersion()
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при согласовании заявки'), loading: false })
           throw error
@@ -323,6 +335,8 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
             ),
             loading: false,
           }))
+
+          get().bumpCalendarVersion()
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при отклонении заявки'), loading: false })
           throw error

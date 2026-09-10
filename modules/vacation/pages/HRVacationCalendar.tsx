@@ -9,6 +9,7 @@ import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
 import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
+import { useVacationStore } from '@/modules/vacation/store/vacationStore'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
@@ -101,6 +102,7 @@ function getDeptIcon(name: string): React.ReactNode {
 
 export function HRVacationCalendar() {
   const user = useAuthStore((state) => state.user)
+  const calendarVersion = useVacationStore((s) => s.calendarVersion)
   const [requests, setRequests] = useState<VacationRequest[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)
@@ -147,7 +149,7 @@ export function HRVacationCalendar() {
       }
     }
     fetchRequests()
-  }, [year])
+  }, [year, calendarVersion])
 
   const handleDateRangeSelect = (startDate: string | null) => {
     if (startDate && startDate.startsWith('vr-')) {

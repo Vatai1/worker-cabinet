@@ -51,6 +51,7 @@ export function Vacation() {
     departmentRequests,
     loading,
     error,
+    calendarVersion,
     fetchAllRequests,
     fetchUserRequests,
     fetchConnectionRequests,
@@ -177,12 +178,33 @@ export function Vacation() {
     return () => { cancelled = true }
   }, [reqFilters.departmentIds, currentOrgId])
 
+  const calendarVersionInitRef = useRef(true)
   useEffect(() => {
-    if (!autoExpandedRef.current && expandedRequestId === null && currentUserRequests.length > 0) {
-      autoExpandedRef.current = true
-      setExpandedRequestId(currentUserRequests[0].id)
+    if (calendarVersionInitRef.current) {
+      calendarVersionInitRef.current = false
+      return
     }
-  }, [currentUserRequests, expandedRequestId])
+    if (!user) return
+    let cancelled = false
+
+    fetchUserRequests(user.id)
+    fetchAllRequests()
+    fetchConnectionRequests()
+
+    if (reqFilters.departmentIds.length > 0) {
+      Promise.all(reqFilters.departmentIds.map((id) => vacationApi.getDepartmentRequests(id)))
+        .then((results) => {
+          if (cancelled) return
+          const merged = new Map<string, VacationRequest>()
+          results.flat().forEach((r) => merged.set(r.id, r))
+          setCalendarDeptRequests(Array.from(merged.values()))
+        })
+        .catch(() => { if (!cancelled) setCalendarDeptRequests([]) })
+    }
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarVersion])
 
   const resetFilters = () => {
     deptTouched.current = false
@@ -505,13 +527,21 @@ export function Vacation() {
   const myRequests = useMemo(() =>
     [...currentUserRequests]
       .filter((r) =>
-        r.status === VacationRequestStatus.ON_APPROVAL ||
-        r.status === VacationRequestStatus.APPROVED ||
-        r.status === VacationRequestStatus.REJECTED
+        (r.status === VacationRequestStatus.ON_APPROVAL ||
+          r.status === VacationRequestStatus.APPROVED ||
+          r.status === VacationRequestStatus.REJECTED) &&
+        Number(r.startDate.slice(0, 4)) === year
       )
       .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()),
-    [currentUserRequests]
+    [currentUserRequests, year]
   )
+
+  useEffect(() => {
+    if (!autoExpandedRef.current && expandedRequestId === null && myRequests.length > 0) {
+      autoExpandedRef.current = true
+      setExpandedRequestId(myRequests[0].id)
+    }
+  }, [myRequests, expandedRequestId])
 
   const getReviewerName = (request: VacationRequest) => {
     const entry = [...(request.statusHistory || [])].reverse().find((h) => h.status === request.status)
@@ -857,7 +887,7 @@ export function Vacation() {
                   {loading ? (
                     <div className="flex items-center justify-center py-8"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
                   ) : myRequests.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">Нет активных заявок</div>
+                    <div className="text-center py-8 text-muted-foreground">Нет заявок за {year} год</div>
                   ) : (
                     <div className="space-y-3">
                       {myRequests.map((request) => {
