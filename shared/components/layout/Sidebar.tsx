@@ -125,6 +125,7 @@ const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg:
     { name: 'Пользователи', href: `${basePath}?tab=users`, icon: Users, section },
     { name: 'Роли и доступы', href: `${basePath}?tab=roles`, icon: Key, section },
     { name: 'Роли по должности', href: `${basePath}?tab=role-mappings`, icon: ShieldCheck, section },
+    { name: 'Отделы', href: `${basePath}?tab=departments`, icon: Building2, section },
     { name: 'Учреждения', href: `${basePath}?tab=organizations`, icon: Building2, section },
     { name: 'Иерархия', href: `${basePath}?tab=global-hierarchy`, icon: Network, section },
     { name: 'Модули', href: `${basePath}?tab=modules`, icon: Boxes, section },

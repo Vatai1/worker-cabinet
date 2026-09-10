@@ -81,7 +81,6 @@ export function HRPanel() {
   const safeActiveTab = requestedTab && allTabs.some((t) => t.id === requestedTab)
     ? requestedTab
     : (firstTab as TabId | undefined)
-  const currentTabInfo = allTabs.find((t) => t.id === safeActiveTab)
 
   const isFullBleedTab = TOP_NAV_TABS.includes(safeActiveTab as typeof TOP_NAV_TABS[number]) &&
     (safeActiveTab ? isModuleEnabled(allTabs.find(t => t.id === safeActiveTab)?.module || '') : false)
@@ -140,17 +139,6 @@ export function HRPanel() {
         </div>
       ) : (
         <div className="relative min-w-0 animate-fade-in">
-          {currentTabInfo && (
-            <div className="flex items-center gap-3 mb-4">
-              <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', currentTabInfo.color)}>
-                <currentTabInfo.icon className="h-4 w-4" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold">{currentTabInfo.name}</h2>
-                <p className="text-xs text-muted-foreground">{currentTabInfo.description}</p>
-              </div>
-            </div>
-          )}
           {([
             ['surveys', HRSurveys],
             ['mailing', HRMailing],

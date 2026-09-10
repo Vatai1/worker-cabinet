@@ -317,7 +317,6 @@ export function AdminPanel({ mode = 'global' }: Props) {
   const allTabs = filteredGroups.flatMap((g) => g.tabs)
   const requestedTab = searchParams.get('tab') as TabId | null
   const activeTab = (requestedTab && allTabs.some((t) => t.id === requestedTab) ? requestedTab : allTabs[0]?.id) ?? 'users'
-  const activeTabInfo = allTabs.find((t) => t.id === activeTab)
 
   useEffect(() => {
     if (activeTab !== 'global-hierarchy') prevTabRef.current = activeTab
@@ -363,17 +362,6 @@ export function AdminPanel({ mode = 'global' }: Props) {
       </div>
 
       <div className="min-w-0">
-        {activeTabInfo && activeTab !== 'global-hierarchy' && (
-          <div className="flex items-center gap-3 mb-4">
-            <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', activeTabInfo.color)}>
-              <activeTabInfo.icon className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">{activeTabInfo.name}</h2>
-              <p className="text-xs text-muted-foreground">{activeTabInfo.description}</p>
-            </div>
-          </div>
-        )}
         {activeTab === 'users' && <UsersTab mode={mode} />}
         {activeTab === 'roles' && <RolesTab />}
         {activeTab === 'role-mappings' && <AdminRoleMappings />}
