@@ -2284,8 +2284,20 @@ router.get('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) =>
 }))
 
 router.post('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) => {
-  const orgId = req.org?.org_id || null
-  if (!orgId) throw new ValidationError('Не выбрана организация — укажите активную организацию')
+  let orgId = req.org?.org_id || null
+  if (!orgId) {
+    const own = await query(
+      `SELECT uo.org_id FROM user_organizations uo
+       JOIN organizations o ON o.id = uo.org_id
+       WHERE uo.user_id = $1 AND uo.is_active = true AND o.is_active = true
+       ORDER BY uo.is_primary DESC, uo.org_id ASC LIMIT 1`,
+      [req.realUser?.id || req.user.id]
+    )
+    orgId = own.rows[0]?.org_id
+      || (await query(`SELECT id FROM organizations WHERE is_active = true ORDER BY id ASC LIMIT 1`)).rows[0]?.id
+      || null
+  }
+  if (!orgId) throw new ValidationError('Не найдено ни одной активной организации')
   const client = await getClient()
   try {
     await client.query('BEGIN')
