@@ -463,7 +463,7 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
         setOrgs(orgList)
         if (initialOrgId != null) {
           const own = orgList.find(o => o.id === initialOrgId)
-          if (own) { setViewerAutoEdit(true); setSelectedOrg(own) }
+          if (own) { setViewerAutoEdit(false); setSelectedOrg(own) }
         }
         let saved: { nodes?: Node[]; edges?: Edge[]; viewport?: { x: number; y: number; zoom: number } } | null = null
         if (layoutRes.ok) {

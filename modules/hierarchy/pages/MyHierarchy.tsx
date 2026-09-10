@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   ReactFlow,
   Controls,
@@ -10,7 +11,7 @@ import {
   type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Network } from 'lucide-react'
+import { Network, X } from 'lucide-react'
 import { useUIStore } from '@/shared/store/uiStore'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -18,11 +19,14 @@ import { getErrorMessage } from '@/shared/lib/utils'
 import { nodeTypes, edgeTypes } from '@/modules/hierarchy/pages/HRHierarchy'
 
 export function MyHierarchy() {
+  const navigate = useNavigate()
   const darkMode = useUIStore((s) => s.darkMode)
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const close = useCallback(() => navigate('/dashboard'), [navigate])
 
   useEffect(() => {
     let cancelled = false
@@ -55,23 +59,38 @@ export function MyHierarchy() {
     }
   }, [])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [close])
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">Иерархия организации</h1>
-        <p className="text-sm text-muted-foreground">Структура подразделений вашей организации</p>
+    <div className="fixed inset-0 z-[60] flex flex-col bg-background">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <Network className="h-4 w-4 shrink-0 text-primary" />
+          <span className="truncate text-[15px] font-semibold">Иерархия организации</span>
+        </div>
+        <button
+          type="button"
+          onClick={close}
+          className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Закрыть"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      <div className="relative flex-1" style={{ minHeight: 0 }}>
+        {error && (
+          <div className="absolute inset-x-0 top-0 z-10 m-3 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
-      <div
-        className="relative rounded-2xl border border-border bg-card overflow-hidden"
-        style={{ height: 'calc(100vh - 140px)' }}
-      >
         {loading ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-full max-w-sm space-y-2 px-6">
