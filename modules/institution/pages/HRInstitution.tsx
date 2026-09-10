@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Building2, Crown, Check, Loader2, Save, ArrowRight, AlertTriangle, UserCog } from 'lucide-react'
+import { Building2, Crown, Check, Loader2, Save, ArrowRight, AlertTriangle, UserCog, Search, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
 import { Input } from '@/shared/components/ui/Input'
 import { Button } from '@/shared/components/ui/Button'
@@ -53,6 +53,7 @@ export function HRInstitution() {
   const [editAddress, setEditAddress] = useState('')
 
   const [showHeadPicker, setShowHeadPicker] = useState(false)
+  const [candidateSearch, setCandidateSearch] = useState('')
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [loadingCandidates, setLoadingCandidates] = useState(false)
   const [savingHead, setSavingHead] = useState(false)
@@ -105,6 +106,7 @@ export function HRInstitution() {
   }
 
   const openHeadPicker = async () => {
+    setCandidateSearch('')
     setShowHeadPicker(true)
     setLoadingCandidates(true)
     try {
@@ -139,6 +141,7 @@ export function HRInstitution() {
 
   const handleCancelConfirm = () => {
     setConfirmCandidate(null)
+    setCandidateSearch('')
     setShowHeadPicker(true)
   }
 
@@ -165,17 +168,26 @@ export function HRInstitution() {
   const headName = personName([org.head_last_name, org.head_first_name, org.head_middle_name])
   const headInitials = personInitials(org.head_first_name, org.head_last_name)
 
+  const candidateQuery = candidateSearch.trim().toLowerCase()
+  const filteredCandidates = candidateQuery
+    ? candidates.filter((c) =>
+        (personName([c.last_name, c.first_name, c.middle_name]).toLowerCase() + ' ' + (c.position || '').toLowerCase()).includes(candidateQuery),
+      )
+    : candidates
+
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden">
-        <div className="h-24 bg-gradient-to-r from-indigo-500 to-blue-600 relative">
-          <div className="absolute -bottom-8 left-6 p-3 rounded-2xl bg-card shadow-lg border border-border/40">
-            <Building2 className="h-7 w-7 text-indigo-500" />
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <h2 className="text-xl font-bold">{org.name}</h2>
           </div>
-        </div>
-        <CardContent className="pt-12">
-          <h2 className="text-xl font-bold">{org.name}</h2>
-          <p className="text-sm text-muted-foreground font-mono mt-0.5">{org.slug}</p>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground font-mono">{org.slug}</p>
           {org.inn && <p className="text-sm text-muted-foreground mt-1">ИНН: {org.inn}</p>}
         </CardContent>
       </Card>
@@ -263,15 +275,35 @@ export function HRInstitution() {
               <CardDescription>Выберите сотрудника учреждения</CardDescription>
             </CardHeader>
             <CardContent className="overflow-y-auto flex-1">
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  autoFocus
+                  className="w-full rounded-lg bg-background border border-input pl-10 pr-9 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+                  placeholder="Поиск по ФИО или должности…"
+                  value={candidateSearch}
+                  onChange={(e) => setCandidateSearch(e.target.value)}
+                />
+                {candidateSearch && (
+                  <button
+                    onClick={() => setCandidateSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
               {loadingCandidates ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : candidates.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">Нет доступных кандидатов</p>
+              ) : filteredCandidates.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Ничего не найдено</p>
               ) : (
                 <div className="space-y-1">
-                  {candidates.map((c) => {
+                  {filteredCandidates.map((c) => {
                     const name = personName([c.last_name, c.first_name, c.middle_name])
                     const initials = personInitials(c.first_name, c.last_name)
                     const isCurrent = c.id === org.head_id
