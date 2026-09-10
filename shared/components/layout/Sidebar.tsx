@@ -8,7 +8,7 @@ import { cn } from '@/shared/lib/utils'
 import {
   LayoutDashboard, User, FileText, FolderOpen, FolderKanban,
   LogOut, Menu, X, Users, Plane, Settings, Sun, Moon,
-  ChevronDown, FileStack, Building2, ClipboardList,
+  ChevronDown, Building2, ClipboardList,
   Calendar, Bell, Crown, Bot, UserCheck,
   Send, UserPlus, Network, Briefcase, Wrench,
   Key, ShieldCheck, Boxes, Settings2, Package,
@@ -21,7 +21,7 @@ import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
 import { BugReportButton } from '@/shared/components/BugReportButton'
 
-interface NavItem {
+export interface NavItem {
   name: string
   href?: string
   icon: React.ComponentType<{ className?: string }>
@@ -172,20 +172,13 @@ const roleLabels: Record<string, string> = {
   superadmin: 'Супер-админ',
 }
 
-export function Sidebar() {
-  const { user, logout } = useAuthStore()
-  const { sidebarOpen, toggleSidebar, darkMode, toggleTheme, openModals } = useUIStore()
+export function useNavigation(): NavItem[] {
+  const { user } = useAuthStore()
   const { isModuleEnabled, modulesLoaded } = useModulesStore()
-  const activeTheme = useThemeStore((s) => s.activeTheme)
-  const isCrctSidebar = activeTheme === 'crct'
-  const location = useLocation()
-  const [expandedItems, setExpandedItems] = useState<string[]>([])
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['Основное']))
-
   const isSuper = isSuperAdmin()
   const isAdminRole = hasAnyRole('admin')
 
-  const navigation = useMemo(() => {
+  return useMemo(() => {
     const rawNavigation =
       user?.role === 'onboarding' ? getOnboardingNavigation() :
       isSuper ? getAdminNavigation(user?.id, true) :
@@ -209,6 +202,21 @@ export function Sidebar() {
       })
       .filter(Boolean) as NavItem[]
   }, [modulesLoaded, isSuper, isAdminRole, isModuleEnabled, user?.role, user?.id])
+}
+
+export function Sidebar() {
+  const { user, logout } = useAuthStore()
+  const { sidebarOpen, toggleSidebar, darkMode, toggleTheme, openModals } = useUIStore()
+  const activeTheme = useThemeStore((s) => s.activeTheme)
+  const isCrctSidebar = activeTheme === 'crct'
+  const location = useLocation()
+  const currentPath = location.pathname + location.search
+  const isHrefActive = (href?: string) =>
+    !!href && (href === currentPath || (!href.includes('?') && href === location.pathname))
+  const [expandedItems, setExpandedItems] = useState<string[]>([])
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['Основное']))
+
+  const navigation = useNavigation()
 
   const sections = useMemo(() => {
     const map = new Map<string, NavItem[]>()
@@ -232,9 +240,10 @@ export function Sidebar() {
   }, [location.pathname, navigation, expandedItems])
 
   useEffect(() => {
+    const matchesPath = (href?: string) => !!href && href.split('?')[0] === location.pathname
     for (const [sectionName, items] of sections.entries()) {
       const isActiveSection = items.some((item) =>
-        location.pathname === item.href || item.children?.some((child) => location.pathname === child.href)
+        matchesPath(item.href) || item.children?.some((child) => matchesPath(child.href))
       )
       if (isActiveSection) {
         setExpandedSections((prev) => (prev.has(sectionName) ? prev : new Set(prev).add(sectionName)))
@@ -284,44 +293,42 @@ export function Sidebar() {
       )}
 
       <aside className={cn(
-        'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+        'fixed left-3 top-3 bottom-3 z-50 flex w-[272px] flex-col overflow-hidden rounded-2xl border shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
         isCrctSidebar
-          ? 'border-sidebar-border bg-sidebar-bg'
-          : 'border-sidebar-border bg-sidebar-bg',
-        openModals ? '-translate-x-full' : sidebarOpen ? 'translate-x-0' : '-translate-x-full',
-        'lg:translate-x-0',
-        isCrctSidebar && 'sidebar-crct',
-        !isCrctSidebar && 'sidebar-legacy'
+          ? 'border-sidebar-border bg-sidebar-bg sidebar-crct'
+          : 'border-border/60 bg-card/80 backdrop-blur-xl sidebar-legacy',
+        openModals ? '-translate-x-[120%]' : sidebarOpen ? 'translate-x-0' : '-translate-x-[120%]',
+        'lg:translate-x-0'
       )}>
-        <div className="relative overflow-hidden px-5 pt-5 pb-4">
+        <div className={cn(
+          'relative flex h-16 shrink-0 items-center gap-3 overflow-hidden px-5',
+          isCrctSidebar ? 'border-b border-white/10' : 'border-b border-border/60'
+        )}>
           <div className="absolute inset-0 gradient-primary opacity-[0.04]" />
-          <div className="absolute -top-12 -right-12 w-40 h-40 bg-primary/8 rounded-full blur-3xl" />
-          <div className="relative flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Logo size="md" showText={false} variant="dark" />
-              <div>
-                <span className={cn(
-                  'text-[15px] font-bold tracking-tight block leading-tight',
-                  isCrctSidebar ? 'text-white' : 'text-gradient'
-                )}>Кабинет</span>
-                <span className={cn(
-                  'text-[10px] font-medium tracking-wide uppercase',
-                  isCrctSidebar ? 'text-white/60' : 'text-muted-foreground/60'
-                )}>Сотрудника</span>
-              </div>
+          <div className="relative flex flex-1 items-center gap-3">
+            <Logo size="md" showText={false} variant="dark" />
+            <div className="min-w-0">
+              <span className={cn(
+                'block text-[15px] font-bold leading-tight tracking-tight',
+                isCrctSidebar ? 'text-white' : 'text-gradient'
+              )}>Кабинет</span>
+              <span className={cn(
+                'text-[10px] font-medium uppercase tracking-wide',
+                isCrctSidebar ? 'text-white/60' : 'text-muted-foreground/60'
+              )}>Сотрудника</span>
             </div>
-            <div className="flex items-center gap-0.5">
-              <Button variant="ghost" size="icon" className={cn('h-8 w-8 interactive', isCrctSidebar && 'text-white hover:bg-white/10')} onClick={toggleTheme}>
-                {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </Button>
-              <Button variant="ghost" size="icon" className={cn('h-8 w-8 lg:hidden', isCrctSidebar && 'text-white hover:bg-white/10')} onClick={toggleSidebar}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+          </div>
+          <div className="relative flex items-center gap-0.5">
+            <Button variant="ghost" size="icon" className={cn('h-8 w-8 rounded-xl interactive', isCrctSidebar && 'text-white hover:bg-white/10')} onClick={toggleTheme}>
+              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" className={cn('h-8 w-8 rounded-xl lg:hidden', isCrctSidebar && 'text-white hover:bg-white/10')} onClick={toggleSidebar}>
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 pb-3">
+        <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-3 pt-2">
           {Array.from(sections.entries()).map(([sectionName, items]) => {
             const isSectionExpanded = expandedSections.has(sectionName)
             return (
@@ -332,8 +339,8 @@ export function Sidebar() {
                 className="flex w-full items-center justify-between px-3 pt-3 pb-1.5 group"
               >
                 <span className={cn(
-                  'text-[10px] font-semibold uppercase tracking-[0.08em]',
-                  isCrctSidebar ? 'text-white/40' : 'text-muted-foreground/50'
+                  'text-[11px] font-semibold uppercase tracking-wider',
+                  isCrctSidebar ? 'text-white/40' : 'text-muted-foreground/70'
                 )}>{sectionName}</span>
                 <ChevronDown className={cn(
                   'h-3 w-3 transition-transform duration-200',
@@ -351,7 +358,7 @@ export function Sidebar() {
                   const Icon = item.icon
                   const hasChildren = !!item.children
                   const isExpanded = expandedItems.includes(item.name)
-                  const hasActiveChild = item.children?.some((child) => location.pathname === child.href)
+                  const hasActiveChild = item.children?.some((child) => isHrefActive(child.href))
 
                   if (hasChildren && item.children) {
                     return (
@@ -359,47 +366,52 @@ export function Sidebar() {
                         <button
                           onClick={() => toggleAccordion(item.name)}
                           className={cn(
-                            'group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-200',
+                            'group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200 ease-out',
                             hasActiveChild
                               ? isCrctSidebar
                                 ? 'bg-white/15 text-white'
-                                : 'bg-primary/8 text-primary'
+                                : 'bg-primary/10 text-primary'
                               : isCrctSidebar
                                 ? 'text-white/70 hover:bg-white/10 hover:text-white'
-                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                                : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                           )}
                         >
-                          <div className="transition-transform duration-200 group-hover:scale-105">
-                            <Icon className="h-[18px] w-[18px] shrink-0" />
-                          </div>
-                          <span className="flex-1 text-left">{item.name}</span>
-                          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-300', isExpanded && 'rotate-180')} />
+                          <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                            <Icon className="h-[18px] w-[18px]" />
+                          </span>
+                          <span className="flex-1 truncate text-left">{item.name}</span>
+                          <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform duration-300', isExpanded && 'rotate-180')} />
                         </button>
                         <div className={cn(
                           'overflow-hidden transition-all duration-300',
                           isExpanded ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
                         )}>
-                          <div className="mt-0.5 ml-4 pl-3.5 border-l-2 border-primary/12 space-y-0.5 py-1">
+                          <div className="mt-0.5 space-y-0.5 py-1">
                             {item.children.map((child) => {
-                              const isChildActive = location.pathname === child.href
+                              const isChildActive = isHrefActive(child.href)
                               return (
                                 <NavLink
                                   key={child.href}
                                   to={child.href}
                                   onClick={() => { if (window.innerWidth < 1024) toggleSidebar() }}
                                   className={cn(
-                                    'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] transition-all duration-200',
+                                    'relative flex items-center gap-3 rounded-lg py-2 pl-8 pr-3 text-[13px] transition-all duration-200 ease-out',
                                     isChildActive
                                       ? isCrctSidebar
-                                        ? 'text-white font-semibold bg-white/10'
-                                        : 'text-primary font-semibold bg-primary/6'
+                                        ? 'bg-white/10 font-medium text-white'
+                                        : 'bg-primary/10 font-medium text-primary'
                                       : isCrctSidebar
-                                        ? 'text-white/60 hover:text-white hover:bg-white/5'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+                                        ? 'text-white/60 hover:bg-white/5 hover:text-white'
+                                        : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                                   )}
                                 >
-                                  <FileStack className="h-3.5 w-3.5" />
-                                  <span>{child.name}</span>
+                                  <span className={cn(
+                                    'absolute left-[15px] h-1.5 w-1.5 rounded-full',
+                                    isChildActive
+                                      ? isCrctSidebar ? 'bg-white' : 'bg-primary'
+                                      : isCrctSidebar ? 'bg-white/30' : 'bg-muted-foreground/30'
+                                  )} />
+                                  <span className="truncate">{child.name}</span>
                                 </NavLink>
                               )
                             })}
@@ -410,7 +422,7 @@ export function Sidebar() {
                   }
 
                   if (!item.href) return null
-                  const isActive = location.pathname === item.href
+                  const isActive = isHrefActive(item.href)
 
                   return (
                     <NavLink
@@ -418,20 +430,23 @@ export function Sidebar() {
                       to={item.href}
                       onClick={() => { if (window.innerWidth < 1024) toggleSidebar() }}
                       className={cn(
-                        'group flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-200',
+                        'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200 ease-out',
                         isActive
                           ? isCrctSidebar
                             ? 'bg-white text-[#003D85] shadow-md shadow-black/20'
-                            : 'gradient-primary text-white shadow-md shadow-primary/20'
+                            : 'bg-primary/10 text-primary'
                           : isCrctSidebar
                             ? 'text-white/70 hover:bg-white/10 hover:text-white'
-                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                            : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                       )}
                     >
-                      <div className="transition-transform duration-200 group-hover:scale-105">
-                        <Icon className="h-[18px] w-[18px] shrink-0" />
-                      </div>
-                      <span className="flex-1">{item.name}</span>
+                      {isActive && !isCrctSidebar && (
+                        <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-primary" />
+                      )}
+                      <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                        <Icon className="h-[18px] w-[18px]" />
+                      </span>
+                      <span className="flex-1 truncate">{item.name}</span>
                     </NavLink>
                   )
                 })}
@@ -443,19 +458,26 @@ export function Sidebar() {
           })}
         </nav>
 
-        <div className="relative border-t border-sidebar-border p-3">
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+        <div className={cn(
+          'shrink-0 p-3',
+          isCrctSidebar ? 'border-t border-white/10' : 'border-t border-border/60'
+        )}>
           <NavLink to="/settings" className={cn(
-            'flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition-all duration-200 mb-1',
-            location.pathname === '/settings'
+            'relative mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200 ease-out',
+            isHrefActive('/settings')
               ? isCrctSidebar
                 ? 'bg-white text-[#003D85] shadow-md shadow-black/20'
-                : 'gradient-primary text-white shadow-md shadow-primary/20'
+                : 'bg-primary/10 text-primary'
               : isCrctSidebar
                 ? 'text-white/70 hover:bg-white/10 hover:text-white'
-                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
           )}>
-            <Settings className="h-[18px] w-[18px]" />
+            {isHrefActive('/settings') && !isCrctSidebar && (
+              <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-primary" />
+            )}
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+              <Settings className="h-[18px] w-[18px]" />
+            </span>
             Настройки
           </NavLink>
 
@@ -467,8 +489,14 @@ export function Sidebar() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 mt-1 hover:bg-white/5 transition-colors duration-200 group cursor-pointer">
-            <Avatar className="h-10 w-10 ring-2 ring-white/10 shadow-sm transition-shadow duration-200 group-hover:ring-white/25">
+          <div className={cn(
+            'group mt-1 flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition-colors duration-200',
+            isCrctSidebar ? 'hover:bg-white/5' : 'hover:bg-muted/70'
+          )}>
+            <Avatar className={cn(
+              'h-10 w-10 shadow-sm ring-2 transition-shadow duration-200',
+              isCrctSidebar ? 'ring-white/10 group-hover:ring-white/25' : 'ring-primary/15 group-hover:ring-primary/30'
+            )}>
               {user && (
                 <AvatarImage src={user.avatar || generateAvatarUrl(user.id, user.gender)} alt={`${user.firstName} ${user.lastName}`} />
               )}

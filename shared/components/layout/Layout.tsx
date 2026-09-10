@@ -9,10 +9,10 @@ export function Layout() {
   return (
     <div className="flex h-screen overflow-hidden gradient-bg">
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden lg:ml-[272px]">
+      <div className="flex flex-1 flex-col overflow-hidden lg:ml-[288px]">
         <Header />
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl p-6 lg:p-10">
+          <div className="mx-auto max-w-7xl p-6 lg:p-12">
             <Outlet />
           </div>
         </main>

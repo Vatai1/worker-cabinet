@@ -1,18 +1,24 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Bell } from 'lucide-react'
-import { SidebarToggle } from './Sidebar'
+import { SidebarToggle, useNavigation } from './Sidebar'
 import { OrgSwitcher } from './OrgSwitcher'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
-import { Logo } from '@/shared/components/brand/Logo'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { apiGet } from '@/shared/lib/apiClient'
 import { useNotificationWs } from '@/shared/lib/useNotificationWs'
 
+interface Crumb {
+  section: string
+  title: string
+}
+
 export function Header() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  const navigation = useNavigation()
   const [unreadCount, setUnreadCount] = useState(0)
 
   const fetchUnread = useCallback(async () => {
@@ -28,21 +34,49 @@ export function Header() {
     fetchUnread()
   }, [fetchUnread])
 
+  const crumb = useMemo<Crumb | null>(() => {
+    const current = location.pathname + location.search
+    const candidates: Array<{ href: string; section: string; title: string }> = [
+      { href: '/settings', section: '', title: 'Настройки' },
+    ]
+    navigation.forEach((item) => {
+      if (item.href) candidates.push({ href: item.href, section: item.section || '', title: item.name })
+      item.children?.forEach((child) =>
+        candidates.push({ href: child.href, section: item.section || '', title: child.name })
+      )
+    })
+    const hit =
+      candidates.find((c) => c.href === current) ||
+      candidates.find((c) => !c.href.includes('?') && c.href === location.pathname)
+    return hit ? { section: hit.section, title: hit.title } : null
+  }, [navigation, location.pathname, location.search])
+
   const getUserInitials = () => {
     if (!user) return '??'
     return `${user.firstName[0]}${user.lastName[0]}`
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border/30 glass px-6">
+    <header className="sticky top-0 z-30 flex h-[68px] items-center gap-4 border-b border-border/60 bg-background/70 px-6 backdrop-blur-xl">
       <SidebarToggle />
-      <Logo size="sm" />
-      <div className="flex-1" />
+      <div className="hidden min-w-0 flex-1 lg:block">
+        {crumb && (
+          <>
+            {crumb.section && (
+              <p className="text-sm leading-tight text-muted-foreground">{crumb.section}</p>
+            )}
+            <p className="truncate text-[15px] font-semibold leading-tight">{crumb.title}</p>
+          </>
+        )}
+      </div>
+      <div className="flex-1 lg:hidden" />
       <div className="flex items-center gap-3">
-        <OrgSwitcher />
+        <div className="rounded-full border bg-card px-3 py-1.5">
+          <OrgSwitcher />
+        </div>
         <button
           onClick={() => navigate('/notifications')}
-          className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+          className="relative flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label="Уведомления"
         >
           <Bell className="h-5 w-5" />
