@@ -6,6 +6,7 @@ import { notify } from '../config/notifications.js'
 import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { excludeTest } from '../utils/testScope.js'
 
 const router = express.Router()
 
@@ -246,6 +247,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       whereClause += ' AND vr.organization_id = $' + (params.length + 1)
       params.push(req.org.org_id)
     }
+    whereClause += ' ' + excludeTest(req, 'u')
 
     if (scope === 'connections') {
       whereClause += ` AND (${userParentSeesChildVacations(params.length + 1)} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userChildSeesParentVacations(params.length + 1)} OR ${childSeesParentVacations(params.length + 1)})`

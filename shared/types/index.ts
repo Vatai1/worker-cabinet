@@ -48,6 +48,10 @@ export interface Document {
 export interface AuthState {
   user: User | null
   isAuthenticated: boolean
+  isImpersonated?: boolean
+  isTestUser?: boolean
+  realUserId?: number | null
+  previewRole?: UserRole | null
 }
 
 export * from '@/modules/vacation/types/vacation'

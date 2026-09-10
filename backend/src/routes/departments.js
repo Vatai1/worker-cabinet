@@ -2,6 +2,7 @@ import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { excludeTest } from '../utils/testScope.js'
 
 const router = express.Router()
 
@@ -36,16 +37,17 @@ router.get('/', authenticateToken, async (req, res) => {
         m.first_name || ' ' || m.last_name as manager_name,
         m.position as manager_position,
         pd.name as parent_name,
-        (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
+        (SELECT COUNT(*) FROM users WHERE department_id = d.id ${excludeTest(req, 'users')}) as employee_count
       FROM departments d
       LEFT JOIN users m ON d.manager_id = m.id
       LEFT JOIN departments pd ON d.parent_id = pd.id
       ${req.org ? 'WHERE d.organization_id = $1' : ''}
+      ${excludeTest(req, 'd', req.org ? 'AND' : 'WHERE')}
       ORDER BY d.name
     `, req.org ? [req.org.org_id] : [])
 
     const employeesResult = await query(`
-      SELECT 
+      SELECT
         u.id,
         u.first_name,
         u.last_name,
@@ -58,7 +60,7 @@ router.get('/', authenticateToken, async (req, res) => {
         u.avatar,
         u.department_id
       FROM users u
-      WHERE u.department_id IS NOT NULL
+      WHERE u.department_id IS NOT NULL ${excludeTest(req, 'u')}
       ORDER BY u.last_name, u.first_name
     `)
 
@@ -113,7 +115,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         m.first_name || ' ' || m.last_name as manager_name
       FROM departments d
       LEFT JOIN users m ON d.manager_id = m.id
-      WHERE d.id = $1${req.org ? ' AND d.organization_id = $2' : ''}
+      WHERE d.id = $1${req.org ? ' AND d.organization_id = $2' : ''} ${excludeTest(req, 'd')}
     `, req.org ? [id, req.org.org_id] : [id])
 
     if (result.rows.length === 0) {
@@ -133,7 +135,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.role,
         u.avatar
       FROM users u
-      WHERE u.department_id = $1
+      WHERE u.department_id = $1 ${excludeTest(req, 'u')}
       ORDER BY u.last_name, u.first_name
     `, [id])
 

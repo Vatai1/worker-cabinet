@@ -3,6 +3,29 @@ import { query } from '../config/database.js'
 export async function attachOrgContext(req, res, next) {
   if (!req.user) return next()
 
+  if (req.previewRole) {
+    const hdrOrg = parseInt(req.headers['x-organization-id']) || parseInt(req.cookies?.active_org_id)
+    let row = null
+    if (hdrOrg) {
+      row = (await query(
+        'SELECT id AS org_id, name, slug FROM organizations WHERE id = $1 AND is_active = true',
+        [hdrOrg]
+      )).rows[0] || null
+    }
+    if (!row) {
+      row = (await query(
+        `SELECT uo.org_id, o.name, o.slug
+         FROM user_organizations uo
+         JOIN organizations o ON uo.org_id = o.id
+         WHERE uo.user_id = $1 AND uo.is_active = true AND o.is_active = true
+         ORDER BY uo.org_id LIMIT 1`,
+        [req.user.id]
+      )).rows[0] || null
+    }
+    req.org = { ...(row || {}), org_role: req.previewRole }
+    return next()
+  }
+
   if (req.user.role === 'superadmin' && !req.headers['x-organization-id']) {
     req.org = null
     return next()

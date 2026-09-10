@@ -57,6 +57,9 @@ export interface AuditLogEntry {
   details: Record<string, unknown> | null
   ip_address: string | null
   created_at: string
+  real_user_id?: number | null
+  real_user_name?: string | null
+  real_user_email?: string | null
 }
 
 export interface AdminStats {

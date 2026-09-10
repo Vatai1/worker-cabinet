@@ -2,6 +2,7 @@ import express from 'express'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { excludeTest } from '../utils/testScope.js'
 
 const router = express.Router()
 
@@ -333,10 +334,11 @@ router.get('/', authenticateToken, async (req, res) => {
                 pu.first_name as parent_user_first_name,
                 pu.last_name as parent_user_last_name,
                 pu.position as parent_user_position,
-                (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
+                (SELECT COUNT(*) FROM users WHERE department_id = d.id ${excludeTest(req, 'users')}) as employee_count
          FROM departments d
          LEFT JOIN users m ON d.manager_id = m.id
          LEFT JOIN users pu ON d.parent_user_id = pu.id${targetOrgId ? ' WHERE d.organization_id = $1' : ''}
+         ${excludeTest(req, 'd', targetOrgId ? 'AND' : 'WHERE')}
          ORDER BY d.name`,
         targetOrgId ? [targetOrgId] : []
       )

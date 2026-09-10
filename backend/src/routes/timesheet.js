@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { excludeTest } from '../utils/testScope.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
 import { getTimesheetExportData } from '../lib/timesheetExport.js'
 
@@ -27,7 +28,7 @@ router.post('/auto-create', authorizeRoles('admin', 'hr'), async (req, res) => {
   const m = month || (now.getMonth() + 1)
 
   try {
-    const { text: dText, values: dVals } = orgScopedQuery('SELECT id FROM departments', [], req)
+    const { text: dText, values: dVals } = orgScopedQuery(`SELECT id FROM departments WHERE 1=1 ${excludeTest(req, 'departments', 'AND')}`, [], req)
     const depts = await query(dText, dVals)
     const { text: eText, values: eVals } = orgScopedQuery(
       'SELECT department_id FROM timesheets WHERE year = $1 AND month = $2',
@@ -292,7 +293,7 @@ router.get('/:id', async (req, res) => {
 
     const empResult = await query(
       `SELECT id, first_name, last_name FROM users
-       WHERE department_id = $1 AND role IN ('employee', 'manager')
+       WHERE department_id = $1 AND role IN ('employee', 'manager') ${excludeTest(req, 'users')}
        ORDER BY last_name, first_name`,
       [tsResult.rows[0].department_id]
     )

@@ -12,7 +12,7 @@ import {
   Calendar, Bell, Crown, Bot, UserCheck,
   Send, UserPlus, Network, Briefcase, Wrench,
   Key, ShieldCheck, Boxes, Settings2, Package,
-  Activity, AlertCircle, Bug, Server, Palette,
+  Activity, AlertCircle, Bug, Server, Palette, FlaskConical,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -20,6 +20,7 @@ import { Logo } from '@/shared/components/brand/Logo'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
 import { BugReportButton } from '@/shared/components/BugReportButton'
+import { TestSwitcher } from '@/shared/components/TestSwitcher'
 
 export interface NavItem {
   name: string
@@ -117,7 +118,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
 // показываем их и в разделе «Настройки организации» в сайдбаре.
 const ORG_HIDDEN_ITEM_NAMES = new Set([
   'Роли и доступы', 'Роли по должности', 'Учреждения', 'Иерархия',
-  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система',
+  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система', 'Тестовые данные',
 ])
 
 const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg: boolean): NavItem[] => {
@@ -135,6 +136,7 @@ const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg:
     { name: 'Ошибки', href: `${basePath}?tab=errors`, icon: AlertCircle, section },
     { name: 'Баг-репорты', href: `${basePath}?tab=bug-reports`, icon: Bug, section },
     { name: 'Система', href: `${basePath}?tab=health`, icon: Server, section },
+    { name: 'Тестовые данные', href: `${basePath}?tab=test-data`, icon: FlaskConical, section },
     { name: 'Должности', href: `${basePath}?tab=dict_positions`, icon: Briefcase, section },
     { name: 'Типы отпусков', href: `${basePath}?tab=dict_vacation`, icon: Plane, module: 'vacation', section },
     { name: 'Навыки', href: `${basePath}?tab=dict_skills`, icon: Package, module: 'skills', section },
@@ -482,6 +484,7 @@ export function Sidebar() {
           </NavLink>
 
           <div className={cn('mt-2', isCrctSidebar ? 'border-t border-white/10 pt-2' : 'border-t border-border/50 pt-2')}>
+            <TestSwitcher isCrct={isCrctSidebar} />
             <div className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-xs',
               isCrctSidebar ? 'text-white/50 hover:bg-white/5 hover:text-white/80' : 'text-muted-foreground/60 hover:bg-muted/40 hover:text-muted-foreground'
             )}>

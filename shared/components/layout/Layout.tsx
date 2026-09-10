@@ -4,10 +4,12 @@ import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ModelsModal } from '@/core/admin/components/ModelsModal'
+import { ImpersonationBanner } from '@/shared/components/TestSwitcher'
 
 export function Layout() {
   return (
     <div className="flex h-screen overflow-hidden gradient-bg">
+      <ImpersonationBanner />
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden lg:ml-[288px]">
         <Header />

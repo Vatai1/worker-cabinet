@@ -3,6 +3,7 @@ import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { query } from '../config/database.js'
 import keycloakConfig, { getJwksUrl, getIssuer } from '../config/keycloak.js'
 import { attachOrgContext } from './orgContext.js'
+import { applyTestContext } from '../utils/testScope.js'
 
 let jwksCache = null
 
@@ -231,12 +232,13 @@ async function findOrCreateUser(kcPayload) {
   ]
 
   let result = await query(
-    'SELECT id, email, role, first_name, last_name, middle_name, gender, phone, position, hire_date, birth_date, avatar, office, cabinet, responsibility_area, department_id FROM users WHERE keycloak_guid = $1',
+    'SELECT id, email, role, first_name, last_name, middle_name, gender, phone, position, hire_date, birth_date, avatar, office, cabinet, responsibility_area, department_id, is_test FROM users WHERE keycloak_guid = $1 AND is_test = false',
     [sub]
   )
 
   if (result.rows.length > 0) {
     const user = result.rows[0]
+    if (user.is_test) return user
     const firstOrgId = await syncUserOrganizations(user.id, kcPayload)
     const updates = []
     const values = []
@@ -288,7 +290,7 @@ async function findOrCreateUser(kcPayload) {
   }
 
   result = await query(
-    'SELECT id, email, role, first_name, last_name, middle_name, gender, phone, position, hire_date, birth_date, avatar, office, cabinet, responsibility_area FROM users WHERE email = $1',
+    'SELECT id, email, role, first_name, last_name, middle_name, gender, phone, position, hire_date, birth_date, avatar, office, cabinet, responsibility_area FROM users WHERE email = $1 AND is_test = false',
     [email]
   )
   if (result.rows.length > 0) {
@@ -396,6 +398,7 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     req.user = user
+    await applyTestContext(req)
     return attachOrgContext(req, res, next)
   } catch (err) {
     console.error('[KC] authenticateToken failed:', err.message)

@@ -17,6 +17,10 @@ interface AuthStore extends AuthState {
 export const useAuthStore = create<AuthStore>()((set) => ({
   user: null,
   isAuthenticated: false,
+  isImpersonated: false,
+  isTestUser: false,
+  realUserId: null,
+  previewRole: null,
   loading: true,
   checkAuth: async () => {
     try {
@@ -26,7 +30,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
       if (!response.ok) {
         deleteCookie('auth_token')
-        set({ isAuthenticated: false, user: null, loading: false })
+        set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null })
         return
       }
 
@@ -52,13 +56,17 @@ export const useAuthStore = create<AuthStore>()((set) => ({
           avatar: data.avatar,
         },
         isAuthenticated: true,
+        isImpersonated: !!data.isImpersonated,
+        isTestUser: !!data.isTestUser,
+        realUserId: data.realUserId ?? null,
+        previewRole: data.previewRole ?? null,
         loading: false,
       })
       useModulesStore.getState().fetchModules()
       useOrgStore.getState().fetchOrgs()
     } catch (error) {
       deleteCookie('auth_token')
-      set({ isAuthenticated: false, user: null, loading: false })
+      set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null })
     }
   },
   login: async (email: string, password: string) => {
@@ -106,6 +114,10 @@ export const useAuthStore = create<AuthStore>()((set) => ({
     set({
       user: null,
       isAuthenticated: false,
+      isImpersonated: false,
+      isTestUser: false,
+      realUserId: null,
+      previewRole: null,
     })
     deleteCookie('auth_token')
     try {

@@ -4,6 +4,7 @@ import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { uploadAvatar } from '../middleware/upload.js'
 import { uploadToS3, getS3FileUrl } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { excludeTest } from '../utils/testScope.js'
 
 const router = express.Router()
 
@@ -151,7 +152,7 @@ router.get('/search', authenticateToken, async (req, res) => {
       ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN users m ON u.manager_id = m.id
-      WHERE 1=1${orgWhere}
+      WHERE 1=1${orgWhere} ${excludeTest(req, "u")}
     `
     
     if (departmentId) {
@@ -236,7 +237,7 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
       ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN users m ON u.manager_id = m.id
-      WHERE 1=1${orgWhere}
+      WHERE 1=1${orgWhere} ${excludeTest(req, "u")}
     `
 
     if (departmentId) {

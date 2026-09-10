@@ -7,6 +7,7 @@ import {
   getSurveyAnalytics,
 } from '../services/surveyService.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { excludeTest } from '../utils/testScope.js'
 
 const router = express.Router()
 
@@ -43,11 +44,11 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
         (SELECT COUNT(*) FROM survey_questions WHERE survey_id = s.id) as question_count,
         (SELECT COUNT(*) FROM survey_responses WHERE survey_id = s.id) as response_count,
         CASE
-          WHEN s.target_type = 'all' THEN (SELECT COUNT(*) FROM users WHERE status = 'active')
+          WHEN s.target_type = 'all' THEN (SELECT COUNT(*) FROM users WHERE status = 'active' ${excludeTest(req, 'users')})
           WHEN s.target_type = 'employees' THEN jsonb_array_length(s.target_ids)
           WHEN s.target_type = 'department' THEN (
             SELECT COUNT(*) FROM users u
-            WHERE u.status = 'active'
+            WHERE u.status = 'active' ${excludeTest(req, 'u')}
             AND u.department_id::TEXT IN (SELECT jsonb_array_elements_text(s.target_ids))
           )
           ELSE 0

@@ -6,6 +6,7 @@ import { authenticateToken, authorizeRoles, authorizeGlobalRoles } from '../midd
 import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '../middleware/errors.js'
 import { query, getClient } from '../config/database.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { signValue, testCookieOptions, requireRealSuperadmin, TEST_PREVIEW_ROLES, excludeTest } from '../utils/testScope.js'
 import { getActiveWsCount } from '../config/ws.js'
 import { createRequire } from 'module'
 import path from 'path'
@@ -25,7 +26,7 @@ const VALID_MAPPING_ROLES = ['employee', 'manager', 'hr', 'admin']
 router.use(authenticateToken)
 router.use(authorizeRoles('admin'))
 
-async function logAudit(userId, userName, action, entityType, entityId, details, ipAddress) {
+async function logAudit(userId, userName, action, entityType, entityId, details, ipAddress, realUserId = null) {
   try {
     let name = userName
     if (!name && userId) {
@@ -33,8 +34,8 @@ async function logAudit(userId, userName, action, entityType, entityId, details,
       if (r.rows.length > 0) name = `${r.rows[0].first_name} ${r.rows[0].last_name}`
     }
     await query(
-      `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, details, ip_address) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [userId, name, action, entityType, entityId, details ? JSON.stringify(details) : null, ipAddress || null]
+      `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, details, ip_address, real_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [userId, name, action, entityType, entityId, details ? JSON.stringify(details) : null, ipAddress || null, realUserId && realUserId !== userId ? realUserId : null]
     )
   } catch (err) {
     console.error('[AUDIT LOG ERROR]', err.message)
@@ -115,7 +116,7 @@ router.post('/roles', asyncHandler(async (req, res) => {
     }
 
     await client.query('COMMIT')
-    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_create', 'role', String(role.id), { name: role.name }, req.ip)
+    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_create', 'role', String(role.id), { name: role.name }, req.ip, req.realUser?.id ?? null)
     res.status(201).json(role)
   } catch (error) {
     await client.query('ROLLBACK')
@@ -194,7 +195,7 @@ router.put('/roles/:id', asyncHandler(async (req, res) => {
     }
 
     await client.query('COMMIT')
-    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_update', 'role', id, { name: name || existing.rows[0].name }, req.ip)
+    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_update', 'role', id, { name: name || existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
     res.json({ success: true })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -231,7 +232,7 @@ router.delete('/roles/:id', asyncHandler(async (req, res) => {
 
   await query('DELETE FROM roles WHERE id = $1', [id])
   await deleteKcRole(existing.rows[0].name).catch(() => {})
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_delete', 'role', id, { name: existing.rows[0].name }, req.ip)
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_delete', 'role', id, { name: existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -318,6 +319,9 @@ router.get('/users', asyncHandler(async (req, res) => {
     paramIdx++
   }
 
+  const testCond = excludeTest(req, 'u', '')
+  if (testCond) conditions.push(testCond)
+
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
   const countResult = await query(`SELECT COUNT(*) as total FROM users u ${orgJoin} ${where}`, values)
@@ -389,7 +393,7 @@ router.put('/users/:id/role', asyncHandler(async (req, res) => {
   }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_role_change', 'user', id,
-    { oldRole, newRole: role.trim(), userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip)
+    { oldRole, newRole: role.trim(), userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -434,7 +438,7 @@ router.put('/users/:id/status', asyncHandler(async (req, res) => {
   }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_status_change', 'user', id,
-    { oldStatus, newStatus: status, userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip)
+    { oldStatus, newStatus: status, userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -477,7 +481,7 @@ router.post('/users/:id/reset-password', asyncHandler(async (req, res) => {
   }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_password_reset', 'user', id,
-    { userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip)
+    { userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -549,7 +553,7 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
     }
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_update', 'user', id, { updatedFields: updates.map(u => u.split(' = ')[0]) }, req.ip)
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_update', 'user', id, { updatedFields: updates.map(u => u.split(' = ')[0]) }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -628,7 +632,7 @@ router.put('/settings', asyncHandler(async (req, res) => {
     )
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'settings_update', 'system', null, { count: settings.length }, req.ip)
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'settings_update', 'system', null, { count: settings.length }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -700,8 +704,11 @@ router.get('/audit-log', asyncHandler(async (req, res) => {
 
   const result = await query(`
     SELECT a.id, a.user_id, a.user_name, a.action, a.entity_type, a.entity_id,
-      a.details, a.ip_address, a.created_at
+      a.details, a.ip_address, a.created_at, a.real_user_id,
+      ru.email AS real_user_email,
+      NULLIF(TRIM(COALESCE(ru.first_name, '') || ' ' || COALESCE(ru.last_name, '')), '') AS real_user_name
     FROM audit_log a
+    LEFT JOIN users ru ON a.real_user_id = ru.id
     ${where}
     ORDER BY a.created_at DESC
     LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
@@ -724,13 +731,16 @@ router.get('/audit-log', asyncHandler(async (req, res) => {
  *         description: Статистика
  */
 router.get('/stats', asyncHandler(async (req, res) => {
-  const deptCount = orgScopedQuery('SELECT COUNT(*) as count FROM departments', [], req)
+  const uTest = excludeTest(req, 'u')
+  const uTestPlain = excludeTest(req, 'users')
+  const dTest = excludeTest(req, 'departments', 'AND')
+  const deptCount = orgScopedQuery(`SELECT COUNT(*) as count FROM departments WHERE 1=1 ${dTest}`, [], req)
   const orgUsersQuery = req.org
-    ? query('SELECT COUNT(*) as count FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true', [req.org.org_id])
-    : query('SELECT COUNT(*) as count FROM users')
+    ? query(`SELECT COUNT(*) as count FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true ${uTest}`, [req.org.org_id])
+    : query(`SELECT COUNT(*) as count FROM users WHERE 1=1 ${uTestPlain}`)
   const orgActiveUsersQuery = req.org
-    ? query('SELECT COUNT(*) as count FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true AND u.status = \'active\'', [req.org.org_id])
-    : query(`SELECT COUNT(*) as count FROM users WHERE status = 'active'`)
+    ? query(`SELECT COUNT(*) as count FROM users u JOIN user_organizations uo ON u.id = uo.user_id WHERE uo.org_id = $1 AND uo.is_active = true AND u.status = 'active' ${uTest}`, [req.org.org_id])
+    : query(`SELECT COUNT(*) as count FROM users WHERE status = 'active' ${uTestPlain}`)
   const [users, roles, departments, auditToday, activeUsers] = await Promise.all([
     orgUsersQuery,
     query('SELECT COUNT(*) as count FROM roles'),
@@ -740,7 +750,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
   ])
 
   const roleDistribution = await query(`
-    SELECT role, COUNT(*) as count FROM users GROUP BY role ORDER BY count DESC
+    SELECT role, COUNT(*) as count FROM users WHERE 1=1 ${uTestPlain} GROUP BY role ORDER BY count DESC
   `)
 
   res.json({
@@ -794,7 +804,7 @@ router.put('/users/bulk-status', asyncHandler(async (req, res) => {
   }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'bulk_status_change', 'user', null,
-    { count: result.rowCount, status }, req.ip)
+    { count: result.rowCount, status }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true, updated: result.rowCount })
 }))
 
@@ -840,7 +850,7 @@ router.put('/users/bulk-role', asyncHandler(async (req, res) => {
   }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'bulk_role_change', 'user', null,
-    { count: result.rowCount, role: role.trim() }, req.ip)
+    { count: result.rowCount, role: role.trim() }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true, updated: result.rowCount })
 }))
 
@@ -1078,7 +1088,7 @@ router.post('/users/:id/unlock', asyncHandler(async (req, res) => {
     await unlockKcUser(guidCheck.rows[0].keycloak_guid).catch(() => {})
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'account_unlock', 'user', id, {}, req.ip)
+  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'account_unlock', 'user', id, {}, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -1619,7 +1629,7 @@ router.post('/modules', asyncHandler(async (req, res) => {
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_create', 'module', String(result.rows[0].id),
-    { code: code.trim(), name: name.trim() }, req.ip)
+    { code: code.trim(), name: name.trim() }, req.ip, req.realUser?.id ?? null)
 
   res.status(201).json(result.rows[0])
 }))
@@ -1669,7 +1679,7 @@ router.put('/modules/:id', authorizeGlobalRoles('admin'), asyncHandler(async (re
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_update', 'module', id,
-    { code: existing.rows[0].code, updatedFields: Object.keys(req.body) }, req.ip)
+    { code: existing.rows[0].code, updatedFields: Object.keys(req.body) }, req.ip, req.realUser?.id ?? null)
 
   res.json(result.rows[0])
 }))
@@ -1701,7 +1711,7 @@ router.delete('/modules/:id', authorizeGlobalRoles('admin'), asyncHandler(async 
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_delete', 'module', id,
-    { code: existing.rows[0].code, name: existing.rows[0].name }, req.ip)
+    { code: existing.rows[0].code, name: existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
 
   res.json({ success: true })
 }))
@@ -1734,7 +1744,7 @@ router.put('/modules/:id/toggle', authorizeGlobalRoles('superadmin'), asyncHandl
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_toggle', 'module', id,
-    { module: existing.rows[0].code, name: existing.rows[0].name, enabled: newStatus }, req.ip)
+    { module: existing.rows[0].code, name: existing.rows[0].name, enabled: newStatus }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true, enabled: newStatus })
 }))
 
@@ -1792,7 +1802,7 @@ router.put('/modules/:code/org-toggle', authorizeRoles('admin'), asyncHandler(as
   const effectiveEnabled = enable !== false
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
     'module_org_toggle', 'module', String(moduleId),
-    { module: code, name: moduleRes.rows[0].name, org_id: req.org.org_id, enabled: effectiveEnabled }, req.ip)
+    { module: code, name: moduleRes.rows[0].name, org_id: req.org.org_id, enabled: effectiveEnabled }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true, enabled: effectiveEnabled })
 }))
 
@@ -1900,7 +1910,7 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
       }
     }
     await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
-      'module_settings_update', 'module', String(globalRes.rows[0].id), { changed, scope: 'global' }, req.ip)
+      'module_settings_update', 'module', String(globalRes.rows[0].id), { changed, scope: 'global' }, req.ip, req.realUser?.id ?? null)
     res.json(result.rows[0].settings)
   } else if (req.org) {
     await query(`
@@ -1909,7 +1919,7 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
       ON CONFLICT (org_id, module_code) DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
     `, [req.org.org_id, id, JSON.stringify(settingsToSave)])
     await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
-      'module_settings_update', 'module', String(globalRes.rows[0].id), { scope: 'org', org_id: req.org.org_id }, req.ip)
+      'module_settings_update', 'module', String(globalRes.rows[0].id), { scope: 'org', org_id: req.org.org_id }, req.ip, req.realUser?.id ?? null)
     res.json(settingsToSave)
   } else {
     res.json(settingsToSave)
@@ -2036,7 +2046,7 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
   }
 
   await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
-    'agent_config_update', 'system', null, { model, baseUrl }, req.ip)
+    'agent_config_update', 'system', null, { model, baseUrl }, req.ip, req.realUser?.id ?? null)
 
   res.json({ success: true })
 }))
@@ -2235,6 +2245,127 @@ router.delete('/role-mappings/:id', authorizeRoles('admin', 'superadmin'), async
   const result = await query('DELETE FROM role_mapping_rules WHERE id = $1 RETURNING id', [id])
   if (result.rows.length === 0) throw new NotFoundError('Правило не найдено')
   res.json({ success: true })
+}))
+
+// ===================== TEST CONTOUR =====================
+
+const TEST_DEPT_NAME = 'TEST Отдел'
+const TEST_USERS = [
+  { email: 'test.employee@wc.test', role: 'employee', first_name: 'Тест', last_name: 'Сотрудник', position: 'Тестовый сотрудник', org_role: 'employee' },
+  { email: 'test.manager@wc.test', role: 'manager', first_name: 'Тест', last_name: 'Руководитель', position: 'Тестовый руководитель', org_role: 'manager' },
+  { email: 'test.hr@wc.test', role: 'hr', first_name: 'Тест', last_name: 'HR', position: 'Тестовый HR', org_role: 'hr' },
+  { email: 'test.admin@wc.test', role: 'admin', first_name: 'Тест', last_name: 'Админ', position: 'Тестовый администратор', org_role: 'admin' },
+]
+const TEST_EMAILS = TEST_USERS.map((u) => u.email)
+
+async function testDataState() {
+  const department = (await query(
+    `SELECT id, name, organization_id, is_test FROM departments WHERE name = $1 AND is_test = true ORDER BY id LIMIT 1`,
+    [TEST_DEPT_NAME]
+  )).rows[0] || null
+  const users = (await query(
+    `SELECT id, email, role, first_name, last_name, position, status, department_id
+     FROM users WHERE is_test = true AND email = ANY($1) ORDER BY id`,
+    [TEST_EMAILS]
+  )).rows
+  return { department, users }
+}
+
+router.get('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) => {
+  const state = await testDataState()
+  res.json({
+    ...state,
+    active: {
+      previewRole: req.previewRole || null,
+      isImpersonated: !!req.impersonatedTestUser,
+      impersonatedUserId: req.impersonatedTestUser ? req.user.id : null,
+    },
+  })
+}))
+
+router.post('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) => {
+  const orgId = req.org?.org_id || null
+  if (!orgId) throw new ValidationError('Не выбрана организация — укажите активную организацию')
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+    let dept = (await client.query(
+      `SELECT id FROM departments WHERE name = $1 AND organization_id = $2`,
+      [TEST_DEPT_NAME, orgId]
+    )).rows[0]
+    if (!dept) {
+      dept = (await client.query(
+        `INSERT INTO departments (name, organization_id, is_test) VALUES ($1, $2, true) RETURNING id`,
+        [TEST_DEPT_NAME, orgId]
+      )).rows[0]
+    } else {
+      await client.query(`UPDATE departments SET is_test = true WHERE id = $1`, [dept.id])
+    }
+    const deptId = dept.id
+    const passwordHash = await bcrypt.hash('password123', 10)
+    const created = []
+    for (const tu of TEST_USERS) {
+      let u = (await client.query(`SELECT id FROM users WHERE email = $1`, [tu.email])).rows[0]
+      if (!u) {
+        u = (await client.query(
+          `INSERT INTO users (email, password_hash, first_name, last_name, role, status, position, department_id, hire_date, is_test)
+           VALUES ($1, $2, $3, $4, $5, 'active', $6, $7, CURRENT_DATE, true) RETURNING id`,
+          [tu.email, passwordHash, tu.first_name, tu.last_name, tu.role, tu.position, deptId]
+        )).rows[0]
+      } else {
+        await client.query(
+          `UPDATE users SET is_test = true, status = 'active', role = $2, department_id = $3, position = $4, password_hash = $5 WHERE id = $1`,
+          [u.id, tu.role, deptId, tu.position, passwordHash]
+        )
+      }
+      await client.query(
+        `INSERT INTO user_organizations (user_id, org_id, org_role, is_active, is_primary)
+         VALUES ($1, $2, $3, true, true)
+         ON CONFLICT (user_id, org_id) DO UPDATE SET org_role = EXCLUDED.org_role, is_active = true, is_primary = true`,
+        [u.id, orgId, tu.org_role]
+      )
+      created.push({ id: u.id, ...tu })
+    }
+    const mgr = created.find((c) => c.role === 'manager')
+    if (mgr) {
+      await client.query(`UPDATE departments SET manager_id = $1 WHERE id = $2`, [mgr.id, deptId])
+      await client.query(
+        `UPDATE users SET manager_id = $1 WHERE is_test = true AND department_id = $2 AND id <> $1`,
+        [mgr.id, deptId]
+      )
+    }
+    await client.query('COMMIT')
+    res.status(201).json(await testDataState())
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
+}))
+
+router.delete('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) => {
+  await query(`UPDATE users SET status = 'inactive' WHERE is_test = true AND email = ANY($1)`, [TEST_EMAILS])
+  res.json(await testDataState())
+}))
+
+router.post('/test/preview-role', requireRealSuperadmin, asyncHandler(async (req, res) => {
+  const role = String(req.body?.role || '')
+  if (!TEST_PREVIEW_ROLES.includes(role)) throw new ValidationError('Некорректная роль')
+  res.cookie('preview_role', signValue(role), testCookieOptions(req))
+  res.clearCookie('imp_user', { path: '/' })
+  res.json({ success: true, previewRole: role })
+}))
+
+router.post('/test/impersonate', requireRealSuperadmin, asyncHandler(async (req, res) => {
+  const userId = parseInt(req.body?.userId, 10)
+  if (!Number.isInteger(userId)) throw new ValidationError('userId обязателен')
+  const target = (await query(`SELECT id, is_test, status FROM users WHERE id = $1`, [userId])).rows[0]
+  if (!target || target.is_test !== true) throw new ValidationError('Пользователь не является тестовым')
+  if (target.status !== 'active') throw new ValidationError('Тестовый пользователь деактивирован')
+  res.cookie('imp_user', signValue(String(userId)), testCookieOptions(req))
+  res.clearCookie('preview_role', { path: '/' })
+  res.json({ success: true, userId })
 }))
 
 export default router

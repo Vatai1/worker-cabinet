@@ -7,6 +7,7 @@ import { authLimiter } from '../middleware/rateLimiter.js'
 import { validateLogin, validateRegister, sanitizeInput } from '../middleware/validation.js'
 import { asyncHandler, ValidationError, UnauthorizedError } from '../middleware/errors.js'
 import { authenticateToken, logScopes } from '../middleware/auth.js'
+import { isRealSuperadmin } from '../utils/testScope.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
 import { getAuthSettings } from '../config/authSettings.js'
 
@@ -174,9 +175,13 @@ router.post('/logout', asyncHandler(async (req, res) => {
     res.clearCookie('auth_token', opts)
     res.clearCookie('kc_id_token', opts)
     res.clearCookie('kc_refresh_token', opts)
+    res.clearCookie('imp_user', opts)
+    res.clearCookie('preview_role', opts)
     res.json({ logoutUrl })
   } else {
     res.clearCookie('auth_token', opts)
+    res.clearCookie('imp_user', opts)
+    res.clearCookie('preview_role', opts)
     res.json({ success: true })
   }
 }))
@@ -240,7 +245,7 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
        d.name as department_name, d.manager_id as department_manager_id
      FROM users u
      LEFT JOIN departments d ON u.department_id = d.id
-     WHERE u.email = $1`,
+     WHERE u.email = $1 AND u.is_test = false`,
     [email]
   )
 
@@ -310,11 +315,21 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
     })
 }))
 
+router.post('/impersonate/stop', authenticateToken, asyncHandler(async (req, res) => {
+  if (!isRealSuperadmin(req) && !req.impersonatedTestUser) {
+    throw new UnauthorizedError('Недоступно')
+  }
+  const opts = cookieOptions(req)
+  res.clearCookie('imp_user', opts)
+  res.clearCookie('preview_role', opts)
+  res.json({ success: true })
+}))
+
 router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT u.id, u.email, u.first_name, u.last_name, u.middle_name,
        u.position, u.department_id, u.phone, u.birth_date, u.hire_date,
-       u.status, u.role, u.manager_id, u.avatar,
+       u.status, u.role, u.manager_id, u.avatar, u.is_test,
        d.name as department_name
      FROM users u
      LEFT JOIN departments d ON u.department_id = d.id
@@ -330,8 +345,13 @@ router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
     id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name,
     middleName: user.middle_name, position: user.position, department: user.department_name,
     departmentId: user.department_id, phone: user.phone, birthDate: user.birth_date,
-    hireDate: user.hire_date, status: user.status, role: user.role,
+    hireDate: user.hire_date, status: user.status,
+    role: req.previewRole || user.role,
     managerId: user.manager_id, avatar: user.avatar,
+    isImpersonated: !!req.impersonatedTestUser,
+    isTestUser: user.is_test === true || !!req.impersonatedTestUser,
+    previewRole: req.previewRole || null,
+    realUserId: req.realUser?.id ?? null,
   })
 }))
 

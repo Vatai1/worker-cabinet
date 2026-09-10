@@ -1848,6 +1848,13 @@ async function runMigrations() {
 
     console.log('✅ Module overrides + global settings migration completed')
 
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT false`)
+    await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT false`)
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_users_is_test ON users(is_test) WHERE is_test`)
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_departments_is_test ON departments(is_test) WHERE is_test`)
+    await db.query(`ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS real_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`).catch(() => {})
+    console.log('  ✓ test contour (users.is_test, departments.is_test, audit_log.real_user_id)')
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
 

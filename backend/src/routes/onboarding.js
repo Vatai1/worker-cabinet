@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { uploadTemplate as uploadTemplateMiddleware } from '../middleware/upload.js'
+import { excludeTest } from '../utils/testScope.js'
 import { uploadToS3, getS3FileUrl, deleteFromS3, getPresignedUrl, getFromS3 } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 
@@ -611,6 +612,7 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
     if (req.org) {
       listSql += ` WHERE eo.organization_id = $1`
     }
+    listSql += ` ${excludeTest(req, 'u', req.org ? 'AND' : 'WHERE')}`
     listSql += ` ORDER BY eo.started_at DESC`
     const result = await query(listSql, listParams)
     res.json(result.rows)
@@ -657,7 +659,7 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
       return res.status(400).json({ error: 'Выберите хотя бы один документ' })
     }
 
-    const existing = await query('SELECT id FROM users WHERE email = $1', [email])
+    const existing = await query('SELECT id FROM users WHERE email = $1 AND is_test = false', [email])
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email уже зарегистрирован' })
     }

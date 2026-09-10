@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { fetchWithRetry } from '@/shared/lib/apiClient'
+import { fetchWithRetry, apiGet, apiPost, apiDelete } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -36,11 +36,11 @@ import {
   Zap, Briefcase, Plane,
   Pencil, Save, Bot, Package,
   Palette, Tag, LogIn, Network,
-  Bug,
+  Bug, FlaskConical,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
-type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports'
+type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports' | 'test-data'
 
 interface TabItem {
   id: TabId
@@ -91,6 +91,7 @@ const TAB_GROUPS: TabGroup[] = [
       { id: 'errors', name: 'Ошибки', icon: AlertCircle, description: 'Лог ошибок системы', color: 'from-orange-500 to-red-600' },
       { id: 'bug-reports', name: 'Баг-репорты', icon: Bug, description: 'Отчёты пользователей', color: 'from-amber-500 to-orange-600' },
       { id: 'health', name: 'Система', icon: Server, description: 'БД, память, подключения', color: 'from-teal-500 to-emerald-600' },
+      { id: 'test-data', name: 'Тестовые данные', icon: FlaskConical, description: 'Тестовый отдел и сотрудники', color: 'from-lime-500 to-green-600' },
     ],
   },
   {
@@ -302,7 +303,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
       .catch(() => {})
   }, [])
 
-  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'global-hierarchy', 'bug-reports']
+  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'global-hierarchy', 'bug-reports', 'test-data']
 
   const filteredGroups = TAB_GROUPS
     .map((group) => ({
@@ -379,6 +380,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
         {activeTab === 'modules' && <ModulesTab mode={mode} />}
         {activeTab === 'appearance' && <AppearanceTab />}
         {activeTab === 'bug-reports' && <AdminBugReports />}
+        {activeTab === 'test-data' && <TestDataTab />}
       </div>
     </div>
   )
@@ -2287,6 +2289,11 @@ function AuditTab() {
                                 {log.user_name.charAt(0)}
                               </div>
                               {log.user_name}
+                              {log.real_user_id && (
+                                <span className="text-amber-600 dark:text-amber-400">
+                                  ({log.real_user_name || log.real_user_email || `id ${log.real_user_id}`})
+                                </span>
+                              )}
                             </span>
                           )}
                           {log.ip_address && (
@@ -3362,6 +3369,119 @@ function ModulesTab({ mode = 'global' }: { mode?: 'global' | 'org' }) {
         </CustomSettingsModal>
       )}
     </>
+  )
+}
+
+interface TestUserRow {
+  id: number
+  email: string
+  role: string
+  first_name: string
+  last_name: string
+  position: string
+  status: string
+}
+interface TestDataResp {
+  department: { id: number; name: string } | null
+  users: TestUserRow[]
+  active: { previewRole: string | null; isImpersonated: boolean; impersonatedUserId: number | null }
+}
+
+function TestDataTab() {
+  const [data, setData] = useState<TestDataResp | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    apiGet<TestDataResp>('/admin/test-data')
+      .then((d) => { setData(d); setError(null) })
+      .catch((e) => setError(getErrorMessage(e)))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const create = async () => {
+    setBusy(true)
+    try {
+      const d = await apiPost<TestDataResp>('/admin/test-data')
+      setData(d)
+      setError(null)
+    } catch (e) { setError(getErrorMessage(e)) }
+    finally { setBusy(false) }
+  }
+
+  const deactivate = async () => {
+    const ok = await confirmDialog({
+      title: 'Деактивировать тестовых пользователей?',
+      message: 'Пользователи станут неактивными и исчезнут из списков. Данные и отметка is_test сохранятся.',
+      confirmText: 'Деактивировать',
+    })
+    if (!ok) return
+    setBusy(true)
+    try {
+      await apiDelete('/admin/test-data')
+      load()
+    } catch (e) { setError(getErrorMessage(e)) }
+    finally { setBusy(false) }
+  }
+
+  const hasData = !!data?.department || (data?.users?.length ?? 0) > 0
+  const activeUsers = data?.users.filter((u) => u.status === 'active') ?? []
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Тестовые данные</CardTitle>
+        <CardDescription>Тестовый отдел и сотрудники, скрытые от всех, кроме супер-админа</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">{error}</div>}
+
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Загрузка…</div>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={create} disabled={busy}>
+                {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                {hasData ? 'Пересоздать / актуализировать' : 'Создать тестовый отдел + сотрудников'}
+              </Button>
+              {activeUsers.length > 0 && (
+                <Button variant="outline" onClick={deactivate} disabled={busy}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Деактивировать
+                </Button>
+              )}
+            </div>
+
+            {data?.department && (
+              <p className="text-sm text-muted-foreground">
+                Отдел: <span className="font-medium text-foreground">{data.department.name}</span> (id {data.department.id})
+              </p>
+            )}
+
+            {(data?.users.length ?? 0) > 0 ? (
+              <div className="space-y-1.5">
+                {data!.users.map((u) => (
+                  <div key={u.id} className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2 text-sm">
+                    <span className="flex-1 truncate">{u.last_name} {u.first_name} <span className="text-muted-foreground">· {u.email}</span></span>
+                    <Badge variant="secondary" className="text-[10px]">{u.role}</Badge>
+                    <Badge className={cn('text-[10px]', u.status === 'active' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-muted text-muted-foreground')}>
+                      {u.status === 'active' ? 'active' : 'inactive'}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Тестовые данные ещё не созданы.</p>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

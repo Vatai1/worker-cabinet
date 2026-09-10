@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { excludeTest } from '../utils/testScope.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
 import { uploadToS3, getFromS3, getPresignedUrl } from '../config/s3.js'
 import { notifyBatch } from '../config/notifications.js'
@@ -142,7 +143,7 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(
   }
 
   const recipientResult = await query(
-    `SELECT DISTINCT u.id FROM users u WHERE u.status = 'active' AND (
+    `SELECT DISTINCT u.id FROM users u WHERE u.status = 'active' ${excludeTest(req, 'u')} AND (
       ($1::int[] IS NOT NULL AND $1::int[] != '{}' AND u.id = ANY($1::int[]))
       OR ($2::text[] IS NOT NULL AND $2::text[] != '{}' AND u.position = ANY($2::text[]))
       OR ($3::int[] IS NOT NULL AND $3::int[] != '{}' AND u.department_id = ANY($3::int[]))
