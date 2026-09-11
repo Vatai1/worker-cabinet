@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Bell } from 'lucide-react'
+import { Bell, Search, X } from 'lucide-react'
 import { SidebarToggle, useNavigation } from './Sidebar'
 import { OrgSwitcher } from './OrgSwitcher'
+import { GlobalSearch } from './GlobalSearch'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
@@ -20,6 +21,7 @@ export function Header() {
   const location = useLocation()
   const navigation = useNavigation()
   const [unreadCount, setUnreadCount] = useState(0)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
 
   const fetchUnread = useCallback(async () => {
     try {
@@ -51,6 +53,15 @@ export function Header() {
     return hit ? { section: hit.section, title: hit.title } : null
   }, [navigation, location.pathname, location.search])
 
+  useEffect(() => {
+    if (!mobileSearchOpen) return
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileSearchOpen(false)
+    }
+    window.addEventListener('keydown', handleKeydown)
+    return () => window.removeEventListener('keydown', handleKeydown)
+  }, [mobileSearchOpen])
+
   const getUserInitials = () => {
     if (!user) return '??'
     return `${user.firstName[0]}${user.lastName[0]}`
@@ -59,8 +70,8 @@ export function Header() {
   return (
     <header className="sticky top-0 z-30 flex h-[68px] items-center gap-4 border-b border-border/60 bg-background/70 px-6 backdrop-blur-xl">
       <SidebarToggle />
-      <div className="hidden min-w-0 flex-1 lg:block">
-        {crumb && (
+      <div className="hidden min-w-0 lg:block">
+        {crumb && !mobileSearchOpen && (
           <>
             {crumb.section && (
               <p className="text-sm leading-tight text-muted-foreground">{crumb.section}</p>
@@ -69,8 +80,33 @@ export function Header() {
           </>
         )}
       </div>
-      <div className="flex-1 lg:hidden" />
+      {user?.role !== 'onboarding' && (
+        <div className={mobileSearchOpen ? 'flex flex-1 items-center gap-2' : 'hidden lg:flex lg:flex-1 lg:min-w-0'}>
+          <GlobalSearch className="w-full" autoFocus={mobileSearchOpen} onNavigate={() => setMobileSearchOpen(false)} />
+          {mobileSearchOpen && (
+            <button
+              type="button"
+              onClick={() => setMobileSearchOpen(false)}
+              aria-label="Закрыть поиск"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+      )}
+      {!mobileSearchOpen && <div className="flex-1 lg:hidden" />}
       <div className="flex items-center gap-3">
+        {user?.role !== 'onboarding' && !mobileSearchOpen && (
+          <button
+            type="button"
+            onClick={() => setMobileSearchOpen(true)}
+            aria-label="Поиск"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+          >
+            <Search className="h-5 w-5" />
+          </button>
+        )}
         <div className="rounded-full border bg-card px-3 py-1.5">
           <OrgSwitcher />
         </div>
