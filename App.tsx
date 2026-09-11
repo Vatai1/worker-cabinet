@@ -33,6 +33,7 @@ const Surveys = lazy(() => import('@/modules/surveys/pages/Surveys').then(m => (
 const SurveyPage = lazy(() => import('@/modules/surveys/pages/SurveyPage').then(m => ({ default: m.SurveyPage })))
 const Onboarding = lazy(() => import('@/modules/onboarding/pages/Onboarding').then(m => ({ default: m.Onboarding })))
 const HROnboarding = lazy(() => import('@/modules/onboarding/pages/HROnboarding').then(m => ({ default: m.HROnboarding })))
+const HRDocTemplateNew = lazy(() => import('@/modules/documents/pages/HRDocTemplateNew').then(m => ({ default: m.HRDocTemplateNew })))
 const ManagerTimesheet = lazy(() => import('@/modules/timesheet/pages/ManagerTimesheet').then(m => ({ default: m.ManagerTimesheet })))
 const CalendarPage = lazy(() => import('@/modules/calendar/pages/CalendarPage').then(m => ({ default: m.CalendarPage })))
 const Notifications = lazy(() => import('@/modules/notifications/pages/Notifications').then(m => ({ default: m.Notifications })))
@@ -201,6 +202,7 @@ function App() {
                 <Route path="onboarding" element={<ModuleGuard module="onboarding"><OnboardingRoute><Onboarding /></OnboardingRoute></ModuleGuard>} />
                 <Route path="hr" element={<HRRoute><HRPanel /></HRRoute>} />
                 <Route path="hr/onboarding/:id" element={<ModuleGuard module="onboarding"><HRRoute><HROnboarding /></HRRoute></ModuleGuard>} />
+                <Route path="hr/doc-templates/new" element={<ModuleGuard module="documents"><HRRoute><HRDocTemplateNew /></HRRoute></ModuleGuard>} />
                 <Route path="leader/timesheet" element={<ModuleGuard module="timesheet"><ManagerRoute><ManagerTimesheet /></ManagerRoute></ModuleGuard>} />
                 <Route path="admin/global" element={<SuperAdminRoute><AdminPanel mode="global" /></SuperAdminRoute>} />
                 <Route path="admin/org" element={<AdminRoute><AdminPanel mode="org" /></AdminRoute>} />

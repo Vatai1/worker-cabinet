@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Plus, Pencil, Trash2, Search, X, Download, Eye, FileUp, Sparkles, Loader2, FolderOpen } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { FileText, Plus, Pencil, Trash2, Search, X, Download, Eye, FileUp, Loader2, FolderOpen } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
@@ -30,11 +31,11 @@ interface DocTemplate {
 }
 
 export function HRDocTemplates() {
+  const navigate = useNavigate()
   const [templates, setTemplates] = useState<DocTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editItem, setEditItem] = useState<DocTemplate | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DocTemplate | null>(null)
   const [previewItem, setPreviewItem] = useState<DocTemplate | null>(null)
@@ -113,42 +114,33 @@ export function HRDocTemplates() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/2 -translate-x-1/4" />
-        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/5 rounded-full" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <Sparkles className="h-6 w-6 text-white/80" />
-            <h1 className="text-2xl font-bold text-white">Шаблоны документов</h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl font-bold">Шаблоны документов</h1>
+          <p className="text-sm text-muted-foreground">Шаблоны документов организации</p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              className="w-full rounded-xl bg-background border border-input pl-10 pr-9 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all"
+              placeholder="Поиск по названию или назначению..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-          <p className="text-sm text-white/60 mb-6">Шаблоны документов организации</p>
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative flex-1 min-w-[240px] max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-              <input
-                className="w-full rounded-xl bg-card/10 border border-white/10 pl-10 pr-9 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all"
-                placeholder="Поиск по названию или назначению..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            <Button
-              onClick={() => setIsAddModalOpen(true)}
-              className="gap-2 bg-white/15 hover:bg-white/25 border-white/20 text-white backdrop-blur-sm"
-            >
-              <Plus className="h-4 w-4" />
-              Добавить шаблон
-            </Button>
-          </div>
+          <Button onClick={() => navigate('/hr/doc-templates/new')} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Добавить шаблон
+          </Button>
         </div>
       </div>
 
@@ -328,11 +320,11 @@ export function HRDocTemplates() {
         />
       )}
 
-      {(isAddModalOpen || editItem) && (
+      {editItem && (
         <AddDictItemModal
           open={true}
-          onClose={() => { setIsAddModalOpen(false); setEditItem(null) }}
-          onAdded={() => { setIsAddModalOpen(false); setEditItem(null); fetchTemplates() }}
+          onClose={() => setEditItem(null)}
+          onAdded={() => { setEditItem(null); fetchTemplates() }}
           tab="doc-templates"
           editItem={editItem}
         />
