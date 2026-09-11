@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { PlannedVacationCard } from '@/shared/components/vacation/PlannedVacationCard'
 import { AddProjectModal, type Project } from '@/core/admin/components/modals/AddProjectModal'
+import { AvatarCropModal } from '@/shared/components/AvatarCropModal'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { SkillsCard } from '@/modules/skills/components/SkillsCard'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
@@ -117,6 +119,8 @@ export function EmployeeProfile() {
   const [settingPrimaryOrg, setSettingPrimaryOrg] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarBust, setAvatarBust] = useState(() => Date.now())
+  const [cropModalOpen, setCropModalOpen] = useState(false)
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const isOwnProfile = currentUser?.id === id
@@ -239,20 +243,41 @@ export function EmployeeProfile() {
     }
   }
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !id) return
+    if (avatarInputRef.current) avatarInputRef.current.value = ''
+    if (!file) return
 
     if (file.size > 5 * 1024 * 1024) {
       toast.error('Файл слишком большой (максимум 5 МБ)')
-      if (avatarInputRef.current) avatarInputRef.current.value = ''
       return
     }
+
+    setCropImageSrc(URL.createObjectURL(file))
+    setCropModalOpen(true)
+  }
+
+  const closeCropModal = () => {
+    setCropModalOpen(false)
+    setCropImageSrc((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+  }
+
+  const handleCropConfirm = async (blob: Blob) => {
+    if (!id) return
+    const confirmed = await confirmDialog({
+      title: 'Сменить фото?',
+      message: 'Текущая фотография профиля будет заменена выбранным изображением.',
+      confirmText: 'Сменить фото',
+    })
+    if (!confirmed) return
 
     setAvatarUploading(true)
     try {
       const formData = new FormData()
-      formData.append('avatar', file)
+      formData.append('avatar', blob, 'avatar.jpg')
       const res = await fetch(`${API_BASE_URL}/users/${id}/avatar`, {
         method: 'POST',
         headers: getAuthHeaders(),
@@ -266,16 +291,24 @@ export function EmployeeProfile() {
       setEmployee((prev) => (prev ? { ...prev, avatar: data.avatar } : prev))
       setAvatarBust(Date.now())
       toast.success('Аватар обновлён')
+      closeCropModal()
     } catch (err: unknown) {
       toast.error(getErrorMessage(err))
     } finally {
       setAvatarUploading(false)
-      if (avatarInputRef.current) avatarInputRef.current.value = ''
     }
   }
 
   const handleAvatarReset = async () => {
     if (!id) return
+    const confirmed = await confirmDialog({
+      title: 'Сбросить аватар?',
+      message: 'Фото профиля будет удалено, вместо него будет показана автоматическая аватарка.',
+      confirmText: 'Сбросить',
+      variant: 'danger',
+    })
+    if (!confirmed) return
+
     try {
       const res = await fetch(`${API_BASE_URL}/users/${id}/avatar`, {
         method: 'DELETE',
@@ -375,7 +408,7 @@ export function EmployeeProfile() {
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 className="hidden"
-                onChange={handleAvatarChange}
+                onChange={handleAvatarFileSelect}
               />
             )}
             {canManageAvatar && employee.avatar && (
@@ -664,6 +697,14 @@ export function EmployeeProfile() {
         open={isAddProjectModalOpen}
         onClose={() => setIsAddProjectModalOpen(false)}
         onAdd={handleAddProject}
+      />
+
+      <AvatarCropModal
+        isOpen={cropModalOpen}
+        imageSrc={cropImageSrc}
+        uploading={avatarUploading}
+        onCancel={closeCropModal}
+        onConfirm={handleCropConfirm}
       />
     </div>
   )

@@ -1,7 +1,7 @@
 {
   "name": "worker-cabinet",
   "private": true,
-  "version": "2.2.21",
+  "version": "2.2.22",
   "type": "module",
   "scripts": {
     "dev": "npm run dev:infra && npm run dev:setup && concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:mini-agent\"",
@@ -63,6 +63,7 @@
     "lucide-react": "^0.300.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-easy-crop": "^6.2.3",
     "react-pdf": "^9.2.1",
     "react-router-dom": "^6.21.0",
     "sonner": "^2.0.7",
