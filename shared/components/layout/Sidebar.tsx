@@ -21,6 +21,7 @@ import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
 import { BugReportButton } from '@/shared/components/BugReportButton'
 import { TestSwitcher, stopImpersonation } from '@/shared/components/TestSwitcher'
+import { ChangelogModal } from '@/shared/components/ChangelogModal'
 
 export interface NavItem {
   name: string
@@ -221,6 +222,7 @@ export function Sidebar() {
     !!href && (href === currentPath || (!href.includes('?') && href === location.pathname))
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['Основное']))
+  const [changelogOpen, setChangelogOpen] = useState(false)
 
   const navigation = useNavigation()
 
@@ -502,6 +504,17 @@ export function Sidebar() {
             </div>
           </div>
 
+          <button
+            type="button"
+            onClick={() => setChangelogOpen(true)}
+            className={cn(
+              'px-3 pb-1 text-[10px] cursor-pointer transition-colors',
+              isCrctSidebar ? 'text-white/40 hover:text-white/70' : 'text-muted-foreground/50 hover:text-foreground'
+            )}
+          >
+            v{__APP_VERSION__}
+          </button>
+
           <div className={cn(
             'group mt-1 flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition-colors duration-200',
             isCrctSidebar ? 'hover:bg-white/5' : 'hover:bg-muted/70'
@@ -534,6 +547,8 @@ export function Sidebar() {
           </div>
         </div>
       </aside>
+
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </>
   )
 }

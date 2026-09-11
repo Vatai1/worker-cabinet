@@ -4,6 +4,7 @@ import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/auth
 import { fetchWithRetry, apiGet, apiPost, apiDelete } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
+import { ChangelogModal } from '@/shared/components/ChangelogModal'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { isSuperAdmin } from '@/shared/lib/permissions'
 import { useModulesStore } from '@/shared/store/modulesStore'
@@ -293,6 +294,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
   const [searchParams, setSearchParams] = useSearchParams()
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const [apiVersion, setApiVersion] = useState<string | null>(null)
+  const [changelogOpen, setChangelogOpen] = useState(false)
   const isGlobalMode = mode === 'global'
   const prevTabRef = useRef<TabId>('users')
 
@@ -355,10 +357,14 @@ export function AdminPanel({ mode = 'global' }: Props) {
                 : 'Управление учреждением: пользователи, модули, настройки'}
             </p>
           </div>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 text-white/70 text-xs whitespace-nowrap">
+          <button
+            type="button"
+            onClick={() => setChangelogOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 text-white/70 text-xs whitespace-nowrap hover:bg-white/20 transition-colors"
+          >
             <Tag className="h-3 w-3" />
             Версия: {__APP_VERSION__}{apiVersion ? ` · API ${apiVersion}` : ''}
-          </span>
+          </button>
         </div>
       </div>
 
@@ -382,6 +388,8 @@ export function AdminPanel({ mode = 'global' }: Props) {
         {activeTab === 'bug-reports' && <AdminBugReports />}
         {activeTab === 'test-data' && <TestDataTab />}
       </div>
+
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </div>
   )
 }
