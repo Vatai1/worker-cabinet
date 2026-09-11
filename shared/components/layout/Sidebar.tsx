@@ -326,7 +326,7 @@ export function Sidebar() {
               )}>Кабинет</span>
               <span className={cn(
                 'text-[10px] font-medium uppercase tracking-wide',
-                isCrctSidebar ? 'text-white/60' : 'text-muted-foreground/60'
+                isCrctSidebar ? 'text-white/75' : 'text-muted-foreground/60'
               )}>Сотрудника</span>
             </div>
           </div>
@@ -352,11 +352,11 @@ export function Sidebar() {
               >
                 <span className={cn(
                   'text-[11px] font-semibold uppercase tracking-wider',
-                  isCrctSidebar ? 'text-white/40' : 'text-muted-foreground/70'
+                  isCrctSidebar ? 'text-white/55' : 'text-muted-foreground/70'
                 )}>{sectionName}</span>
                 <ChevronDown className={cn(
                   'h-3 w-3 transition-transform duration-200',
-                  isCrctSidebar ? 'text-white/30 group-hover:text-white/50' : 'text-muted-foreground/40 group-hover:text-muted-foreground/70',
+                  isCrctSidebar ? 'text-white/45 group-hover:text-white/70' : 'text-muted-foreground/40 group-hover:text-muted-foreground/70',
                   isSectionExpanded && 'rotate-180'
                 )} />
               </button>
@@ -384,7 +384,7 @@ export function Sidebar() {
                                 ? 'bg-white/15 text-white'
                                 : 'bg-primary/10 text-primary'
                               : isCrctSidebar
-                                ? 'text-white/70 hover:bg-white/10 hover:text-white'
+                                ? 'text-white/85 hover:bg-white/10 hover:text-white'
                                 : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                           )}
                         >
@@ -413,7 +413,7 @@ export function Sidebar() {
                                         ? 'bg-white/10 font-medium text-white'
                                         : 'bg-primary/10 font-medium text-primary'
                                       : isCrctSidebar
-                                        ? 'text-white/60 hover:bg-white/5 hover:text-white'
+                                        ? 'text-white/80 hover:bg-white/5 hover:text-white'
                                         : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                                   )}
                                 >
@@ -421,7 +421,7 @@ export function Sidebar() {
                                     'absolute left-[15px] h-1.5 w-1.5 rounded-full',
                                     isChildActive
                                       ? isCrctSidebar ? 'bg-white' : 'bg-primary'
-                                      : isCrctSidebar ? 'bg-white/30' : 'bg-muted-foreground/30'
+                                      : isCrctSidebar ? 'bg-white/45' : 'bg-muted-foreground/30'
                                   )} />
                                   <span className="truncate">{child.name}</span>
                                 </NavLink>
@@ -448,7 +448,7 @@ export function Sidebar() {
                             ? 'bg-white text-[#003D85] shadow-md shadow-black/20'
                             : 'bg-primary/10 text-primary'
                           : isCrctSidebar
-                            ? 'text-white/70 hover:bg-white/10 hover:text-white'
+                            ? 'text-white/85 hover:bg-white/10 hover:text-white'
                             : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                       )}
                     >
@@ -481,7 +481,7 @@ export function Sidebar() {
                 ? 'bg-white text-[#003D85] shadow-md shadow-black/20'
                 : 'bg-primary/10 text-primary'
               : isCrctSidebar
-                ? 'text-white/70 hover:bg-white/10 hover:text-white'
+                ? 'text-white/85 hover:bg-white/10 hover:text-white'
                 : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
           )}>
             {isHrefActive('/settings') && !isCrctSidebar && (
@@ -496,7 +496,7 @@ export function Sidebar() {
           <div className={cn('mt-2', isCrctSidebar ? 'border-t border-white/10 pt-2' : 'border-t border-border/50 pt-2')}>
             <TestSwitcher isCrct={isCrctSidebar} />
             <div className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-xs',
-              isCrctSidebar ? 'text-white/50 hover:bg-white/5 hover:text-white/80' : 'text-muted-foreground/60 hover:bg-muted/40 hover:text-muted-foreground'
+              isCrctSidebar ? 'text-white/65 hover:bg-white/5 hover:text-white' : 'text-muted-foreground/60 hover:bg-muted/40 hover:text-muted-foreground'
             )}>
               <BugReportButton />
             </div>
@@ -518,15 +518,15 @@ export function Sidebar() {
             <div className="flex-1 overflow-hidden min-w-0">
               <p className={cn('truncate text-sm font-semibold leading-tight', isCrctSidebar ? 'text-white' : 'text-foreground')}>{user?.firstName} {user?.lastName}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <Crown className={cn('h-3 w-3', isCrctSidebar ? 'text-white/40' : 'text-primary/60')} />
-                <p className={cn('truncate text-[11px]', isCrctSidebar ? 'text-white/40' : 'text-muted-foreground/70')}>{roleLabels[user?.role ?? 'employee']}</p>
+                <Crown className={cn('h-3 w-3', isCrctSidebar ? 'text-white/55' : 'text-primary/60')} />
+                <p className={cn('truncate text-[11px]', isCrctSidebar ? 'text-white/55' : 'text-muted-foreground/70')}>{roleLabels[user?.role ?? 'employee']}</p>
               </div>
             </div>
             <Button
               variant="ghost"
               size="icon"
               title={isImpersonated ? 'Выйти из тест-режима' : 'Выйти'}
-              className={cn('h-7 w-7 shrink-0 transition-colors duration-200', isCrctSidebar ? 'text-white/40 hover:text-red-300' : 'text-muted-foreground/50 hover:text-destructive')}
+              className={cn('h-7 w-7 shrink-0 transition-colors duration-200', isCrctSidebar ? 'text-white/55 hover:text-red-300' : 'text-muted-foreground/50 hover:text-destructive')}
               onClick={handleLogout}
             >
               {isImpersonated ? <Undo2 className="h-3.5 w-3.5" /> : <LogOut className="h-3.5 w-3.5" />}
