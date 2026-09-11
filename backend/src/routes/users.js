@@ -2,7 +2,7 @@ import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { uploadAvatar } from '../middleware/upload.js'
-import { uploadToS3, getS3FileUrl } from '../config/s3.js'
+import { uploadToS3, getS3FileUrl, deleteFromS3, S3_ENDPOINT, S3_BUCKET } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 
@@ -17,6 +17,17 @@ async function checkProfileAccess(req, targetId) {
     [targetId, req.org.org_id]
   )
   return membership.rows.length > 0
+}
+
+function s3KeyFromAvatarUrl(url) {
+  if (!url) return null
+  const prefix = `${S3_ENDPOINT}/${S3_BUCKET}/`
+  if (!url.startsWith(prefix)) return null
+  try {
+    return decodeURIComponent(url.slice(prefix.length))
+  } catch {
+    return null
+  }
 }
 
 // Get all unique skills
@@ -303,6 +314,165 @@ router.post('/me/avatar', authenticateToken, uploadAvatar.single('avatar'), asyn
   } catch (error) {
     console.error('Error uploading avatar:', error)
     res.status(500).json({ error: 'Не удалось загрузить фото' })
+  }
+})
+
+// Upload avatar for a user (HR/admin)
+/**
+ * @swagger
+ * /users/{id}/avatar:
+ *   post:
+ *     tags: [Users]
+ *     summary: Загрузить аватар сотруднику (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Аватар загружен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 avatar: { type: string }
+ *       400:
+ *         description: Файл не загружен
+ *       403:
+ *         description: Недостаточно прав
+ *       404:
+ *         description: Пользователь не найден
+ */
+router.post('/:id/avatar', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), uploadAvatar.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Файл не загружен' })
+    }
+
+    const userId = req.params.id
+    const existing = await query('SELECT avatar FROM users WHERE id = $1', [userId])
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Пользователь не найден' })
+    }
+
+    const oldKey = s3KeyFromAvatarUrl(existing.rows[0].avatar)
+    if (oldKey) {
+      await deleteFromS3(oldKey).catch(() => {})
+    }
+
+    const ext = req.file.mimetype.split('/')[1].replace('jpeg', 'jpg')
+    const key = `avatars/${userId}/${Date.now()}.${ext}`
+
+    await uploadToS3(req.file, key)
+    const avatarUrl = getS3FileUrl(key)
+
+    await query('UPDATE users SET avatar = $1 WHERE id = $2', [avatarUrl, userId])
+
+    res.json({ avatar: avatarUrl })
+  } catch (error) {
+    console.error('Error uploading user avatar:', error)
+    res.status(500).json({ error: 'Не удалось загрузить фото' })
+  }
+})
+
+// Reset current user's avatar
+/**
+ * @swagger
+ * /users/me/avatar:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Сбросить свой аватар
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Аватар сброшен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 avatar: { type: 'null' }
+ */
+router.delete('/me/avatar', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const existing = await query('SELECT avatar FROM users WHERE id = $1', [userId])
+    const oldKey = s3KeyFromAvatarUrl(existing.rows[0]?.avatar)
+    if (oldKey) {
+      await deleteFromS3(oldKey).catch(() => {})
+    }
+
+    await query('UPDATE users SET avatar = NULL WHERE id = $1', [userId])
+
+    res.json({ avatar: null })
+  } catch (error) {
+    console.error('Error resetting avatar:', error)
+    res.status(500).json({ error: 'Не удалось сбросить аватар' })
+  }
+})
+
+// Reset a user's avatar (HR/admin)
+/**
+ * @swagger
+ * /users/{id}/avatar:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Сбросить аватар сотрудника (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Аватар сброшен
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 avatar: { type: 'null' }
+ *       403:
+ *         description: Недостаточно прав
+ *       404:
+ *         description: Пользователь не найден
+ */
+router.delete('/:id/avatar', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), async (req, res) => {
+  try {
+    const userId = req.params.id
+    const existing = await query('SELECT avatar FROM users WHERE id = $1', [userId])
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Пользователь не найден' })
+    }
+
+    const oldKey = s3KeyFromAvatarUrl(existing.rows[0].avatar)
+    if (oldKey) {
+      await deleteFromS3(oldKey).catch(() => {})
+    }
+
+    await query('UPDATE users SET avatar = NULL WHERE id = $1', [userId])
+
+    res.json({ avatar: null })
+  } catch (error) {
+    console.error('Error resetting user avatar:', error)
+    res.status(500).json({ error: 'Не удалось сбросить аватар' })
   }
 })
 

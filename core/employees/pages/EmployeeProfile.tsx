@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -16,11 +16,12 @@ import {
   Mail, Phone, Building2, Briefcase,
   User, Target, ChevronLeft, Sparkles,
   Clock, FolderKanban, Plus, MapPin, UserCheck, Star, CalendarDays,
+  Camera, Loader2, X,
 } from 'lucide-react'
 
 import { API_BASE_URL } from '@/shared/lib/api'
 import { apiGet, apiPatch } from '@/shared/lib/apiClient'
-import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getAvatarColor as getAvatarGradient } from '@/shared/lib/constants'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
@@ -114,11 +115,15 @@ export function EmployeeProfile() {
   const [responsibilityText, setResponsibilityText] = useState('')
   const [substitutes, setSubstitutes] = useState<SubstituteInfo[]>([])
   const [settingPrimaryOrg, setSettingPrimaryOrg] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarBust, setAvatarBust] = useState(() => Date.now())
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const isOwnProfile = currentUser?.id === id
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const canEditProfile = isOwnProfile || hasAnyRole('hr', 'admin')
   const canManageOrganizations = hasAnyRole('hr', 'admin')
+  const canManageAvatar = hasAnyRole('hr', 'admin')
 
   useEffect(() => {
     if (!id) return
@@ -234,6 +239,59 @@ export function EmployeeProfile() {
     }
   }
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !id) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Файл слишком большой (максимум 5 МБ)')
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+      return
+    }
+
+    setAvatarUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('avatar', file)
+      const res = await fetch(`${API_BASE_URL}/users/${id}/avatar`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData,
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Не удалось загрузить фото')
+      }
+      const data = await res.json()
+      setEmployee((prev) => (prev ? { ...prev, avatar: data.avatar } : prev))
+      setAvatarBust(Date.now())
+      toast.success('Аватар обновлён')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setAvatarUploading(false)
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
+  }
+
+  const handleAvatarReset = async () => {
+    if (!id) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${id}/avatar`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Не удалось сбросить аватар')
+      }
+      setEmployee((prev) => (prev ? { ...prev, avatar: undefined } : prev))
+      toast.success('Аватар сброшен')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err))
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-8 animate-fade-in">
@@ -281,17 +339,55 @@ export function EmployeeProfile() {
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
         <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
         <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-6">
-          <div className="relative shrink-0">
-            <Avatar className="h-24 w-24 ring-4 ring-white/20 text-3xl shadow-2xl">
-              <AvatarImage
-                src={employee.avatar || generateAvatarUrl(employee.id, employee.gender)}
-                alt={initials}
+          <div className="flex shrink-0 flex-col items-center gap-1.5">
+            <div className="group relative">
+              <Avatar className="h-24 w-24 ring-4 ring-white/20 text-3xl shadow-2xl">
+                <AvatarImage
+                  src={employee.avatar ? `${employee.avatar}?v=${avatarBust}` : generateAvatarUrl(employee.id, employee.gender)}
+                  alt={initials}
+                />
+                <AvatarFallback className={`bg-gradient-to-br ${avatarColor} text-white text-2xl font-bold`}>
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-[3px] border-white/30 ${status.dot}`} />
+              {canManageAvatar && (
+                <button
+                  type="button"
+                  disabled={avatarUploading}
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-full bg-black/50 text-white opacity-0 transition-opacity duration-200 cursor-pointer group-hover:opacity-100 disabled:cursor-wait"
+                >
+                  {avatarUploading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Camera className="h-5 w-5" />
+                      <span className="text-[11px] font-medium">Фото</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+            {canManageAvatar && (
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={handleAvatarChange}
               />
-              <AvatarFallback className={`bg-gradient-to-br ${avatarColor} text-white text-2xl font-bold`}>
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-[3px] border-white/30 ${status.dot}`} />
+            )}
+            {canManageAvatar && employee.avatar && (
+              <button
+                type="button"
+                onClick={handleAvatarReset}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-white/60 transition-colors hover:text-white"
+              >
+                <X className="h-3 w-3" />
+                Сбросить
+              </button>
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
