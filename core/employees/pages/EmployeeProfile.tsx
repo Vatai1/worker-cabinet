@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Button } from '@/shared/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
+import { Card } from '@/shared/components/ui/Card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { PlannedVacationCard } from '@/shared/components/vacation/PlannedVacationCard'
 import { AddProjectModal, type Project } from '@/core/admin/components/modals/AddProjectModal'
@@ -17,8 +17,8 @@ import { hasAnyRole } from '@/shared/lib/permissions'
 import {
   Mail, Phone, Building2, Briefcase,
   User, Target, ChevronLeft, Sparkles,
-  Clock, FolderKanban, Plus, MapPin, UserCheck, Star, CalendarDays,
-  Camera, Loader2, X,
+  Clock, FolderKanban, Plus, MapPin, UserCheck, Star, CalendarDays, Calendar,
+  Camera, Loader2, X, CircleDot, CheckCircle2, Cake,
 } from 'lucide-react'
 
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -87,9 +87,9 @@ const roleLabels: Record<string, string> = {
 }
 
 const projectStatusConfig = {
-  active:   { label: 'Активный',    bg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
-  completed: { label: 'Завершён',   bg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
-  paused:   { label: 'Приостановлен', bg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  active:    { label: 'Активный',      icon: CircleDot,    bg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  completed: { label: 'Завершён',      icon: CheckCircle2, bg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
+  paused:    { label: 'Приостановлен', icon: Clock,        bg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
 }
 
 function calculateWorkExperience(hireDate?: string): string {
@@ -481,59 +481,53 @@ export function EmployeeProfile() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="hover-lift stagger-1 animate-slide-up">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
-                <User className="h-4 w-4 text-primary" />
-              </div>
-              Личная информация
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <InfoRow label="Фамилия" value={employee.lastName} />
-            <InfoRow label="Имя" value={employee.firstName} />
-            <InfoRow label="Отчество" value={employee.middleName} />
-            <InfoRow label="Дата рождения" value={employee.birthDate ? formatDate(employee.birthDate) : undefined} />
-          </CardContent>
+        <Card className="animate-slide-up stagger-1 overflow-hidden p-0">
+          <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <User className="h-4 w-4" />
+            </div>
+            <h2 className="text-base font-semibold leading-tight">Личная информация</h2>
+          </div>
+          <div className="space-y-1 p-5">
+            <InfoRow icon={<User className="h-4 w-4" />} label="Фамилия" value={employee.lastName} />
+            <InfoRow icon={<User className="h-4 w-4" />} label="Имя" value={employee.firstName} />
+            <InfoRow icon={<User className="h-4 w-4" />} label="Отчество" value={employee.middleName} />
+            <InfoRow icon={<Cake className="h-4 w-4" />} label="Дата рождения" value={employee.birthDate ? formatDate(employee.birthDate) : undefined} />
+          </div>
         </Card>
 
-        <Card className="hover-lift stagger-2 animate-slide-up">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
-                <Mail className="h-4 w-4 text-primary" />
-              </div>
-              Контакты
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <ContactRow icon={<Mail className="h-4 w-4 text-primary" />} value={employee.email} href={`mailto:${employee.email}`} />
-            <ContactRow icon={<Phone className="h-4 w-4 text-primary" />} value={employee.phone} href={employee.phone ? `tel:${employee.phone}` : undefined} />
-          </CardContent>
+        <Card className="animate-slide-up stagger-2 overflow-hidden p-0">
+          <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Mail className="h-4 w-4" />
+            </div>
+            <h2 className="text-base font-semibold leading-tight">Контакты</h2>
+          </div>
+          <div className="space-y-1 p-5">
+            <InfoRow icon={<Mail className="h-4 w-4" />} label="Email" value={employee.email} href={`mailto:${employee.email}`} />
+            <InfoRow icon={<Phone className="h-4 w-4" />} label="Телефон" value={employee.phone} href={employee.phone ? `tel:${employee.phone}` : undefined} />
+          </div>
         </Card>
 
-        <Card className="hover-lift stagger-3 animate-slide-up">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
-                <Briefcase className="h-4 w-4 text-primary" />
-              </div>
-              Работа
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <InfoRow label="Организация" value={employee.organizationName} />
-            <InfoRow label="Должность" value={employee.position} />
-            <InfoRow label="Отдел" value={employee.department} />
-            <InfoRow label="Дата найма" value={employee.hireDate ? formatDate(employee.hireDate) : undefined} />
-            <InfoRow label="Стаж" value={calculateWorkExperience(employee.hireDate)} />
-            <InfoRow label="Офис" value={employee.office} />
-            <InfoRow label="Кабинет" value={employee.cabinet} />
+        <Card className="animate-slide-up stagger-3 overflow-hidden p-0">
+          <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Briefcase className="h-4 w-4" />
+            </div>
+            <h2 className="text-base font-semibold leading-tight">Работа</h2>
+          </div>
+          <div className="space-y-1 p-5">
+            <InfoRow icon={<Building2 className="h-4 w-4" />} label="Организация" value={employee.organizationName} />
+            <InfoRow icon={<Briefcase className="h-4 w-4" />} label="Должность" value={employee.position} />
+            <InfoRow icon={<Building2 className="h-4 w-4" />} label="Отдел" value={employee.department} />
+            <InfoRow icon={<Calendar className="h-4 w-4" />} label="Дата найма" value={employee.hireDate ? formatDate(employee.hireDate) : undefined} />
+            <InfoRow icon={<Clock className="h-4 w-4" />} label="Стаж" value={calculateWorkExperience(employee.hireDate)} />
+            <InfoRow icon={<MapPin className="h-4 w-4" />} label="Офис" value={employee.office} />
+            <InfoRow icon={<MapPin className="h-4 w-4" />} label="Кабинет" value={employee.cabinet} />
             {(employee.organizations?.length ?? 0) > 1 && (
-              <div className="pt-3 mt-1 border-t border-border/40">
-                <p className="text-xs text-muted-foreground">Другие организации</p>
-                <div className="mt-1.5 space-y-1.5">
+              <div className="mt-3 border-t border-border/60 pt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Другие организации</p>
+                <div className="mt-2 space-y-1.5">
                   {employee.organizations!.filter(o => !o.is_primary).map(o => (
                     <div key={o.id} className="flex items-center gap-2 text-sm">
                       <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -563,27 +557,25 @@ export function EmployeeProfile() {
                 </div>
               </div>
             )}
-          </CardContent>
+          </div>
         </Card>
       </div>
 
-      <Card className="hover-lift stagger-4 animate-slide-up">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
-                <Target className="h-4 w-4 text-primary" />
-              </div>
-              Зона ответственности
-            </CardTitle>
-            {isOwnProfile && !editingResponsibility && (
-              <Button variant="ghost" size="sm" onClick={handleStartEditingResponsibility} className="h-7 text-xs interactive">
-                Редактировать
-              </Button>
-            )}
+      <Card className="animate-slide-up stagger-4 overflow-hidden p-0">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Target className="h-4 w-4" />
+            </div>
+            <h2 className="text-base font-semibold leading-tight">Зона ответственности</h2>
           </div>
-        </CardHeader>
-        <CardContent>
+          {isOwnProfile && !editingResponsibility && (
+            <Button variant="ghost" size="sm" onClick={handleStartEditingResponsibility} className="h-7 text-xs interactive">
+              Редактировать
+            </Button>
+          )}
+        </div>
+        <div className="p-5">
           {editingResponsibility ? (
             <div>
               <textarea
@@ -615,65 +607,64 @@ export function EmployeeProfile() {
               {employee.responsibilityArea || 'Не указана'}
             </p>
           )}
-        </CardContent>
+        </div>
       </Card>
 
       {isModuleEnabled('vacation') && (
         <PlannedVacationsBlock userId={id!} />
       )}
 
-      <Card className="hover-lift stagger-6 animate-slide-up">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
-                <FolderKanban className="h-4 w-4 text-primary" />
-              </div>
-              Проекты
-              <span className="text-xs text-muted-foreground font-normal ml-1">({projects.length})</span>
-            </CardTitle>
-            {canEditProfile && (
-              <Button variant="outline" size="sm" onClick={() => setIsAddProjectModalOpen(true)} className="h-7 gap-1.5 text-xs interactive">
-                <Plus className="h-3.5 w-3.5" />
-                Добавить
-              </Button>
-            )}
+      <Card className="animate-slide-up stagger-6 overflow-hidden p-0">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <FolderKanban className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold leading-tight">Проекты</h2>
+              <p className="text-xs text-muted-foreground">{projects.length} всего</p>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
+          {canEditProfile && (
+            <Button variant="outline" size="sm" onClick={() => setIsAddProjectModalOpen(true)} className="h-7 gap-1.5 text-xs interactive">
+              <Plus className="h-3.5 w-3.5" />
+              Добавить
+            </Button>
+          )}
+        </div>
+        <div className="p-5">
           {projects.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-8 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-muted/60 flex items-center justify-center">
-                <FolderKanban className="h-7 w-7 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground">Нет проектов</p>
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 py-10 text-center">
+              <FolderKanban className="h-8 w-8 text-muted-foreground/40" />
+              <p className="mt-3 text-sm text-muted-foreground">Нет проектов</p>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {projects.map((project) => {
                 const ps = projectStatusConfig[project.status] ?? projectStatusConfig.active
+                const StatusIcon = ps.icon
                 return (
                   <div
                     key={project.id}
-                    className="group flex items-start gap-3 p-3 rounded-xl border border-border/60 hover:border-primary/20 hover:bg-primary/5 transition-colors"
+                    className="group flex items-start gap-3 rounded-xl border border-border/60 p-3 transition-colors hover:border-primary/20 hover:bg-primary/5"
                   >
-                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-primary/10 shrink-0 mt-0.5">
-                      <FolderKanban className="h-4 w-4 text-primary" />
+                    <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${ps.bg}`}>
+                      <StatusIcon className="h-4 w-4" />
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium truncate">{project.name}</span>
+                        <span className="truncate text-sm font-medium">{project.name}</span>
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${ps.bg}`}>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium ${ps.bg}`}>
                           {ps.label}
                         </span>
-                        <span className="text-[10px] text-muted-foreground capitalize">
+                        <span className="text-[10px] capitalize text-muted-foreground">
                           {project.role === 'lead' ? 'Руководитель' : 'Участник'}
                         </span>
                       </div>
                       {project.description && (
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{project.description}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{project.description}</p>
                       )}
                     </div>
                   </div>
@@ -681,7 +672,7 @@ export function EmployeeProfile() {
               })}
             </div>
           )}
-        </CardContent>
+        </div>
       </Card>
 
       {isModuleEnabled('skills') && (
@@ -732,47 +723,43 @@ function PlannedVacationsBlock({ userId }: { userId: string }) {
   if (!nearest) return null
 
   return (
-    <Card className="hover-lift stagger-5 animate-slide-up">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-primary/10">
-            <CalendarDays className="h-4 w-4 text-primary" />
-          </div>
-          Запланированные отпуска
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Card className="animate-slide-up stagger-5 overflow-hidden p-0">
+      <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <CalendarDays className="h-4 w-4" />
+        </div>
+        <h2 className="text-base font-semibold leading-tight">Запланированные отпуска</h2>
+      </div>
+      <div className="p-5">
         <PlannedVacationCard
           start={nearest.start_date}
           end={nearest.end_date}
           createdAt={nearest.created_at}
           status={nearest.status}
         />
-      </CardContent>
+      </div>
     </Card>
   )
 }
 
-function InfoRow({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div className="flex items-center justify-between text-sm py-2 border-b border-border/30 last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-right">{value || '—'}</span>
-    </div>
-  )
-}
-
-function ContactRow({ icon, value, href }: { icon: React.ReactNode; value?: string; href?: string }) {
+function InfoRow({ icon, label, value, href }: { icon: React.ReactNode; label: string; value?: string | null; href?: string }) {
   const content = (
-    <div className="flex items-center gap-3 text-sm py-1">
-      <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 shrink-0">
+    <div className="flex items-center gap-3 py-2">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
         {icon}
       </div>
-      <span className="break-all">{value || '—'}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="truncate text-sm font-medium">{value || '—'}</p>
+      </div>
     </div>
   )
   if (href && value) {
-    return <a href={href} className="block hover:bg-primary/5 rounded-lg px-1 -mx-1 transition-colors">{content}</a>
+    return (
+      <a href={href} className="-mx-2 block rounded-lg px-2 transition-colors hover:bg-muted/40">
+        {content}
+      </a>
+    )
   }
   return content
 }

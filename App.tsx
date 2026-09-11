@@ -8,7 +8,6 @@ import { hasAnyRole, hasAnyRoleSync, isSuperAdmin } from '@/shared/lib/permissio
 import { Login } from '@/core/auth/pages/Login'
 import { Layout } from '@/shared/components/layout/Layout'
 import { Dashboard } from '@/shared/pages/Dashboard'
-import { Profile } from '@/core/auth/pages/Profile'
 import { ThemeProvider } from '@/shared/components/ThemeProvider'
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 
@@ -125,6 +124,11 @@ function AdminRedirect() {
   return <Navigate to="/admin/org" replace />
 }
 
+function ProfileRedirect() {
+  const user = useAuthStore((state) => state.user)
+  return <Navigate to={user ? `/employees/${user.id}` : '/dashboard'} replace />
+}
+
 function ModuleGuard({ module, children }: { module: string; children: React.ReactNode }) {
   const loaded = useModulesStore((s) => s.loaded)
   const enabledModules = useModulesStore((s) => s.enabledModules)
@@ -186,7 +190,7 @@ function App() {
                 <Route path="employees" element={<Employees />} />
                 <Route path="departments" element={<Departments />} />
                 <Route path="departments/:id" element={<DepartmentDetail />} />
-                <Route path="profile" element={<Profile />} />
+                <Route path="profile" element={<ProfileRedirect />} />
                 <Route path="settings" element={<Settings />} />
                 <Route path="notifications" element={<ModuleGuard module="notifications"><BlockOnboardingRoute><Notifications /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="requests" element={<BlockOnboardingRoute><Requests /></BlockOnboardingRoute>} />

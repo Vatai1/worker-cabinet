@@ -168,14 +168,11 @@ test.describe('Модуль Сотрудники', () => {
     test.describe('UC-3: Просмотр собственного профиля', () => {
       test.beforeEach(async ({ page }) => {
         await loginAs(page, 'employee')
-        await page.goto('/profile')
+        await page.goto('/dashboard')
+        await page.getByRole('link', { name: 'Профиль' }).click()
       })
 
-      test('открытие /profile, видны личные данные', async ({ page }) => {
-        await expect(
-          page.getByRole('heading', { name: 'Профиль', exact: true })
-        ).toBeVisible({ timeout: 10000 })
-
+      test('открытие профиля из сайдбара, видны личные данные', async ({ page }) => {
         const main = page.locator('main')
 
         // Карточка с личной информацией.
