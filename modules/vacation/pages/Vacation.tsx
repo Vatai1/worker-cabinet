@@ -1115,22 +1115,31 @@ export function Vacation() {
       {activeTab === 'restrictions' && isManager && <VacationRestrictions />}
 
       {activeTab === 'approvals' && isManager && (
-        <Card>
-          <div className="p-5">
-            <div className="flex items-center gap-2 mb-5">
-              <h2 className="text-base font-semibold">Заявки на согласовании</h2>
-              {pendingApprovals.length > 0 && (
-                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">
-                  {pendingApprovals.length}
-                </span>
-              )}
+        <Card className="overflow-hidden p-0">
+          <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <UserCheck className="h-4 w-4" />
             </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-semibold leading-tight">Согласование заявок</h2>
+              <p className="text-xs text-muted-foreground">Заявки на отпуск, ожидающие вашего решения</p>
+            </div>
+            {pendingApprovals.length > 0 && (
+              <span className="inline-flex h-6 min-w-[24px] shrink-0 items-center justify-center rounded-full bg-amber-500/15 px-2 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                {pendingApprovals.length}
+              </span>
+            )}
+          </div>
+          <div className="p-5">
             {loading ? (
-              <div className="flex items-center justify-center py-8"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
+              <div className="flex items-center justify-center py-10"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
             ) : pendingApprovals.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <CheckCircle className="h-8 w-8 text-muted-foreground/40" />
-                <p className="mt-3 text-sm text-muted-foreground">Все заявки обработаны</p>
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 py-12 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                  <CheckCircle className="h-6 w-6" />
+                </div>
+                <p className="mt-3 text-sm font-medium">Все заявки обработаны</p>
+                <p className="mt-1 text-xs text-muted-foreground">Новые заявки появятся здесь</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1142,7 +1151,7 @@ export function Vacation() {
                       key={request.id}
                       data-testid="approval-card"
                       className={cn(
-                        'rounded-lg border border-border p-4 transition-all duration-[250ms] ease-out',
+                        'rounded-xl border border-border p-4 transition-all duration-[250ms] ease-out hover:border-primary/30',
                         isLeaving ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'
                       )}
                     >
