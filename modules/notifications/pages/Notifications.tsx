@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Bell, CheckCheck, Mail, MailOpen, Clock, AlertCircle, Sparkles } from 'lucide-react'
-import { Card, CardContent } from '@/shared/components/ui/Card'
+import {
+  Bell, CheckCheck, Mail, MailOpen, Clock, AlertCircle, Sparkles, ChevronLeft, ChevronRight,
+  Plane, ClipboardList, FileText, BarChart3, GraduationCap,
+} from 'lucide-react'
+import { Card } from '@/shared/components/ui/Card'
+import { Badge } from '@/shared/components/ui/Badge'
 import { Button } from '@/shared/components/ui/Button'
-import { formatDateTime, getErrorMessage } from '@/shared/lib/utils'
+import { formatDateTime, getErrorMessage, cn } from '@/shared/lib/utils'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 
@@ -27,14 +31,20 @@ const TYPE_LABELS: Record<string, string> = {
   generic: 'Уведомление',
 }
 
-const TYPE_ICONS: Record<string, string> = {
-  vacation_created: '✈️',
-  vacation_status_changed: '📋',
-  document_assigned: '📄',
-  survey_assigned: '📊',
-  onboarding_task: '🎓',
-  mailing: '📬',
-  generic: '🔔',
+const TYPE_META: Record<string, { icon: typeof Bell; className: string }> = {
+  vacation_created: { icon: Plane, className: 'text-blue-600 bg-blue-500/15' },
+  vacation_status_changed: { icon: ClipboardList, className: 'text-violet-600 bg-violet-500/15' },
+  document_assigned: { icon: FileText, className: 'text-pink-600 bg-pink-500/15' },
+  survey_assigned: { icon: BarChart3, className: 'text-purple-600 bg-purple-500/15' },
+  onboarding_task: { icon: GraduationCap, className: 'text-amber-600 bg-amber-500/15' },
+  mailing: { icon: Mail, className: 'text-teal-600 bg-teal-500/15' },
+  generic: { icon: Bell, className: 'text-muted-foreground bg-muted' },
+}
+
+const STATUS_META: Record<string, { label: string; icon: typeof Mail; variant: 'success' | 'warning' | 'destructive' | 'outline' }> = {
+  sent: { label: 'Отправлено', icon: Mail, variant: 'success' },
+  pending: { label: 'Ожидает', icon: Clock, variant: 'warning' },
+  failed: { label: 'Ошибка', icon: AlertCircle, variant: 'destructive' },
 }
 
 export function Notifications() {
@@ -105,7 +115,7 @@ export function Notifications() {
   const totalPages = Math.ceil(total / 20)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="relative overflow-hidden gradient-primary text-white rounded-xl animate-slide-up">
         <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
@@ -151,107 +161,119 @@ export function Notifications() {
         </div>
       </div>
 
-      {error && <p className="text-destructive text-sm">{error}</p>}
+      {error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>
+      )}
 
-      {loading ? (
-        <p className="text-muted-foreground">Загрузка...</p>
-      ) : notifications.length === 0 ? (
-        <div className="text-center py-24 text-muted-foreground animate-fade-in">
-          <Bell className="h-16 w-16 mx-auto mb-4 opacity-30" />
-          <p className="text-lg font-medium">Нет уведомлений</p>
-          <p className="text-sm mt-1">Здесь будут отображаться все ваши уведомления</p>
+      <Card className="overflow-hidden p-0">
+        <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Bell className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-semibold leading-tight">Лента уведомлений</h2>
+            <p className="text-xs text-muted-foreground">
+              {total > 0 ? `Страница ${page} из ${totalPages || 1} · всего ${total}` : 'Пока нет уведомлений'}
+            </p>
+          </div>
         </div>
-      ) : (
-        <>
-          <div className="space-y-2">
-            {notifications.map((n, index) => {
-              const isUnread = !n.read_at
-              const icon = TYPE_ICONS[n.type] || '🔔'
-              const label = TYPE_LABELS[n.type] || n.type
-              const data = n.data || {}
-              const subject = (data.subject as string) || label
-              const message = (data.message as string) || ''
-              const imageUrls = (data.imageUrls as string[]) || []
-              const title = n.type === 'mailing' ? (data.title as string) : subject
-              const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
 
-              return (
-                <Card
-                  key={n.id}
-                  className={`section-card ${staggerClass} transition-colors cursor-pointer ${
-                    isUnread ? 'border-primary/30 bg-primary/5' : ''
-                  }`}
-                  onClick={() => isUnread && markAsRead(n.id)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="text-xl flex-shrink-0 mt-0.5">{icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="font-medium text-sm">{title}</span>
-                          {isUnread && (
-                            <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+        <div className="p-5">
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 py-16 text-center">
+              <Bell className="h-10 w-10 text-muted-foreground/40" />
+              <p className="mt-3 text-sm font-medium">Нет уведомлений</p>
+              <p className="mt-1 text-xs text-muted-foreground">Здесь будут отображаться все ваши уведомления</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {notifications.map((n) => {
+                const isUnread = !n.read_at
+                const meta = TYPE_META[n.type] || TYPE_META.generic
+                const Icon = meta.icon
+                const label = TYPE_LABELS[n.type] || n.type
+                const data = n.data || {}
+                const subject = (data.subject as string) || label
+                const message = (data.message as string) || ''
+                const imageUrls = (data.imageUrls as string[]) || []
+                const title = n.type === 'mailing' ? (data.title as string) : subject
+                const statusMeta = STATUS_META[n.status]
+                const StatusIcon = statusMeta?.icon || MailOpen
+
+                return (
+                  <div
+                    key={n.id}
+                    className={cn(
+                      'flex items-start gap-3 rounded-xl border p-4 transition-colors cursor-pointer',
+                      isUnread ? 'border-primary/30 bg-primary/5 hover:bg-primary/10' : 'border-border hover:bg-muted/30',
+                    )}
+                    onClick={() => isUnread && markAsRead(n.id)}
+                  >
+                    <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', meta.className)}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold">{title}</span>
+                        {isUnread && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />}
+                      </div>
+                      {message && (
+                        <p className="mt-0.5 truncate text-sm text-muted-foreground">{message}</p>
+                      )}
+                      {imageUrls.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {imageUrls.slice(0, 3).map((url, idx) => (
+                            <img key={idx} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-border/40" />
+                          ))}
+                          {imageUrls.length > 3 && (
+                            <span className="self-center text-xs text-muted-foreground">+{imageUrls.length - 3}</span>
                           )}
                         </div>
-                        {message && (
-                          <p className="text-sm text-muted-foreground truncate">{message}</p>
-                        )}
-                        {imageUrls.length > 0 && (
-                          <div className="flex gap-2 mt-2 flex-wrap">
-                            {imageUrls.slice(0, 3).map((url, idx) => (
-                              <img key={idx} src={url} alt="" className="h-16 w-16 rounded-lg object-cover border border-border/40" />
-                            ))}
-                            {imageUrls.length > 3 && (
-                              <span className="text-xs text-muted-foreground self-center">+{imageUrls.length - 3}</span>
-                            )}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            {n.status === 'sent' ? (
-                              <><Mail className="h-3 w-3" /> Отправлено</>
-                            ) : n.status === 'pending' ? (
-                              <><Clock className="h-3 w-3" /> Ожидает</>
-                            ) : n.status === 'failed' ? (
-                              <><AlertCircle className="h-3 w-3 text-destructive" /> Ошибка</>
-                            ) : (
-                              <><MailOpen className="h-3 w-3" /> {n.status}</>
-                            )}
-                          </span>
-                          <span>{formatDateTime(n.sent_at || n.created_at)}</span>
-                        </div>
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant={statusMeta?.variant || 'outline'}>
+                          <StatusIcon className="mr-1 h-3 w-3" />
+                          {statusMeta?.label || n.status}
+                        </Badge>
+                        <span>{formatDateTime(n.sent_at || n.created_at)}</span>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Назад
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Далее
-              </Button>
+                  </div>
+                )
+              })}
             </div>
           )}
-        </>
+        </div>
+      </Card>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Назад
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {page} / {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Далее
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
       )}
     </div>
   )
