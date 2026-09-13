@@ -44,6 +44,8 @@ interface VacationStore {
 
   approveRequest: (requestId: string, managerId: string) => Promise<void>
   rejectRequest: (requestId: string, managerId: string, reason: string) => Promise<void>
+  approveTransferRequest: (requestId: string) => Promise<void>
+  rejectTransferRequest: (requestId: string, reason: string) => Promise<void>
 
   addComment: (requestId: string, comment: string) => Promise<void>
 
@@ -342,7 +344,57 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
           throw error
         }
       },
-      
+
+      approveTransferRequest: async (requestId: string) => {
+        set({ loading: true, error: null })
+        try {
+          const updatedRequest = await vacationApi.approveTransfer(requestId)
+
+          set((state) => ({
+            requests: state.requests.map((r) =>
+              r.id === requestId ? updatedRequest : r
+            ),
+            currentUserRequests: state.currentUserRequests.map((r) =>
+              r.id === requestId ? updatedRequest : r
+            ),
+            departmentRequests: state.departmentRequests.map((r) =>
+              r.id === requestId ? updatedRequest : r
+            ),
+            loading: false,
+          }))
+
+          get().bumpCalendarVersion()
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при согласовании переноса'), loading: false })
+          throw error
+        }
+      },
+
+      rejectTransferRequest: async (requestId: string, reason: string) => {
+        set({ loading: true, error: null })
+        try {
+          const updatedRequest = await vacationApi.rejectTransfer(requestId, reason)
+
+          set((state) => ({
+            requests: state.requests.map((r) =>
+              r.id === requestId ? updatedRequest : r
+            ),
+            currentUserRequests: state.currentUserRequests.map((r) =>
+              r.id === requestId ? updatedRequest : r
+            ),
+            departmentRequests: state.departmentRequests.map((r) =>
+              r.id === requestId ? updatedRequest : r
+            ),
+            loading: false,
+          }))
+
+          get().bumpCalendarVersion()
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при отклонении переноса'), loading: false })
+          throw error
+        }
+      },
+
       addComment: async (requestId: string, comment: string) => {
         set({ loading: true, error: null })
         try {

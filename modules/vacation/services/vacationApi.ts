@@ -279,6 +279,25 @@ export const vacationApi = {
     return mapDbRequestToApi(dbRequest)
   },
 
+  async approveTransfer(requestId: string): Promise<VacationRequest> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/transfer/approve`, {
+      method: 'POST',
+      headers: getAuthHeadersWithContentType(),
+    })
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
+  },
+
+  async rejectTransfer(requestId: string, reason: string): Promise<VacationRequest> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/transfer/reject`, {
+      method: 'POST',
+      headers: getAuthHeadersWithContentType(),
+      body: JSON.stringify({ reason }),
+    })
+    const dbRequest = await handleResponse(response)
+    return mapDbRequestToApi(dbRequest)
+  },
+
   async createRestriction(
     departmentId: string,
     data: Omit<VacationRestriction, 'id' | 'departmentId' | 'createdAt' | 'createdBy' | 'createdByName'>

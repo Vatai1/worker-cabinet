@@ -58,6 +58,8 @@ export function Vacation() {
     fetchBalance,
     fetchRestrictions,
     approveRequest,
+    approveTransferRequest,
+    rejectTransferRequest,
     rejectRequest,
   } = useVacationStore()
 
@@ -220,10 +222,17 @@ export function Vacation() {
     if (tab === 'team') setCalendarScope('team')
   }
 
+  const isTransferRequest = (requestId: string) =>
+    departmentRequests.some((r) => r.id === requestId && r.transferredFromId)
+
   const handleApprove = async (requestId: string) => {
     if (!user) return
     try {
-      await approveRequest(requestId, user.id)
+      if (isTransferRequest(requestId)) {
+        await approveTransferRequest(requestId)
+      } else {
+        await approveRequest(requestId, user.id)
+      }
       fetchUserRequests(user.id)
       reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
@@ -237,7 +246,11 @@ export function Vacation() {
     if (!user) return
     if (!reason || !reason.trim()) return
     try {
-      await rejectRequest(requestId, user.id, reason)
+      if (isTransferRequest(requestId)) {
+        await rejectTransferRequest(requestId, reason)
+      } else {
+        await rejectRequest(requestId, user.id, reason)
+      }
       fetchUserRequests(user.id)
       reloadRequests()
       fetchBalance(user.id, year).then(setBalance)

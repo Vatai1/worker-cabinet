@@ -688,7 +688,7 @@ describe('Модуль отпусков — user stories', () => {
       await cleanupFixtures({ deptIds: [deptId] })
     })
 
-    it('POST /requests/:id/substitutes добавляет замещающего и уведомляет', { skip: 'баг: orgScopedQuery добавляет organization_id к users → 500 «Не удалось добавить замещающих»; см. коммит' }, async () => {
+    it('POST /requests/:id/substitutes добавляет замещающего и уведомляет', async () => {
       const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
       const res = await call('POST', `/vacation/requests/${created.data.id}/substitutes`, await tokenFor(emp), { substitute_ids: [sub.id] })
       assert.strictEqual(res.status, 201)
@@ -698,7 +698,7 @@ describe('Модуль отпусков — user stories', () => {
       assert.ok(await waitNotification(sub.id, 'vacation_substitution'))
     })
 
-    it('GET /my-substitutions показывает отпуск замещающему', { skip: 'баг: orgScopedQuery даёт ambiguous organization_id в JOIN vs+vr → 500; см. коммит' }, async () => {
+    it('GET /my-substitutions показывает отпуск замещающему', async () => {
       const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
       await query('INSERT INTO vacation_substitutions (vacation_request_id, substitute_user_id, assigned_by, organization_id) VALUES ($1, $2, $3, 1)', [created.data.id, sub.id, emp.id])
       const res = await call('GET', '/vacation/my-substitutions', await tokenFor(sub))

@@ -233,14 +233,10 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
       await expect(page.getByTestId('approval-card').filter({ hasText: ruDate(C_S) })).toHaveCount(0, { timeout: 15000 })
     })
 
-    test('сотрудник видит результат: перенос согласован; исходная остаётся согласованной (по факту кода)', async ({ page }) => {
+    test('сотрудник видит результат: новые даты согласованы, прежние закрыты', async ({ page }) => {
       await openVacation(page, 'employee')
       await expect(myCard(page, rangeText(C_S, C_E, 5)).getByText('Согласовано', { exact: true })).toBeVisible({ timeout: 15000 })
-      await expect(myCard(page, rangeText(A_S, A_E, 5)).getByText('Согласовано', { exact: true })).toBeVisible({ timeout: 10000 })
-    })
-
-    test('перенос закрывает исходную заявку и меняет даты', async () => {
-      test.skip(true, 'фронт зовёт POST /requests/:id/approve вместо /transfer/approve — transfer-семантика бэкенда из UI недостижима; см. коммит')
+      await expect(page.getByText(rangeText(A_S, A_E, 5), { exact: true })).toHaveCount(0, { timeout: 10000 })
     })
   })
 

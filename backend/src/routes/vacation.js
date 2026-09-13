@@ -2599,7 +2599,7 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
 router.get('/my-substitutions', authenticateToken, async (req, res) => {
   try {
     if (!(await isSubstitutionEnabled(req))) return res.json([])
-    const { text, values } = orgScopedQuery(
+    const result = await query(
       `SELECT vr.id, vr.start_date, vr.end_date, vr.duration,
               u.id as user_id, u.first_name, u.last_name, u.middle_name,
               u.position, u.avatar, u.gender,
@@ -2609,10 +2609,10 @@ router.get('/my-substitutions', authenticateToken, async (req, res) => {
        JOIN request_statuses rs ON vr.status_id = rs.id
        JOIN users u ON vr.user_id = u.id
        WHERE vs.substitute_user_id = $1 AND vr.end_date >= CURRENT_DATE
+         ${req.org ? 'AND vs.organization_id = $2' : ''}
        ORDER BY vr.start_date ASC`,
-      [req.user.id], req
+      req.org ? [req.user.id, req.org.org_id] : [req.user.id]
     )
-    const result = await query(text, values)
     res.json(result.rows)
   } catch (error) {
     res.status(500).json({ error: 'Не удалось получить замещения' })
@@ -2650,11 +2650,12 @@ router.post('/requests/:id/substitutes', authenticateToken, async (req, res) => 
       }
     }
 
-    const { text: chkText, values: chkValues } = orgScopedQuery(
-      `SELECT id FROM users WHERE id = ANY($1)`,
-      [substitute_ids], req
+    const validUsers = await query(
+      `SELECT u.id FROM users u
+       JOIN user_organizations uo ON uo.user_id = u.id AND uo.is_active = true
+       WHERE u.id = ANY($1)${req.org ? ' AND uo.org_id = $2' : ''}`,
+      req.org ? [substitute_ids, req.org.org_id] : [substitute_ids]
     )
-    const validUsers = await query(chkText, chkValues)
     const validIds = validUsers.rows.map((r) => r.id)
     if (validIds.length === 0) {
       return res.status(400).json({ error: 'Замещающие не найдены в организации' })
