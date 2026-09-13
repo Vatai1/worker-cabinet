@@ -117,6 +117,7 @@ export function YearCalendar({
 
   const getVacationsForDay = (date: Date) => {
     return requests.filter(request => {
+      if (request.status !== VacationRequestStatus.APPROVED && request.status !== VacationRequestStatus.ON_APPROVAL) return false
       const start = new Date(request.startDate)
       const end = new Date(request.endDate)
       const within = isWithinInterval(date, { start, end }) ||

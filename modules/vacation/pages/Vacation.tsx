@@ -512,6 +512,7 @@ export function Vacation() {
       })
     }
     return merged.filter(r => {
+      if (r.status !== VacationRequestStatus.APPROVED && r.status !== VacationRequestStatus.ON_APPROVAL) return false
       if (calendarScope === 'mine') return true
       if (reqFilters.departmentIds.length > 0 && (!r.departmentId || !reqFilters.departmentIds.includes(r.departmentId))) return false
       if (reqFilters.statuses.length > 0 && !reqFilters.statuses.includes(r.status)) return false
