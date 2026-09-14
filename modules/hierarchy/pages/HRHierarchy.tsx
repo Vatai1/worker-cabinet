@@ -267,9 +267,13 @@ function GroupNode({ data, selected }: NodeProps) {
   const d = data as { title?: string; color?: string }
   const color = d.color ?? '#6b7280'
   return (
-    <div className="w-full h-full rounded-2xl border-2 border-dashed pointer-events-none" style={{ borderColor: color, background: `${color}0F` }}>
+    <div className={cn('w-full h-full rounded-2xl border-2 border-dashed', selected ? 'pointer-events-auto cursor-grab' : 'pointer-events-none')} style={{ borderColor: color, background: `${color}0F` }}>
       <NodeResizer color={color} isVisible={selected} minWidth={200} minHeight={140} lineClassName="!border-dashed pointer-events-auto" handleClassName="pointer-events-auto" />
-      <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider truncate pointer-events-auto" style={{ color }}>
+      <div
+        className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider truncate pointer-events-auto cursor-grab select-none"
+        style={{ color }}
+        title="Перетащите группу за эту полосу; клик выделяет группу — после этого её можно тянуть за любую точку"
+      >
         {d.title || 'Группа'}
       </div>
     </div>
@@ -2166,7 +2170,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             { title: 'Родительские связи', text: 'Отдел ↔ отдел задаёт структуру подразделений, сотрудник ↔ отдел назначает куратора, сотрудник ↔ сотрудник — личного руководителя. С текстовыми блоками родительская связь недоступна.' },
             { title: 'Видимость отпусков', text: 'В настройках родительской связи: «Родитель видит отпуска подчинённых», «Отпуск родителя виден подчинённым» и «Родитель согласовывает отпуска подчинённых». Флаги применяются после сохранения. Дублирующий вход — ПКМ по связи.' },
             { title: 'Точки опоры', text: 'Наведите на связь — появятся точки добавления опоры. Клик по линии — настройки. Выделите связь: точки можно тянуть, двойной клик — удалить' },
-            { title: 'Группы и описание', text: 'Пунктирные рамки объединяют элементы визуально, текстовые блоки служат для заметок. Редактирование и удаление — через ПКМ.' },
+            { title: 'Группы и описание', text: 'Пунктирные рамки объединяют элементы визуально, текстовые блоки служат для заметок. Группу тащат за полосу заголовка; клик по полосе выделяет группу — дальше её можно перемещать за любую точку и менять размер. Редактирование и удаление — через ПКМ.' },
             { title: 'Сохранение и отмена', text: 'Кнопка «Сохранить» записывает схему. Ctrl+Z — отменить последнее действие. Удаление блоков и связей требует подтверждения, а выход с несохранёнными изменениями предупреждает.' },
           ]}
         />
