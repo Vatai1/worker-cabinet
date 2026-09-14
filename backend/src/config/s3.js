@@ -16,6 +16,8 @@ export const s3Client = new S3Client({
     secretAccessKey: process.env.S3_SECRET_KEY || '',
   },
   forcePathStyle: true,
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 })
 
 export const s3PublicClient = S3_PUBLIC_URL
@@ -27,6 +29,8 @@ export const s3PublicClient = S3_PUBLIC_URL
         secretAccessKey: process.env.S3_SECRET_KEY || '',
       },
       forcePathStyle: true,
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     })
   : null
 
@@ -120,6 +124,19 @@ export const getPresignedUrl = async (key, expiresIn = 3600) => {
     Key: key,
   }
 
-  const url = await getSignedUrl(s3PublicClient || s3Client, new GetObjectCommand(params), { expiresIn })
+  const client = s3PublicClient || s3Client
+  const stack = client.middlewareStack.clone()
+  stack.add(
+    (next) => async (args) => {
+      delete args.request.query['x-id']
+      return next(args)
+    },
+    { step: 'build', name: 'stripXId', priority: 'low' }
+  )
+  const url = await getSignedUrl(
+    { config: client.config, middlewareStack: stack },
+    new GetObjectCommand(params),
+    { expiresIn }
+  )
   return url
 }
