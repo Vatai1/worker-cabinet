@@ -1,6 +1,6 @@
 {
   "name": "worker-cabinet-backend",
-  "version": "2.3.22",
+  "version": "2.3.25",
   "description": "Backend for Worker Cabinet",
   "main": "src/server.js",
   "type": "module",
@@ -24,7 +24,7 @@
     "test:projects": "node --test src/tests/projects.test.js",
     "test:onboarding": "node --test src/tests/onboarding.test.js",
     "test:dictionaries": "node --test src/tests/dictionaries.test.js",
-    "test:hierarchy": "node --test src/tests/hierarchy.test.js",
+    "test:hierarchy": "node --test src/tests/hierarchy-full.test.js",
     "test:documents": "node --test src/tests/documents.test.js",
     "test:user-documents": "node --test src/tests/user-documents.test.js",
     "test:calendar": "node --test src/tests/calendar.test.js",

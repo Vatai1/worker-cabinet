@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, CreateBucketCommand, HeadBucketCommand, PutBucketPolicyCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import dotenv from 'dotenv'
 
@@ -31,19 +31,43 @@ export const s3PublicClient = S3_PUBLIC_URL
   : null
 
 let bucketEnsured = false
+let policyEnsured = false
+
+async function ensurePublicAvatarPolicy() {
+  if (policyEnsured) return
+  const policy = {
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Principal: { AWS: ['*'] },
+        Action: ['s3:GetObject'],
+        Resource: [`arn:aws:s3:::${S3_BUCKET}/avatars/*`],
+      },
+    ],
+  }
+  try {
+    await s3Client.send(new PutBucketPolicyCommand({ Bucket: S3_BUCKET, Policy: JSON.stringify(policy) }))
+    policyEnsured = true
+  } catch (e) {
+    console.error('[S3] avatar policy failed:', e)
+  }
+}
 
 export async function ensureBucket() {
-  if (bucketEnsured) return
-  try {
-    await s3Client.send(new HeadBucketCommand({ Bucket: S3_BUCKET }))
-  } catch (e) {
-    if (e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404) {
-      await s3Client.send(new CreateBucketCommand({ Bucket: S3_BUCKET }))
-    } else {
-      throw e
+  if (!bucketEnsured) {
+    try {
+      await s3Client.send(new HeadBucketCommand({ Bucket: S3_BUCKET }))
+    } catch (e) {
+      if (e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404) {
+        await s3Client.send(new CreateBucketCommand({ Bucket: S3_BUCKET }))
+      } else {
+        throw e
+      }
     }
+    bucketEnsured = true
   }
-  bucketEnsured = true
+  await ensurePublicAvatarPolicy()
 }
 
 export const uploadToS3 = async (file, key) => {
