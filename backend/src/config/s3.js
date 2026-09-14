@@ -6,6 +6,7 @@ dotenv.config()
 
 export const S3_BUCKET = process.env.S3_BUCKET || 'worker-cabinet-docs'
 export const S3_ENDPOINT = process.env.S3_ENDPOINT || 'http://localhost:9000'
+export const S3_PUBLIC_URL = (process.env.S3_PUBLIC_URL || '').replace(/\/+$/, '')
 
 export const s3Client = new S3Client({
   region: 'us-east-1',
@@ -16,6 +17,18 @@ export const s3Client = new S3Client({
   },
   forcePathStyle: true,
 })
+
+export const s3PublicClient = S3_PUBLIC_URL
+  ? new S3Client({
+      region: 'us-east-1',
+      endpoint: S3_PUBLIC_URL,
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY || process.env.S3_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.S3_SECRET_KEY || '',
+      },
+      forcePathStyle: true,
+    })
+  : null
 
 let bucketEnsured = false
 
@@ -50,7 +63,7 @@ export const uploadToS3 = async (file, key) => {
 
 export const getS3FileUrl = (key) => {
   const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/')
-  return `${S3_ENDPOINT}/${S3_BUCKET}/${encodedKey}`
+  return `${S3_PUBLIC_URL || S3_ENDPOINT}/${S3_BUCKET}/${encodedKey}`
 }
 
 export const deleteFromS3 = async (key) => {
@@ -83,6 +96,6 @@ export const getPresignedUrl = async (key, expiresIn = 3600) => {
     Key: key,
   }
 
-  const url = await getSignedUrl(s3Client, new GetObjectCommand(params), { expiresIn })
+  const url = await getSignedUrl(s3PublicClient || s3Client, new GetObjectCommand(params), { expiresIn })
   return url
 }

@@ -1682,6 +1682,7 @@ async function runMigrations() {
     await migrateTravelBalance(db)
     await migrateMailingTables(db)
     await migrateApprovalHierarchy(db)
+    await migrateAvatarUrls(db)
 
     console.log('Adding multi-tenancy organization_id columns...')
     const orgScopedTables = [
@@ -1975,5 +1976,27 @@ async function migrateTravelBalance(db) {
     }
   } else {
     console.log('  - travel columns not found, skipping')
+  }
+}
+
+async function migrateAvatarUrls(db) {
+  console.log('Checking avatar S3 urls...')
+  const publicUrl = (process.env.S3_PUBLIC_URL || '').replace(/\/+$/, '')
+  if (!publicUrl) {
+    console.log('  ✓ avatar urls (S3_PUBLIC_URL not set, skipped)')
+    return
+  }
+  const bucket = process.env.S3_BUCKET || 'worker-cabinet-docs'
+  const from = `${process.env.S3_ENDPOINT || 'http://localhost:9000'}/${bucket}/`
+  const to = `${publicUrl}/${bucket}/`
+  const escapeLike = (s) => s.replace(/[\\%_]/g, (m) => '\\' + m)
+  try {
+    const result = await db.query(
+      `UPDATE users SET avatar = REPLACE(avatar, $1, $2) WHERE avatar LIKE $3 ESCAPE '\\'`,
+      [from, to, escapeLike(from) + '%']
+    )
+    console.log(`  ✓ avatar urls rewritten to public prefix: ${result.rowCount}`)
+  } catch (e) {
+    console.log('  - avatar urls:', e.message)
   }
 }

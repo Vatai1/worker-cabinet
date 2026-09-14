@@ -2,7 +2,7 @@ import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { uploadAvatar } from '../middleware/upload.js'
-import { uploadToS3, getS3FileUrl, deleteFromS3, S3_ENDPOINT, S3_BUCKET } from '../config/s3.js'
+import { uploadToS3, getS3FileUrl, deleteFromS3, S3_ENDPOINT, S3_BUCKET, S3_PUBLIC_URL } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 
@@ -21,8 +21,11 @@ async function checkProfileAccess(req, targetId) {
 
 function s3KeyFromAvatarUrl(url) {
   if (!url) return null
-  const prefix = `${S3_ENDPOINT}/${S3_BUCKET}/`
-  if (!url.startsWith(prefix)) return null
+  const prefixes = S3_PUBLIC_URL
+    ? [`${S3_PUBLIC_URL}/${S3_BUCKET}/`, `${S3_ENDPOINT}/${S3_BUCKET}/`]
+    : [`${S3_ENDPOINT}/${S3_BUCKET}/`]
+  const prefix = prefixes.find((p) => url.startsWith(p))
+  if (!prefix) return null
   try {
     return decodeURIComponent(url.slice(prefix.length))
   } catch {
