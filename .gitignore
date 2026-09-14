@@ -6,6 +6,7 @@
 .env.*.local
 .env.local
 .env.onlyoffice
+deploy/onlyoffice-local.dev.json
 .idea
 .kilo/
 .nyc_output
