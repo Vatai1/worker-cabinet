@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test'
 
-type Role = 'employee' | 'manager' | 'hr' | 'admin'
+type Role = 'employee' | 'manager' | 'hr' | 'admin' | 'superadmin'
 
 const CREDENTIALS: Record<Role, { email: string; password: string }> = {
   employee: { email: 'ivanov@example.com', password: 'password123' },
   manager: { email: 'petrov@example.com', password: 'password123' },
   hr: { email: 'elena@example.com', password: 'password123' },
   admin: { email: 'admin@example.com', password: 'password123' },
+  superadmin: { email: 'superadmin@example.com', password: 'password123' },
 }
 
 export async function loginAs(page: Page, role: Role) {
