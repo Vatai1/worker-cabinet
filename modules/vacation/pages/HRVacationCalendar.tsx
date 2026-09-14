@@ -10,6 +10,7 @@ import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
+import { useWsStore } from '@/shared/store/wsStore'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
@@ -103,6 +104,13 @@ function getDeptIcon(name: string): React.ReactNode {
 export function HRVacationCalendar() {
   const user = useAuthStore((state) => state.user)
   const calendarVersion = useVacationStore((s) => s.calendarVersion)
+  const bumpCalendarVersion = useVacationStore((s) => s.bumpCalendarVersion)
+  const vacationEvents = useWsStore((s) => s.vacationEvents)
+
+  useEffect(() => {
+    if (vacationEvents.n === 0) return
+    bumpCalendarVersion()
+  }, [vacationEvents, bumpCalendarVersion])
   const [requests, setRequests] = useState<VacationRequest[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)

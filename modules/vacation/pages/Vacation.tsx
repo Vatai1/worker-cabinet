@@ -5,6 +5,7 @@ import { useAuthStore } from '@/core/auth/store/authStore'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
+import { useWsStore } from '@/shared/store/wsStore'
 import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
@@ -52,6 +53,7 @@ export function Vacation() {
     loading,
     error,
     calendarVersion,
+    bumpCalendarVersion,
     fetchAllRequests,
     fetchUserRequests,
     fetchConnectionRequests,
@@ -215,6 +217,15 @@ export function Vacation() {
     setYear(new Date().getFullYear())
     toast.success('Фильтры сброшены')
   }
+
+  const { vacationEvents } = useWsStore()
+
+  useEffect(() => {
+    if (vacationEvents.n === 0) return
+    if (currentOrgId !== null && vacationEvents.organizationId !== undefined && vacationEvents.organizationId !== currentOrgId) return
+    if (user && vacationEvents.actorId !== undefined && String(vacationEvents.actorId) === String(user.id)) return
+    bumpCalendarVersion()
+  }, [vacationEvents, currentOrgId, user, bumpCalendarVersion])
 
   const handleTabClick = (tab: VacationTab) => {
     setActiveTab(tab)

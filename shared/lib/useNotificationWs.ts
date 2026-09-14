@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { useWsStore } from '@/shared/store/wsStore'
 
 interface WsMessage {
   event: string
@@ -23,6 +24,12 @@ export function useNotificationWs(onUnreadCount: (count: number) => void) {
         const msg: WsMessage = JSON.parse(event.data)
         if (msg.event === 'notification' && typeof msg.data.unreadCount === 'number') {
           onUnreadRef.current(msg.data.unreadCount as number)
+        }
+        if (msg.event === 'vacation_changed') {
+          useWsStore.getState().bumpVacationEvents({
+            organizationId: msg.data?.organizationId as number | undefined,
+            actorId: msg.data?.actorId as number | undefined,
+          })
         }
       } catch {}
     }

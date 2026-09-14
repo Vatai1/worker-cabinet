@@ -77,6 +77,12 @@ export function initWsServer(server) {
     if (!clients.has(userId)) clients.set(userId, new Set())
     clients.get(userId).add(ws)
 
+    ws.orgIds = new Set()
+    try {
+      const orgs = await query('SELECT org_id FROM user_organizations WHERE user_id = $1 AND is_active = true', [userId])
+      for (const row of orgs.rows) ws.orgIds.add(row.org_id)
+    } catch {}
+
     ws.on('close', () => {
       const userClients = clients.get(userId)
       if (userClients) {
@@ -118,4 +124,16 @@ export async function sendToUser(userId, event, data) {
   }
   const results = await Promise.all(promises)
   return results.some(Boolean)
+}
+
+export function broadcastToOrg(orgId, event, data) {
+  if (!orgId) return
+  const message = JSON.stringify({ event, data })
+  for (const userClients of clients.values()) {
+    for (const ws of userClients) {
+      if (ws.readyState === 1 && ws.orgIds?.has(orgId)) {
+        ws.send(message, () => {})
+      }
+    }
+  }
 }

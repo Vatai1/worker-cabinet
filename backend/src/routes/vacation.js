@@ -3,6 +3,7 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { getFromS3 } from '../config/s3.js'
 import { notify } from '../config/notifications.js'
+import { broadcastToOrg } from '../config/ws.js'
 import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
@@ -141,6 +142,12 @@ async function notifyVacationCreated(request, employeeId, req) {
     notify({ userId: row.id, type: 'vacation_created', data: payload })
       .catch((err) => console.warn(`[NOTIFY] vacation create #${request.id} hr: ${err.message}`))
   }
+}
+
+function notifyVacationChanged(req, requestId, action) {
+  const orgId = currentOrgId(req)
+  if (!orgId) return
+  broadcastToOrg(orgId, 'vacation_changed', { requestId, action, actorId: req.user.id, organizationId: orgId })
 }
 
 async function vacationDatesByMonth(startDate, endDate) {
@@ -965,6 +972,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     }
 
     res.status(201).json(request)
+    notifyVacationChanged(req, request.id, 'created')
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Failed to create vacation request' })
@@ -1096,6 +1104,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     )
 
     res.json(fullResult.rows[0])
+    notifyVacationChanged(req, id, 'updated')
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Failed to update vacation request' })
@@ -1161,6 +1170,7 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
     }).catch((err) => console.warn(`[NOTIFY] vacation approve #${id}: ${err.message}`))
 
     res.json({ ...result.rows[0], status: 'approved' })
+    notifyVacationChanged(req, id, 'approved')
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Ошибка согласования' })
@@ -1230,6 +1240,7 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
     }).catch((err) => console.warn(`[NOTIFY] vacation reject #${id}: ${err.message}`))
 
     res.json({ ...result.rows[0], status: 'rejected' })
+    notifyVacationChanged(req, id, 'rejected')
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Ошибка отклонения' })
@@ -1285,6 +1296,7 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
     res.json({ ...result.rows[0], status: 'cancelled_by_employee' })
+    notifyVacationChanged(req, id, 'cancelled')
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Ошибка отмены' })
@@ -1426,6 +1438,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     await notifyVacationCreated(newReq, userId, req)
 
     res.status(201).json(newReq)
+    notifyVacationChanged(req, newReq.id, 'transferred')
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Ошибка создания заявки на перенос' })
@@ -1571,6 +1584,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
     )
 
     res.json(fullResult.rows[0])
+    notifyVacationChanged(req, id, 'approved')
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Failed to approve vacation transfer' })
@@ -1714,6 +1728,7 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
     )
 
     res.json(fullResult.rows[0])
+    notifyVacationChanged(req, id, 'rejected')
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Failed to reject vacation transfer' })
@@ -1828,6 +1843,7 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
     )
 
     res.json(fullResult.rows[0])
+    notifyVacationChanged(req, id, 'cancelled')
   } catch (error) {
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Failed to cancel vacation transfer' })
@@ -2681,6 +2697,7 @@ router.post('/requests/:id/substitutes', authenticateToken, async (req, res) => 
     }
 
     res.status(201).json({ added: validIds.length })
+    notifyVacationChanged(req, id, 'substitutes_changed')
   } catch (error) {
     res.status(500).json({ error: 'Не удалось добавить замещающих' })
   }
@@ -2724,6 +2741,7 @@ router.delete('/requests/:id/substitutes/:userId', authenticateToken, async (req
     }).catch((err) => console.warn(`[NOTIFY] substitute remove ${subUserId}: ${err.message}`))
 
     res.json({ removed: true })
+    notifyVacationChanged(req, id, 'substitutes_changed')
   } catch (error) {
     res.status(500).json({ error: 'Не удалось удалить замещающего' })
   }
