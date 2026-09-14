@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { DepartmentBalanceEntry } from '@/shared/types'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
-import { getUserColor } from '@/shared/components/calendar/YearCalendar'
+import { buildUserColorMap } from '@/shared/components/calendar/YearCalendar'
 import { cn } from '@/shared/lib/utils'
 
 interface DepartmentBalanceTableProps {
@@ -36,6 +36,8 @@ export function DepartmentBalanceTable({ departmentId, year, currentUserId }: De
     return <div className="py-6 text-center text-sm text-muted-foreground">Нет данных по отделу</div>
   }
 
+  const colorMap = buildUserColorMap(rows.map(r => r.userId))
+
   return (
     <div className="max-h-72 overflow-y-auto overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-sm">
@@ -54,7 +56,7 @@ export function DepartmentBalanceTable({ departmentId, year, currentUserId }: De
               <tr key={row.userId} className={cn('border-t border-border', isMe && 'bg-primary/5 font-medium')}>
                 <td className="px-3 py-2">
                   <span className="inline-flex items-center gap-2">
-                    <span className={cn('h-2 w-2 shrink-0 rounded-full', getUserColor(row.userId))} />
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: colorMap.get(row.userId) ?? undefined }} />
                     <span className="truncate">{row.lastName} {row.firstName}</span>
                   </span>
                 </td>

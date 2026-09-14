@@ -14,9 +14,9 @@ async function apiHeaders(page: Page) {
   }
 }
 
-async function snapshotOrgHierarchy(page: Page) {
+async function snapshotOrgHierarchy(page: Page): Promise<HierarchySnapshot | null> {
   const res = await page.request.get(`${API}/hierarchy`, { headers: await apiHeaders(page) })
-  return await res.json()
+  return (await res.json().catch(() => null)) as HierarchySnapshot | null
 }
 
 async function clearOrgHierarchy(page: Page) {
@@ -28,7 +28,17 @@ async function clearOrgHierarchy(page: Page) {
   })
 }
 
-async function restoreOrgHierarchy(page: Page, snap: any) {
+type HierarchySnapshot = {
+  data?: {
+    nodes?: unknown[]
+    edges?: unknown[]
+    viewport?: { x: number; y: number; zoom: number }
+    orgPositions?: Record<string, { x: number; y: number }>
+  }
+  version?: number
+}
+
+async function restoreOrgHierarchy(page: Page, snap: HierarchySnapshot | null) {
   const headers = await apiHeaders(page)
   const cur = await (await page.request.get(`${API}/hierarchy`, { headers })).json()
   await page.request.put(`${API}/hierarchy`, {
@@ -242,7 +252,7 @@ test.describe('Модуль Иерархия', () => {
   })
 
   test.describe('HR — UC-2: Построение структуры', () => {
-    let snap: any
+    let snap: HierarchySnapshot | null
 
     test.beforeEach(async ({ page }) => {
       await loginAs(page, 'hr')
@@ -379,7 +389,7 @@ test.describe('Модуль Иерархия', () => {
   })
 
   test.describe('HR — UC-3: Удаление элемента', () => {
-    let snap: any
+    let snap: HierarchySnapshot | null
 
     test.beforeEach(async ({ page }) => {
       await loginAs(page, 'hr')

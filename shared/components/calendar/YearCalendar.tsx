@@ -26,36 +26,26 @@ const MONTHS = [
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
 ]
 
-export const PARTICIPANT_COLORS = ['#10B981', '#F97316', '#EC4899', '#3B82F6', '#8B5CF6', '#F43F5E']
-
-const COLORS = [
-  'bg-emerald-500',
-  'bg-orange-500',
-  'bg-pink-500',
-  'bg-blue-500',
-  'bg-violet-500',
-  'bg-rose-500',
+export const PARTICIPANT_COLORS = [
+  '#10B981', '#F97316', '#EC4899', '#3B82F6', '#8B5CF6', '#F43F5E',
+  '#14B8A6', '#06B6D4', '#84CC16', '#EAB308', '#FB923C', '#DC2626',
 ]
 
-export function getUserColor(userId: string): string {
-  let hash = 0
-  for (let i = 0; i < userId.length; i++) {
-    hash = userId.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return COLORS[Math.abs(hash) % COLORS.length]
-}
-
-export function getUserColorHex(userId: string): string {
-  let hash = 0
-  for (let i = 0; i < userId.length; i++) {
-    hash = userId.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return PARTICIPANT_COLORS[Math.abs(hash) % PARTICIPANT_COLORS.length]
-}
-
-export function getParticipantColor(userId: string, isMe: boolean): string {
-  if (isMe) return 'hsl(var(--primary))'
-  return getUserColorHex(userId)
+export function buildUserColorMap(userIds: string[]): Map<string, string> {
+  const unique = Array.from(new Set(userIds))
+  unique.sort((a, b) => {
+    const na = Number(a)
+    const nb = Number(b)
+    const aNum = Number.isFinite(na) && String(na) === a
+    const bNum = Number.isFinite(nb) && String(nb) === b
+    if (aNum && bNum) return na - nb
+    if (aNum) return -1
+    if (bNum) return 1
+    return a.localeCompare(b)
+  })
+  const map = new Map<string, string>()
+  unique.forEach((id, i) => map.set(id, PARTICIPANT_COLORS[i % PARTICIPANT_COLORS.length]))
+  return map
 }
 
 const RF_HOLIDAYS: Array<[number, number]> = [
@@ -95,6 +85,8 @@ export function YearCalendar({
   } | null>(null)
 
   const normalizedSearch = searchQuery?.trim().toLowerCase() || ''
+
+  const colorMap = useMemo(() => buildUserColorMap(requests.map(r => r.userId)), [requests])
 
   const months = useMemo(() => {
     const months = []
@@ -301,7 +293,7 @@ export function YearCalendar({
 
                 let vacationStyle: { backgroundColor?: string; backgroundImage?: string } | undefined
                 if (!isSelected && singleVacation) {
-                  const hex = getUserColorHex(singleVacation.userId)
+                  const hex = colorMap.get(singleVacation.userId) ?? PARTICIPANT_COLORS[0]
                   if (singleVacation.status === VacationRequestStatus.APPROVED) {
                     vacationStyle = { backgroundColor: `${hex}26` }
                   } else {
@@ -354,7 +346,7 @@ export function YearCalendar({
                           <div
                             key={v.id}
                             className="h-1 w-1 rounded-full"
-                            style={{ backgroundColor: getUserColorHex(v.userId) }}
+                            style={{ backgroundColor: colorMap.get(v.userId) ?? PARTICIPANT_COLORS[0] }}
                           />
                         ))}
                       </div>
@@ -421,7 +413,7 @@ export function YearCalendar({
                 const request = userRequests[0]
                 return (
                   <div key={userId} className="flex items-center gap-2 text-sm">
-                    <div className={`w-3 h-3 rounded ${getUserColor(userId)}`} />
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: colorMap.get(userId) ?? PARTICIPANT_COLORS[0] }} />
                     <span>{request.userLastName} {request.userFirstName[0]}.</span>
                   </div>
                 )
@@ -464,7 +456,7 @@ export function YearCalendar({
                       >
                         <div
                           className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: getParticipantColor(request.userId, request.userId === currentUserId) }}
+                          style={{ backgroundColor: request.userId === currentUserId ? 'hsl(var(--primary))' : colorMap.get(request.userId) ?? PARTICIPANT_COLORS[0] }}
                         />
                         <span>{request.userLastName} {request.userFirstName}</span>
                         <span className="text-xs text-muted-foreground">
