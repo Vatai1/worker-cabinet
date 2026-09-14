@@ -267,9 +267,9 @@ function GroupNode({ data, selected }: NodeProps) {
   const d = data as { title?: string; color?: string }
   const color = d.color ?? '#6b7280'
   return (
-    <div className="w-full h-full rounded-2xl border-2 border-dashed" style={{ borderColor: color, background: `${color}0F` }}>
-      <NodeResizer color={color} isVisible={selected} minWidth={200} minHeight={140} lineClassName="!border-dashed" />
-      <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider truncate" style={{ color }}>
+    <div className="w-full h-full rounded-2xl border-2 border-dashed pointer-events-none" style={{ borderColor: color, background: `${color}0F` }}>
+      <NodeResizer color={color} isVisible={selected} minWidth={200} minHeight={140} lineClassName="!border-dashed pointer-events-auto" handleClassName="pointer-events-auto" />
+      <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider truncate pointer-events-auto" style={{ color }}>
         {d.title || 'Группа'}
       </div>
     </div>
@@ -332,6 +332,7 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
   const saveSnapshot = useContext(SaveSnapshotContext)
   const waypoints: Waypoint[] = (data as { waypoints?: Waypoint[] })?.waypoints ?? []
   const hasWaypoints = waypoints.length > 0
+  const [hovered, setHovered] = useState(false)
 
   const [smoothPath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
 
@@ -381,17 +382,28 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
     saveSnapshot()
     suppressEdgeMenu()
     setEdges(eds => eds.map(ed => {
-      if (ed.id !== id) return ed
+      if (ed.id !== id) return { ...ed, selected: false }
       const wps = [...((ed.data as { waypoints?: Waypoint[] })?.waypoints ?? [])]
       wps.splice(segIdx, 0, { x, y })
-      return { ...ed, data: { ...ed.data, waypoints: wps } }
+      return { ...ed, selected: true, data: { ...ed.data, waypoints: wps } }
     }))
   }
 
   return (
     <>
-      <path d={pathD} fill="none" stroke="transparent" strokeWidth={20} />
       <BaseEdge path={pathD} markerEnd={markerEnd} markerStart={markerStart} style={style} />
+      <path
+        d={pathD}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={20}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={e => {
+          const rt = e.relatedTarget as HTMLElement | null
+          if (rt && typeof rt.closest === 'function' && rt.closest('[data-edge-handles]')?.getAttribute('data-edge-handles') === id) return
+          setHovered(false)
+        }}
+      />
       {(data as { note?: string } | undefined)?.note && (
         <EdgeLabelRenderer>
           <div
@@ -407,46 +419,48 @@ function EditableEdge({ id, sourceX, sourceY, sourcePosition, targetX, targetY, 
           </div>
         </EdgeLabelRenderer>
       )}
-      {selected && (
+      {(selected || hovered) && (
         <EdgeLabelRenderer>
-          {hasWaypoints && waypoints.map((wp, i) => (
-            <div
-              key={`wp-${i}`}
-              style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${wp.x}px, ${wp.y}px)`, pointerEvents: 'all', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'move' }}
-              className="nodrag nopan"
-              onMouseDown={e => dragWaypoint(e, i)}
-              onDoubleClick={e => removeWaypoint(e, i)}
-              title="Тащите • двойной клик — удалить"
-            >
-              <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'white', border: '2px solid #6b7280', pointerEvents: 'none' }} />
-            </div>
-          ))}
-          {hasWaypoints
-            ? segments.map((seg, i) => {
-                const mid = segmentMidpoint(seg)
-                return (
-                  <div
-                    key={`mid-${i}`}
-                    style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)`, pointerEvents: 'all', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                    className="nodrag nopan"
-                    onClick={e => addWaypoint(e, i, mid.x, mid.y)}
-                    title="Клик — добавить точку опоры"
-                  >
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', opacity: 0.7, pointerEvents: 'none' }} />
-                  </div>
-                )
-              })
-            : (
+          <div data-edge-handles={id} onMouseLeave={() => setHovered(false)}>
+            {selected && hasWaypoints && waypoints.map((wp, i) => (
               <div
-                style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: 'all', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                key={`wp-${i}`}
+                style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${wp.x}px, ${wp.y}px)`, pointerEvents: 'all', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'move' }}
                 className="nodrag nopan"
-                onClick={e => addWaypoint(e, 0, labelX, labelY)}
-                title="Клик — добавить точку опоры"
+                onMouseDown={e => dragWaypoint(e, i)}
+                onDoubleClick={e => removeWaypoint(e, i)}
+                title="Тащите • двойной клик — удалить"
               >
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', opacity: 0.7, pointerEvents: 'none' }} />
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'white', border: '2px solid #6b7280', pointerEvents: 'none' }} />
               </div>
-            )
-          }
+            ))}
+            {hasWaypoints
+              ? segments.map((seg, i) => {
+                  const mid = segmentMidpoint(seg)
+                  return (
+                    <div
+                      key={`mid-${i}`}
+                      style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)`, pointerEvents: 'all', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                      className="nodrag nopan"
+                      onClick={e => addWaypoint(e, i, mid.x, mid.y)}
+                      title="Клик — добавить точку опоры"
+                    >
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', opacity: 0.7, pointerEvents: 'none' }} />
+                    </div>
+                  )
+                })
+              : (
+                <div
+                  style={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: 'all', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  className="nodrag nopan"
+                  onClick={e => addWaypoint(e, 0, labelX, labelY)}
+                  title="Клик — добавить точку опоры"
+                >
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'white', border: '2px dashed #9ca3af', opacity: 0.7, pointerEvents: 'none' }} />
+                </div>
+              )
+            }
+          </div>
         </EdgeLabelRenderer>
       )}
     </>
@@ -1815,7 +1829,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     try {
       const { nodes: n, edges: e, viewport } = inst.toObject()
       const nodesClean = n.filter(x => x.type !== 'organization').map(x => ({ ...x, selected: false }))
-      const edgesClean = e.filter(x => !String(x.source).startsWith('org-') && !String(x.target).startsWith('org-'))
+      const edgesClean = e.filter(x => !String(x.source).startsWith('org-') && !String(x.target).startsWith('org-')).map(x => ({ ...x, selected: false }))
       const orgPositions: Record<string, { x: number; y: number }> = {}
       for (const x of n) {
         if (x.type === 'organization') {
@@ -1917,7 +1931,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
   }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft, parentEdgeId, confirmDeleteEdgeId, confirmDeleteNode, confirmLeave, showInstruction, requestClose])
 
   const displayNodes = useMemo(
-    () => nodes.map(n => (n.type === 'group' ? { ...n, zIndex: 0 } : { ...n, zIndex: n.zIndex ?? 1 })) as Node[],
+    () => nodes.map(n => (n.type === 'group' ? { ...n, zIndex: 0, className: 'hierarchy-group-node' } : { ...n, zIndex: n.zIndex ?? 1 })) as Node[],
     [nodes],
   )
 
@@ -2151,7 +2165,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             { title: 'Связи', text: 'Потяните от точки на краю блока к другому блоку. Клик по связи открывает все настройки, включая видимость и согласование отпусков.' },
             { title: 'Родительские связи', text: 'Отдел ↔ отдел задаёт структуру подразделений, сотрудник ↔ отдел назначает куратора, сотрудник ↔ сотрудник — личного руководителя. С текстовыми блоками родительская связь недоступна.' },
             { title: 'Видимость отпусков', text: 'В настройках родительской связи: «Родитель видит отпуска подчинённых», «Отпуск родителя виден подчинённым» и «Родитель согласовывает отпуска подчинённых». Флаги применяются после сохранения. Дублирующий вход — ПКМ по связи.' },
-            { title: 'Точки опоры', text: 'Выделите связь: точки на линии можно тянуть, «+» добавляет точку, двойной клик по точке удаляет её. Линия рисуется кривой Безье.' },
+            { title: 'Точки опоры', text: 'Наведите на связь — появятся точки добавления опоры. Клик по линии — настройки. Выделите связь: точки можно тянуть, двойной клик — удалить' },
             { title: 'Группы и описание', text: 'Пунктирные рамки объединяют элементы визуально, текстовые блоки служат для заметок. Редактирование и удаление — через ПКМ.' },
             { title: 'Сохранение и отмена', text: 'Кнопка «Сохранить» записывает схему. Ctrl+Z — отменить последнее действие. Удаление блоков и связей требует подтверждения, а выход с несохранёнными изменениями предупреждает.' },
           ]}
