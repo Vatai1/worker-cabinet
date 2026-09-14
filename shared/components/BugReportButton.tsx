@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bug, X, Loader2, Camera, Trash2 } from 'lucide-react'
+import html2canvas from 'html2canvas'
+import { Bug, X, Loader2, Camera, Trash2, Monitor } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
@@ -14,8 +15,66 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [capturing, setCapturing] = useState(false)
 
-  const captureScreen = async () => {
+  const convertHsl = (v: string) => v.replace(
+    /hsl\(([\d.]+) ([\d.]+)% ([\d.]+)%(?: *\/ *([\d.]+%?))?\)/g,
+    (_m, h: string, s: string, l: string, a?: string) => a != null
+      ? `hsla(${h}, ${s}%, ${l}%, ${a.endsWith('%') ? String(parseFloat(a) / 100) : a})`
+      : `hsl(${h}, ${s}%, ${l}%)`
+  )
+
+  const withHslCompat = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    const orig = window.getComputedStyle
+    window.getComputedStyle = ((el: Element, pseudo?: string | null) => {
+      const style = orig.call(window, el, pseudo)
+      const wrap = (value: unknown) => (typeof value === 'string' && value.includes('hsl(') ? convertHsl(value) : value)
+      return new Proxy(style, {
+        get(target, prop) {
+          if (prop === 'getPropertyValue') {
+            const raw = target.getPropertyValue.bind(target)
+            return (name: string) => wrap(raw(name))
+          }
+          const value = Reflect.get(target, prop, target)
+          if (typeof value === 'function') return value.bind(target)
+          return wrap(value)
+        },
+      }) as CSSStyleDeclaration
+    }) as typeof window.getComputedStyle
+    try {
+      return await fn()
+    } finally {
+      window.getComputedStyle = orig
+    }
+  }
+
+  const canvasToJpegBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> => {
+    const w = canvas.width
+    if (w > 1920) {
+      const scaled = document.createElement('canvas')
+      scaled.width = 1920
+      scaled.height = Math.round((canvas.height * 1920) / w)
+      scaled.getContext('2d')!.drawImage(canvas, 0, 0, scaled.width, scaled.height)
+      canvas = scaled
+    }
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9))
+  }
+
+  const captureDom = async (): Promise<Blob | null> => {
+    try {
+      const canvas = await withHslCompat(() => html2canvas(document.body, {
+        logging: false,
+        useCORS: true,
+        scale: Math.min(window.devicePixelRatio || 1, 2),
+      }))
+      if (!canvas.width || !canvas.height) return null
+      return await canvasToJpegBlob(canvas)
+    } catch {
+      return null
+    }
+  }
+
+  const captureScreen = async (): Promise<Blob | null> => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: { displaySurface: 'browser' } as MediaTrackConstraints,
@@ -43,21 +102,35 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
       track.stop()
       stream.getTracks().forEach((t) => t.stop())
 
-      const blob: Blob = await new Promise((resolve) => {
-        canvas.toBlob((b) => resolve(b!), 'image/png')
-      })
-      return blob
+      return await canvasToJpegBlob(canvas)
     } catch {
+      toast.info('Захват экрана отменён')
       return null
     }
   }
 
+  const applyShot = (blob: Blob | null) => {
+    if (screenshotUrl) URL.revokeObjectURL(screenshotUrl)
+    setScreenshotBlob(blob)
+    setScreenshotUrl(blob ? URL.createObjectURL(blob) : null)
+  }
+
+  const handleDomShot = async () => {
+    setCapturing(true)
+    applyShot(await captureDom())
+    setCapturing(false)
+  }
+
+  const handlePickShot = async () => {
+    setCapturing(true)
+    applyShot(await captureScreen())
+    setCapturing(false)
+  }
+
   const handleClick = async () => {
-    const blob = await captureScreen()
-    if (blob) {
-      setScreenshotBlob(blob)
-      setScreenshotUrl(URL.createObjectURL(blob))
-    }
+    setCapturing(true)
+    applyShot(await captureDom())
+    setCapturing(false)
     setPhase('open')
   }
 
@@ -70,7 +143,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
       formData.append('description', description)
       formData.append('page_url', window.location.href)
       formData.append('browser_info', navigator.userAgent)
-      if (screenshotBlob) formData.append('screenshot', screenshotBlob, 'screenshot.png')
+      if (screenshotBlob) formData.append('screenshot', screenshotBlob, 'screenshot.jpg')
 
       const res = await fetch(`${API_BASE_URL}/bug-reports`, {
         method: 'POST',
@@ -110,6 +183,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
         )}
       >
         <Bug className="h-4 w-4 shrink-0" />
+        {capturing && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />}
         {!collapsed && <span>Баг-репорт</span>}
       </button>
 
@@ -160,6 +234,15 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
                     <img src={screenshotUrl} alt="Скриншот" className="w-full rounded-lg border border-border max-h-40 object-cover" />
                     <button
                       type="button"
+                      disabled={capturing}
+                      onClick={handleDomShot}
+                      className="absolute top-2 left-2 p-1.5 rounded-lg bg-background/90 border border-border text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Переснять страницу"
+                    >
+                      {capturing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => {
                         if (screenshotUrl) URL.revokeObjectURL(screenshotUrl)
                         setScreenshotBlob(null)
@@ -171,8 +254,15 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
                     </button>
                   </div>
                 ) : (
-                  <div className="p-3 rounded-lg border border-dashed border-border text-sm text-muted-foreground text-center">
-                    Скриншот не приложен
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" className="flex-1 gap-1.5" onClick={handleDomShot} disabled={capturing}>
+                      {capturing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                      Снять страницу
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="flex-1 gap-1.5" onClick={handlePickShot} disabled={capturing}>
+                      <Monitor className="h-3.5 w-3.5" />
+                      Экран / окно
+                    </Button>
                   </div>
                 )}
               </div>
