@@ -134,7 +134,7 @@ export function DepartmentDetail() {
             <div className="bg-gradient-to-r from-primary/5 to-transparent p-5">
               <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary/60 mb-3">
                 <Crown className="h-3.5 w-3.5" />
-                Руководитель отдела
+                Руководитель подразделения
               </div>
               <div className="flex items-center gap-4">
                 <Avatar className="h-14 w-14 ring-2 ring-primary/15 shadow-md shrink-0">

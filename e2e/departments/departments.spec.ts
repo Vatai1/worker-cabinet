@@ -108,8 +108,8 @@ test.describe('Модуль Отделы и Документы', () => {
       const content = main(page)
       // Участники отдела показаны карточками с именами в <h4>.
       const memberNames = content.getByRole('heading', { level: 4 })
-      // Руководитель — отдельная карточка с подписью «Руководитель отдела».
-      const managerLabel = content.getByText('Руководитель отдела', {
+      // Руководитель — отдельная карточка с подписью «Руководитель подразделения».
+      const managerLabel = content.getByText('Руководитель подразделения', {
         exact: true,
       })
 

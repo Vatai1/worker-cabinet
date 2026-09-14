@@ -5,6 +5,7 @@ import { SidebarToggle, useNavigation } from './Sidebar'
 import { OrgSwitcher } from './OrgSwitcher'
 import { GlobalSearch } from './GlobalSearch'
 import { useAuthStore } from '@/core/auth/store/authStore'
+import { useOrgStore } from '@/shared/store/orgStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { apiGet } from '@/shared/lib/apiClient'
@@ -17,6 +18,7 @@ interface Crumb {
 
 export function Header() {
   const { user } = useAuthStore()
+  const { organizations, loaded } = useOrgStore()
   const navigate = useNavigate()
   const location = useLocation()
   const navigation = useNavigation()
@@ -107,9 +109,11 @@ export function Header() {
             <Search className="h-5 w-5" />
           </button>
         )}
-        <div className="rounded-full border bg-card px-3 py-1.5">
-          <OrgSwitcher />
-        </div>
+        {loaded && organizations.length > 1 && (
+          <div className="rounded-full border bg-card px-3 py-1.5">
+            <OrgSwitcher />
+          </div>
+        )}
         <button
           onClick={() => navigate('/notifications')}
           className="relative flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

@@ -7,8 +7,10 @@ import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { cn } from '@/shared/lib/utils'
+import { useThemeStore } from '@/shared/theme/themeStore'
 
 export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) {
+  const isCrct = useThemeStore((s) => s.activeTheme === 'crct')
   const [phase, setPhase] = useState<'idle' | 'open'>('idle')
   const [screenshotBlob, setScreenshotBlob] = useState<Blob | null>(null)
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
@@ -219,9 +221,13 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
         title="Баг-репорт"
         className={cn(
           'flex items-center gap-2 rounded-lg text-sm font-medium transition-colors interactive',
-          collapsed
-            ? 'justify-center p-2 text-muted-foreground hover:text-foreground'
-            : 'px-3 py-2 text-muted-foreground hover:bg-muted hover:text-foreground'
+          isCrct
+            ? collapsed
+              ? 'justify-center p-2 text-white/85 hover:text-white'
+              : 'px-3 py-2 text-white/85 hover:bg-white/10 hover:text-white'
+            : collapsed
+              ? 'justify-center p-2 text-muted-foreground hover:text-foreground'
+              : 'px-3 py-2 text-muted-foreground hover:bg-muted hover:text-foreground'
         )}
       >
         <Bug className="h-4 w-4 shrink-0" />
