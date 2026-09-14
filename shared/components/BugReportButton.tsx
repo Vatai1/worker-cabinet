@@ -62,10 +62,31 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
 
   const captureDom = async (): Promise<Blob | null> => {
     try {
+      if (document.fonts?.ready) await document.fonts.ready
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+      const pending = Array.from(document.images).filter((img) => !img.complete)
+      if (pending.length > 0) {
+        await Promise.all(pending.map((img) => new Promise((res) => {
+          img.addEventListener('load', res, { once: true })
+          img.addEventListener('error', res, { once: true })
+          setTimeout(res, 1500)
+        })))
+      }
       const canvas = await withHslCompat(() => html2canvas(document.body, {
         logging: false,
         useCORS: true,
         scale: Math.min(window.devicePixelRatio || 1, 2),
+        onclone: (doc) => {
+          doc.querySelectorAll<HTMLElement>('[class*="animate-"], [class*="stagger-"]').forEach((el) => {
+            for (const cls of Array.from(el.classList)) {
+              if (cls.startsWith('animate-') || cls.startsWith('stagger-')) el.classList.remove(cls)
+            }
+            el.style.animation = 'none'
+            el.style.transition = 'none'
+            el.style.opacity = '1'
+            el.style.transform = 'none'
+          })
+        },
       }))
       if (!canvas.width || !canvas.height) return null
       return await canvasToJpegBlob(canvas)
