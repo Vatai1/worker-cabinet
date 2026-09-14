@@ -56,7 +56,7 @@ export function MultiSelectDropdown({
         <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="absolute z-20 mt-1.5 max-h-64 w-60 overflow-y-auto rounded-[10px] border border-border bg-card p-1.5 shadow-lg">
+        <div className="absolute z-20 mt-1.5 max-h-64 w-max min-w-[240px] max-w-[min(420px,70vw)] overflow-y-auto rounded-[10px] border border-border bg-card p-1.5 shadow-lg">
           <button
             type="button"
             onClick={() => onChange([])}
@@ -69,15 +69,15 @@ export function MultiSelectDropdown({
             return (
               <label
                 key={o.value}
-                className="flex cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[13px] text-foreground hover:bg-muted"
+                className="flex cursor-pointer items-start gap-2 rounded-[8px] px-2.5 py-1.5 text-[13px] text-foreground hover:bg-muted"
               >
                 <input
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggle(o.value)}
-                  className="h-3.5 w-3.5 shrink-0 rounded border-border accent-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="mt-[3px] h-3.5 w-3.5 shrink-0 rounded border-border accent-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
-                <span className="truncate">{o.label}</span>
+                <span className="whitespace-normal break-words leading-snug">{o.label}</span>
               </label>
             )
           })}

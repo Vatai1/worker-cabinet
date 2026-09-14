@@ -42,7 +42,7 @@ const REQUEST_STATUS_OPTIONS = [
 
 const EMPTY_REQUEST_FILTERS: { departmentIds: string[]; statuses: string[]; vacationTypes: string[] } = { departmentIds: [], statuses: [], vacationTypes: [] }
 
-type VacationTab = 'mine' | 'team' | 'approvals' | 'restrictions' | 'requests' | 'history'
+type VacationTab = 'mine' | 'approvals' | 'restrictions' | 'requests' | 'history'
 type CalendarScope = 'mine' | 'team'
 
 export function Vacation() {
@@ -230,7 +230,6 @@ export function Vacation() {
   const handleTabClick = (tab: VacationTab) => {
     setActiveTab(tab)
     if (tab === 'mine') setCalendarScope('mine')
-    if (tab === 'team') setCalendarScope('team')
   }
 
   const isTransferRequest = (requestId: string) =>
@@ -618,8 +617,7 @@ export function Vacation() {
   }
 
   const tabs: Array<{ id: VacationTab; label: string; badge?: number }> = [
-    { id: 'mine', label: 'Мои отпуска' },
-    { id: 'team', label: 'Команда' },
+    { id: 'mine', label: 'Отпуск' },
     ...(isManager ? [{ id: 'approvals' as VacationTab, label: 'Согласование', badge: pendingApprovals.length }] : []),
     ...(isManager ? [{ id: 'restrictions' as VacationTab, label: 'Пересечения' }] : []),
     { id: 'requests', label: 'Заявления' },
@@ -896,6 +894,19 @@ export function Vacation() {
           <VacationLegend departmentId={user?.departmentId || ''} year={year} currentUserId={user?.id} />
 
           <Card>
+            <div className="border-b border-border px-5 py-4">
+              <h2 className="text-base font-semibold">Сотрудники отдела</h2>
+            </div>
+            <div className="p-5">
+              <DepartmentBalanceTable
+                departmentId={reqFilters.departmentIds[0] || user?.departmentId || ''}
+                year={year}
+                currentUserId={user?.id}
+              />
+            </div>
+          </Card>
+
+          <Card>
             <div
               className="p-5 cursor-pointer flex items-center justify-between gap-4"
               onClick={() => setMyRequestsExpanded(!myRequestsExpanded)}
@@ -1113,25 +1124,6 @@ export function Vacation() {
                   )}
                 </div>
               </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === 'team' && (
-        <div className="space-y-6">
-          {calendarSection}
-
-          <Card>
-            <div className="border-b border-border px-5 py-4">
-              <h2 className="text-base font-semibold">Сотрудники отдела</h2>
-            </div>
-            <div className="p-5">
-              <DepartmentBalanceTable
-                departmentId={reqFilters.departmentIds[0] || user?.departmentId || ''}
-                year={year}
-                currentUserId={user?.id}
-              />
             </div>
           </Card>
         </div>
