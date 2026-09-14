@@ -26,15 +26,15 @@ const MONTHS = [
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
 ]
 
+export const PARTICIPANT_COLORS = ['#10B981', '#F97316', '#EC4899', '#3B82F6', '#8B5CF6', '#F43F5E']
+
 const COLORS = [
-  'bg-blue-500',
-  'bg-green-500',
-  'bg-purple-500',
-  'bg-pink-500',
+  'bg-emerald-500',
   'bg-orange-500',
-  'bg-teal-500',
-  'bg-indigo-500',
-  'bg-red-500',
+  'bg-pink-500',
+  'bg-blue-500',
+  'bg-violet-500',
+  'bg-rose-500',
 ]
 
 export function getUserColor(userId: string): string {
@@ -45,15 +45,17 @@ export function getUserColor(userId: string): string {
   return COLORS[Math.abs(hash) % COLORS.length]
 }
 
-const PARTICIPANT_COLORS = ['#10B981', '#F97316', '#EC4899', '#3B82F6', '#8B5CF6', '#F43F5E']
-
-export function getParticipantColor(userId: string, isMe: boolean): string {
-  if (isMe) return 'hsl(var(--primary))'
+export function getUserColorHex(userId: string): string {
   let hash = 0
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash)
   }
   return PARTICIPANT_COLORS[Math.abs(hash) % PARTICIPANT_COLORS.length]
+}
+
+export function getParticipantColor(userId: string, isMe: boolean): string {
+  if (isMe) return 'hsl(var(--primary))'
+  return getUserColorHex(userId)
 }
 
 const RF_HOLIDAYS: Array<[number, number]> = [
@@ -237,7 +239,7 @@ export function YearCalendar({
           </div>
 
           <div className="text-sm text-muted-foreground">
-            💡 <strong>Подсказка:</strong> Дни с заявками на отпуск заштрихованы. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки.
+            💡 <strong>Подсказка:</strong> Дни отпусков окрашены цветом сотрудника, на согласовании — штриховкой. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки.
           </div>
         </>
       )}
@@ -277,8 +279,7 @@ export function YearCalendar({
                 const visibleVacations = vacations.slice(0, 3)
                 const remainingCount = vacations.length > 3 ? vacations.length - 3 : 0
                 const isMineDay = !!currentUserId && vacations.some(v => v.userId === currentUserId)
-                const hasApproved = vacations.some(v => v.status === VacationRequestStatus.APPROVED)
-                const hasPending = vacations.some(v => v.status === VacationRequestStatus.ON_APPROVAL)
+                const singleVacation = !isMineDay && vacations.length === 1 ? vacations[0] : null
                 const matchesSearch = !normalizedSearch || vacations.some(v =>
                   `${v.userLastName} ${v.userFirstName} ${v.userMiddleName ?? ''}`.toLowerCase().includes(normalizedSearch)
                 )
@@ -287,15 +288,25 @@ export function YearCalendar({
 
                 let stateClass = 'text-foreground'
                 if (isMineDay) {
-                  stateClass = 'bg-primary/15 text-primary font-bold'
-                } else if (hasApproved) {
-                  stateClass = 'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 font-semibold'
-                } else if (hasPending) {
-                  stateClass = 'vac-pending-stripe text-amber-700 dark:text-amber-400 font-semibold'
+                  stateClass = 'font-bold'
+                } else if (singleVacation) {
+                  stateClass = 'text-foreground font-semibold'
+                } else if (vacations.length > 1) {
+                  stateClass = 'bg-muted/40'
                 } else if (holiday) {
                   stateClass = 'bg-muted text-muted-foreground'
                 } else if (weekend) {
                   stateClass = 'text-muted-foreground'
+                }
+
+                let vacationStyle: { backgroundColor?: string; backgroundImage?: string } | undefined
+                if (!isSelected && singleVacation) {
+                  const hex = getUserColorHex(singleVacation.userId)
+                  if (singleVacation.status === VacationRequestStatus.APPROVED) {
+                    vacationStyle = { backgroundColor: `${hex}26` }
+                  } else {
+                    vacationStyle = { backgroundImage: `repeating-linear-gradient(45deg, ${hex}59 0 2px, transparent 2px 6px)` }
+                  }
                 }
 
                 const liftShadow = '0 3px 8px -2px rgb(0 0 0 / 0.25)'
@@ -330,6 +341,7 @@ export function YearCalendar({
                       isDimmed && 'opacity-[.22]'
                     )}
                     style={{
+                      ...vacationStyle,
                       transform: isHoveringCell && !isSelected ? 'translateY(-1px)' : undefined,
                       boxShadow: !isSelected ? boxShadow : undefined,
                       zIndex: isHoveringCell ? 2 : undefined,
@@ -342,7 +354,7 @@ export function YearCalendar({
                           <div
                             key={v.id}
                             className="h-1 w-1 rounded-full"
-                            style={{ backgroundColor: getParticipantColor(v.userId, v.userId === currentUserId) }}
+                            style={{ backgroundColor: getUserColorHex(v.userId) }}
                           />
                         ))}
                       </div>
@@ -373,14 +385,28 @@ export function YearCalendar({
 
             {showLegendExpanded && (
               <>
-              <div className="mt-3 mb-3 grid grid-cols-3 gap-2 text-sm">
+              <div className="mt-3 mb-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
                <div className="flex items-center gap-2">
-                 <div className="w-6 h-6 rounded border border-border bg-emerald-500/15 dark:bg-emerald-500/20" />
-                 <span>Одобрено</span>
+                 <div className="w-6 h-6 rounded flex items-center justify-center" style={{ boxShadow: 'inset 0 0 0 1.5px hsl(var(--primary))' }}>
+                   <span className="text-[11px] font-bold text-foreground">7</span>
+                 </div>
+                 <span>Мой отпуск</span>
                </div>
                <div className="flex items-center gap-2">
-                 <div className="w-6 h-6 rounded border border-border vac-pending-stripe" />
-                 <span>На согласовании</span>
+                 <div className="w-6 h-6 rounded border border-border" style={{ backgroundColor: `${PARTICIPANT_COLORS[1]}26` }} />
+                 <span className="flex items-center gap-1.5">
+                   Согласовано
+                   <span className="text-xs text-muted-foreground">— цвет сотрудника</span>
+                   <span className="flex gap-1">
+                     {PARTICIPANT_COLORS.slice(0, 4).map(hex => (
+                       <span key={hex} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: hex }} />
+                     ))}
+                   </span>
+                 </span>
+               </div>
+               <div className="flex items-center gap-2">
+                 <div className="w-6 h-6 rounded border border-border" style={{ backgroundImage: `repeating-linear-gradient(45deg, ${PARTICIPANT_COLORS[0]}59 0 2px, transparent 2px 6px)` }} />
+                 <span>На согласовании <span className="text-xs text-muted-foreground">— цвет сотрудника</span></span>
                </div>
                <div className="flex items-center gap-2">
                  <div className="w-6 h-6 rounded border bg-muted" />
@@ -441,6 +467,9 @@ export function YearCalendar({
                           style={{ backgroundColor: getParticipantColor(request.userId, request.userId === currentUserId) }}
                         />
                         <span>{request.userLastName} {request.userFirstName}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {request.status === VacationRequestStatus.APPROVED ? 'согласовано' : 'на согласовании'}
+                        </span>
                       </button>
                       {request.userId === currentUserId && request.status === VacationRequestStatus.APPROVED && onTransfer && (
                         <button
