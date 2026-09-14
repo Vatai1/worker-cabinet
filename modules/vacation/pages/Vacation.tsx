@@ -12,7 +12,6 @@ import { Badge } from '@/shared/components/ui/Badge'
 import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
 import { YearCalendar } from '@/shared/components/calendar/YearCalendar'
 import { VacationLegend } from '@/shared/components/calendar/VacationLegend'
-import { DepartmentBalanceTable } from '@/modules/vacation/components/DepartmentBalanceTable'
 import { VacationHistoryList } from '@/modules/vacation/components/modals/VacationHistoryModal'
 import { CreateVacationModal } from '@/modules/vacation/components/modals/CreateVacationModal'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
@@ -892,19 +891,6 @@ export function Vacation() {
           {calendarSection}
 
           <VacationLegend departmentId={user?.departmentId || ''} year={year} currentUserId={user?.id} />
-
-          <Card>
-            <div className="border-b border-border px-5 py-4">
-              <h2 className="text-base font-semibold">Сотрудники отдела</h2>
-            </div>
-            <div className="p-5">
-              <DepartmentBalanceTable
-                departmentId={reqFilters.departmentIds[0] || user?.departmentId || ''}
-                year={year}
-                currentUserId={user?.id}
-              />
-            </div>
-          </Card>
 
           <Card>
             <div
