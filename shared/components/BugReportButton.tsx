@@ -77,6 +77,27 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
         useCORS: true,
         scale: Math.min(window.devicePixelRatio || 1, 2),
         onclone: (doc) => {
+          const style = doc.createElement('style')
+          style.textContent = `*, *::before, *::after { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif !important; }`
+          doc.head.appendChild(style)
+          const win = doc.defaultView
+          if (win) {
+            doc.querySelectorAll<HTMLElement>('*').forEach((el) => {
+              const cs = win.getComputedStyle(el)
+              const clipText = cs.webkitBackgroundClip === 'text' || cs.backgroundClip === 'text'
+              const transparentText = cs.webkitTextFillColor === 'rgba(0, 0, 0, 0)' || cs.color === 'rgba(0, 0, 0, 0)' || cs.color === 'transparent'
+              if (clipText || transparentText) {
+                el.style.background = 'none'
+                el.style.webkitBackgroundClip = 'unset'
+                el.style.backgroundClip = 'unset'
+                el.style.webkitTextFillColor = 'unset'
+                if (transparentText) {
+                  const raw = win.getComputedStyle(doc.documentElement).getPropertyValue('--primary').trim()
+                  el.style.color = /^\d/.test(raw) ? `hsl(${raw})` : (raw || '#0f172a')
+                }
+              }
+            })
+          }
           doc.querySelectorAll<HTMLElement>('[class*="animate-"], [class*="stagger-"]').forEach((el) => {
             for (const cls of Array.from(el.classList)) {
               if (cls.startsWith('animate-') || cls.startsWith('stagger-')) el.classList.remove(cls)
