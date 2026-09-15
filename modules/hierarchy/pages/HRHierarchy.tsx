@@ -541,8 +541,8 @@ function SelectDepartmentModal({
   )
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <Building2 className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">Выберите отдел</h2>
@@ -551,7 +551,7 @@ function SelectDepartmentModal({
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
-        <div className="px-4 py-3 border-b border-border">
+        <div className="px-4 py-3 border-b border-border shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
@@ -563,7 +563,7 @@ function SelectDepartmentModal({
             />
           </div>
         </div>
-        <div className="max-h-52 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           {filtered.length === 0 ? (
             <div className="px-6 py-8 text-center text-sm text-muted-foreground">Не найдено</div>
           ) : (
@@ -586,7 +586,7 @@ function SelectDepartmentModal({
             ))
           )}
         </div>
-        <div className="px-4 py-3 border-t border-border">
+        <div className="px-4 py-3 border-t border-border shrink-0">
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
@@ -595,7 +595,7 @@ function SelectDepartmentModal({
             className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors resize-none"
           />
         </div>
-        <div className="px-6 py-3 border-t border-border flex gap-2">
+        <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
           <Button className="flex-1" disabled={!selected} onClick={() => selected && onSelect(selected, description)}>
             Добавить
@@ -646,8 +646,8 @@ function SelectEmployeeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <User className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">Выберите сотрудника</h2>
@@ -656,7 +656,7 @@ function SelectEmployeeModal({
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
-        <div className="px-4 py-3 border-b border-border space-y-2">
+        <div className="px-4 py-3 border-b border-border space-y-2 shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
@@ -678,7 +678,7 @@ function SelectEmployeeModal({
             ))}
           </select>
         </div>
-        <div className="max-h-48 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           {filtered.length === 0 ? (
             <div className="px-6 py-8 text-center text-sm text-muted-foreground">Не найдено</div>
           ) : (
@@ -705,7 +705,7 @@ function SelectEmployeeModal({
             ))
           )}
         </div>
-        <div className="px-4 py-3 border-t border-border">
+        <div className="px-4 py-3 border-t border-border shrink-0">
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
@@ -714,7 +714,7 @@ function SelectEmployeeModal({
             className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors resize-none"
           />
         </div>
-        <div className="px-6 py-3 border-t border-border flex gap-2">
+        <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
           <Button className="flex-1" disabled={!selected} onClick={() => selected && onSelect(selected, description)}>
             Добавить
@@ -737,8 +737,8 @@ function TextInputModal({
   const [text, setText] = useState(initialText)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <AlignLeft className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">Текстовый блок</h2>
@@ -747,7 +747,7 @@ function TextInputModal({
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
-        <div className="px-4 py-4">
+        <div className="px-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           <textarea
             autoFocus
             value={text}
@@ -757,7 +757,7 @@ function TextInputModal({
             className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors resize-none"
           />
         </div>
-        <div className="px-6 py-3 border-t border-border flex gap-2">
+        <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
           <Button className="flex-1" disabled={!text.trim()} onClick={() => onConfirm(text)}>
             {initialText ? 'Сохранить' : 'Добавить'}
@@ -1196,8 +1196,8 @@ function ConfirmLeaveModal({ onConfirm, onClose }: { onConfirm: () => void; onCl
 export function InstructionModal({ title, items, onClose }: { title: string; items: { title: string; text: string }[]; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden animate-scale-in flex flex-col max-h-[80vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden animate-scale-in flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">{title}</h2>
@@ -1206,7 +1206,7 @@ export function InstructionModal({ title, items, onClose }: { title: string; ite
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
-        <div className="px-6 py-4 space-y-3 overflow-y-auto">
+        <div className="px-6 py-4 space-y-3 overflow-y-auto scrollbar-thin overscroll-contain min-h-0 flex-1">
           {items.map(item => (
             <div key={item.title} className="rounded-lg border border-border px-4 py-3">
               <p className="text-sm font-medium">{item.title}</p>
@@ -1214,7 +1214,7 @@ export function InstructionModal({ title, items, onClose }: { title: string; ite
             </div>
           ))}
         </div>
-        <div className="px-6 py-3 border-t border-border">
+        <div className="px-6 py-3 border-t border-border shrink-0">
           <Button className="w-full" onClick={onClose}>Понятно</Button>
         </div>
       </div>

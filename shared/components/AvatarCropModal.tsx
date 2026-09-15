@@ -61,8 +61,8 @@ export function AvatarCropModal({ isOpen, imageSrc, uploading, onCancel, onConfi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-card shadow-2xl animate-scale-in">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-card shadow-2xl animate-scale-in flex max-h-[85vh] flex-col">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <Crop className="h-4 w-4" />
@@ -96,7 +96,7 @@ export function AvatarCropModal({ isOpen, imageSrc, uploading, onCancel, onConfi
           />
         </div>
 
-        <div className="space-y-4 border-t border-border px-5 py-4">
+        <div className="space-y-4 border-t border-border px-5 py-4 shrink-0">
           <div className="flex items-center gap-3">
             <ZoomOut className="h-4 w-4 shrink-0 text-muted-foreground" />
             <input

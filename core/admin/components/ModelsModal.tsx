@@ -133,8 +133,8 @@ export function ModelsModal() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-card rounded-xl border border-border shadow-2xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col animate-scale-in">
-        <div className="flex items-center justify-between p-4 border-b border-border">
+      <div className="relative bg-card rounded-xl border border-border shadow-2xl max-w-lg w-full mx-4 max-h-[85vh] flex flex-col overflow-hidden animate-scale-in">
+        <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <Package className="h-5 w-5" />
             <h3 className="text-lg font-semibold">Модели Ollama</h3>
@@ -144,7 +144,7 @@ export function ModelsModal() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-4 space-y-3">
           {error && (
             <div className="flex items-center gap-2 p-2 rounded-lg text-sm bg-destructive/10 text-destructive">
               {error}

@@ -149,9 +149,9 @@ function TaskModal({ rows, cols, mode, task, defaultRowId, defaultStartCol, onSa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-lg animate-scale-in" onClick={e=>e.stopPropagation()}>
+      <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-lg animate-scale-in flex max-h-[85vh] flex-col overflow-hidden" onClick={e=>e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background:`${color}22`}}>
               {isMilestone
@@ -165,7 +165,7 @@ function TaskModal({ rows, cols, mode, task, defaultRowId, defaultStartCol, onSa
           </button>
         </div>
 
-        <form onSubmit={submit} className="p-5 space-y-4">
+        <form onSubmit={submit} className="p-5 space-y-4 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           {/* Milestone toggle */}
           <label className="flex items-center gap-3 p-3 rounded-xl border border-border cursor-pointer hover:bg-muted/50 transition-colors">
             <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${isMilestone?'bg-primary':'bg-muted-foreground/30'}`}

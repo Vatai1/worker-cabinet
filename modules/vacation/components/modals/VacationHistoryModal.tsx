@@ -262,8 +262,8 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col animate-scale-in">
-        <div className="p-6 border-b flex justify-between items-center bg-card">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-5xl mx-4 max-h-[85vh] flex flex-col overflow-hidden animate-scale-in">
+        <div className="p-6 border-b flex justify-between items-center bg-card shrink-0">
           <h2 className="text-xl font-semibold">История отпусков</h2>
           <button
             onClick={onClose}
@@ -273,11 +273,11 @@ export function VacationHistoryModal({ isOpen, requests, onClose }: VacationHist
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           <VacationHistoryList requests={requests} />
         </div>
 
-        <div className="p-6 border-t bg-muted/50">
+        <div className="p-6 border-t bg-muted/50 shrink-0">
           <Button
             onClick={onClose}
             className="w-full"

@@ -50,8 +50,8 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div data-testid="vacation-detail-modal" className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 animate-scale-in">
-        <div className="p-6 border-b flex justify-between items-center">
+      <div data-testid="vacation-detail-modal" className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 animate-scale-in overflow-hidden flex max-h-[85vh] flex-col">
+        <div className="p-6 border-b flex justify-between items-center shrink-0">
           <h2 className="text-xl font-semibold">Детали отпуска</h2>
           <button
             onClick={onClose}
@@ -61,7 +61,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 overflow-y-auto scrollbar-thin overscroll-contain">
           <div>
             <div className="text-sm text-muted-foreground mb-1">Сотрудник</div>
             <div className="font-semibold text-lg">
@@ -240,7 +240,9 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
             </div>
           )}
 
-          <div className="pt-4 border-t flex gap-3">
+        </div>
+        <div className="px-6 py-4 border-t border-border shrink-0">
+          <div className="flex gap-3">
             {canManage && !showRejectInput && (
               <>
                 <Button

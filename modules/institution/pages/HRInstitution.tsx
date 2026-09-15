@@ -7,7 +7,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { apiGet, apiPut } from '@/shared/lib/apiClient'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { cn, getErrorMessage } from '@/shared/lib/utils'
+import { cn, getErrorMessage, personName } from '@/shared/lib/utils'
 
 interface OrgData {
   id: number
@@ -31,10 +31,6 @@ interface Candidate {
   middle_name: string | null
   position: string | null
   avatar: string | null
-}
-
-function personName(parts: (string | null | undefined)[]): string {
-  return parts.filter(Boolean).join(' ')
 }
 
 function personInitials(first?: string | null, last?: string | null): string {
@@ -165,13 +161,13 @@ export function HRInstitution() {
 
   if (!org) return null
 
-  const headName = personName([org.head_last_name, org.head_first_name, org.head_middle_name])
+  const headName = personName(org.head_last_name, org.head_first_name, org.head_middle_name)
   const headInitials = personInitials(org.head_first_name, org.head_last_name)
 
   const candidateQuery = candidateSearch.trim().toLowerCase()
   const filteredCandidates = candidateQuery
     ? candidates.filter((c) =>
-        (personName([c.last_name, c.first_name, c.middle_name]).toLowerCase() + ' ' + (c.position || '').toLowerCase()).includes(candidateQuery),
+        (personName(c.last_name, c.first_name, c.middle_name).toLowerCase() + ' ' + (c.position || '').toLowerCase()).includes(candidateQuery),
       )
     : candidates
 
@@ -267,14 +263,14 @@ export function HRInstitution() {
       {showHeadPicker && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 animate-fade-in" onClick={() => { setShowHeadPicker(false); setConfirmCandidate(null) }}>
           <Card className="max-w-md w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => { e.stopPropagation(); }}>
-            <CardHeader>
+            <CardHeader className="shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <UserCog className="h-5 w-5 text-amber-500" />
                 {org.head_id ? 'Замена руководителя' : 'Назначение руководителя'}
               </CardTitle>
               <CardDescription>Выберите сотрудника учреждения</CardDescription>
             </CardHeader>
-            <CardContent className="overflow-y-auto flex-1">
+            <CardContent className="overflow-y-auto scrollbar-thin overscroll-contain flex-1 min-h-0">
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
@@ -304,7 +300,7 @@ export function HRInstitution() {
               ) : (
                 <div className="space-y-1">
                   {filteredCandidates.map((c) => {
-                    const name = personName([c.last_name, c.first_name, c.middle_name])
+                    const name = personName(c.last_name, c.first_name, c.middle_name)
                     const initials = personInitials(c.first_name, c.last_name)
                     const isCurrent = c.id === org.head_id
                     return (
@@ -344,8 +340,8 @@ export function HRInstitution() {
 
       {confirmCandidate && createPortal(
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 animate-fade-in" onClick={() => !savingHead && handleCancelConfirm()}>
-          <Card className="max-w-lg w-full mx-4" onClick={(e) => { e.stopPropagation(); }}>
-            <CardHeader>
+          <Card className="max-w-lg w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => { e.stopPropagation(); }}>
+            <CardHeader className="shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-amber-500" />
                 Подтверждение смены руководителя
@@ -356,7 +352,7 @@ export function HRInstitution() {
                   : 'Назначить нового руководителя учреждения?'}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 overflow-y-auto scrollbar-thin overscroll-contain">
               {org.head_id && (
                 <div className="flex items-center gap-4">
                   <div className="flex-1 rounded-xl bg-muted/40 border border-border/40 p-3 text-center">
@@ -375,10 +371,10 @@ export function HRInstitution() {
 
                   <div className="flex-1 rounded-xl bg-amber-500/5 border border-amber-500/20 p-3 text-center">
                     <Avatar className="h-14 w-14 mx-auto mb-2 ring-2 ring-amber-500/30">
-                      <AvatarImage src={confirmCandidate.avatar || generateAvatarUrl(String(confirmCandidate.id))} alt={personName([confirmCandidate.last_name, confirmCandidate.first_name, confirmCandidate.middle_name])} />
+                      <AvatarImage src={confirmCandidate.avatar || generateAvatarUrl(String(confirmCandidate.id))} alt={personName(confirmCandidate.last_name, confirmCandidate.first_name, confirmCandidate.middle_name)} />
                       <AvatarFallback className="text-sm">{personInitials(confirmCandidate.first_name, confirmCandidate.last_name)}</AvatarFallback>
                     </Avatar>
-                    <p className="text-xs font-medium truncate">{personName([confirmCandidate.last_name, confirmCandidate.first_name, confirmCandidate.middle_name])}</p>
+                    <p className="text-xs font-medium truncate">{personName(confirmCandidate.last_name, confirmCandidate.first_name, confirmCandidate.middle_name)}</p>
                     {confirmCandidate.position && <p className="text-[11px] text-muted-foreground truncate">{confirmCandidate.position}</p>}
                     <span className="inline-block mt-1.5 text-[10px] text-amber-600 font-medium uppercase tracking-wide">Новый</span>
                   </div>
@@ -388,11 +384,11 @@ export function HRInstitution() {
               {!org.head_id && (
                 <div className="rounded-xl bg-amber-500/5 border border-amber-500/20 p-3 flex items-center gap-3">
                   <Avatar className="h-12 w-12 shrink-0 ring-2 ring-amber-500/30">
-                    <AvatarImage src={confirmCandidate.avatar || generateAvatarUrl(String(confirmCandidate.id))} alt={personName([confirmCandidate.last_name, confirmCandidate.first_name, confirmCandidate.middle_name])} />
+                    <AvatarImage src={confirmCandidate.avatar || generateAvatarUrl(String(confirmCandidate.id))} alt={personName(confirmCandidate.last_name, confirmCandidate.first_name, confirmCandidate.middle_name)} />
                     <AvatarFallback className="text-sm">{personInitials(confirmCandidate.first_name, confirmCandidate.last_name)}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{personName([confirmCandidate.last_name, confirmCandidate.first_name, confirmCandidate.middle_name])}</p>
+                    <p className="text-sm font-medium truncate">{personName(confirmCandidate.last_name, confirmCandidate.first_name, confirmCandidate.middle_name)}</p>
                     {confirmCandidate.position && <p className="text-xs text-muted-foreground truncate">{confirmCandidate.position}</p>}
                   </div>
                 </div>

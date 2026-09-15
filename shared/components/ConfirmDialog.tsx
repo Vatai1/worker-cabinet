@@ -59,8 +59,8 @@ export function ConfirmDialog() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleCancel} />
-      <div className="relative bg-card rounded-xl border border-border shadow-2xl p-6 max-w-md w-full mx-4 animate-scale-in">
-        <div className="flex items-start gap-4">
+      <div className="relative bg-card rounded-xl border border-border shadow-2xl p-6 max-w-md w-full mx-4 animate-scale-in flex max-h-[85vh] flex-col overflow-hidden">
+        <div className="flex items-start gap-4 overflow-y-auto scrollbar-thin overscroll-contain">
           <div className="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
             <AlertTriangle className="h-5 w-5 text-destructive" />
           </div>
@@ -69,7 +69,7 @@ export function ConfirmDialog() {
             <p className="mt-1 text-sm text-muted-foreground">{options.message}</p>
           </div>
         </div>
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex justify-end gap-3 shrink-0">
           <button
             onClick={handleCancel}
             className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"

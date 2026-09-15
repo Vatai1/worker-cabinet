@@ -161,7 +161,7 @@ router.get('/search', authenticateToken, async (req, res) => {
         u.avatar,
         u.office,
         u.cabinet,
-        m.first_name || ' ' || m.last_name as manager_name
+        m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name
       FROM users u
       ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
@@ -246,7 +246,7 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
         u.role,
         u.manager_id,
         u.avatar,
-        m.first_name || ' ' || m.last_name as manager_name
+        m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name
       FROM users u
       ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
@@ -559,7 +559,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.avatar,
         u.office,
         u.cabinet,
-        m.first_name || ' ' || m.last_name as manager_name,
+        m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
         vb.total_days,
         vb.used_days,
         vb.available_days,

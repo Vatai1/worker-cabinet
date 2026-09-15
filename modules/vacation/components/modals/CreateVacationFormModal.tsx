@@ -182,8 +182,8 @@ export function CreateVacationFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-xl border border-border/60 shadow-sm w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto animate-scale-in">
-        <div className="p-6 border-b border-border/60 flex justify-between items-center">
+      <div className="bg-card rounded-xl border border-border/60 shadow-sm w-full max-w-lg mx-4 max-h-[85vh] overflow-hidden flex flex-col animate-scale-in">
+        <div className="p-6 border-b border-border/60 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-primary/10">
               <FileText className="h-5 w-5 text-primary" />
@@ -198,7 +198,8 @@ export function CreateVacationFormModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="p-6 space-y-4 overflow-y-auto scrollbar-thin overscroll-contain">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="startDate" className="block text-sm font-medium text-muted-foreground mb-1.5">
@@ -537,7 +538,9 @@ export function CreateVacationFormModal({
             </div>
           )}
 
-          <div className="flex gap-3 pt-4">
+          </div>
+          <div className="px-6 py-4 border-t border-border/60 shrink-0">
+            <div className="flex gap-3">
             <Button
               type="button"
               variant="secondary"
@@ -569,6 +572,7 @@ export function CreateVacationFormModal({
             >
               {loading ? 'Создание...' : 'Создать заявку'}
             </Button>
+            </div>
           </div>
         </form>
       </div>

@@ -205,7 +205,7 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
           animation: closing ? 'modalOut 0.2s ease forwards' : 'modalIn 0.2s ease-out',
         }}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg text-lg" style={{ backgroundColor: `${info.color}20` }}>
               {info.emoji}
@@ -274,7 +274,7 @@ export function ModuleSettingsModal({ moduleId, isOpen, onClose }: Props) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-6">
             {loading ? (
               <div className="flex items-center justify-center h-32">
                 <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />

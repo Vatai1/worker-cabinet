@@ -91,7 +91,7 @@ export function TestSwitcher({ isCrct }: { isCrct?: boolean }) {
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 z-50 mb-1 w-64 space-y-3 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-lg">
+        <div className="absolute bottom-full left-0 z-50 mb-1 w-64 space-y-3 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-lg max-h-[60vh] overflow-y-auto scrollbar-thin overscroll-contain">
           {isImpersonated && (
             <button
               type="button"

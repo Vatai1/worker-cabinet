@@ -517,8 +517,8 @@ export function HRMailing() {
       {detailCampaign && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setDetailCampaign(null)} />
-          <div className="relative z-10 flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-border/60 bg-card p-6 shadow-xl animate-scale-in">
-            <div className="flex items-start justify-between gap-4">
+          <div className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-border/60 bg-card p-6 shadow-xl animate-scale-in overflow-hidden">
+            <div className="flex items-start justify-between gap-4 shrink-0">
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold">Получатели</h3>
                 <p className="mt-0.5 truncate text-sm text-muted-foreground">{detailCampaign.title}</p>
@@ -532,7 +532,7 @@ export function HRMailing() {
             </div>
 
             {detailCampaign.recipients.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              <div className="mt-4 flex flex-wrap gap-2 text-xs shrink-0">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-1 font-medium text-green-600">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Отправлено: {detailSent}
@@ -550,7 +550,7 @@ export function HRMailing() {
               </div>
             )}
 
-            <div className="mt-4 flex-1 space-y-0.5 overflow-y-auto pr-1">
+            <div className="mt-4 flex-1 min-h-0 space-y-0.5 overflow-y-auto scrollbar-thin overscroll-contain pr-1">
               {detailCampaign.recipients.length === 0 ? (
                 <p className="py-4 text-center text-sm text-muted-foreground">Нет данных о получателях</p>
               ) : (

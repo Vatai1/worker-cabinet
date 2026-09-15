@@ -85,8 +85,8 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-md mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] flex flex-col">
-        <div className="p-6 border-b border-border/50">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-md mx-4 animate-in fade-in zoom-in duration-200 max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="p-6 border-b border-border/50 shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10">
               <UserPlus className="h-4 w-4 text-primary" />
@@ -108,7 +108,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 min-h-0">
+        <div className="flex-1 overflow-y-auto scrollbar-thin overscroll-contain p-2 min-h-0">
           {filtered.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-8">
               {search ? 'Никого не найдено' : 'Все сотрудники уже добавлены'}
@@ -144,7 +144,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
         </div>
 
         {selectedId && (
-          <div className="p-4 border-t border-border/50">
+          <div className="p-4 border-t border-border/50 shrink-0">
             <div className="flex gap-1 p-1 rounded-xl bg-muted/60 mb-4">
               {(['member', 'lead'] as const).map((r) => (
                 <button

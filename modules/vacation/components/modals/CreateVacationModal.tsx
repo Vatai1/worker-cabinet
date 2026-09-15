@@ -213,12 +213,13 @@ export function CreateVacationModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 animate-scale-in max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 animate-scale-in max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="p-6 border-b shrink-0">
           <h2 className="text-xl font-semibold">Создать заявку на отпуск</h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="p-6 space-y-4 overflow-y-auto scrollbar-thin overscroll-contain">
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">
               Период отпуска
@@ -506,7 +507,9 @@ export function CreateVacationModal({
             </div>
           )}
 
-          <div className="flex gap-3 pt-4">
+          </div>
+          <div className="px-6 py-4 border-t shrink-0">
+            <div className="flex gap-3">
             <Button
               type="button"
               variant="secondary"
@@ -528,6 +531,7 @@ export function CreateVacationModal({
             >
               {loading ? 'Создание...' : 'Создать заявку'}
             </Button>
+            </div>
           </div>
         </form>
       </div>
@@ -535,7 +539,7 @@ export function CreateVacationModal({
       {showSubstituteModal && createPortal(
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60">
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-md mx-4 animate-scale-in max-h-[80vh] flex flex-col">
-            <div className="p-5 border-b flex items-center justify-between">
+            <div className="p-5 border-b flex items-center justify-between shrink-0">
               <h3 className="text-lg font-semibold flex items-center gap-2">
                 <UserCheck className="h-5 w-5 text-primary" />
                 Выберите замещающих
@@ -549,7 +553,7 @@ export function CreateVacationModal({
               </button>
             </div>
 
-            <div className="p-4 border-b">
+            <div className="p-4 border-b shrink-0">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
@@ -562,7 +566,7 @@ export function CreateVacationModal({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2">
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-2">
               {myDeptEmployees.length > 0 && (
                 <div className="mb-2">
                   <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -586,7 +590,7 @@ export function CreateVacationModal({
               )}
             </div>
 
-            <div className="p-4 border-t flex items-center justify-between">
+            <div className="p-4 border-t flex items-center justify-between shrink-0">
               <span className="text-sm text-muted-foreground">
                 Выбрано: {pickerSelected.size}
               </span>

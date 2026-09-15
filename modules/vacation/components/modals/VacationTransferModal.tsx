@@ -90,8 +90,8 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-lg mx-4 animate-scale-in">
-        <div className="p-6 border-b flex justify-between items-center">
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-lg mx-4 animate-scale-in overflow-hidden flex max-h-[85vh] flex-col">
+        <div className="p-6 border-b flex justify-between items-center shrink-0">
           <h2 className="text-xl font-semibold">Перенос отпуска</h2>
           <button
             onClick={handleClose}
@@ -101,8 +101,8 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="p-6 space-y-4 overflow-y-auto scrollbar-thin overscroll-contain">
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
               <div className="flex items-center gap-2 text-amber-800">
                 <AlertTriangle className="h-5 w-5" />
@@ -178,7 +178,9 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
               </div>
             )}
 
-            <div className="flex gap-3 pt-4">
+          </div>
+          <div className="px-6 py-4 border-t border-border shrink-0">
+            <div className="flex gap-3">
               <Button
                 type="button"
                 variant="outline"

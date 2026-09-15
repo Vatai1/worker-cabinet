@@ -526,14 +526,14 @@ function OnboardingDetailModal({ detail, loading, onClose, onCancel, onOpenOnlyO
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-scale-in">
-        <div className="flex items-center justify-between p-6 border-b border-border/50">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-scale-in">
+        <div className="flex items-center justify-between p-6 border-b border-border/50 shrink-0">
           <h3 className="text-lg font-semibold">
             {detail ? `${detail.lastName} ${detail.firstName}` : 'Загрузка...'}
           </h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-6">
           {loading && <div className="flex items-center justify-center py-12"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}
           {detail && !loading && (
             <div className="space-y-4">
@@ -665,12 +665,12 @@ function AddOnboardingModal({ departments, positions, templates, onTemplatesNeed
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-border/50">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border/50 shrink-0">
           <h3 className="text-lg font-semibold">Добавить сотрудника на онбординг</h3>
           <button onClick={onClose}><X className="h-5 w-5 text-muted-foreground" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label>Фамилия</Label>
@@ -803,12 +803,12 @@ function TemplateModal({ template, departments, positions, onClose, onSuccess }:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-border/50">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border/50 shrink-0">
           <h3 className="text-lg font-semibold">{isEdit ? 'Редактировать шаблон' : 'Создать шаблон'}</h3>
           <button onClick={onClose}><X className="h-5 w-5 text-muted-foreground" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-6 space-y-4">
           <div className="space-y-1">
             <Label>Название *</Label>
             <Input value={title} onChange={e => setTitle(e.target.value)} />

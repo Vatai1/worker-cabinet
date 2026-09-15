@@ -70,7 +70,7 @@ const router = express.Router()
 router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   let sql = `
     SELECT d.id, d.name, d.manager_id, d.description, d.vacation_requests_blocked,
-            m.first_name || ' ' || m.last_name as manager_name,
+            m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
             (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
      FROM departments d
      LEFT JOIN users m ON d.manager_id = m.id`

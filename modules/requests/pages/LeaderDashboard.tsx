@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useRequestsStore } from '@/modules/requests/store/requestsStore'
-import { formatDate } from '@/shared/lib/utils'
+import { formatDate, personName } from '@/shared/lib/utils'
 
 export function LeaderDashboard() {
   const { user } = useAuthStore()
@@ -90,7 +90,7 @@ export function LeaderDashboard() {
       '4': { firstName: 'Мария', lastName: 'Петрова' },
     }
     const emp = employees[userId]
-    return emp ? `${emp.firstName} ${emp.lastName}` : `Сотрудник #${userId}`
+    return emp ? personName(emp.lastName, emp.firstName) : `Сотрудник #${userId}`
   }
 
   return (

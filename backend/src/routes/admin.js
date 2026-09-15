@@ -7,6 +7,7 @@ import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '..
 import { query, getClient } from '../config/database.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { requireRealSuperadmin, excludeTest, TEST_DEPT_NAME, TEST_USERS, TEST_USER_EMAILS, getTestDataState } from '../utils/testScope.js'
+import { personName } from '../utils/personName.js'
 import { getActiveWsCount } from '../config/ws.js'
 import { createRequire } from 'module'
 import path from 'path'
@@ -30,8 +31,8 @@ async function logAudit(userId, userName, action, entityType, entityId, details,
   try {
     let name = userName
     if (!name && userId) {
-      const r = await query('SELECT first_name, last_name FROM users WHERE id = $1', [userId])
-      if (r.rows.length > 0) name = `${r.rows[0].first_name} ${r.rows[0].last_name}`
+      const r = await query('SELECT first_name, last_name, middle_name FROM users WHERE id = $1', [userId])
+      if (r.rows.length > 0) name = personName(r.rows[0])
     }
     await query(
       `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, details, ip_address, real_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -116,7 +117,7 @@ router.post('/roles', asyncHandler(async (req, res) => {
     }
 
     await client.query('COMMIT')
-    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_create', 'role', String(role.id), { name: role.name }, req.ip, req.realUser?.id ?? null)
+    await logAudit(req.user.id, personName(req.user), 'role_create', 'role', String(role.id), { name: role.name }, req.ip, req.realUser?.id ?? null)
     res.status(201).json(role)
   } catch (error) {
     await client.query('ROLLBACK')
@@ -195,7 +196,7 @@ router.put('/roles/:id', asyncHandler(async (req, res) => {
     }
 
     await client.query('COMMIT')
-    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_update', 'role', id, { name: name || existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
+    await logAudit(req.user.id, personName(req.user), 'role_update', 'role', id, { name: name || existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
     res.json({ success: true })
   } catch (error) {
     await client.query('ROLLBACK')
@@ -232,7 +233,7 @@ router.delete('/roles/:id', asyncHandler(async (req, res) => {
 
   await query('DELETE FROM roles WHERE id = $1', [id])
   await deleteKcRole(existing.rows[0].name).catch(() => {})
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'role_delete', 'role', id, { name: existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
+  await logAudit(req.user.id, personName(req.user), 'role_delete', 'role', id, { name: existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -381,7 +382,7 @@ router.put('/users/:id/role', asyncHandler(async (req, res) => {
   const roleCheck = await query('SELECT id FROM roles WHERE name = $1', [role.trim()])
   if (roleCheck.rows.length === 0) throw new ValidationError('Роль не найдена')
 
-  const userCheck = await query('SELECT id, role, first_name, last_name FROM users WHERE id = $1', [id])
+  const userCheck = await query('SELECT id, role, first_name, last_name, middle_name FROM users WHERE id = $1', [id])
   if (userCheck.rows.length === 0) throw new NotFoundError('Пользователь не найден')
 
   const oldRole = userCheck.rows[0].role
@@ -392,8 +393,8 @@ router.put('/users/:id/role', asyncHandler(async (req, res) => {
     await updateKcUserRole(guidCheck.rows[0].keycloak_guid, role.trim()).catch(() => {})
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_role_change', 'user', id,
-    { oldRole, newRole: role.trim(), userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip, req.realUser?.id ?? null)
+  await logAudit(req.user.id, personName(req.user), 'user_role_change', 'user', id,
+    { oldRole, newRole: role.trim(), userName: personName(userCheck.rows[0]) }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -426,7 +427,7 @@ router.put('/users/:id/status', asyncHandler(async (req, res) => {
   const validStatuses = ['active', 'inactive', 'on_leave']
   if (!validStatuses.includes(status)) throw new ValidationError('Недопустимый статус')
 
-  const userCheck = await query('SELECT id, status, first_name, last_name FROM users WHERE id = $1', [id])
+  const userCheck = await query('SELECT id, status, first_name, last_name, middle_name FROM users WHERE id = $1', [id])
   if (userCheck.rows.length === 0) throw new NotFoundError('Пользователь не найден')
 
   const oldStatus = userCheck.rows[0].status
@@ -437,8 +438,8 @@ router.put('/users/:id/status', asyncHandler(async (req, res) => {
     await setKcUserEnabled(guidCheck.rows[0].keycloak_guid, status === 'active').catch(() => {})
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_status_change', 'user', id,
-    { oldStatus, newStatus: status, userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip, req.realUser?.id ?? null)
+  await logAudit(req.user.id, personName(req.user), 'user_status_change', 'user', id,
+    { oldStatus, newStatus: status, userName: personName(userCheck.rows[0]) }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -469,7 +470,7 @@ router.post('/users/:id/reset-password', asyncHandler(async (req, res) => {
   const { newPassword } = req.body
   if (!newPassword || newPassword.length < 6) throw new ValidationError('Пароль должен быть не менее 6 символов')
 
-  const userCheck = await query('SELECT id, first_name, last_name FROM users WHERE id = $1', [id])
+  const userCheck = await query('SELECT id, first_name, last_name, middle_name FROM users WHERE id = $1', [id])
   if (userCheck.rows.length === 0) throw new NotFoundError('Пользователь не найден')
 
   const hash = await bcrypt.hash(newPassword, 10)
@@ -480,8 +481,8 @@ router.post('/users/:id/reset-password', asyncHandler(async (req, res) => {
     await resetKcUserPassword(guidCheck.rows[0].keycloak_guid, newPassword).catch(() => {})
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_password_reset', 'user', id,
-    { userName: `${userCheck.rows[0].first_name} ${userCheck.rows[0].last_name}` }, req.ip, req.realUser?.id ?? null)
+  await logAudit(req.user.id, personName(req.user), 'user_password_reset', 'user', id,
+    { userName: personName(userCheck.rows[0]) }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -553,7 +554,7 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
     }
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'user_update', 'user', id, { updatedFields: updates.map(u => u.split(' = ')[0]) }, req.ip, req.realUser?.id ?? null)
+  await logAudit(req.user.id, personName(req.user), 'user_update', 'user', id, { updatedFields: updates.map(u => u.split(' = ')[0]) }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -632,7 +633,7 @@ router.put('/settings', asyncHandler(async (req, res) => {
     )
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'settings_update', 'system', null, { count: settings.length }, req.ip, req.realUser?.id ?? null)
+  await logAudit(req.user.id, personName(req.user), 'settings_update', 'system', null, { count: settings.length }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -803,7 +804,7 @@ router.put('/users/bulk-status', asyncHandler(async (req, res) => {
     }
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'bulk_status_change', 'user', null,
+  await logAudit(req.user.id, personName(req.user), 'bulk_status_change', 'user', null,
     { count: result.rowCount, status }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true, updated: result.rowCount })
 }))
@@ -849,7 +850,7 @@ router.put('/users/bulk-role', asyncHandler(async (req, res) => {
     }
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'bulk_role_change', 'user', null,
+  await logAudit(req.user.id, personName(req.user), 'bulk_role_change', 'user', null,
     { count: result.rowCount, role: role.trim() }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true, updated: result.rowCount })
 }))
@@ -1088,7 +1089,7 @@ router.post('/users/:id/unlock', asyncHandler(async (req, res) => {
     await unlockKcUser(guidCheck.rows[0].keycloak_guid).catch(() => {})
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`, 'account_unlock', 'user', id, {}, req.ip, req.realUser?.id ?? null)
+  await logAudit(req.user.id, personName(req.user), 'account_unlock', 'user', id, {}, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
 }))
 
@@ -1312,7 +1313,7 @@ router.get('/reports/project-load', asyncHandler(async (req, res) => {
   const projects = await query(`
     SELECT cp.id, cp.name, cp.status,
       COUNT(cpm.id) as member_count,
-      COALESCE(json_agg(json_build_object('id', u.id, 'name', u.first_name || ' ' || u.last_name, 'role', cpm.role))
+      COALESCE(json_agg(json_build_object('id', u.id, 'name', u.last_name || ' ' || u.first_name || COALESCE(' ' || NULLIF(u.middle_name, ''), ''), 'role', cpm.role))
         FILTER (WHERE u.id IS NOT NULL), '[]') as members
     FROM company_projects cp
     LEFT JOIN company_project_members cpm ON cpm.project_id = cp.id
@@ -1627,7 +1628,7 @@ router.post('/modules', asyncHandler(async (req, res) => {
     [code.trim(), name.trim(), description || null, icon || null, route || null, category || 'general', sort_order || 0]
   )
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+  await logAudit(req.user.id, personName(req.user),
     'module_create', 'module', String(result.rows[0].id),
     { code: code.trim(), name: name.trim() }, req.ip, req.realUser?.id ?? null)
 
@@ -1677,7 +1678,7 @@ router.put('/modules/:id', authorizeGlobalRoles('admin'), asyncHandler(async (re
     [name || null, description !== undefined ? description : null, icon || null, route || null, category || null, sort_order !== undefined ? sort_order : null, id]
   )
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+  await logAudit(req.user.id, personName(req.user),
     'module_update', 'module', id,
     { code: existing.rows[0].code, updatedFields: Object.keys(req.body) }, req.ip, req.realUser?.id ?? null)
 
@@ -1709,7 +1710,7 @@ router.delete('/modules/:id', authorizeGlobalRoles('admin'), asyncHandler(async 
 
   await query('DELETE FROM modules WHERE id = $1', [id])
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+  await logAudit(req.user.id, personName(req.user),
     'module_delete', 'module', id,
     { code: existing.rows[0].code, name: existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
 
@@ -1742,7 +1743,7 @@ router.put('/modules/:id/toggle', authorizeGlobalRoles('superadmin'), asyncHandl
   const newStatus = !existing.rows[0].is_enabled
   await query('UPDATE modules SET is_enabled = $1, updated_at = NOW() WHERE id = $2', [newStatus, id])
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+  await logAudit(req.user.id, personName(req.user),
     'module_toggle', 'module', id,
     { module: existing.rows[0].code, name: existing.rows[0].name, enabled: newStatus }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true, enabled: newStatus })
@@ -1800,7 +1801,7 @@ router.put('/modules/:code/org-toggle', authorizeRoles('admin'), asyncHandler(as
   }
 
   const effectiveEnabled = enable !== false
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+  await logAudit(req.user.id, personName(req.user),
     'module_org_toggle', 'module', String(moduleId),
     { module: code, name: moduleRes.rows[0].name, org_id: req.org.org_id, enabled: effectiveEnabled }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true, enabled: effectiveEnabled })
@@ -1909,7 +1910,7 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
         changed[key] = { old: oldVal ?? null, new: newVal }
       }
     }
-    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    await logAudit(req.user.id, personName(req.user),
       'module_settings_update', 'module', String(globalRes.rows[0].id), { changed, scope: 'global' }, req.ip, req.realUser?.id ?? null)
     res.json(result.rows[0].settings)
   } else if (req.org) {
@@ -1918,7 +1919,7 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
       VALUES ($1, $2, $3)
       ON CONFLICT (org_id, module_code) DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
     `, [req.org.org_id, id, JSON.stringify(settingsToSave)])
-    await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+    await logAudit(req.user.id, personName(req.user),
       'module_settings_update', 'module', String(globalRes.rows[0].id), { scope: 'org', org_id: req.org.org_id }, req.ip, req.realUser?.id ?? null)
     res.json(settingsToSave)
   } else {
@@ -2045,7 +2046,7 @@ router.post('/assistant/agent-config', asyncHandler(async (req, res) => {
     return res.json({ success: false, message: e.message })
   }
 
-  await logAudit(req.user.id, `${req.user.first_name} ${req.user.last_name}`,
+  await logAudit(req.user.id, personName(req.user),
     'agent_config_update', 'system', null, { model, baseUrl }, req.ip, req.realUser?.id ?? null)
 
   res.json({ success: true })

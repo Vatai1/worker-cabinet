@@ -54,8 +54,8 @@ export function ChangelogModal({ open, onClose }: ChangelogModalProps) {
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
       <div className="fixed inset-0" onClick={onClose} />
-      <Card className="relative flex w-full max-w-lg max-h-[80vh] flex-col overflow-hidden p-0 shadow-2xl animate-scale-in mx-4">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+      <Card className="relative flex w-full max-w-lg max-h-[85vh] flex-col overflow-hidden p-0 shadow-2xl animate-scale-in mx-4">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <Sparkles className="h-4 w-4" />
@@ -71,7 +71,7 @@ export function ChangelogModal({ open, onClose }: ChangelogModalProps) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-5 space-y-5">
           {ENTRIES.length === 0 ? (
             <p className="text-sm text-muted-foreground">Список изменений пуст</p>
           ) : (

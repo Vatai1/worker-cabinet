@@ -401,8 +401,8 @@ export function Documents() {
 
       {uploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <Card className="section-card w-full max-w-md mx-4 animate-scale-in">
-            <CardHeader>
+          <Card className="section-card w-full max-w-md mx-4 animate-scale-in max-h-[85vh] overflow-hidden flex flex-col">
+            <CardHeader className="shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle>Загрузить документ</CardTitle>
                 <Button variant="ghost" size="icon" onClick={() => setUploadModalOpen(false)}>
@@ -410,7 +410,7 @@ export function Documents() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
               <div>
                 <label className="text-sm font-medium">Файл</label>
                 <input

@@ -947,8 +947,8 @@ function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChan
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
-        <div className="p-5 border-b border-border">
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b border-border shrink-0">
           <div className="flex items-start gap-4">
             <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-lg font-bold text-primary shrink-0">
               {user.first_name?.[0]}{user.last_name?.[0]}
@@ -965,7 +965,7 @@ function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChan
           </div>
         </div>
 
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border shrink-0">
           {([
             { id: 'info' as const, name: 'Профиль', icon: Users },
             { id: 'edit' as const, name: 'Изменить', icon: Pencil },
@@ -992,7 +992,7 @@ function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChan
           })}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-5">
           {activeSection === 'info' && (
             <div className="space-y-4">
               <InfoRow label="Должность" value={user.position || '—'} />
@@ -1549,8 +1549,8 @@ function DepartmentPickerModal({ departments, selectedId, onSelect, onClose }: {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-border">
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-border shrink-0">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-foreground">Выбор отдела</h3>
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
@@ -1566,7 +1566,7 @@ function DepartmentPickerModal({ departments, selectedId, onSelect, onClose }: {
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-2">
           <button
             onClick={() => onSelect(null)}
             className={cn(
@@ -1626,8 +1626,8 @@ function PositionPickerModal({ positions, selected, onSelect, onClose }: {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-border">
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-border shrink-0">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-foreground">Выбор должности</h3>
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
@@ -1643,7 +1643,7 @@ function PositionPickerModal({ positions, selected, onSelect, onClose }: {
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-2">
           {filtered.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
               {search ? 'Ничего не найдено' : 'Нет должностей'}
@@ -2801,12 +2801,12 @@ interface ModuleCategory {
 function CustomSettingsModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-border">
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-border shrink-0">
           <h3 className="font-semibold text-lg">{title}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-5 w-5" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-5">{children}</div>
       </div>
     </div>
   )

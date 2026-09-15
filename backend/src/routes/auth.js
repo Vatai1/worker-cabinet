@@ -8,6 +8,7 @@ import { validateLogin, validateRegister, sanitizeInput } from '../middleware/va
 import { asyncHandler, ValidationError, UnauthorizedError } from '../middleware/errors.js'
 import { authenticateToken, logScopes } from '../middleware/auth.js'
 import { isRealSuperadmin, signValue, testCookieOptions, TEST_PREVIEW_ROLES, getTestDataState } from '../utils/testScope.js'
+import { personName } from '../utils/personName.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
 import { getAuthSettings } from '../config/authSettings.js'
 
@@ -289,7 +290,7 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
 
   await query(
     `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, ip_address) VALUES ($1, $2, 'login', 'user', $3, $4)`,
-    [user.id, `${user.first_name} ${user.last_name}`, String(user.id), ip]
+    [user.id, personName(user), String(user.id), ip]
   ).catch(() => {})
 
   let subordinates = []

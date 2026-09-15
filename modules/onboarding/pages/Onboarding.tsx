@@ -9,7 +9,7 @@ import { CheckCircle2, Circle, FileText, Download, Loader2, BookOpen, Eye, Clipb
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
-import { getErrorMessage, formatDate } from '@/shared/lib/utils'
+import { getErrorMessage, formatDate, personName } from '@/shared/lib/utils'
 
 interface OnboardingDocument {
   id: number
@@ -124,7 +124,7 @@ export function Onboarding() {
             <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Онбординг</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight">Онбординг</h1>
-          <p className="mt-2 text-white/50 text-sm">Добро пожаловать, {onboarding.firstName} {onboarding.lastName}! Ознакомьтесь с документами</p>
+          <p className="mt-2 text-white/50 text-sm">Добро пожаловать, {personName(onboarding.lastName, onboarding.firstName)}! Ознакомьтесь с документами</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 mt-6">
           <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
@@ -191,12 +191,12 @@ export function Onboarding() {
 
       {selectedDoc && !confirmDocId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col animate-scale-in">
-            <div className="flex items-center justify-between p-6 border-b border-border/50">
+          <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between p-6 border-b border-border/50 shrink-0">
               <h3 className="text-lg font-semibold">{selectedDoc.title}</h3>
               <button onClick={() => setSelectedDoc(null)} className="interactive text-muted-foreground hover:text-foreground transition-colors">✕</button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-6">
               {selectedDoc.contentText && (
                 <div className="text-sm whitespace-pre-wrap leading-relaxed">{selectedDoc.contentText}</div>
               )}

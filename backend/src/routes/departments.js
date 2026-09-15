@@ -34,7 +34,7 @@ router.get('/', authenticateToken, async (req, res) => {
         d.created_at,
         d.updated_at,
         d.vacation_requests_blocked,
-        m.first_name || ' ' || m.last_name as manager_name,
+        m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
         m.position as manager_position,
         pd.name as parent_name,
         (SELECT COUNT(*) FROM users WHERE department_id = d.id ${excludeTest(req, 'users')}) as employee_count
@@ -112,7 +112,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         d.created_at,
         d.updated_at,
         d.vacation_requests_blocked,
-        m.first_name || ' ' || m.last_name as manager_name
+        m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name
       FROM departments d
       LEFT JOIN users m ON d.manager_id = m.id
       WHERE d.id = $1${req.org ? ' AND d.organization_id = $2' : ''} ${excludeTest(req, 'd')}

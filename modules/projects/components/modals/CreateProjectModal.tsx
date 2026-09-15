@@ -87,8 +87,8 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-lg mx-4 animate-in fade-in zoom-in duration-200 max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="p-6 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           <div className="flex items-center gap-3 mb-1">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary/10 text-primary">
               <FolderKanban className="h-5 w-5 text-white" />

@@ -237,8 +237,8 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
 
       {phase === 'open' && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
-          <div className="bg-card rounded-xl shadow-2xl w-full max-w-lg mx-4 animate-scale-in max-h-[90vh] flex flex-col">
-            <div className="p-5 border-b flex items-center justify-between">
+          <div className="bg-card rounded-xl shadow-2xl w-full max-w-lg mx-4 animate-scale-in max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="p-5 border-b flex items-center justify-between shrink-0">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Bug className="h-5 w-5 text-primary" />
                 Баг-репорт
@@ -248,7 +248,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-5 space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Заголовок <span className="text-destructive">*</span></label>
                 <input
@@ -320,7 +320,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
               </div>
             </div>
 
-            <div className="p-5 border-t flex justify-end gap-3">
+            <div className="p-5 border-t flex justify-end gap-3 shrink-0">
               <Button type="button" variant="outline" onClick={handleClose}>Отмена</Button>
               <Button type="button" onClick={handleSubmit} disabled={!title.trim() || submitting}>
                 {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}

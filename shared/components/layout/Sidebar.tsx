@@ -4,7 +4,7 @@ import { useAuthStore } from '@/core/auth/store/authStore'
 import { useUIStore } from '@/shared/store/uiStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useThemeStore } from '@/shared/theme/themeStore'
-import { cn } from '@/shared/lib/utils'
+import { cn, personName } from '@/shared/lib/utils'
 import {
   LayoutDashboard, User, FileText, FolderOpen, FolderKanban,
   LogOut, Menu, X, Users, Plane, Settings, Sun, Moon, Undo2,
@@ -524,12 +524,12 @@ export function Sidebar() {
               isCrctSidebar ? 'ring-white/10 group-hover:ring-white/25' : 'ring-primary/15 group-hover:ring-primary/30'
             )}>
               {user && (
-                <AvatarImage src={user.avatar || generateAvatarUrl(user.id, user.gender)} alt={`${user.firstName} ${user.lastName}`} />
+                <AvatarImage src={user.avatar || generateAvatarUrl(user.id, user.gender)} alt={personName(user.lastName, user.firstName, user.middleName)} />
               )}
               <AvatarFallback className="text-xs font-bold">{getUserInitials()}</AvatarFallback>
             </Avatar>
             <div className="flex-1 overflow-hidden min-w-0">
-              <p className={cn('truncate text-sm font-semibold leading-tight', isCrctSidebar ? 'text-white' : 'text-foreground')}>{user?.firstName} {user?.lastName}</p>
+              <p className={cn('truncate text-sm font-semibold leading-tight', isCrctSidebar ? 'text-white' : 'text-foreground')}>{personName(user?.lastName, user?.firstName, user?.middleName)}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <Crown className={cn('h-3 w-3', isCrctSidebar ? 'text-white/55' : 'text-primary/60')} />
                 <p className={cn('truncate text-[11px]', isCrctSidebar ? 'text-white/55' : 'text-muted-foreground/70')}>{roleLabels[user?.role ?? 'employee']}</p>

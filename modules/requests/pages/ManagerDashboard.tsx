@@ -8,7 +8,7 @@ import { Check, X, Search, Users, Clock, CheckCircle } from 'lucide-react'
 import { useRequestsStore } from '@/modules/requests/store/requestsStore'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/requestUtils'
-import { formatDate, formatDateTime } from '@/shared/lib/utils'
+import { formatDate, formatDateTime, personName } from '@/shared/lib/utils'
 
 export function ManagerDashboard() {
   const { user } = useAuthStore()
@@ -52,7 +52,7 @@ export function ManagerDashboard() {
       '1': { firstName: 'Иван', lastName: 'Иванов' },
     }
     const emp = employees[userId]
-    return emp ? `${emp.firstName} ${emp.lastName}` : `Сотрудник #${userId}`
+    return emp ? personName(emp.lastName, emp.firstName) : `Сотрудник #${userId}`
   }
 
   return (

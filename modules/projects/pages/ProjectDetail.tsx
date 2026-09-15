@@ -536,12 +536,12 @@ function TaskDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md mx-4 overflow-hidden flex max-h-[85vh] flex-col">
         <div
-          className="h-1.5 w-full"
+          className="h-1.5 w-full shrink-0"
           style={{ backgroundColor: task.color || row?.color || '#6366f1' }}
         />
-        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-2">
+        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             {task.is_milestone && (
               <Diamond className="h-4 w-4 shrink-0 text-amber-500" />
@@ -556,7 +556,7 @@ function TaskDetailModal({
           </button>
         </div>
 
-        <div className="px-5 pb-5 space-y-3">
+        <div className="px-5 pb-5 space-y-3 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           {row && (
             <div className="flex items-center gap-2 text-sm">
               <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: row.color }} />

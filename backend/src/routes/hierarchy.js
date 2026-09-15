@@ -338,7 +338,7 @@ router.get('/', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       const deptResult = await query(
         `SELECT d.id, d.name, d.parent_id, d.parent_user_id,
-                m.first_name || ' ' || m.last_name as manager_name,
+                m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
                 pu.first_name as parent_user_first_name,
                 pu.last_name as parent_user_last_name,
                 pu.position as parent_user_position,

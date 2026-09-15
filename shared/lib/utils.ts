@@ -40,3 +40,7 @@ export function getErrorMessage(error: unknown): string {
   if (typeof error === 'string') return error
   return 'Произошла неизвестная ошибка'
 }
+
+export function personName(last?: string | null, first?: string | null, middle?: string | null): string {
+  return [last, first, middle].map(part => part?.trim()).filter(Boolean).join(' ')
+}

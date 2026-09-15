@@ -10,7 +10,7 @@ import { Plus, Search, Download, X, FileText, Clock, CheckCircle } from 'lucide-
 import { useRequestsStore } from '@/modules/requests/store/requestsStore'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/requestUtils'
-import { formatDate, formatDateTime } from '@/shared/lib/utils'
+import { formatDate, formatDateTime, personName } from '@/shared/lib/utils'
 
 type RequestStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'cancelled'
 
@@ -50,7 +50,7 @@ export function Requests() {
     const content = `
 ЗЯВЛЕНИЕ НА ОТПУСК
 
-От: ${user?.firstName} ${user?.lastName}
+От: ${personName(user?.lastName, user?.firstName, user?.middleName)}
 Должность: ${user?.position}
 Отдел: ${user?.department}
 

@@ -9,6 +9,7 @@ import { useOrgStore } from '@/shared/store/orgStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { apiGet } from '@/shared/lib/apiClient'
+import { personName } from '@/shared/lib/utils'
 import { useNotificationWs } from '@/shared/lib/useNotificationWs'
 
 interface Crumb {
@@ -128,12 +129,12 @@ export function Header() {
         </button>
         <div className="hidden md:flex items-center gap-3.5 pl-4 border-l border-border/40">
           <div className="text-right">
-            <p className="text-sm font-semibold leading-tight">{user?.firstName} {user?.lastName}</p>
+            <p className="text-sm font-semibold leading-tight">{personName(user?.lastName, user?.firstName, user?.middleName)}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">{user?.position}</p>
           </div>
           <Avatar className="h-9 w-9 ring-2 ring-primary/15 shadow-sm">
             {user && (
-              <AvatarImage src={user.avatar || generateAvatarUrl(user.id, user.gender)} alt={`${user.firstName} ${user.lastName}`} />
+              <AvatarImage src={user.avatar || generateAvatarUrl(user.id, user.gender)} alt={personName(user.lastName, user.firstName, user.middleName)} />
             )}
             <AvatarFallback className="text-xs font-semibold">{getUserInitials()}</AvatarFallback>
           </Avatar>

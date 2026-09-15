@@ -394,7 +394,7 @@ export function DepartmentsTab() {
             aria-modal="true"
             aria-label={modalMode === 'edit' ? 'Редактировать отдел' : 'Новый отдел'}
             onClick={e => e.stopPropagation()}
-            className="w-full max-w-[440px] rounded-2xl border border-border bg-card p-6 shadow-2xl"
+            className="w-full max-w-[440px] rounded-2xl border border-border bg-card p-6 shadow-2xl max-h-[85vh] overflow-y-auto scrollbar-thin overscroll-contain"
           >
             <h3 className="mb-4 text-base font-bold">
               {modalMode === 'edit' ? 'Редактировать отдел' : 'Новый отдел'}
@@ -504,8 +504,8 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col border border-border" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-border">
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-border shrink-0">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-foreground">Выбор сотрудника</h3>
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
@@ -521,7 +521,7 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-2">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
           ) : filtered.length === 0 ? (

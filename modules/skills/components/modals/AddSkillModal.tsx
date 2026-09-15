@@ -92,8 +92,8 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative bg-background rounded-xl shadow-xl w-full max-w-md mx-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
+      <div className="relative bg-background rounded-xl shadow-xl w-full max-w-md mx-4 animate-in fade-in zoom-in duration-200 max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="p-6 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           <div className="flex items-center gap-2 mb-2">
             <Plus className="h-5 w-5 text-primary" />
             <h2 className="text-xl font-semibold">Добавить навык</h2>

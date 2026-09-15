@@ -3,7 +3,7 @@ import { X, GripVertical, ChevronUp, ChevronDown, Plus, Trash2 } from 'lucide-re
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { surveyApi } from '@/modules/surveys/services/surveyApi'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
@@ -177,15 +177,15 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-5xl mx-auto flex flex-col h-[90vh] animate-scale-in">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="relative bg-background rounded-2xl shadow-xl w-full max-w-5xl mx-auto flex flex-col max-h-[85vh] animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h2 className="text-lg font-semibold">{editSurvey ? 'Редактировать опрос' : 'Создать опрос'}</h2>
           <Button variant="ghost" size="sm" onClick={onClose}><X className="h-4 w-4" /></Button>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Left: question blocks */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-3">
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-6 space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Вопросы</p>
 
             {questions.map((q, idx) => (
@@ -310,7 +310,7 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
           </div>
 
           {/* Right: settings */}
-          <div className="w-80 border-l border-border overflow-y-auto p-6 space-y-4 shrink-0">
+          <div className="w-80 border-l border-border overflow-y-auto scrollbar-thin overscroll-contain p-6 space-y-4 shrink-0">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Настройки</p>
 
             <div>
@@ -364,7 +364,7 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
                           )
                         }}
                       />
-                      {emp.firstName} {emp.lastName}
+                      {personName(emp.lastName, emp.firstName)}
                     </label>
                   ))}
                   {employees.length === 0 && <p className="text-xs text-muted-foreground">Загрузка...</p>}

@@ -222,12 +222,12 @@ function CreateOrgModal({ onClose, onCreated }: { onClose: () => void; onCreated
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 border border-border" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-border">
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 border border-border flex max-h-[85vh] flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-border shrink-0">
           <h3 className="font-semibold text-lg flex items-center gap-2"><Building2 className="h-5 w-5" /> Новое учреждение</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-5 w-5" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
               <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
@@ -328,7 +328,7 @@ function OrganizationDetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-card rounded-2xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col border border-border"
+        className="bg-card rounded-2xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col overflow-hidden border border-border"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-5 border-b border-border shrink-0">
@@ -367,7 +367,7 @@ function OrganizationDetailModal({
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-5">
           <div key={activeDetailTab} className="animate-fade-in">
             {activeDetailTab === 'info' && <InfoTab org={org} orgs={orgs} onToggleActive={handleToggleActive} onUpdated={onUpdated} />}
             {activeDetailTab === 'departments' && <DepartmentsTabContent orgId={org.id} onSelectDept={handleSelectDept} />}
