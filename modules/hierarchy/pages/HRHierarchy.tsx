@@ -822,8 +822,8 @@ function EdgeSettingsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <ArrowLeftRight className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">{draft.mode === 'create' ? 'Новая связь' : 'Связь'}</h2>
@@ -832,7 +832,7 @@ function EdgeSettingsModal({
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
-        <div className="px-6 py-4 space-y-4">
+        <div className="px-6 py-4 space-y-4 overflow-y-auto scrollbar-thin overscroll-contain">
           <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
             <span className="font-medium text-foreground truncate">{draft.sourceName}</span>
             <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
@@ -991,7 +991,7 @@ function EdgeSettingsModal({
             />
           </div>
         </div>
-        <div className="px-6 py-3 border-t border-border flex gap-2">
+        <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           {draft.mode === 'edit' && onDelete && (
             <Button variant="outline" className="text-destructive hover:text-destructive" onClick={onDelete}>
               <Trash2 className="h-4 w-4" />
@@ -1095,8 +1095,8 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <Eye className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">Родительская связь</h2>
@@ -1105,7 +1105,7 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
-        <div className="px-6 py-4 space-y-3">
+        <div className="px-6 py-4 space-y-3 overflow-y-auto scrollbar-thin overscroll-contain">
           <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
             <p className="text-sm font-medium">Отпуск родителя виден подчинённым</p>
             <Switch checked={childSeesParent} onCheckedChange={setChildSeesParent} />
@@ -1126,7 +1126,7 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
             </div>
           )}
         </div>
-        <div className="px-6 py-3 border-t border-border flex gap-2">
+        <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
           <Button className="flex-1" onClick={() => onConfirm(childSeesParent, parentSeesChild, isEmpToEmp ? true : parentApproves)}>
             Сохранить
