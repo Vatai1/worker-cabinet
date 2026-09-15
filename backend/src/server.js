@@ -37,6 +37,8 @@ import { initWsServer } from './config/ws.js'
 import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
 import { attachOrgContext } from './middleware/orgContext.js'
+import { syncKcSessionSettings } from './config/keycloak.js'
+import { getAuthSettings } from './config/authSettings.js'
 import bcrypt from 'bcryptjs'
 import { query } from './config/database.js'
 import { ensureBucket } from './config/s3.js'
@@ -247,6 +249,9 @@ server.listen(PORT, async () => {
 
   initWsServer(server)
   scheduleTimesheetCron()
+
+  const { sessionLifetime, refreshLifetime } = await getAuthSettings()
+  await syncKcSessionSettings({ sessionLifetimeMinutes: sessionLifetime, refreshLifetimeDays: refreshLifetime })
 
   if (process.env.RABBITMQ_URL) {
     try {

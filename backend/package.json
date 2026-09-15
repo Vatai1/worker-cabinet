@@ -1,6 +1,6 @@
 {
   "name": "worker-cabinet-backend",
-  "version": "2.3.32",
+  "version": "2.3.33",
   "description": "Backend for Worker Cabinet",
   "main": "src/server.js",
   "type": "module",
