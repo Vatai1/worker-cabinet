@@ -274,7 +274,7 @@ async function runMigrations() {
       { code: 'on_approval', name: 'На согласовании' },
       { code: 'approved', name: 'Согласовано' },
       { code: 'rejected', name: 'Отклонено' },
-      { code: 'cancelled_by_employee', name: 'Отменено сотрудником' },
+      { code: 'cancelled_by_employee', name: 'Отменено работником' },
       { code: 'cancelled_by_manager', name: 'Отменено руководителем' }
     ]
     for (const status of requestStatusesData) {
@@ -1302,7 +1302,7 @@ async function runMigrations() {
     console.log('  ✓ roles')
 
     const systemRoles = [
-      { name: 'employee', description: 'Сотрудник', color: '#6366f1' },
+      { name: 'employee', description: 'Работник', color: '#6366f1' },
       { name: 'manager', description: 'Руководитель', color: '#f59e0b' },
       { name: 'hr', description: 'HR-менеджер', color: '#10b981' },
       { name: 'admin', description: 'Администратор', color: '#ef4444' },
@@ -1445,12 +1445,12 @@ async function runMigrations() {
       { key: 'vacation_default_days', value: '28', desc: 'Количество дней отпуска по умолчанию' },
       { key: 'session_duration_days', value: '7', desc: 'Длительность сессии (дни)' },
       { key: 'password_min_length', value: '8', desc: 'Минимальная длина пароля' },
-      { key: 'login_title', value: 'Личный кабинет сотрудника', desc: 'Заголовок на странице входа' },
+      { key: 'login_title', value: 'Личный кабинет работника', desc: 'Заголовок на странице входа' },
       { key: 'login_subtitle', value: 'Единая платформа для управления персоналом, отпусками и документами', desc: 'Описание на странице входа' },
       { key: 'login_stat_1_value', value: '24', desc: 'Статистика 1 — значение' },
       { key: 'login_stat_1_label', value: 'дня отпуска', desc: 'Статистика 1 — подпись' },
       { key: 'login_stat_2_value', value: '156', desc: 'Статистика 2 — значение' },
-      { key: 'login_stat_2_label', value: 'сотрудников', desc: 'Статистика 2 — подпись' },
+      { key: 'login_stat_2_label', value: 'работников', desc: 'Статистика 2 — подпись' },
       { key: 'login_stat_3_value', value: '12', desc: 'Статистика 3 — значение' },
       { key: 'login_stat_3_label', value: 'отделов', desc: 'Статистика 3 — подпись' },
       { key: 'login_demo_buttons', value: 'true', desc: 'Показывать демо-кнопки быстрого входа' },
@@ -1458,7 +1458,7 @@ async function runMigrations() {
       { key: 'assistant_api_url', value: '', desc: 'API URL ассистента (OpenAI-совместимый)' },
       { key: 'assistant_api_key', value: '', desc: 'API ключ ассистента' },
       { key: 'assistant_model', value: 'gpt-4o-mini', desc: 'Модель AI ассистента' },
-      { key: 'assistant_system_prompt', value: 'Ты — кадровый ассистент. Помогай сотрудникам с вопросами о кадрах, отпусках, документах. Отвечай на русском языке.', desc: 'Системный промпт ассистента' },
+      { key: 'assistant_system_prompt', value: 'Ты — кадровый ассистент. Помогай работникам с вопросами о кадрах, отпусках, документах. Отвечай на русском языке.', desc: 'Системный промпт ассистента' },
       { key: 'assistant_agent_enabled', value: 'false', desc: 'Включить встроенный Mini-Agent (Docker)' },
       { key: 'assistant_agent_model', value: 'qwen2.5:3b', desc: 'Модель Ollama для Mini-Agent' },
       { key: 'assistant_agent_base_url', value: 'http://host.docker.internal:11434/v1', desc: 'Ollama Base URL для Mini-Agent' },
@@ -1575,16 +1575,16 @@ async function runMigrations() {
       { code: 'projects', name: 'Проекты', description: 'Управление проектами и задачами', icon: 'FolderKanban', route: '/projects', sort: 30, category: 'work' },
       { code: 'documents', name: 'Документы', description: 'Загрузка и хранение документов', icon: 'FolderOpen', route: '/documents', sort: 40, category: 'docs' },
       { code: 'timesheet', name: 'Табель', description: 'Учёт рабочего времени по Т-13', icon: 'Calendar', route: '/timesheet', sort: 50, category: 'work' },
-      { code: 'onboarding', name: 'Онбординг', description: 'Адаптация новых сотрудников', icon: 'UserPlus', route: '/onboarding', sort: 60, category: 'hr' },
+      { code: 'onboarding', name: 'Онбординг', description: 'Адаптация новых работников', icon: 'UserPlus', route: '/onboarding', sort: 60, category: 'hr' },
       { code: 'hierarchy', name: 'Иерархия', description: 'Организационная структура компании', icon: 'Network', route: '/hr/hierarchy', sort: 70, category: 'hr' },
       { code: 'dictionaries', name: 'Справочники', description: 'Справочники должностей, навыков, типов', icon: 'BookOpen', route: '/hr/dictionaries', sort: 80, category: 'admin' },
-      { code: 'skills', name: 'Навыки', description: 'Управление навыками и компетенциями сотрудников', icon: 'Wrench', route: null, sort: 85, category: 'hr' },
+      { code: 'skills', name: 'Навыки', description: 'Управление навыками и компетенциями работников', icon: 'Wrench', route: null, sort: 85, category: 'hr' },
       { code: 'calendar', name: 'Календарь', description: 'Интеграция с Outlook/EWS календарём', icon: 'CalendarDays', route: '/calendar', sort: 90, category: 'admin' },
       { code: 'notifications', name: 'Уведомления', description: 'Email-уведомления о событиях в системе', icon: 'Bell', route: '/notifications', sort: 100, category: 'docs' },
       { code: 'auth', name: 'Авторизация', description: 'Настройки аутентификации, авторизации и безопасности', icon: 'Lock', route: null, sort: 5, category: 'core' },
-      { code: 'assistant', name: 'AI Ассистент', description: 'Кадровый AI-ассистент для ответов на вопросы сотрудников', icon: 'Bot', route: '/assistant', sort: 15, category: 'general' },
+      { code: 'assistant', name: 'AI Ассистент', description: 'Кадровый AI-ассистент для ответов на вопросы работников', icon: 'Bot', route: '/assistant', sort: 15, category: 'general' },
       { code: 'appearance', name: 'Внешний вид', description: 'Тема оформления системы', icon: 'Palette', route: null, sort: 3, category: 'core' },
-      { code: 'mailing', name: 'Рассылки', description: 'Рассылка информации сотрудникам', icon: 'Send', route: '/hr/mailing', sort: 25, category: 'hr' },
+      { code: 'mailing', name: 'Рассылки', description: 'Рассылка информации работникам', icon: 'Send', route: '/hr/mailing', sort: 25, category: 'hr' },
       { code: 'substitution', name: 'Замещение', description: 'Делегирование обязанностей на время отпуска', icon: 'UserCheck', route: null, sort: 55, category: 'work' },
     ]
     for (const m of defaultModules) {

@@ -6,7 +6,7 @@ export const TEST_PREVIEW_ROLES = ['employee', 'manager', 'hr', 'admin', 'onboar
 export const TEST_DEPT_NAME = 'TEST Отдел'
 
 export const TEST_USERS = [
-  { email: 'test.employee@wc.test', role: 'employee', first_name: 'Тест', last_name: 'Сотрудник', position: 'Тестовый сотрудник', org_role: 'employee' },
+  { email: 'test.employee@wc.test', role: 'employee', first_name: 'Тест', last_name: 'Работник', position: 'Тестовый работник', org_role: 'employee' },
   { email: 'test.manager@wc.test', role: 'manager', first_name: 'Тест', last_name: 'Руководитель', position: 'Тестовый руководитель', org_role: 'manager' },
   { email: 'test.hr@wc.test', role: 'hr', first_name: 'Тест', last_name: 'HR', position: 'Тестовый HR', org_role: 'hr' },
   { email: 'test.admin@wc.test', role: 'admin', first_name: 'Тест', last_name: 'Админ', position: 'Тестовый администратор', org_role: 'admin' },

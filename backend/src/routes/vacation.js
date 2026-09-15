@@ -224,7 +224,7 @@ function extractYear(date) {
  *   get:
  *     tags: [Vacation]
  *     summary: Получить список заявок на отпуск
- *     description: 'Сотрудник видит свои заявки, approved-заявки всей организации и заявки по связям иерархии (кураторства, родители, подчинённые); руководитель — также заявки, которые согласовывает'
+ *     description: 'Работник видит свои заявки, approved-заявки всей организации и заявки по связям иерархии (кураторства, родители, подчинённые); руководитель — также заявки, которые согласовывает'
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -445,8 +445,8 @@ router.get('/requests', authenticateToken, async (req, res) => {
  * /vacation/upcoming/{userId}:
  *   get:
  *     tags: [Vacation]
- *     summary: Запланированные отпуска сотрудника
- *     description: 'Предстоящие заявки (approved и on_approval, start_date >= сегодня) и текущие approved-отпуска (start_date <= сегодня <= end_date), отсортированы по start_date ASC. Доступно: сам сотрудник, его руководитель (users.manager_id), роли hr, admin, superadmin'
+ *     summary: Запланированные отпуска работника
+ *     description: 'Предстоящие заявки (approved и on_approval, start_date >= сегодня) и текущие approved-отпуска (start_date <= сегодня <= end_date), отсортированы по start_date ASC. Доступно: сам работник, его руководитель (users.manager_id), роли hr, admin, superadmin'
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -478,7 +478,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  *       403:
- *         description: Нет доступа к отпускам сотрудника
+ *         description: Нет доступа к отпускам работника
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
@@ -492,7 +492,7 @@ router.get('/upcoming/:userId', authenticateToken, async (req, res) => {
     if (targetUserId !== req.user.id && !['hr', 'admin', 'superadmin'].includes(req.user.role)) {
       const managerCheck = await query('SELECT 1 FROM users WHERE id = $1 AND manager_id = $2', [targetUserId, req.user.id])
       if (managerCheck.rows.length === 0) {
-        return res.status(403).json({ error: 'Нет доступа к отпускам сотрудника' })
+        return res.status(403).json({ error: 'Нет доступа к отпускам работника' })
       }
     }
     const params = [targetUserId]
@@ -524,8 +524,8 @@ router.get('/upcoming/:userId', authenticateToken, async (req, res) => {
  * /vacation/department-head-requests:
  *   get:
  *     tags: [Vacation]
- *     summary: Отпуска начальника отдела текущего сотрудника
- *     description: 'Заявки руководителя отдела сотрудника (все статусы кроме rejected и cancelled_by_employee)'
+ *     summary: Отпуска начальника отдела текущего работника
+ *     description: 'Заявки руководителя отдела работника (все статусы кроме rejected и cancelled_by_employee)'
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -1826,7 +1826,7 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
       `INSERT INTO vacation_request_status_history
         (request_id, status_id, changed_by, comment, organization_id)
         VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3, $4)`,
-      [id, userId, 'Отменено сотрудником', currentOrgId(req)]
+      [id, userId, 'Отменено работником', currentOrgId(req)]
     )
 
     await clearVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date, req)
@@ -2432,13 +2432,13 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
 
     if (type === 'pair') {
       if (parsedIds.length !== 2) {
-        return res.status(400).json({ error: 'Для парного ограничения выберите ровно двух сотрудников' })
+        return res.status(400).json({ error: 'Для парного ограничения выберите ровно двух работников' })
       }
       employeeIds = [parsedIds[0], parsedIds[1]]
       maxConc = null
     } else if (type === 'group') {
       if (parsedIds.length < 2) {
-        return res.status(400).json({ error: 'Для группового ограничения выберите минимум двух сотрудников' })
+        return res.status(400).json({ error: 'Для группового ограничения выберите минимум двух работников' })
       }
       employeeIds = parsedIds
       maxConc = maxConcurrent || 1

@@ -154,7 +154,7 @@ async function anonymousCall(method, path, body) {
 describe('Модуль отпусков — user stories', () => {
   after(() => pool.end())
 
-  describe('US-1. Сотрудник подаёт заявку на отпуск', () => {
+  describe('US-1. Работник подаёт заявку на отпуск', () => {
     let deptId, mgr, emp, emp2, sub
     let modulesSnap
 
@@ -268,7 +268,7 @@ describe('Модуль отпусков — user stories', () => {
     })
   })
 
-  describe('US-2. Сотрудник видит свои отпуска и баланс', () => {
+  describe('US-2. Работник видит свои отпуска и баланс', () => {
     let deptId, mgr, emp, emp2
     let modulesSnap
 
@@ -321,7 +321,7 @@ describe('Модуль отпусков — user stories', () => {
     })
   })
 
-  describe('US-3. Сотрудник отменяет свою заявку', () => {
+  describe('US-3. Работник отменяет свою заявку', () => {
     let deptId, mgr, emp, emp2, hr
     let modulesSnap
 
@@ -482,7 +482,7 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(await statusOf(created.data.id), 'approved')
     })
 
-    it('посторонний сотрудник → 403', async () => {
+    it('посторонний работник → 403', async () => {
       const created = await postVacation(emp2, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
       assert.strictEqual(created.status, 201)
       const res = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(emp2), {})
@@ -491,7 +491,7 @@ describe('Модуль отпусков — user stories', () => {
     })
   })
 
-  describe('US-6. Сотрудник запрашивает перенос отпуска', () => {
+  describe('US-6. Работник запрашивает перенос отпуска', () => {
     let deptId, mgr, emp, emp2
     let modulesSnap
 
@@ -520,7 +520,7 @@ describe('Модуль отпусков — user stories', () => {
       return created.data.id
     }
 
-    it('GET /my-transferable: у владельца approved есть, у сотрудника без отпусков пусто', async () => {
+    it('GET /my-transferable: у владельца approved есть, у работника без отпусков пусто', async () => {
       const id = await approvedVacation()
       const mine = await call('GET', '/vacation/my-transferable', await tokenFor(emp))
       assert.strictEqual(mine.status, 200)
@@ -542,7 +542,7 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(String(res.data.start_date), shift(40))
     })
 
-    it('чужой сотрудник → 404 (владелец проверяется в SQL)', async () => {
+    it('чужой работник → 404 (владелец проверяется в SQL)', async () => {
       const id = await approvedVacation()
       const res = await call('POST', `/vacation/requests/${id}/transfer`, await tokenFor(emp2), { newStartDate: shift(40), newEndDate: shift(44), reason: 'Захват' })
       assert.strictEqual(res.status, 404)
@@ -933,7 +933,7 @@ describe('Модуль отпусков — user stories', () => {
     })
   })
 
-  describe('US-11. Сотрудник генерирует заявления', () => {
+  describe('US-11. Работник генерирует заявления', () => {
     let deptId, mgr, emp, hrUser, templateA, templateT
     let modulesSnap
 

@@ -1,4 +1,4 @@
-# Модуль: Сотрудники
+# Модуль: Работники
 
 ## Основная информация
 
@@ -7,7 +7,7 @@
 - **Маршрут**: `/employees`
 - **Иконка**: `Users`
 - **Сортировка**: 2
-- **Описание**: Справочник сотрудников, профили, навыки, аватары
+- **Описание**: Справочник работников, профили, навыки, аватары
 
 ## Файловая структура
 
@@ -24,11 +24,11 @@ core/employees/
 
 | Метод | Путь | Роли | Описание |
 |--------|------|------|----------|
-| GET | `/api/users/` | employee, manager, hr, admin | Список сотрудников |
-| GET | `/api/users/search` | all | Поиск сотрудников |
-| GET | `/api/users/skills/all` | all | Все навыки с сотрудниками |
+| GET | `/api/users/` | employee, manager, hr, admin | Список работников |
+| GET | `/api/users/search` | all | Поиск работников |
+| GET | `/api/users/skills/all` | all | Все навыки с работниками |
 | GET | `/api/users/positions/all` | all | Все должности |
-| GET | `/api/users/:id` | employee: свой | Профиль сотрудника |
+| GET | `/api/users/:id` | employee: свой | Профиль работника |
 | PUT | `/api/users/:id` | employee: свой | Обновить профиль |
 | POST | `/api/users/:id/skills` | employee: свой | Добавить навык |
 | DELETE | `/api/users/:id/skills` | employee: свой | Удалить навык |

@@ -49,7 +49,7 @@ export function Employees() {
         setLoading(true)
         const params = user?.departmentId ? `?departmentId=${user.departmentId}` : ''
         const response = await fetch(`${API_BASE_URL}/users${params}`, { headers: getAuthHeadersWithContentType() })
-        if (!response.ok) throw new Error('Не удалось загрузить список сотрудников')
+        if (!response.ok) throw new Error('Не удалось загрузить список работников')
         setEmployees(await response.json())
       } catch (err: unknown) {
         setError(getErrorMessage(err))
@@ -104,9 +104,9 @@ export function Employees() {
             <Sparkles className="h-4 w-4 text-white/60" />
             <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Коллектив</span>
           </div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Сотрудники</h1>
+          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Работники</h1>
           <p className="mt-2 text-white/45 text-sm">
-            {user?.department ? `Отдел: ${user.department}` : 'Все сотрудники компании'}
+            {user?.department ? `Отдел: ${user.department}` : 'Все работники компании'}
           </p>
         </div>
       </div>
@@ -114,7 +114,7 @@ export function Employees() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-          <span className="text-sm font-medium">{filtered.length} из {employees.length} сотрудников</span>
+          <span className="text-sm font-medium">{filtered.length} из {employees.length} работников</span>
         </div>
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
@@ -206,7 +206,7 @@ export function Employees() {
             <Users className="h-7 w-7 text-muted-foreground/40" />
           </div>
           <p className="text-sm text-muted-foreground/70">
-            {search ? 'Никого не нашли по запросу' : 'Сотрудники не найдены'}
+            {search ? 'Никого не нашли по запросу' : 'Работники не найдены'}
           </p>
         </div>
       )}

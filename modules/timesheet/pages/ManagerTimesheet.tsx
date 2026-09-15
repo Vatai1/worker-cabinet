@@ -128,12 +128,12 @@ export function ManagerTimesheet() {
             <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Табель</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight">Табель</h1>
-          <p className="mt-2 text-white/50 text-sm">Учёт рабочего времени сотрудников</p>
+          <p className="mt-2 text-white/50 text-sm">Учёт рабочего времени работников</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 mt-6">
           {timesheetData?.employees && (
             <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-              <Users className="h-3.5 w-3.5" />{timesheetData.employees.length} сотрудников
+              <Users className="h-3.5 w-3.5" />{timesheetData.employees.length} работников
             </div>
           )}
         </div>

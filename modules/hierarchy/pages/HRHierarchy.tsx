@@ -650,7 +650,7 @@ function SelectEmployeeModal({
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <User className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">Выберите сотрудника</h2>
+            <h2 className="text-lg font-semibold">Выберите работника</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
             <X className="h-4 w-4 text-muted-foreground" />
@@ -663,7 +663,7 @@ function SelectEmployeeModal({
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Поиск сотрудника..."
+              placeholder="Поиск работника..."
               className="w-full pl-9 pr-4 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors"
             />
           </div>
@@ -1048,7 +1048,7 @@ function validateGraphEdges(nodes: Node[], edges: Edge[]): string | null {
       deptCurator.set(tD, sU)
     } else if (sU != null && tU != null && sU !== tU) {
       const ex = empParent.get(tU)
-      if (ex != null && ex !== sU) return `У сотрудника может быть только один родитель: ${nameByUser.get(tU)}`
+      if (ex != null && ex !== sU) return `У работника может быть только один родитель: ${nameByUser.get(tU)}`
       empParent.set(tU, sU)
     }
   }
@@ -1063,7 +1063,7 @@ function validateGraphEdges(nodes: Node[], edges: Edge[]): string | null {
     const seen = new Set<number>()
     let cur: number | null | undefined = childUser
     while (cur != null && !seen.has(cur)) { seen.add(cur); cur = empParent.get(cur) ?? null }
-    if (cur != null) return 'Цикл в иерархии сотрудников'
+    if (cur != null) return 'Цикл в иерархии работников'
   }
 
   for (const childDept of deptParents.keys()) {
@@ -1456,7 +1456,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       }
       const existingParent = userParentOf.get(tUser)
       if (existingParent != null && existingParent !== sUser) {
-        toast('У сотрудника может быть только один родитель')
+        toast('У работника может быть только один родитель')
         return
       }
       let cur: number | null = sUser
@@ -1464,7 +1464,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       while (cur != null && !seen.has(cur)) {
         seen.add(cur)
         if (cur === tUser) {
-          toast('Цикл в иерархии сотрудников')
+          toast('Цикл в иерархии работников')
           return
         }
         cur = userParentOf.get(cur) ?? null
@@ -1955,7 +1955,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             Иерархия
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Перетащите блоки на холст, затем выберите отдел или сотрудника. Соединяйте точками на краях.
+            Перетащите блоки на холст, затем выберите отдел или работника. Соединяйте точками на краях.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -2012,7 +2012,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
               <User className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <div className="text-sm font-semibold">Сотрудник</div>
+              <div className="text-sm font-semibold">Работник</div>
               <div className="text-[10px] text-muted-foreground">Перетащите на холст</div>
             </div>
           </div>
@@ -2165,9 +2165,9 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
           title="Инструкция по иерархии"
           onClose={() => setShowInstruction(false)}
           items={[
-            { title: 'Добавление элементов', text: 'Перетащите блок из панели слева на холст. Для отдела или сотрудника откроется окно выбора. Описание и группа добавляются сразу.' },
+            { title: 'Добавление элементов', text: 'Перетащите блок из панели слева на холст. Для отдела или работника откроется окно выбора. Описание и группа добавляются сразу.' },
             { title: 'Связи', text: 'Потяните от точки на краю блока к другому блоку. Клик по связи открывает все настройки, включая видимость и согласование отпусков.' },
-            { title: 'Родительские связи', text: 'Отдел ↔ отдел задаёт структуру подразделений, сотрудник ↔ отдел назначает куратора, сотрудник ↔ сотрудник — личного руководителя. С текстовыми блоками родительская связь недоступна.' },
+            { title: 'Родительские связи', text: 'Отдел ↔ отдел задаёт структуру подразделений, работник ↔ отдел назначает куратора, работник ↔ работник — личного руководителя. С текстовыми блоками родительская связь недоступна.' },
             { title: 'Видимость отпусков', text: 'В настройках родительской связи: «Родитель видит отпуска подчинённых», «Отпуск родителя виден подчинённым» и «Родитель согласовывает отпуска подчинённых». Флаги применяются после сохранения. Дублирующий вход — ПКМ по связи.' },
             { title: 'Точки опоры', text: 'Наведите на связь — появятся точки добавления опоры. Клик по линии — настройки. Выделите связь: точки можно тянуть, двойной клик — удалить' },
             { title: 'Группы и описание', text: 'Пунктирные рамки объединяют элементы визуально, текстовые блоки служат для заметок. Группу тащат за полосу заголовка; клик по полосе выделяет группу — дальше её можно перемещать за любую точку и менять размер. Редактирование и удаление — через ПКМ.' },
@@ -2254,7 +2254,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             </div>
             <div className="px-6 py-4">
               <p className="text-sm text-muted-foreground">
-                Будет очищен руководитель у {pendingSaveNames.length}&nbsp;сотрудник(ов): {pendingSaveNames.join(', ')}. Продолжить?
+                Будет очищен руководитель у {pendingSaveNames.length}&nbsp;работник(ов): {pendingSaveNames.join(', ')}. Продолжить?
               </p>
             </div>
             <div className="px-6 py-3 border-t border-border flex gap-2">

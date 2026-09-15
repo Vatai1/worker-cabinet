@@ -119,7 +119,7 @@ export function DepartmentDetail() {
             <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-white/50">
               <span className="flex items-center gap-1.5">
                 <Users className="h-3.5 w-3.5" />
-                {department.employees.length} сотрудников
+                {department.employees.length} работников
               </span>
               {activeCount > 0 && <span>{activeCount} активно</span>}
               {onLeaveCount > 0 && <span>{onLeaveCount} в отпуске</span>}
@@ -171,7 +171,7 @@ export function DepartmentDetail() {
         <div className="flex items-center gap-2">
           <UserCircle className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium">
-            {members.length} {members.length === 1 ? 'сотрудник' : members.length < 5 ? 'сотрудника' : 'сотрудников'}
+            {members.length} {members.length === 1 ? 'работник' : members.length < 5 ? 'работника' : 'работников'}
           </span>
         </div>
         <div className="relative w-full sm:w-80">
@@ -230,7 +230,7 @@ export function DepartmentDetail() {
             <Users className="h-7 w-7 text-muted-foreground/40" />
           </div>
           <p className="text-sm text-muted-foreground/70">
-            {search ? 'Сотрудники не найдены по запросу' : 'Сотрудники не найдены'}
+            {search ? 'Работники не найдены по запросу' : 'Работники не найдены'}
           </p>
         </div>
       )}

@@ -181,7 +181,7 @@ export function DepartmentsTab() {
   const removeDept = async (dept: Dept) => {
     const confirmed = await confirmDialog({
       title: 'Удалить отдел',
-      message: `Удалить отдел «${dept.name}»? Сотрудники будут отвязаны от отдела.`,
+      message: `Удалить отдел «${dept.name}»? Работники будут отвязаны от отдела.`,
       confirmText: 'Удалить',
       variant: 'danger',
     })
@@ -246,7 +246,7 @@ export function DepartmentsTab() {
       <div className="flex flex-wrap gap-2.5">
         {[
           { b: stats.total, label: pluralRu(stats.total, 'отдел', 'отдела', 'отделов') },
-          { b: stats.people, label: pluralRu(stats.people, 'сотрудник', 'сотрудника', 'сотрудников') },
+          { b: stats.people, label: pluralRu(stats.people, 'работник', 'работника', 'работников') },
           { b: stats.managers, label: pluralRu(stats.managers, 'руководитель', 'руководителя', 'руководителей') },
         ].map((s, i) => (
           <div key={i} className="flex min-w-[120px] flex-col gap-0.5 rounded-xl border border-border bg-card px-4 py-2.5">
@@ -272,7 +272,7 @@ export function DepartmentsTab() {
           className="rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
         >
           <option value="name">По алфавиту</option>
-          <option value="count">По количеству сотрудников</option>
+          <option value="count">По количеству работников</option>
         </select>
         <div className="ml-auto flex items-center gap-3">
           <span className="whitespace-nowrap text-sm text-muted-foreground">
@@ -507,7 +507,7 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
       <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
         <div className="p-4 border-b border-border shrink-0">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-foreground">Выбор сотрудника</h3>
+            <h3 className="font-semibold text-foreground">Выбор работника</h3>
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
           </div>
           <div className="relative">
@@ -526,7 +526,7 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
-              {search ? 'Ничего не найдено' : 'Нет сотрудников'}
+              {search ? 'Ничего не найдено' : 'Нет работников'}
             </div>
           ) : (
             <div className="space-y-0.5">

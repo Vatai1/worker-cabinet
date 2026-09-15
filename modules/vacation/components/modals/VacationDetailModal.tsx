@@ -63,7 +63,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
 
         <div className="p-6 space-y-4 overflow-y-auto scrollbar-thin overscroll-contain">
           <div>
-            <div className="text-sm text-muted-foreground mb-1">Сотрудник</div>
+            <div className="text-sm text-muted-foreground mb-1">Работник</div>
             <div className="font-semibold text-lg">
               {request.userLastName} {request.userFirstName} {request.userMiddleName || ''}
             </div>
@@ -212,7 +212,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
                           : history.status === 'rejected'
                           ? 'Не согласовано'
                           : history.status === 'cancelled_by_employee'
-                          ? 'Отменено сотрудником'
+                          ? 'Отменено работником'
                           : history.status === 'cancelled_by_manager'
                           ? 'Отменено руководителем'
                           : history.status}

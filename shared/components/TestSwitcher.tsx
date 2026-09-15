@@ -9,7 +9,7 @@ const ROLE_SEGMENTS = [
   { role: 'admin', label: 'Админ' },
   { role: 'hr', label: 'HR' },
   { role: 'manager', label: 'Руководитель' },
-  { role: 'employee', label: 'Сотрудник' },
+  { role: 'employee', label: 'Работник' },
   { role: 'onboarding', label: 'Онбординг' },
 ] as const
 

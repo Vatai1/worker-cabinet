@@ -150,7 +150,7 @@ export function MemberProjectInfoModal({ member, projectId, open, onClose, onUpd
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Опишите роль сотрудника в проекте..."
+                  placeholder="Опишите роль работника в проекте..."
                 />
               ) : (
                 <div className="p-4 rounded-xl border border-border/60 bg-card min-h-[100px]">

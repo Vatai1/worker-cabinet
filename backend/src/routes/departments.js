@@ -16,7 +16,7 @@ const router = express.Router()
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Список отделов с сотрудниками
+ *         description: Список отделов с работниками
  *         content:
  *           application/json:
  *             schema:
@@ -91,7 +91,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Отдел с сотрудниками
+ *         description: Отдел с работниками
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Department' }

@@ -276,7 +276,7 @@ export function HROnboarding() {
             <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Онбординг</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight">Управление онбордингом</h1>
-          <p className="mt-2 text-white/50 text-sm">Управление онбордингом сотрудников</p>
+          <p className="mt-2 text-white/50 text-sm">Управление онбордингом работников</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 mt-6">
           <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
@@ -290,7 +290,7 @@ export function HROnboarding() {
           {tab === 'employees' && (
             <Button onClick={() => setShowAddModal(true)} className="bg-card/10 hover:bg-card/20 border border-white/20 text-white">
               <Plus className="h-4 w-4 mr-2" />
-              Добавить сотрудника
+              Добавить работника
             </Button>
           )}
           {tab === 'templates' && (
@@ -303,7 +303,7 @@ export function HROnboarding() {
       </div>
 
       <div className="flex gap-1 border-b border-border/50">
-        {([['employees', 'Сотрудники', Users], ['templates', 'Шаблоны', BookOpen]] as const).map(([key, label, Icon]) => (
+        {([['employees', 'Работники', Users], ['templates', 'Шаблоны', BookOpen]] as const).map(([key, label, Icon]) => (
           <button
             key={key}
             onClick={() => handleTabChange(key)}
@@ -330,7 +330,7 @@ export function HROnboarding() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border/50 text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">Сотрудник</th>
+                    <th className="text-left py-3 px-4 font-medium">Работник</th>
                     <th className="text-left py-3 px-4 font-medium">Должность</th>
                     <th className="text-left py-3 px-4 font-medium">Отдел</th>
                     <th className="text-left py-3 px-4 font-medium">Начало</th>
@@ -459,7 +459,7 @@ export function HROnboarding() {
       {cancelTarget && (
         <ConfirmModal
           title="Отменить онбординг"
-          message={`Отменить онбординг для ${cancelTarget.lastName} ${cancelTarget.firstName}? Роль сотрудника будет изменена на «Сотрудник».`}
+          message={`Отменить онбординг для ${cancelTarget.lastName} ${cancelTarget.firstName}? Роль работника будет изменена на «Работник».`}
           confirmLabel="Отменить онбординг"
           confirmVariant="destructive"
           loading={cancelLoading}
@@ -667,7 +667,7 @@ function AddOnboardingModal({ departments, positions, templates, onTemplatesNeed
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b border-border/50 shrink-0">
-          <h3 className="text-lg font-semibold">Добавить сотрудника на онбординг</h3>
+          <h3 className="text-lg font-semibold">Добавить работника на онбординг</h3>
           <button onClick={onClose}><X className="h-5 w-5 text-muted-foreground" /></button>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-6 space-y-4">

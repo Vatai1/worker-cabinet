@@ -148,7 +148,7 @@ async function ensureCardExpanded(page: Page, text: string) {
 }
 
 test.describe('Модуль Отпуск — user stories (E2E)', () => {
-  test.describe('US-1/US-2. Сотрудник подаёт и отслеживает заявки', () => {
+  test.describe('US-1/US-2. Работник подаёт и отслеживает заявки', () => {
     test('создаёт заявку A через календарь', async ({ page }) => {
       await openVacation(page, 'employee')
       await selectRange(page, A_S, A_E)
@@ -167,7 +167,7 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
   })
 
   test.describe('US-4. Руководитель согласовывает и отклоняет', () => {
-    test('согласовывает заявку A сотрудника', async ({ page }) => {
+    test('согласовывает заявку A работника', async ({ page }) => {
       await openVacation(page, 'manager')
       await page.getByRole('button', { name: /Согласование/ }).click()
       const card = page.getByTestId('approval-card').filter({ hasText: ruDate(A_S) }).first()
@@ -193,7 +193,7 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
     })
   })
 
-  test.describe('US-2. Сотрудник видит статусы и баланс', () => {
+  test.describe('US-2. Работник видит статусы и баланс', () => {
     test('A — Согласовано, B — Отклонено с причиной, баланс виден', async ({ page }) => {
       await openVacation(page, 'employee')
       const cardA = myCard(page, rangeText(A_S, A_E, 5))
@@ -206,7 +206,7 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
   })
 
   test.describe('US-6/US-7. Перенос отпуска', () => {
-    test('сотрудник запрашивает перенос A на новые даты', async ({ page }) => {
+    test('работник запрашивает перенос A на новые даты', async ({ page }) => {
       await openVacation(page, 'employee')
       const dayCell = monthCard(page, monthName(OWN_DAY)).locator('[data-date-cell]').nth(dayOfMonth(OWN_DAY) - 1)
       await dayCell.click({ button: 'right' })
@@ -233,14 +233,14 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
       await expect(page.getByTestId('approval-card').filter({ hasText: ruDate(C_S) })).toHaveCount(0, { timeout: 15000 })
     })
 
-    test('сотрудник видит результат: новые даты согласованы, прежние закрыты', async ({ page }) => {
+    test('работник видит результат: новые даты согласованы, прежние закрыты', async ({ page }) => {
       await openVacation(page, 'employee')
       await expect(myCard(page, rangeText(C_S, C_E, 5)).getByText('Согласовано', { exact: true })).toBeVisible({ timeout: 15000 })
       await expect(page.getByText(rangeText(A_S, A_E, 5), { exact: true })).toHaveCount(0, { timeout: 10000 })
     })
   })
 
-  test.describe('US-3. Сотрудник отменяет свою заявку', () => {
+  test.describe('US-3. Работник отменяет свою заявку', () => {
     test('отмена согласованной заявки C через подтверждение', async ({ page }) => {
       await openVacation(page, 'employee')
       const cardC = await ensureCardExpanded(page, rangeText(C_S, C_E, 5))
@@ -290,7 +290,7 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
     })
   })
 
-  test.describe('US-11. Сотрудник генерирует заявление', () => {
+  test.describe('US-11. Работник генерирует заявление', () => {
     test('скачивает заявление .docx по шаблону', async ({ page }) => {
       await openVacation(page, 'employee')
       await page.getByRole('button', { name: 'Заявления', exact: true }).click()

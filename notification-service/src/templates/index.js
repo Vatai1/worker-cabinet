@@ -81,7 +81,7 @@ export function vacationCreated(data) {
   const { employeeName, startDate, endDate, days, approverName, link } = data
   const body = `
     <p>Здравствуйте${approverName ? ', ' + esc(approverName) : ''}!</p>
-    <p>Сотрудник <strong>${esc(employeeName)}</strong> подал заявку на отпуск:</p>
+    <p>Работник <strong>${esc(employeeName)}</strong> подал заявку на отпуск:</p>
     <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
       <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Период</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${esc(startDate)} — ${esc(endDate)}</td></tr>
       <tr><td style="padding: 8px; border: 1px solid #e5e7eb; color: #6b7280;">Количество дней</td><td style="padding: 8px; border: 1px solid #e5e7eb;">${esc(days)}</td></tr>

@@ -218,7 +218,7 @@ export function Login() {
   }
 
   const showDemo = isDev && (loaded ? settings.login_demo_buttons !== 'false' : true)
-  const title = settings.login_title || 'Личный кабинет сотрудника'
+  const title = settings.login_title || 'Личный кабинет работника'
   const subtitle = settings.login_subtitle || 'Единая платформа для управления персоналом, отпусками и документами'
 
   if (loadingConfig) {
@@ -400,7 +400,7 @@ export function Login() {
                         <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-foreground">Сотрудник (ЦРЦТ)</p>
+                        <p className="text-sm font-semibold text-foreground">Работник (ЦРЦТ)</p>
                         <p className="font-mono text-xs text-muted-foreground mt-0.5">morozova@crct.ru</p>
                       </div>
                     </div>
@@ -445,7 +445,7 @@ export function Login() {
                         <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-foreground">Сотрудник (Минцифры)</p>
+                        <p className="text-sm font-semibold text-foreground">Работник (Минцифры)</p>
                         <p className="font-mono text-xs text-muted-foreground mt-0.5">sidorov@mindit.ru</p>
                       </div>
                     </div>

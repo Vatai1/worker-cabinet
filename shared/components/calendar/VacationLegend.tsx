@@ -24,7 +24,7 @@ export function VacationLegend({ departmentId, year, currentUserId }: VacationLe
           onClick={() => setExpanded((v) => !v)}
           className="mt-4 flex w-full items-center justify-between gap-2 rounded-md px-1 py-1 text-sm font-medium transition-colors hover:bg-muted"
         >
-          Сотрудники отдела
+          Работники отдела
           <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform duration-200', expanded && 'rotate-180')} />
         </button>
 

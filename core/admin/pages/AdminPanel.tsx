@@ -61,7 +61,7 @@ const TAB_GROUPS: TabGroup[] = [
   {
     label: 'Управление',
     tabs: [
-      { id: 'users', name: 'Пользователи', icon: Users, description: 'Сотрудники, роли, статусы', color: 'from-blue-500 to-indigo-600' },
+      { id: 'users', name: 'Пользователи', icon: Users, description: 'Работники, роли, статусы', color: 'from-blue-500 to-indigo-600' },
       { id: 'roles', name: 'Роли и доступы', icon: Key, description: 'Динамические роли, пермишены', color: 'from-violet-500 to-purple-600' },
       { id: 'role-mappings', name: 'Роли по должности', icon: ShieldCheck, description: 'Автоназначение org_role при первом входе', color: 'from-rose-500 to-red-600' },
       { id: 'departments', name: 'Отделы', icon: Building2, description: 'Структура организации', color: 'from-emerald-500 to-teal-600' },
@@ -92,7 +92,7 @@ const TAB_GROUPS: TabGroup[] = [
       { id: 'errors', name: 'Ошибки', icon: AlertCircle, description: 'Лог ошибок системы', color: 'from-orange-500 to-red-600' },
       { id: 'bug-reports', name: 'Баг-репорты', icon: Bug, description: 'Отчёты пользователей', color: 'from-amber-500 to-orange-600' },
       { id: 'health', name: 'Система', icon: Server, description: 'БД, память, подключения', color: 'from-teal-500 to-emerald-600' },
-      { id: 'test-data', name: 'Тестовые данные', icon: FlaskConical, description: 'Тестовый отдел и сотрудники', color: 'from-lime-500 to-green-600' },
+      { id: 'test-data', name: 'Тестовые данные', icon: FlaskConical, description: 'Тестовый отдел и работники', color: 'from-lime-500 to-green-600' },
     ],
   },
   {
@@ -104,7 +104,7 @@ const TAB_GROUPS: TabGroup[] = [
 ]
 
 const ROLE_LABELS: Record<string, string> = {
-  employee: 'Сотрудник',
+  employee: 'Работник',
   manager: 'Руководитель',
   hr: 'HR-менеджер',
   admin: 'Администратор',
@@ -530,7 +530,7 @@ function UsersTab({ mode }: { mode?: 'global' | 'org' }) {
     const ids = Array.from(selectedIds)
     const confirmed = await confirmDialog({
       title: 'Массовое действие',
-      message: `Применить к ${ids.length} сотрудникам?`,
+      message: `Применить к ${ids.length} работникам?`,
       confirmText: 'Применить',
     })
     if (!confirmed) return
@@ -632,7 +632,7 @@ function UsersTab({ mode }: { mode?: 'global' | 'org' }) {
               {selectedIds.size === users.length && users.length > 0 && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
             </div>
             <span>Выбрать всех на странице</span>
-            <span className="ml-auto">{total} сотрудников</span>
+            <span className="ml-auto">{total} работников</span>
           </div>
           <div className="space-y-1">
             {users.map(user => {
@@ -1141,7 +1141,7 @@ function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChan
                               ORG_ROLE_SELECT_COLORS[org.org_role] || ORG_ROLE_SELECT_COLORS.employee
                             )}
                           >
-                            <option value="employee">Сотрудник</option>
+                            <option value="employee">Работник</option>
                             <option value="manager">Руководитель</option>
                             <option value="hr">HR</option>
                             <option value="admin">Администратор</option>
@@ -1190,7 +1190,7 @@ function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChan
                             onChange={e => setAddOrgRole(e.target.value)}
                             className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
                           >
-                            <option value="employee">Сотрудник</option>
+                            <option value="employee">Работник</option>
                             <option value="manager">Руководитель</option>
                             <option value="hr">HR</option>
                             <option value="admin">Администратор</option>
@@ -3443,7 +3443,7 @@ function TestDataTab() {
     <Card>
       <CardHeader>
         <CardTitle>Тестовые данные</CardTitle>
-        <CardDescription>Тестовый отдел и сотрудники, скрытые от всех, кроме супер-админа</CardDescription>
+        <CardDescription>Тестовый отдел и работники, скрытые от всех, кроме супер-админа</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {error && <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">{error}</div>}
@@ -3455,7 +3455,7 @@ function TestDataTab() {
             <div className="flex flex-wrap gap-2">
               <Button onClick={create} disabled={busy}>
                 {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-                {hasData ? 'Пересоздать / актуализировать' : 'Создать тестовый отдел + сотрудников'}
+                {hasData ? 'Пересоздать / актуализировать' : 'Создать тестовый отдел + работников'}
               </Button>
               {activeUsers.length > 0 && (
                 <Button variant="outline" onClick={deactivate} disabled={busy}>

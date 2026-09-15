@@ -1,6 +1,6 @@
 # Worker Cabinet — Backend
 
-Backend API для HR-системы управления сотрудниками.
+Backend API для HR-системы управления работниками.
 
 ## Технологии
 
@@ -171,11 +171,11 @@ npm start
 
 | Email | Пароль | Роль |
 |-------|--------|------|
-| ivanov@example.com | password123 | Сотрудник |
+| ivanov@example.com | password123 | Работник |
 | petrov@example.com | password123 | Руководитель |
-| sidorov@example.com | password123 | Сотрудник |
-| ivanova@example.com | password123 | Сотрудник |
-| petrova@example.com | password123 | Сотрудник |
+| sidorov@example.com | password123 | Работник |
+| ivanova@example.com | password123 | Работник |
+| petrova@example.com | password123 | Работник |
 
 ## Структура проекта
 

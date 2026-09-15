@@ -409,7 +409,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
               <User className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <div className="text-sm font-semibold">Сотрудник</div>
+              <div className="text-sm font-semibold">Работник</div>
               <div className="text-[10px] text-muted-foreground">Перетащите на холст</div>
             </div>
           </div>

@@ -150,7 +150,7 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     } else if (sourceUser != null && targetUser != null && sourceUser !== targetUser) {
       const existing = parentUserByUser.get(targetUser)
       if (existing != null && existing !== sourceUser) {
-        const err = new Error(`У сотрудника может быть только один родитель: ${nameByUser.get(targetUser)}`)
+        const err = new Error(`У работника может быть только один родитель: ${nameByUser.get(targetUser)}`)
         err.statusCode = 400
         throw err
       }
@@ -180,7 +180,7 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
       cur = parentUserByUser.get(cur) ?? null
     }
     if (cur != null) {
-      const err = new Error('Цикл в иерархии сотрудников')
+      const err = new Error('Цикл в иерархии работников')
       err.statusCode = 400
       throw err
     }

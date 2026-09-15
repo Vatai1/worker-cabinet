@@ -238,7 +238,7 @@ test.describe('Модуль Иерархия', () => {
       await expect(root).toBeVisible({ timeout: 15000 })
       await expect(root.getByRole('heading', { name: 'Иерархия', exact: true })).toBeVisible()
       await expect(root.getByText('Элементы', { exact: true })).toBeVisible({ timeout: 10000 })
-      for (const label of ['Отдел', 'Сотрудник', 'Описание', 'Группа']) {
+      for (const label of ['Отдел', 'Работник', 'Описание', 'Группа']) {
         await expect(root.locator('div[draggable="true"]').filter({ hasText: label }).first()).toBeVisible()
       }
       await expect(root.getByRole('button', { name: 'Сохранить', exact: true })).toBeVisible({ timeout: 10000 })
@@ -272,10 +272,10 @@ test.describe('Модуль Иерархия', () => {
       await expect(editorNodes(page).first()).toContainText('сотр.')
     })
 
-    test('драг «Сотрудник» → выбор сотрудника → нод на канвасе', async ({ page }) => {
+    test('драг «Работник» → выбор работника → нод на канвасе', async ({ page }) => {
       const pt = await canvasPoint(page, 0.5, 0.4)
-      await dropFromPalette(page, 'Сотрудник', pt.x, pt.y)
-      const modal = editorRoot(page).locator('.animate-scale-in').filter({ hasText: 'Выберите сотрудника' })
+      await dropFromPalette(page, 'Работник', pt.x, pt.y)
+      const modal = editorRoot(page).locator('.animate-scale-in').filter({ hasText: 'Выберите работника' })
       await expect(modal).toBeVisible({ timeout: 10000 })
       await modal.locator('.max-h-48 button').first().click()
       await modal.getByRole('button', { name: 'Добавить', exact: true }).click()
@@ -488,7 +488,7 @@ test.describe('Модуль Иерархия', () => {
     })
   })
 
-  test.describe('Сотрудник — UC-5: Моя иерархия', () => {
+  test.describe('Работник — UC-5: Моя иерархия', () => {
     test('фуллскрин-просмотр: ноды нельзя тащить, закрытие по X ведёт на /dashboard', async ({ page }, testInfo) => {
       await loginAs(page, 'employee')
       await page.goto('/my-hierarchy')
@@ -528,7 +528,7 @@ test.describe('Модуль Иерархия', () => {
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 })
     })
 
-    test('сотрудник не попадает на /hr?tab=hierarchy — редирект на /dashboard', async ({ page }) => {
+    test('работник не попадает на /hr?tab=hierarchy — редирект на /dashboard', async ({ page }) => {
       await loginAs(page, 'employee')
       await page.goto('/hr?tab=hierarchy')
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 })

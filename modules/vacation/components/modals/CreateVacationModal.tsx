@@ -560,7 +560,7 @@ export function CreateVacationModal({
                   type="text"
                   value={pickerSearch}
                   onChange={(e) => setPickerSearch(e.target.value)}
-                  placeholder="Поиск сотрудника..."
+                  placeholder="Поиск работника..."
                   className="w-full pl-9 pr-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
@@ -578,7 +578,7 @@ export function CreateVacationModal({
               {otherEmployees.length > 0 && (
                 <div>
                   <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Другие сотрудники
+                    Другие работники
                   </div>
                   {otherEmployees.map(renderEmployee)}
                 </div>

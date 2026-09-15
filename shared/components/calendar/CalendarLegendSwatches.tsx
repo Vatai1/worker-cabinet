@@ -11,11 +11,11 @@ export function CalendarLegendSwatches() {
       </div>
       <div className="flex items-center gap-2">
         <div className="h-5 w-5 rounded border border-border" style={{ backgroundColor: `${PARTICIPANT_COLORS[1]}26` }} />
-        <span className="text-muted-foreground">Согласовано — цвет сотрудника</span>
+        <span className="text-muted-foreground">Согласовано — цвет работника</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="h-5 w-5 rounded border border-border" style={{ backgroundImage: `repeating-linear-gradient(45deg, ${PARTICIPANT_COLORS[0]}59 0 2px, transparent 2px 6px)` }} />
-        <span className="text-muted-foreground">На согласовании — цвет сотрудника</span>
+        <span className="text-muted-foreground">На согласовании — цвет работника</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="h-5 w-5 rounded border border-border bg-muted" />

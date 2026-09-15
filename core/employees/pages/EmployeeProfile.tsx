@@ -80,7 +80,7 @@ const statusConfig = {
 }
 
 const roleLabels: Record<string, string> = {
-  employee: 'Сотрудник',
+  employee: 'Работник',
   manager:  'Руководитель',
   hr:       'HR',
   admin:    'Администратор',
@@ -135,7 +135,7 @@ export function EmployeeProfile() {
       try {
         setLoading(true)
         const response = await fetch(`${API_BASE_URL}/users/${id}`, { headers: getAuthHeadersWithContentType() })
-        if (!response.ok) throw new Error('Не удалось загрузить данные сотрудника')
+        if (!response.ok) throw new Error('Не удалось загрузить данные работника')
         const data = await response.json()
         setEmployee({
           ...data,
@@ -345,7 +345,7 @@ export function EmployeeProfile() {
           <Button variant="outline"><ChevronLeft className="mr-2 h-4 w-4" />Назад</Button>
         </Link>
         <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-8 text-center">
-          <p className="text-destructive font-medium">{error ?? 'Сотрудник не найден'}</p>
+          <p className="text-destructive font-medium">{error ?? 'Работник не найден'}</p>
         </div>
       </div>
     )
@@ -425,7 +425,7 @@ export function EmployeeProfile() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Sparkles className="h-4 w-4 text-white/60" />
-              <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Профиль сотрудника</span>
+              <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Профиль работника</span>
             </div>
             <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">{fullName}</h1>
             <p className="mt-1 text-white/60 text-sm font-medium">{employee.position}</p>

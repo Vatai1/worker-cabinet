@@ -9,7 +9,7 @@ import type { Survey } from '@/shared/types'
 type SurveyWithResponded = Survey & { responded: boolean }
 
 const TARGET_LABELS: Record<string, string> = {
-  all: 'Для всех', department: 'Отдел', employees: 'Выбранные сотрудники',
+  all: 'Для всех', department: 'Отдел', employees: 'Выбранные работники',
 }
 
 const surveyColors = [

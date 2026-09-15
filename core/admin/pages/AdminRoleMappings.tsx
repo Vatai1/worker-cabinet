@@ -21,7 +21,7 @@ const ROLE_CONFIG: Record<string, { label: string; className: string }> = {
   admin: { label: 'Администратор', className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
   hr: { label: 'HR', className: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
   manager: { label: 'Начальник подразделения', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
-  employee: { label: 'Сотрудник', className: 'bg-slate-100 text-slate-600 dark:bg-slate-900/30 dark:text-slate-400' },
+  employee: { label: 'Работник', className: 'bg-slate-100 text-slate-600 dark:bg-slate-900/30 dark:text-slate-400' },
 }
 
 export function AdminRoleMappings() {
@@ -105,7 +105,7 @@ export function AdminRoleMappings() {
     <Card>
       <CardHeader>
         <CardTitle>Маппинг должностей → роли</CardTitle>
-        <CardDescription>При первом входе сотрудника из Keycloak система автоматически назначит org_role по его должности</CardDescription>
+        <CardDescription>При первом входе работника из Keycloak система автоматически назначит org_role по его должности</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
@@ -168,7 +168,7 @@ export function AdminRoleMappings() {
                 onChange={(e) => setRole(e.target.value)}
                 className="h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="employee">Сотрудник</option>
+                <option value="employee">Работник</option>
                 <option value="manager">Начальник подразделения</option>
                 <option value="hr">HR</option>
                 <option value="admin">Администратор</option>
@@ -192,7 +192,7 @@ export function AdminRoleMappings() {
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
 
-        <p className="text-xs text-muted-foreground">Маппинг применяется только при первом входе сотрудника. Ручные изменения роли не затираются</p>
+        <p className="text-xs text-muted-foreground">Маппинг применяется только при первом входе работника. Ручные изменения роли не затираются</p>
       </CardContent>
     </Card>
   )

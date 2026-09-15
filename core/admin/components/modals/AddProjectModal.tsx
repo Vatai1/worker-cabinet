@@ -95,7 +95,7 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
             <h2 className="text-xl font-semibold">Добавить проект</h2>
           </div>
           <p className="text-sm text-muted-foreground mb-6">
-            Заполните информацию о проекте сотрудника
+            Заполните информацию о проекте работника
           </p>
 
           <form onSubmit={handleSubmit} onKeyDown={handleKeyDown}>

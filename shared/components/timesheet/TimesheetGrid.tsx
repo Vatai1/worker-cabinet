@@ -241,7 +241,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, on
           <thead>
             <tr>
               <th className="sticky left-0 z-20 bg-muted border-b border-r border-border px-3 py-2 text-left font-semibold min-w-[180px] text-sm">
-                Сотрудник
+                Работник
               </th>
               {days.map(d => {
                 const weekend = isWeekend(year, month, d)

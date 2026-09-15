@@ -25,7 +25,7 @@ modules/departments/
 | Метод | Путь | Роли | Описание |
 |--------|------|------|----------|
 | GET | `/api/departments/` | all | Список отделов |
-| GET | `/api/departments/:id` | all | Детали отдела с сотрудниками |
+| GET | `/api/departments/:id` | all | Детали отдела с работниками |
 | PATCH | `/api/departments/vacation-block-all` | hr, admin | Заблокировать отпуска во всех отделах |
 | PATCH | `/api/departments/:id/vacation-block` | hr, admin | Заблокировать/разблокировать отпуска в отделе |
 

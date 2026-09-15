@@ -148,7 +148,7 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
     )
     if (alreadyManager.rows.length > 0) {
       const dept = alreadyManager.rows[0]
-      throw new ConflictError(`Этот сотрудник уже является руководителем отдела «${dept.name}»`)
+      throw new ConflictError(`Этот работник уже является руководителем отдела «${dept.name}»`)
     }
   }
 
@@ -205,7 +205,7 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
     const alreadyManager = await query(...orgScopedQuery('SELECT d.id, d.name FROM departments d WHERE d.manager_id = $1 AND d.id != $2', [manager_id, id], req))
     if (alreadyManager.rows.length > 0) {
       const dept = alreadyManager.rows[0]
-      throw new ConflictError(`Этот сотрудник уже является руководителем отдела «${dept.name}»`)
+      throw new ConflictError(`Этот работник уже является руководителем отдела «${dept.name}»`)
     }
   }
 
@@ -246,7 +246,7 @@ router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin
 
   const usersInDept = await query('SELECT COUNT(*) as cnt FROM users WHERE department_id = $1', [id])
   if (parseInt(usersInDept.rows[0].cnt) > 0) {
-    throw new ConflictError('Нельзя удалить отдел, в котором есть сотрудники')
+    throw new ConflictError('Нельзя удалить отдел, в котором есть работники')
   }
 
   await query(...orgScopedQuery('DELETE FROM departments WHERE id = $1', [id], req))
@@ -382,7 +382,7 @@ router.delete('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), a
 
   const usersWithSkill = await query('SELECT COUNT(*) as cnt FROM user_skills WHERE skill_id = $1', [id])
   if (parseInt(usersWithSkill.rows[0].cnt) > 0) {
-    throw new ConflictError('Нельзя удалить навык, который привязан к сотрудникам')
+    throw new ConflictError('Нельзя удалить навык, который привязан к работникам')
   }
 
   await query(...orgScopedQuery('DELETE FROM skills_dictionary WHERE id = $1', [id], req))

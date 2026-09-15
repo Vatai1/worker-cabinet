@@ -393,7 +393,7 @@ export function HRMailing() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <RecipientCategory<number>
               icon={<Users className="h-4 w-4" />}
-              title="Сотрудники"
+              title="Работники"
               search={employeeSearch}
               onSearchChange={setEmployeeSearch}
               items={filteredEmployees.slice(0, 50).map(e => ({ id: e.id, label: `${e.last_name} ${e.first_name}` }))}

@@ -125,7 +125,7 @@ afterEach(async () => {
 after(() => pool.end())
 
 describe('US-Б1. «HR сохраняет структуру организации»', () => {
-  it('Given пустая схема org A, When HR делает PUT / с нодами отдел+сотрудник+текст+группа и edge с vacationVisibility, Then 200 и version=1', async () => {
+  it('Given пустая схема org A, When HR делает PUT / с нодами отдел+работник+текст+группа и edge с vacationVisibility, Then 200 и version=1', async () => {
     const token = await tokenFor(hrA)
     const nodes = [deptNode(deptA, 'Отдел А hier'), deptNode(deptB, 'Отдел Б hier', 400), empNode(empA2.id), TEXT_NODE, GROUP_NODE]
     const edges = [parentEdge(`department-${deptA}-t1`, `department-${deptB}-t1`, { vacationVisibility: { parentSeesChild: true, childSeesParent: true, parentApproves: true } })]
@@ -192,7 +192,7 @@ describe('US-Б1. «HR сохраняет структуру организац�
   })
 })
 
-describe('US-Б2. «Сотрудник смотрит структуру своей org»', () => {
+describe('US-Б2. «Работник смотрит структуру своей org»', () => {
   it('Given схемы в org A и org B, When employee org A запрашивает GET / с чужим X-Organization-Id, Then возвращает его собственную org', async () => {
     const hrAToken = await tokenFor(hrA)
     await call('PUT', '/hierarchy', hrAToken, { nodes: [deptNode(deptA, 'Отдел А hier'), TEXT_NODE], edges: [], baseVersion: 0 }, orgA)
@@ -337,7 +337,7 @@ describe('US-Б5. «Целостность»', () => {
     assert.strictEqual(res.data.error, 'Цикл в иерархии отделов')
   })
 
-  it('When цикл сотрудников u1→u2→u1, Then 400 «Цикл в иерархии сотрудников»', async () => {
+  it('When цикл работников u1→u2→u1, Then 400 «Цикл в иерархии работников»', async () => {
     const token = await tokenFor(hrA)
     const nodes = [empNode(empA.id), empNode(empA2.id, 400)]
     const edges = [
@@ -346,7 +346,7 @@ describe('US-Б5. «Целостность»', () => {
     ]
     const res = await call('PUT', '/hierarchy', token, { nodes, edges, baseVersion: 0 }, orgA)
     assert.strictEqual(res.status, 400)
-    assert.strictEqual(res.data.error, 'Цикл в иерархии сотрудников')
+    assert.strictEqual(res.data.error, 'Цикл в иерархии работников')
   })
 
   it('When у отдела два родителя, Then 400 «У отдела может быть только один родитель»', async () => {

@@ -185,7 +185,7 @@ async function seed() {
       const lastName = gender === 'M' ? randomItem(LAST_NAMES_M) : randomItem(LAST_NAMES_F)
       const middleName = generatePatronymic(gender)
       const deptName = randomItem(deptNames)
-      const deptPositions = DEPARTMENTS_DATA.find(d => d.name === deptName)?.positions || ['Сотрудник']
+      const deptPositions = DEPARTMENTS_DATA.find(d => d.name === deptName)?.positions || ['Работник']
       const position = randomItem(deptPositions)
       const deptId = deptMap[deptName] || depts.rows[0]?.id
 
@@ -429,8 +429,8 @@ async function seed() {
       'Настройка автоматической сборки и деплоя через GitLab CI.',
       'Обновление UI/UX корпоративного портала с использованием нового дизайн-сайта.',
       'Внедрение Prometheus + Grafana для мониторинга инфраструктуры.',
-      'Кросс-платформенное приложение для сотрудников на React Native.',
-      'Автоматизация процесса онбординга и адаптации новых сотрудников.',
+      'Кросс-платформенное приложение для работников на React Native.',
+      'Автоматизация процесса онбординга и адаптации новых работников.',
       'Двусторонний обмен данными между системой и бухгалтерией 1С.',
       'Контейнеризация всех сервисов и настройка Docker Compose для разработки.',
       'Переход с PostgreSQL 13 на 16 версию с минимальным простоем.',

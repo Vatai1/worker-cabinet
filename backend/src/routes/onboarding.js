@@ -626,7 +626,7 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
  * /onboarding:
  *   post:
  *     tags: [Onboarding]
- *     summary: Создать адаптацию для сотрудника (HR/admin)
+ *     summary: Создать адаптацию для работника (HR/admin)
  *     security:
  *       - bearerAuth: []
  *     requestBody:

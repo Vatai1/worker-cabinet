@@ -589,7 +589,7 @@ app.use('/api/training', trainingRoutes)
 
 ### Step 4: swagger.js
 ```javascript
-{ name: 'Training', description: 'Обучение и развитие сотрудников' },
+{ name: 'Training', description: 'Обучение и развитие работников' },
 ```
 
 ### Step 5: pages/Training.tsx

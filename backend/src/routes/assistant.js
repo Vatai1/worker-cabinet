@@ -29,7 +29,7 @@ async function getAssistantConfig(req) {
     agentEnabled: map.assistant_agent_enabled === 'true',
     agentModel: map.assistant_agent_model || 'qwen2.5:3b',
     agentPort: map.assistant_agent_port || '8642',
-    systemPrompt: map.assistant_system_prompt || 'Ты — кадровый ассистент. Помогай сотрудникам с вопросами о кадрах, отпусках, документах. Отвечай на русском языке.',
+    systemPrompt: map.assistant_system_prompt || 'Ты — кадровый ассистент. Помогай работникам с вопросами о кадрах, отпусках, документах. Отвечай на русском языке.',
     temperature: parseFloat(map.assistant_temperature) || 0.7,
     maxTokens: parseInt(map.assistant_max_tokens) || 2048,
     historyLimit: parseInt(map.assistant_history_limit) || 20,

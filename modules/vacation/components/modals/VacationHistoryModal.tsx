@@ -21,7 +21,7 @@ const STATUS_FILTERS: { value: string; label: string }[] = [
   { value: VacationRequestStatus.ON_APPROVAL, label: 'На согласовании' },
   { value: VacationRequestStatus.APPROVED, label: 'Согласовано' },
   { value: VacationRequestStatus.REJECTED, label: 'Не согласовано' },
-  { value: VacationRequestStatus.CANCELLED_BY_EMPLOYEE, label: 'Отменено сотрудником' },
+  { value: VacationRequestStatus.CANCELLED_BY_EMPLOYEE, label: 'Отменено работником' },
   { value: VacationRequestStatus.CANCELLED_BY_MANAGER, label: 'Отменено руководителем' },
 ]
 
@@ -29,7 +29,7 @@ const STATUS_META: Record<VacationRequestStatus, { label: string; icon: typeof C
   [VacationRequestStatus.ON_APPROVAL]: { label: 'На согласовании', icon: Clock, className: 'text-amber-600 bg-amber-500/15' },
   [VacationRequestStatus.APPROVED]: { label: 'Согласовано', icon: CheckCircle2, className: 'text-emerald-600 bg-emerald-500/15' },
   [VacationRequestStatus.REJECTED]: { label: 'Не согласовано', icon: XCircle, className: 'text-red-600 bg-red-500/15' },
-  [VacationRequestStatus.CANCELLED_BY_EMPLOYEE]: { label: 'Отменено сотрудником', icon: Ban, className: 'text-muted-foreground bg-muted' },
+  [VacationRequestStatus.CANCELLED_BY_EMPLOYEE]: { label: 'Отменено работником', icon: Ban, className: 'text-muted-foreground bg-muted' },
   [VacationRequestStatus.CANCELLED_BY_MANAGER]: { label: 'Отменено руководителем', icon: Ban, className: 'text-orange-600 bg-orange-500/15' },
 }
 

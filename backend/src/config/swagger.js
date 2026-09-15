@@ -6,7 +6,7 @@ const options = {
     info: {
       title: 'Worker Cabinet API',
       version: '1.0.0',
-      description: 'Система управления персоналом (HR Management System). API для управления сотрудниками, отпусками, проектами, табелями, опросами и документами.',
+      description: 'Система управления персоналом (HR Management System). API для управления работниками, отпусками, проектами, табелями, опросами и документами.',
     },
     servers: [
       { url: 'http://localhost:5000/api', description: 'Локальная разработка' },
@@ -200,7 +200,7 @@ const options = {
       { name: 'Documents', description: 'Управление документами' },
       { name: 'Departments', description: 'Отделы' },
       { name: 'Surveys', description: 'Опросы' },
-      { name: 'Onboarding', description: 'Адаптация новых сотрудников' },
+      { name: 'Onboarding', description: 'Адаптация новых работников' },
       { name: 'Hierarchy', description: 'Организационная структура' },
       { name: 'Dictionaries', description: 'Справочники' },
       { name: 'Timesheet', description: 'Табель учёта рабочего времени' },

@@ -360,7 +360,7 @@ export function Vacation() {
         const employeeName = `${otherRequest.userLastName} ${otherRequest.userFirstName}`
         const dates = `${new Date(otherRequest.startDate).toLocaleDateString('ru-RU')} - ${new Date(otherRequest.endDate).toLocaleDateString('ru-RU')}`
         warnings.push({
-          message: `Пересечение с отпуском сотрудника`,
+          message: `Пересечение с отпуском работника`,
           employeeName,
           dates
         })
@@ -577,7 +577,7 @@ export function Vacation() {
         <div className="page-header">
           <h1 className="text-xl font-semibold tracking-tight">Мои замещения</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Сотрудники, которых вы замещаете на время отпуска
+            Работники, которых вы замещаете на время отпуска
           </p>
         </div>
 
@@ -789,7 +789,7 @@ export function Vacation() {
           <span className="text-[11px] font-medium uppercase tracking-widest text-white/60">Управление · Отпуска</span>
           <h1 className="mt-2 text-3xl font-bold tracking-tight">Отпуск</h1>
           <p className="mt-2 text-sm text-white/70">
-            {isManager ? 'Управление отпусками сотрудников' : 'Управление вашими отпусками'}
+            {isManager ? 'Управление отпусками работников' : 'Управление вашими отпусками'}
           </p>
         </div>
       </div>

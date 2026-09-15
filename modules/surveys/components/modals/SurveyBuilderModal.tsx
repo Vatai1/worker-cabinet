@@ -335,9 +335,9 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
                 onChange={(e) => { setTargetType(e.target.value as typeof targetType); setTargetIds([]) }}
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm mb-2"
               >
-                <option value="all">Все сотрудники</option>
+                <option value="all">Все работники</option>
                 <option value="department">Конкретный отдел</option>
-                <option value="employees">Конкретные сотрудники</option>
+                <option value="employees">Конкретные работники</option>
               </select>
               {targetType === 'department' && (
                 <select

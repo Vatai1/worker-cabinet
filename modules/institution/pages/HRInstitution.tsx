@@ -268,7 +268,7 @@ export function HRInstitution() {
                 <UserCog className="h-5 w-5 text-amber-500" />
                 {org.head_id ? 'Замена руководителя' : 'Назначение руководителя'}
               </CardTitle>
-              <CardDescription>Выберите сотрудника учреждения</CardDescription>
+              <CardDescription>Выберите работника учреждения</CardDescription>
             </CardHeader>
             <CardContent className="overflow-y-auto scrollbar-thin overscroll-contain flex-1 min-h-0">
               <div className="relative mb-3">

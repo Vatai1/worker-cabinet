@@ -24,7 +24,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_vacation_balance",
-            "description": "Получить баланс отпускных дней текущего сотрудника. НЕ требует никаких параметров — вызывай без аргументов.",
+            "description": "Получить баланс отпускных дней текущего работника. НЕ требует никаких параметров — вызывай без аргументов.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -35,7 +35,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_vacation_requests",
-            "description": "Получить список заявок на отпуск текущего сотрудника. Можно фильтровать по статусу (on_approval, approved, rejected, cancelled) и году.",
+            "description": "Получить список заявок на отпуск текущего работника. Можно фильтровать по статусу (on_approval, approved, rejected, cancelled) и году.",
             "parameters": {
                 "type": "object",
                 "properties": {

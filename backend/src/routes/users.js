@@ -195,7 +195,7 @@ router.get('/search', authenticateToken, async (req, res) => {
  * /users:
  *   get:
  *     tags: [Users]
- *     summary: Получить список всех сотрудников
+ *     summary: Получить список всех работников
  *     description: 'Доступно для ролей: employee, manager, hr, admin'
  *     security:
  *       - bearerAuth: []
@@ -206,7 +206,7 @@ router.get('/search', authenticateToken, async (req, res) => {
  *         description: Фильтр по отделу
  *     responses:
  *       200:
- *         description: Список сотрудников
+ *         description: Список работников
  *         content:
  *           application/json:
  *             schema:
@@ -326,7 +326,7 @@ router.post('/me/avatar', authenticateToken, uploadAvatar.single('avatar'), asyn
  * /users/{id}/avatar:
  *   post:
  *     tags: [Users]
- *     summary: Загрузить аватар сотруднику (HR/admin)
+ *     summary: Загрузить аватар работнику (HR/admin)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -435,7 +435,7 @@ router.delete('/me/avatar', authenticateToken, async (req, res) => {
  * /users/{id}/avatar:
  *   delete:
  *     tags: [Users]
- *     summary: Сбросить аватар сотрудника (HR/admin)
+ *     summary: Сбросить аватар работника (HR/admin)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -518,7 +518,7 @@ router.delete('/:id/avatar', authenticateToken, authorizeRoles('hr', 'admin', 's
  *                           is_primary: { type: boolean }
  *                           is_active: { type: boolean }
  *       403:
- *         description: Доступ запрещён (сотрудник видит только свой профиль)
+ *         description: Доступ запрещён (работник видит только свой профиль)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
@@ -534,7 +534,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const targetId = parseInt(id)
 
     if (!(await checkProfileAccess(req, targetId))) {
-      return res.status(403).json({ error: 'Нет доступа к профилю этого сотрудника' })
+      return res.status(403).json({ error: 'Нет доступа к профилю этого работника' })
     }
 
     const result = await query(
@@ -662,7 +662,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
  * /users/{id}/primary-org:
  *   patch:
  *     tags: [Users]
- *     summary: Изменить основную организацию сотрудника
+ *     summary: Изменить основную организацию работника
  *     description: 'Доступно для ролей: admin, hr'
  *     security:
  *       - bearerAuth: []
@@ -695,7 +695,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  *       404:
- *         description: 'Организация не найдена или не привязана к сотруднику'
+ *         description: 'Организация не найдена или не привязана к работнику'
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
@@ -714,7 +714,7 @@ router.patch('/:id/primary-org', authenticateToken, authorizeRoles('admin', 'hr'
       [userId, orgId]
     )
     if (membership.rows.length === 0) {
-      return res.status(404).json({ error: 'Организация не найдена или не привязана к сотруднику' })
+      return res.status(404).json({ error: 'Организация не найдена или не привязана к работнику' })
     }
 
     await query(

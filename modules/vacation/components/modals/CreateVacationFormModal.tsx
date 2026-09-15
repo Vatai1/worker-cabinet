@@ -383,13 +383,13 @@ export function CreateVacationFormModal({
                 Замещающие <span className="text-muted-foreground">(необязательно)</span>
               </label>
               <p className="text-xs text-muted-foreground mb-2">
-                Выберите сотрудников, которые будут замещать вас на время отпуска. Им будут перенаправлены заявки на согласование.
+                Выберите работников, которые будут замещать вас на время отпуска. Им будут перенаправлены заявки на согласование.
               </p>
               <input
                 type="text"
                 value={employeeSearch}
                 onChange={(e) => setEmployeeSearch(e.target.value)}
-                placeholder="Поиск сотрудника..."
+                placeholder="Поиск работника..."
                 className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm mb-2"
                 disabled={loading}
               />

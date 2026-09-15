@@ -320,7 +320,7 @@ function OrganizationDetailModal({
   const detailTabs: { id: DetailTab; name: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'info', name: 'Об учреждении', icon: Building2 },
     { id: 'departments', name: 'Отделы', icon: FolderOpen },
-    { id: 'members', name: 'Сотрудники', icon: Users },
+    { id: 'members', name: 'Работники', icon: Users },
     { id: 'modules', name: 'Модули', icon: Boxes },
     { id: 'settings', name: 'Настройки', icon: SettingsIcon },
   ]
@@ -490,7 +490,7 @@ function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; 
         <div className="p-4 rounded-xl border border-border/50 bg-muted/20">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Users className="h-4 w-4" />
-            <span className="text-xs">Сотрудники</span>
+            <span className="text-xs">Работники</span>
           </div>
           <p className="text-2xl font-bold">{stats?.members ?? '—'}</p>
         </div>
@@ -619,7 +619,7 @@ function DepartmentsTabContent({ orgId, onSelectDept }: { orgId: number; onSelec
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground mb-3">Нажмите на отдел, чтобы посмотреть сотрудников</p>
+      <p className="text-xs text-muted-foreground mb-3">Нажмите на отдел, чтобы посмотреть работников</p>
       {departments.map((dept) => (
         <button
           key={dept.id}
@@ -715,7 +715,7 @@ function MembersTabContent({
             className="ml-auto text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
           >
             <X className="h-3 w-3" />
-            Все сотрудники
+            Все работники
           </button>
         </div>
       )}
@@ -734,7 +734,7 @@ function MembersTabContent({
       {filtered.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
-          <p>Сотрудников нет</p>
+          <p>Работников нет</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -764,7 +764,7 @@ function MembersTabContent({
                   ORG_ROLE_COLORS[member.org_role] || ORG_ROLE_COLORS.employee
                 )}
               >
-                <option value="employee">Сотрудник</option>
+                <option value="employee">Работник</option>
                 <option value="manager">Руководитель</option>
                 <option value="hr">HR</option>
                 <option value="admin">Администратор</option>

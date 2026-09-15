@@ -84,7 +84,7 @@ export function Departments() {
           </div>
           <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Отделы</h1>
           <p className="mt-2 text-white/45 text-sm">
-            {departments.length} {departments.length === 1 ? 'отдел' : 'отделов'} · {totalEmployees} сотрудников в компании
+            {departments.length} {departments.length === 1 ? 'отдел' : 'отделов'} · {totalEmployees} работников в компании
           </p>
         </div>
       </div>
@@ -97,7 +97,7 @@ export function Departments() {
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Users className="h-3.5 w-3.5" />
-            {filtered.reduce((s, d) => s + parseInt(d.employee_count || '0'), 0)} сотрудников
+            {filtered.reduce((s, d) => s + parseInt(d.employee_count || '0'), 0)} работников
           </div>
         </div>
         <div className="relative w-full sm:w-80">
@@ -137,7 +137,7 @@ export function Departments() {
                       <h3 className="font-bold text-[15px] leading-tight group-hover:text-primary transition-colors duration-200">{department.name}</h3>
                       <div className="flex items-center gap-1.5 mt-1.5 text-sm text-muted-foreground">
                         <Users className="h-3.5 w-3.5" />
-                        {count} {count === 1 ? 'сотрудник' : count < 5 ? 'сотрудника' : 'сотрудников'}
+                        {count} {count === 1 ? 'работник' : count < 5 ? 'работника' : 'работников'}
                       </div>
                     </div>
 

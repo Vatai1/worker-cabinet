@@ -195,7 +195,7 @@ export function GlobalSearch({ className, autoFocus, onNavigate }: GlobalSearchP
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => { if (query.trim().length >= 2) setOpen(true) }}
           onKeyDown={handleInputKeyDown}
-          placeholder="Поиск: сотрудники, отделы, проекты…"
+          placeholder="Поиск: работники, отделы, проекты…"
           className="w-full rounded-xl border border-input bg-card py-2 pl-9 pr-8 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
         {query && (
@@ -213,7 +213,7 @@ export function GlobalSearch({ className, autoFocus, onNavigate }: GlobalSearchP
         <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-card shadow-lg">
           {employees.length > 0 && (
             <div>
-              <p className="px-3 py-1.5 text-xs uppercase text-muted-foreground">Сотрудники</p>
+              <p className="px-3 py-1.5 text-xs uppercase text-muted-foreground">Работники</p>
               {employees.map((u) => (
                 <button
                   key={u.id}

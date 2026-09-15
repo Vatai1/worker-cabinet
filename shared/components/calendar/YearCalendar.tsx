@@ -231,7 +231,7 @@ export function YearCalendar({
           </div>
 
           <div className="text-sm text-muted-foreground">
-            💡 <strong>Подсказка:</strong> Дни отпусков окрашены цветом сотрудника, на согласовании — штриховкой. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки.
+            💡 <strong>Подсказка:</strong> Дни отпусков окрашены цветом работника, на согласовании — штриховкой. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки.
           </div>
         </>
       )}
@@ -388,7 +388,7 @@ export function YearCalendar({
                  <div className="w-6 h-6 rounded border border-border" style={{ backgroundColor: `${PARTICIPANT_COLORS[1]}26` }} />
                  <span className="flex items-center gap-1.5">
                    Согласовано
-                   <span className="text-xs text-muted-foreground">— цвет сотрудника</span>
+                   <span className="text-xs text-muted-foreground">— цвет работника</span>
                    <span className="flex gap-1">
                      {PARTICIPANT_COLORS.slice(0, 4).map(hex => (
                        <span key={hex} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: hex }} />
@@ -398,7 +398,7 @@ export function YearCalendar({
                </div>
                <div className="flex items-center gap-2">
                  <div className="w-6 h-6 rounded border border-border" style={{ backgroundImage: `repeating-linear-gradient(45deg, ${PARTICIPANT_COLORS[0]}59 0 2px, transparent 2px 6px)` }} />
-                 <span>На согласовании <span className="text-xs text-muted-foreground">— цвет сотрудника</span></span>
+                 <span>На согласовании <span className="text-xs text-muted-foreground">— цвет работника</span></span>
                </div>
                <div className="flex items-center gap-2">
                  <div className="w-6 h-6 rounded border bg-muted" />
@@ -406,7 +406,7 @@ export function YearCalendar({
                </div>
              </div>
 
-            <h4 className="font-medium text-sm mb-2">Сотрудники</h4>
+            <h4 className="font-medium text-sm mb-2">Работники</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
               {Array.from(new Set(requests.map(r => r.userId))).map(userId => {
                 const userRequests = requests.filter(r => r.userId === userId)

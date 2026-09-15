@@ -23,9 +23,9 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 const TARGET_LABELS: Record<string, string> = {
-  all: 'Все сотрудники',
+  all: 'Все работники',
   department: 'Отдел',
-  employees: 'Выбранные сотрудники',
+  employees: 'Выбранные работники',
 }
 
 export function HRSurveys() {

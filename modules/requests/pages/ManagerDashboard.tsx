@@ -52,7 +52,7 @@ export function ManagerDashboard() {
       '1': { firstName: 'Иван', lastName: 'Иванов' },
     }
     const emp = employees[userId]
-    return emp ? personName(emp.lastName, emp.firstName) : `Сотрудник #${userId}`
+    return emp ? personName(emp.lastName, emp.firstName) : `Работник #${userId}`
   }
 
   return (
@@ -67,7 +67,7 @@ export function ManagerDashboard() {
             <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Руководитель</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight">Панель руководителя</h1>
-          <p className="mt-2 text-white/50 text-sm">Рассмотрение заявлений от сотрудников подразделения</p>
+          <p className="mt-2 text-white/50 text-sm">Рассмотрение заявлений от работников подразделения</p>
         </div>
       </div>
 

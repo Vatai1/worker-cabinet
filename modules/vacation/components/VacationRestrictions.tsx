@@ -98,12 +98,12 @@ export function VacationRestrictions() {
     if (!selectedDepartmentId || selectedEmployees.length === 0) return
 
     if (restrictionType === 'pair' && selectedEmployees.length !== 2) {
-      toast.error('Для парного ограничения нужно выбрать ровно 2 сотрудника')
+      toast.error('Для парного ограничения нужно выбрать ровно 2 работника')
       return
     }
 
     if (restrictionType === 'group' && selectedEmployees.length < 2) {
-      toast.error('Для группового ограничения нужно выбрать минимум 2 сотрудника')
+      toast.error('Для группового ограничения нужно выбрать минимум 2 работника')
       return
     }
 
@@ -235,12 +235,12 @@ export function VacationRestrictions() {
                 )}
               >
                 {restrictionType === 'pair'
-                  ? 'Два выбранных сотрудника не могут одновременно находиться в отпуске.'
-                  : `Максимум ${maxConcurrent} ${maxConcurrent === 1 ? 'сотрудник' : 'сотрудника'} из группы могут одновременно находиться в отпуске.`}
+                  ? 'Два выбранных работника не могут одновременно находиться в отпуске.'
+                  : `Максимум ${maxConcurrent} ${maxConcurrent === 1 ? 'работник' : 'работника'} из группы могут одновременно находиться в отпуске.`}
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium">Сотрудники</label>
+                <label className="block text-sm font-medium">Работники</label>
 
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -277,7 +277,7 @@ export function VacationRestrictions() {
 
                 <div className="max-h-60 overflow-y-auto rounded-xl border border-border">
                   {filteredUsers.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-sm text-muted-foreground">Сотрудники не найдены</div>
+                    <div className="px-4 py-6 text-center text-sm text-muted-foreground">Работники не найдены</div>
                   ) : (
                     filteredUsers.map((employee) => {
                       const isChecked = selectedEmployees.includes(employee.id)
@@ -289,7 +289,7 @@ export function VacationRestrictions() {
                           onClick={() => toggleEmployee(employee.id)}
                           title={
                             atPairLimit
-                              ? 'Для парного ограничения выбирается ровно 2 сотрудника — выбор заменит одного из выбранных'
+                              ? 'Для парного ограничения выбирается ровно 2 работника — выбор заменит одного из выбранных'
                               : undefined
                           }
                           className={cn(

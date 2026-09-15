@@ -18,7 +18,7 @@ interface SiteSettingsState {
 }
 
 const defaults: LoginSettings = {
-  login_title: 'Личный кабинет сотрудника',
+  login_title: 'Личный кабинет работника',
   login_subtitle: 'Единая платформа для управления персоналом, отпусками и документами',
   login_demo_buttons: 'true',
 }

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 
 const ROLE_LABELS: Record<string, string> = {
-  employee: 'Сотрудник', manager: 'Руководитель', hr: 'HR-менеджер',
+  employee: 'Работник', manager: 'Руководитель', hr: 'HR-менеджер',
   admin: 'Администратор', director: 'Директор', onboarding: 'Онбординг',
 }
 
@@ -164,7 +164,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   if (!data) return null
 
   const tabInfo = activeDict === 'positions'
-    ? { name: 'Должности', icon: Briefcase, color: 'from-blue-500 to-indigo-600', desc: 'Должности сотрудников (из профиля)' }
+    ? { name: 'Должности', icon: Briefcase, color: 'from-blue-500 to-indigo-600', desc: 'Должности работников (из профиля)' }
     : activeDict === 'vacationTypes'
     ? { name: 'Отпуск', icon: Plane, color: 'from-emerald-500 to-teal-600', desc: 'Типы отпусков' }
     : { name: 'Навыки', icon: Wrench, color: 'from-violet-500 to-purple-600', desc: 'Каталог навыков компании' }
@@ -217,7 +217,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className="text-[10px]">{p.count} чел.</Badge>
-                        <button onClick={() => setShowPositionUsers(p.name)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Сотрудники">
+                        <button onClick={() => setShowPositionUsers(p.name)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Работники">
                           <Users className="h-3.5 w-3.5" />
                         </button>
                         {isAdmin && (
@@ -357,7 +357,7 @@ function PositionUsersModal({ position, isAdmin, onClose }: { position: string; 
         <div className="flex items-center justify-between p-5 border-b border-border shrink-0">
           <div>
             <h3 className="font-semibold text-lg flex items-center gap-2"><Briefcase className="h-5 w-5 text-muted-foreground" /> {position}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Сотрудники на этой должности</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Работники на этой должности</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-5 w-5" /></button>
         </div>
@@ -367,7 +367,7 @@ function PositionUsersModal({ position, isAdmin, onClose }: { position: string; 
           ) : users.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
               <Users className="h-10 w-10 opacity-20" />
-              <p className="text-sm">Нет сотрудников на этой должности</p>
+              <p className="text-sm">Нет работников на этой должности</p>
             </div>
           ) : (
             <div className="space-y-1">

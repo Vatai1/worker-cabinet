@@ -40,7 +40,7 @@ export function LeaderDashboard() {
 
   const stats = [
     {
-      title: 'Сотрудники',
+      title: 'Работники',
       value: totalSubordinates.toString(),
       description: 'в подразделении',
       icon: Users,
@@ -90,7 +90,7 @@ export function LeaderDashboard() {
       '4': { firstName: 'Мария', lastName: 'Петрова' },
     }
     const emp = employees[userId]
-    return emp ? personName(emp.lastName, emp.firstName) : `Сотрудник #${userId}`
+    return emp ? personName(emp.lastName, emp.firstName) : `Работник #${userId}`
   }
 
   return (
@@ -147,7 +147,7 @@ export function LeaderDashboard() {
           <CardHeader>
             <CardTitle>Требуют рассмотрения</CardTitle>
             <CardDescription>
-              Заявки от сотрудников, ожидающие решения
+              Заявки от работников, ожидающие решения
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -259,7 +259,7 @@ export function LeaderDashboard() {
         <CardHeader>
           <CardTitle>Статус отпусков команды</CardTitle>
           <CardDescription>
-            Текущий статус отпусков сотрудников подразделения
+            Текущий статус отпусков работников подразделения
           </CardDescription>
         </CardHeader>
         <CardContent>

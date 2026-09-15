@@ -100,7 +100,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-9"
-              placeholder="Поиск сотрудника…"
+              placeholder="Поиск работника…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
@@ -111,7 +111,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
         <div className="flex-1 overflow-y-auto scrollbar-thin overscroll-contain p-2 min-h-0">
           {filtered.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-8">
-              {search ? 'Никого не найдено' : 'Все сотрудники уже добавлены'}
+              {search ? 'Никого не найдено' : 'Все работники уже добавлены'}
             </p>
           ) : (
             filtered.map((u) => {

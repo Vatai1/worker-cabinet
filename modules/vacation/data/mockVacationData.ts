@@ -20,7 +20,7 @@ export const getVacationRequestStatusBadge = (
       className: 'bg-red-100 text-red-800',
     },
     [VacationRequestStatus.CANCELLED_BY_EMPLOYEE]: {
-      label: 'Отменено сотрудником',
+      label: 'Отменено работником',
       className: 'bg-gray-100 text-gray-800',
     },
     [VacationRequestStatus.CANCELLED_BY_MANAGER]: {

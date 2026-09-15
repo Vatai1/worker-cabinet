@@ -7,7 +7,7 @@
 - **Маршрут**: (нет отдельного маршрута — внутри EmployeeProfile)
 - **Иконка**: `Wrench`
 - **Сортировка**: 85
-- **Описание**: Управление навыками и компетенциями сотрудников
+- **Описание**: Управление навыками и компетенциями работников
 
 ## Файловая структура
 
@@ -23,11 +23,11 @@ modules/skills/
 
 **Файлы**: `backend/src/routes/users.js`, `backend/src/routes/dictionaries.js`, `backend/src/routes/admin.js`
 
-### Навыки сотрудников
+### Навыки работников
 
 | Метод | Путь | Роли | Описание |
 |--------|------|------|----------|
-| GET | `/api/users/skills/all` | all | Все навыки с сотрудниками |
+| GET | `/api/users/skills/all` | all | Все навыки с работниками |
 | POST | `/api/users/:id/skills` | own, admin | Добавить навык |
 | DELETE | `/api/users/:id/skills` | own, admin | Удалить навык |
 

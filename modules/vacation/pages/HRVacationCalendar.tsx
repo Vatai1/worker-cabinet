@@ -298,7 +298,7 @@ export function HRVacationCalendar() {
             <Plane className="w-8 h-8 text-primary" />
             Календарь отпусков
           </h1>
-          <p className="mt-2 text-muted-foreground">{pluralRn(totalEmp, 'сотрудник', 'сотрудника', 'сотрудников')} в отпуске в {year} году</p>
+          <p className="mt-2 text-muted-foreground">{pluralRn(totalEmp, 'работник', 'работника', 'работников')} в отпуске в {year} году</p>
         </div>
       </div>
 
@@ -452,7 +452,7 @@ export function HRVacationCalendar() {
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium leading-snug break-words" title={dd.name}>{dd.name}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        {typeof dd.employee_count === 'number' ? dd.employee_count : (dd.employee_count || '—')} сотрудник(ов)
+                        {typeof dd.employee_count === 'number' ? dd.employee_count : (dd.employee_count || '—')} работник(ов)
                       </div>
                     </div>
                   </div>
@@ -489,12 +489,12 @@ export function HRVacationCalendar() {
         </div>
       </Card>
 
-      {/* ── Сотрудники в отпуске ── */}
+      {/* ── Работники в отпуске ── */}
       <Card>
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-foreground">Сотрудники в отпуске</h2>
-            <span className="text-sm text-muted-foreground">{pluralRn(filteredCards.length, 'сотрудник', 'сотрудника', 'сотрудников')}</span>
+            <h2 className="text-xl font-bold text-foreground">Работники в отпуске</h2>
+            <span className="text-sm text-muted-foreground">{pluralRn(filteredCards.length, 'работник', 'работника', 'работников')}</span>
           </div>
           {loading ? (
             <div className="flex items-center justify-center py-12">

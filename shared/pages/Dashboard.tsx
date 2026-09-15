@@ -165,14 +165,14 @@ export function Dashboard() {
     { key: 'surveys', href: '/surveys', title: 'Опросы', desc: 'Пройти доступные опросы', icon: ClipboardList, bg: 'bg-purple-500/10', iconColor: 'text-purple-600 dark:text-purple-400', enabled: surveysEnabled },
     { key: 'documents', href: '/documents', title: 'Мои документы', desc: 'Доступ к трудовым документам', icon: FileText, bg: 'bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', enabled: isModuleEnabled('documents') },
     { key: 'projects', href: '/projects', title: 'Проекты', desc: 'Ваши текущие проекты', icon: FolderKanban, bg: 'bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', enabled: isModuleEnabled('projects') },
-    { key: 'onboarding', href: '/hr?tab=onboarding', title: 'Онбординг', desc: 'Адаптация новых сотрудников', icon: UserPlus, bg: 'bg-teal-500/10', iconColor: 'text-teal-600 dark:text-teal-400', enabled: isHR && onboardingEnabled },
-    { key: 'mailing', href: '/hr?tab=mailing', title: 'Рассылка', desc: 'Отправить письмо сотрудникам', icon: Send, bg: 'bg-pink-500/10', iconColor: 'text-pink-600 dark:text-pink-400', enabled: isHR && isModuleEnabled('mailing') },
+    { key: 'onboarding', href: '/hr?tab=onboarding', title: 'Онбординг', desc: 'Адаптация новых работников', icon: UserPlus, bg: 'bg-teal-500/10', iconColor: 'text-teal-600 dark:text-teal-400', enabled: isHR && onboardingEnabled },
+    { key: 'mailing', href: '/hr?tab=mailing', title: 'Рассылка', desc: 'Отправить письмо работникам', icon: Send, bg: 'bg-pink-500/10', iconColor: 'text-pink-600 dark:text-pink-400', enabled: isHR && isModuleEnabled('mailing') },
   ].filter((a) => a.enabled)
 
   const pulseStats = [
     vacationEnabled && orgPulse ? { key: 'pending', href: '/hr?tab=vacation', label: 'Заявок на согласовании', value: orgPulse.pendingApprovals, icon: Plane, className: 'text-amber-600 bg-amber-500/15' } : null,
     onboardingEnabled && orgPulse ? { key: 'onboarding', href: '/hr?tab=onboarding', label: 'В процессе онбординга', value: orgPulse.onboardingActive, icon: UserPlus, className: 'text-teal-600 bg-teal-500/15' } : null,
-    orgPulse ? { key: 'employees', href: '/employees', label: 'Всего сотрудников', value: orgPulse.employeeCount, icon: Users, className: 'text-blue-600 bg-blue-500/15' } : null,
+    orgPulse ? { key: 'employees', href: '/employees', label: 'Всего работников', value: orgPulse.employeeCount, icon: Users, className: 'text-blue-600 bg-blue-500/15' } : null,
   ].filter((s): s is { key: string; href: string; label: string; value: number; icon: typeof Plane; className: string } => s !== null)
 
   return (
@@ -430,7 +430,7 @@ export function Dashboard() {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Users className="h-4 w-4 shrink-0" />
-                  Сотрудников: {myDepartment.employee_count ?? '—'}
+                  Работников: {myDepartment.employee_count ?? '—'}
                 </div>
                 <Link to={`/departments/${myDepartment.id}`} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
                   Перейти к отделу <ArrowRight className="h-3.5 w-3.5" />

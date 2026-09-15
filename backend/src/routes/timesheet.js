@@ -246,7 +246,7 @@ router.post('/', async (req, res) => {
  * /timesheet/{id}:
  *   get:
  *     tags: [Timesheet]
- *     summary: Получить табель с записями и сотрудниками
+ *     summary: Получить табель с записями и работниками
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -658,7 +658,7 @@ router.get('/:id/export/excel', async (req, res) => {
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet('Табель')
 
-    const header = ['Сотрудник']
+    const header = ['Работник']
     for (let d = 1; d <= daysInMonth; d++) header.push(String(d))
     sheet.addRow(header)
     sheet.getRow(1).font = { bold: true }
@@ -732,7 +732,7 @@ router.get('/:id/export/pdf', async (req, res) => {
     let y = doc.y
     const startX = 30
 
-    doc.fontSize(7).text('Сотрудник', startX, y, { width: nameWidth, continued: false })
+    doc.fontSize(7).text('Работник', startX, y, { width: nameWidth, continued: false })
     for (let d = 1; d <= daysInMonth; d++) {
       doc.text(String(d), startX + nameWidth + (d - 1) * colWidth, y, { width: colWidth, align: 'center' })
     }
