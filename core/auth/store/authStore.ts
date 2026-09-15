@@ -3,6 +3,7 @@ import type { User, AuthState } from '@/shared/types'
 import { deleteCookie } from '@/shared/lib/cookies'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
+import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 
@@ -26,6 +27,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
     try {
       const response = await fetchWithRetry(`${API_BASE_URL}/auth/me`, {
         credentials: 'include',
+        headers: getAuthHeaders(),
       })
 
       if (!response.ok) {
@@ -124,6 +126,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
       const res = await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
+        headers: getAuthHeaders(),
       })
       if (res.ok) {
         const data = await res.json()
