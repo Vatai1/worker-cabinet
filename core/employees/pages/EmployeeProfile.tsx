@@ -26,12 +26,13 @@ import { apiGet, apiPatch } from '@/shared/lib/apiClient'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getAvatarColor as getAvatarGradient } from '@/shared/lib/constants'
-import { formatDate, getErrorMessage } from '@/shared/lib/utils'
+import { formatDate, getErrorMessage, personName } from '@/shared/lib/utils'
 
 interface SubstituteInfo {
   id: number
   first_name: string
   last_name: string
+  middle_name?: string | null
   position: string
   avatar?: string
 }
@@ -453,7 +454,7 @@ export function EmployeeProfile() {
                   {substitutes.map((s, i) => (
                     <span key={s.id}>
                       <Link to={`/employees/${s.id}`} className="underline hover:text-white">
-                        {s.last_name} {s.first_name}
+                        {personName(s.last_name, s.first_name, s.middle_name)}
                       </Link>
                       {i < substitutes.length - 1 ? ', ' : ''}
                     </span>

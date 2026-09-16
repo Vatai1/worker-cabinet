@@ -39,12 +39,12 @@ function s3KeyFromAvatarUrl(url) {
  * /users/skills/all:
  *   get:
  *     tags: [Users]
- *     summary: Получить все навыки (справочник)
+ *     summary: Получить все теги (справочник)
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Список навыков
+ *         description: Список тегов
  *         content:
  *           application/json:
  *             schema:
@@ -161,24 +161,33 @@ router.get('/search', authenticateToken, async (req, res) => {
         u.avatar,
         u.office,
         u.cabinet,
-        m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name
+        m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
+        COALESCE(
+          (SELECT json_agg(sd.name ORDER BY sd.name)
+           FROM user_skills us JOIN skills_dictionary sd ON us.skill_id = sd.id
+           WHERE us.user_id = u.id),
+          '[]'
+        ) as skills
       FROM users u
       ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN users m ON u.manager_id = m.id
       WHERE 1=1${orgWhere} ${excludeTest(req, "u")}
     `
-    
+
     if (departmentId) {
       sql += ' AND u.department_id = $' + (params.length + 1)
       params.push(departmentId)
     }
-    
+
     if (q) {
-      sql += ` AND (u.first_name ILIKE $${params.length + 1} OR u.last_name ILIKE $${params.length + 1} OR u.position ILIKE $${params.length + 1})`
+      sql += ` AND (u.first_name ILIKE $${params.length + 1} OR u.last_name ILIKE $${params.length + 1} OR u.position ILIKE $${params.length + 1} OR EXISTS (
+        SELECT 1 FROM user_skills us2 JOIN skills_dictionary sd2 ON us2.skill_id = sd2.id
+        WHERE us2.user_id = u.id AND sd2.name ILIKE $${params.length + 1}
+      ))`
       params.push(`%${q}%`)
     }
-    
+
     sql += ' ORDER BY u.last_name, u.first_name'
     
     const result = await query(sql, params)
@@ -246,7 +255,13 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
         u.role,
         u.manager_id,
         u.avatar,
-        m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name
+        m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
+        COALESCE(
+          (SELECT json_agg(sd.name ORDER BY sd.name)
+           FROM user_skills us JOIN skills_dictionary sd ON us.skill_id = sd.id
+           WHERE us.user_id = u.id),
+          '[]'
+        ) as skills
       FROM users u
       ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
@@ -739,7 +754,7 @@ router.patch('/:id/primary-org', authenticateToken, authorizeRoles('admin', 'hr'
  * /users/{id}/skills:
  *   post:
  *     tags: [Users]
- *     summary: Добавить навык пользователю
+ *     summary: Добавить тег пользователю
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -758,7 +773,7 @@ router.patch('/:id/primary-org', authenticateToken, authorizeRoles('admin', 'hr'
  *               skill: { type: string }
  *     responses:
  *       200:
- *         description: Навык добавлен
+ *         description: Тег добавлен
  *         content:
  *           application/json:
  *             schema:
@@ -822,7 +837,7 @@ router.post('/:id/skills', authenticateToken, async (req, res) => {
  * /users/{id}/skills:
  *   delete:
  *     tags: [Users]
- *     summary: Удалить навык у пользователя
+ *     summary: Удалить тег у пользователя
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -841,7 +856,7 @@ router.post('/:id/skills', authenticateToken, async (req, res) => {
  *               skill: { type: string }
  *     responses:
  *       200:
- *         description: Навык удалён
+ *         description: Тег удалён
  *         content:
  *           application/json:
  *             schema:

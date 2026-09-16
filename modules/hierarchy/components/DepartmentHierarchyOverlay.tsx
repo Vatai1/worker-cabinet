@@ -136,6 +136,39 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
     load()
   }, [departmentId, setNodes, setEdges])
 
+  useEffect(() => {
+    if (departments.length === 0) return
+    const byId = new Map(departments.map(d => [d.id, d]))
+    setNodes(nds => nds.map(n => {
+      if (n.type !== 'department') return n
+      const d = n.data as { id?: number; name?: string; managerName?: string | null; employeeCount?: number }
+      if (d?.id == null) return n
+      const fresh = byId.get(d.id)
+      if (!fresh) return n
+      if (d.name === fresh.name && d.managerName === fresh.manager_name && d.employeeCount === fresh.employee_count) return n
+      return { ...n, data: { ...n.data, name: fresh.name, managerName: fresh.manager_name, employeeCount: fresh.employee_count } }
+    }))
+  }, [departments, setNodes])
+
+  useEffect(() => {
+    const allEmployees = departments.flatMap(d => (d.employees ?? []).map(e => ({ ...e, departmentName: d.name })))
+    if (allEmployees.length === 0) return
+    const byId = new Map(allEmployees.map(m => [m.id, m]))
+    setNodes(nds => nds.map(n => {
+      if (n.type !== 'employee') return n
+      const d = n.data as { id?: number; firstName?: string; lastName?: string; middleName?: string | null; position?: string; department?: string }
+      if (d?.id == null) return n
+      const fresh = byId.get(d.id)
+      if (!fresh) return n
+      if (d.firstName === fresh.first_name && d.lastName === fresh.last_name && d.middleName === fresh.middle_name &&
+        d.position === fresh.position && d.department === fresh.departmentName) return n
+      return {
+        ...n,
+        data: { ...n.data, firstName: fresh.first_name, lastName: fresh.last_name, middleName: fresh.middle_name, position: fresh.position, department: fresh.departmentName },
+      }
+    }))
+  }, [departments, setNodes])
+
   const handleInit = useCallback((inst: ReactFlowInstance) => {
     rfInstanceRef.current = inst
     if (pendingViewportRef.current) {
@@ -278,7 +311,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
       id: `employee-${emp.id}-${Date.now()}`,
       type: 'employee',
       position: pendingDrop.position,
-      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, position: emp.position, department: emp.departmentName, description },
+      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, description },
     } as Node])
     setPendingDrop(null)
   }
@@ -288,7 +321,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
     saveSnapshot()
     setNodes(nds => nds.map(n => n.id === editingNode.id ? {
       ...n,
-      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, position: emp.position, department: emp.departmentName, description },
+      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, description },
     } : n))
     setEditingNode(null)
   }

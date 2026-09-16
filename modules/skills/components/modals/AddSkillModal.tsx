@@ -96,16 +96,16 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
         <div className="p-6 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           <div className="flex items-center gap-2 mb-2">
             <Plus className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-semibold">Добавить навык</h2>
+            <h2 className="text-xl font-semibold">Добавить тег</h2>
           </div>
           <p className="text-sm text-muted-foreground mb-6">
-            {mode === 'select' ? 'Выберите навык из списка или создайте новый' : 'Введите название нового навыка'}
+            {mode === 'select' ? 'Выберите тег из списка или создайте новый' : 'Введите название нового тега'}
           </p>
 
           {mode === 'select' ? (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="search">Поиск навыков</Label>
+                <Label htmlFor="search">Поиск тегов</Label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -121,7 +121,7 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
               </div>
 
               <div className="space-y-2">
-                <Label>Доступные навыки</Label>
+                <Label>Доступные теги</Label>
                 {loading ? (
                   <div className="text-center py-8 text-sm text-muted-foreground">Загрузка...</div>
                 ) : filteredSkills.length > 0 ? (
@@ -138,7 +138,7 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
                   </div>
                 ) : (
                   <div className="text-center py-8 text-sm text-muted-foreground">
-                    {searchQuery ? 'Ничего не найдено' : 'Все навыки уже добавлены'}
+                    {searchQuery ? 'Ничего не найдено' : 'Все теги уже добавлены'}
                   </div>
                 )}
               </div>
@@ -150,7 +150,7 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
                 onClick={() => setMode('create')}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Добавить новый навык
+                Добавить новый тег
               </Button>
 
               <div className="flex justify-end gap-3">
@@ -163,7 +163,7 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
             <form onSubmit={handleCreateSkill} onKeyDown={handleKeyDown}>
               <div className="space-y-4 mb-6">
                 <div className="space-y-2">
-                  <Label htmlFor="newSkill">Название нового навыка</Label>
+                  <Label htmlFor="newSkill">Название нового тега</Label>
                   <Input
                     id="newSkill"
                     placeholder="Например: Управление проектами..."

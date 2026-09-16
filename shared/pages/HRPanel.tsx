@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 import {
   Users, ClipboardList, UserPlus, Plane, Network,
-  Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Wrench, Send,
+  Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Tag, Send,
 } from 'lucide-react'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
@@ -56,7 +56,7 @@ const TAB_GROUPS: TabGroup[] = [
     { id: 'hr_departments', name: 'Отделы', icon: Building2, description: 'Структура организации', module: 'dictionaries', color: 'from-blue-500 to-indigo-600' },
     { id: 'hr_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', module: 'dictionaries', color: 'from-violet-500 to-purple-600' },
     { id: 'hr_vacation_types', name: 'Типы отпусков', icon: Plane, description: 'Типы отпусков', module: 'vacation', color: 'from-amber-500 to-orange-600' },
-    { id: 'hr_skills', name: 'Навыки', icon: Wrench, description: 'Каталог навыков', module: 'skills', color: 'from-emerald-500 to-teal-600' },
+    { id: 'hr_skills', name: 'Теги', icon: Tag, description: 'Каталог тегов', module: 'skills', color: 'from-emerald-500 to-teal-600' },
   ]},
 ]
 

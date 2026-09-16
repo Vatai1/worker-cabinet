@@ -411,6 +411,6 @@
   }
 }
 
-.react-flow__node.hierarchy-group-node {
-  pointer-events: none;
+.react-flow .react-flow__node.hierarchy-group-node {
+  pointer-events: none !important;
 }

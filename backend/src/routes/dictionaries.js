@@ -258,12 +258,12 @@ router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin
  * /dictionaries/skills:
  *   get:
  *     tags: [Dictionaries]
- *     summary: Получить справочник навыков (HR/admin)
+ *     summary: Получить справочник тегов (HR/admin)
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Список навыков
+ *         description: Список тегов
  */
 router.get('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
@@ -284,7 +284,7 @@ router.get('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHan
  * /dictionaries/skills:
  *   post:
  *     tags: [Dictionaries]
- *     summary: Создать навык (HR/admin)
+ *     summary: Создать тег (HR/admin)
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -298,14 +298,14 @@ router.get('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHan
  *               name: { type: string }
  *     responses:
  *       201:
- *         description: Навык создан
+ *         description: Тег создан
  */
 router.post('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { name } = req.body
-  if (!name?.trim()) throw new ValidationError('Название навыка обязательно')
+  if (!name?.trim()) throw new ValidationError('Название тега обязательно')
 
   const existing = await query(...orgScopedQuery('SELECT id FROM skills_dictionary WHERE name = $1', [name.trim()], req))
-  if (existing.rows.length > 0) throw new ConflictError('Навык с таким названием уже существует')
+  if (existing.rows.length > 0) throw new ConflictError('Тег с таким названием уже существует')
 
   const result = await query(
     'INSERT INTO skills_dictionary (name, organization_id) VALUES ($1, $2) RETURNING id, name',
@@ -319,7 +319,7 @@ router.post('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHa
  * /dictionaries/skills/{id}:
  *   put:
  *     tags: [Dictionaries]
- *     summary: Обновить навык (HR/admin)
+ *     summary: Обновить тег (HR/admin)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -338,18 +338,18 @@ router.post('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHa
  *               name: { type: string }
  *     responses:
  *       200:
- *         description: Навык обновлён
+ *         description: Тег обновлён
  */
 router.put('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { name } = req.body
-  if (!name?.trim()) throw new ValidationError('Название навыка обязательно')
+  if (!name?.trim()) throw new ValidationError('Название тега обязательно')
 
   const existing = await query(...orgScopedQuery('SELECT id FROM skills_dictionary WHERE id = $1', [id], req))
-  if (existing.rows.length === 0) throw new NotFoundError('Навык не найден')
+  if (existing.rows.length === 0) throw new NotFoundError('Тег не найден')
 
   const duplicate = await query(...orgScopedQuery('SELECT id FROM skills_dictionary WHERE name = $1 AND id != $2', [name.trim(), id], req))
-  if (duplicate.rows.length > 0) throw new ConflictError('Навык с таким названием уже существует')
+  if (duplicate.rows.length > 0) throw new ConflictError('Тег с таким названием уже существует')
 
   const result = await query(
     ...orgScopedQuery('UPDATE skills_dictionary SET name = $1 WHERE id = $2 RETURNING id, name', [name.trim(), id], req)
@@ -362,7 +362,7 @@ router.put('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyn
  * /dictionaries/skills/{id}:
  *   delete:
  *     tags: [Dictionaries]
- *     summary: Удалить навык (HR/admin)
+ *     summary: Удалить тег (HR/admin)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -372,21 +372,66 @@ router.put('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyn
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Навык удалён
+ *         description: Тег удалён
  */
 router.delete('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
   const existing = await query(...orgScopedQuery('SELECT id FROM skills_dictionary WHERE id = $1', [id], req))
-  if (existing.rows.length === 0) throw new NotFoundError('Навык не найден')
+  if (existing.rows.length === 0) throw new NotFoundError('Тег не найден')
 
   const usersWithSkill = await query('SELECT COUNT(*) as cnt FROM user_skills WHERE skill_id = $1', [id])
   if (parseInt(usersWithSkill.rows[0].cnt) > 0) {
-    throw new ConflictError('Нельзя удалить навык, который привязан к работникам')
+    throw new ConflictError('Нельзя удалить тег, который привязан к работникам')
   }
 
   await query(...orgScopedQuery('DELETE FROM skills_dictionary WHERE id = $1', [id], req))
   res.json({ success: true })
+}))
+
+/**
+ * @swagger
+ * /dictionaries/skills/{id}/assign:
+ *   post:
+ *     tags: [Dictionaries]
+ *     summary: Массово назначить тег работникам (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userIds]
+ *             properties:
+ *               userIds: { type: array, items: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Тег назначен работникам
+ */
+router.post('/skills/:id/assign', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const { userIds } = req.body
+  const ids = Array.isArray(userIds) ? userIds.map(Number).filter((n) => Number.isInteger(n)) : []
+  if (ids.length === 0) throw new ValidationError('Список работников обязателен')
+
+  const tag = await query(...orgScopedQuery('SELECT id, name FROM skills_dictionary WHERE id = $1', [id], req))
+  if (tag.rows.length === 0) throw new NotFoundError('Тег не найден')
+
+  const result = await query(
+    `INSERT INTO user_skills (user_id, skill_id)
+     SELECT DISTINCT u, $2::int FROM unnest($1::int[]) AS u
+     ON CONFLICT (user_id, skill_id) DO NOTHING
+     RETURNING user_id`,
+    [ids, id]
+  )
+  res.json({ assigned: result.rows.length, total: ids.length, tagName: tag.rows[0].name })
 }))
 
 /**

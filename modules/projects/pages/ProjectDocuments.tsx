@@ -8,7 +8,7 @@ import { isPreviewable } from '@/shared/lib/documentUtils'
 import type { FolderItem, DocItem, ProjectMeta, ContextMenuState } from '@/shared/lib/documentUtils'
 import { getFileTypeLabel } from '@/shared/lib/documentUtils'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { hasAnyRole } from '@/shared/lib/permissions'
 import {
@@ -226,7 +226,7 @@ function FolderInfoModal({
       const res = await fetch(`${API_BASE_URL}/users/${folder.created_by}`, { headers: getAuthHeaders() })
       if (res.ok) {
         const data = await res.json()
-        return `${data.first_name} ${data.last_name}`
+        return personName(data.last_name, data.first_name, data.middle_name)
       }
     } catch {}
     return ''
@@ -322,7 +322,7 @@ function DocInfoModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-muted-foreground mb-1">Загружил</p>
-              <p className="text-sm font-medium">{doc.uploader_first_name} {doc.uploader_last_name}</p>
+              <p className="text-sm font-medium">{personName(doc.uploader_last_name, doc.uploader_first_name, doc.uploader_middle_name)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">Дата загрузки</p>
@@ -1336,7 +1336,7 @@ export function ProjectDocuments() {
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                     <span>{formatSize(Number(doc.file_size))}</span>
                     <span>•</span>
-                    <span>{doc.uploader_first_name} {doc.uploader_last_name}</span>
+                    <span>{personName(doc.uploader_last_name, doc.uploader_first_name, doc.uploader_middle_name)}</span>
                     <span>•</span>
                     <span>{formatDate(doc.created_at)}</span>
                   </div>

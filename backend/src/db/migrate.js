@@ -1577,8 +1577,8 @@ async function runMigrations() {
       { code: 'timesheet', name: 'Табель', description: 'Учёт рабочего времени по Т-13', icon: 'Calendar', route: '/timesheet', sort: 50, category: 'work' },
       { code: 'onboarding', name: 'Онбординг', description: 'Адаптация новых работников', icon: 'UserPlus', route: '/onboarding', sort: 60, category: 'hr' },
       { code: 'hierarchy', name: 'Иерархия', description: 'Организационная структура компании', icon: 'Network', route: '/hr/hierarchy', sort: 70, category: 'hr' },
-      { code: 'dictionaries', name: 'Справочники', description: 'Справочники должностей, навыков, типов', icon: 'BookOpen', route: '/hr/dictionaries', sort: 80, category: 'admin' },
-      { code: 'skills', name: 'Навыки', description: 'Управление навыками и компетенциями работников', icon: 'Wrench', route: null, sort: 85, category: 'hr' },
+      { code: 'dictionaries', name: 'Справочники', description: 'Справочники должностей, тегов, типов', icon: 'BookOpen', route: '/hr/dictionaries', sort: 80, category: 'admin' },
+      { code: 'skills', name: 'Теги', description: 'Управление тегами на профилях работников', icon: 'Tag', route: null, sort: 85, category: 'hr' },
       { code: 'calendar', name: 'Календарь', description: 'Интеграция с Outlook/EWS календарём', icon: 'CalendarDays', route: '/calendar', sort: 90, category: 'admin' },
       { code: 'notifications', name: 'Уведомления', description: 'Email-уведомления о событиях в системе', icon: 'Bell', route: '/notifications', sort: 100, category: 'docs' },
       { code: 'auth', name: 'Авторизация', description: 'Настройки аутентификации, авторизации и безопасности', icon: 'Lock', route: null, sort: 5, category: 'core' },
@@ -1595,6 +1595,8 @@ async function runMigrations() {
     }
     console.log('  ✓ modules seeded')
     await db.query("UPDATE modules SET category = 'hr' WHERE code = 'mailing'").catch(() => {})
+    await db.query("UPDATE modules SET name = 'Теги', description = 'Управление тегами на профилях работников', icon = 'Tag' WHERE code = 'skills'").catch(() => {})
+    await db.query("UPDATE modules SET description = 'Справочники должностей, тегов, типов' WHERE code = 'dictionaries'").catch(() => {})
     await db.query("DELETE FROM modules WHERE code = 'analytics'").catch(() => {})
     await db.query("DELETE FROM permissions WHERE module = 'analytics'").catch(() => {})
     const appearanceResult = await db.query("SELECT settings FROM modules WHERE code = 'appearance'")

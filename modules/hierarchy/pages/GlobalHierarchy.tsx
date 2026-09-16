@@ -23,7 +23,7 @@ import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { useUIStore } from '@/shared/store/uiStore'
 import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, HRHierarchy, ChildOrgNode, buildOrgOverlay, animateOrgReveal, ConfirmLeaveModal } from '@/modules/hierarchy/pages/HRHierarchy'
 
@@ -36,6 +36,7 @@ interface OrgItem {
   head_id?: number | null
   head_first_name?: string | null
   head_last_name?: string | null
+  head_middle_name?: string | null
   parent_id?: number | null
   parent_name?: string | null
 }
@@ -113,7 +114,7 @@ function orgDataOf(o: OrgItem, childrenMap: Map<number, OrgItem[]>) {
   return {
     name: o.name,
     memberCount: o.member_count,
-    headName: o.head_id ? [o.head_last_name, o.head_first_name].filter(Boolean).join(' ') || null : null,
+    headName: o.head_id ? personName(o.head_last_name, o.head_first_name, o.head_middle_name) || null : null,
     childOrgs: kids.map(k => ({ id: k.id, name: k.name, childCount: countDescendants(k.id, childrenMap) })),
   }
 }

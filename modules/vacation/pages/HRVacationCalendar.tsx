@@ -14,7 +14,7 @@ import { useWsStore } from '@/shared/store/wsStore'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
-import { cn } from '@/shared/lib/utils'
+import { cn, personName } from '@/shared/lib/utils'
 import {
   Plane, Calendar, Search, ChevronLeft, ChevronRight, Loader2,
   Lock, Unlock, Filter, Users, Server, Check, BarChart3, Shield,
@@ -204,10 +204,10 @@ export function HRVacationCalendar() {
   }, [requests, reqFilters])
 
   const employeeStats = useMemo(() => {
-    const stats: Record<string, { firstName: string; lastName: string; position: string; department: string; departmentId: string; count: number }> = {}
+    const stats: Record<string, { firstName: string; lastName: string; middleName?: string | null; position: string; department: string; departmentId: string; count: number }> = {}
     visibleRequests.forEach((r) => {
       if (!stats[r.userId]) {
-        stats[r.userId] = { firstName: r.userFirstName, lastName: r.userLastName, position: r.userPosition, department: r.userDepartment, departmentId: r.departmentId ?? '', count: 0 }
+        stats[r.userId] = { firstName: r.userFirstName, lastName: r.userLastName, middleName: r.userMiddleName, position: r.userPosition, department: r.userDepartment, departmentId: r.departmentId ?? '', count: 0 }
       }
       stats[r.userId].count++
     })
@@ -226,7 +226,7 @@ export function HRVacationCalendar() {
         return [new Date(r.startDate).getMonth(), new Date(r.startDate).getDate(), new Date(r.endDate).getMonth(), new Date(r.endDate).getDate()] as [number, number, number, number]
       })
       return {
-        id: Number(userId), name: `${info.lastName} ${info.firstName}`,
+        id: Number(userId), name: personName(info.lastName, info.firstName, info.middleName),
         pos: info.position, dept: info.department, deptId: info.departmentId, p, days,
         initials: info.lastName[0] + info.firstName[0],
         hue: deptHue(info.department),

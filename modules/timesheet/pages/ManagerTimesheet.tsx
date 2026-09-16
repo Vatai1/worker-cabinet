@@ -5,7 +5,7 @@ import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
 import { Sparkles, Users, Send, CheckCircle2 } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 
@@ -26,7 +26,7 @@ export function ManagerTimesheet() {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [timesheet, setTimesheet] = useState<Timesheet | null>(null)
-  const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[]; employees: { id: number; first_name: string; last_name: string }[] } | null>(null)
+  const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[]; employees: { id: number; first_name: string; last_name: string; middle_name?: string | null }[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -88,7 +88,7 @@ export function ManagerTimesheet() {
     if (emptyCells.length > 0) {
       const names = emptyCells.map((e: TimesheetEntry) => {
         const emp = timesheetData.employees.find((em: { id: number }) => em.id === e.employee_id)
-        return emp ? `${emp.first_name} ${emp.last_name}` : `ID ${e.employee_id}`
+        return emp ? personName(emp.last_name, emp.first_name, emp.middle_name) : `ID ${e.employee_id}`
       })
       await confirmDialog({
         title: 'Не все ячейки заполнены',

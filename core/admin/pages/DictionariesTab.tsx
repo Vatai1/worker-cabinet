@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
-import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import {
-  Briefcase, Plane, Wrench, Plus, Trash2, Edit3, Check, X,
-  AlertTriangle, Loader2, Users,
+  Briefcase, Plane, Tag, Plus, Trash2, Edit3, Check, X,
+  AlertTriangle, Loader2, Users, UserPlus,
 } from 'lucide-react'
 
 const ROLE_LABELS: Record<string, string> = {
@@ -50,9 +50,10 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   const [editVacationCode, setEditVacationCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [showPositionUsers, setShowPositionUsers] = useState<string | null>(null)
+  const [assigningTag, setAssigningTag] = useState<{ id: number; name: string } | null>(null)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       if (isAdmin) {
         const res = await fetchWithRetry(`${API_BASE_URL}/admin/dictionaries`, { headers: getAuthHeaders() })
@@ -68,7 +69,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
         const skills = sklRes.ok ? await sklRes.json() : []
         setData({ positions, vacationTypes, skills })
       }
-    } catch {} finally { setLoading(false) }
+    } catch {} finally { if (!silent) setLoading(false) }
   }, [isAdmin])
 
   useEffect(() => { fetchData() }, [fetchData])
@@ -167,7 +168,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
     ? { name: 'Должности', icon: Briefcase, color: 'from-blue-500 to-indigo-600', desc: 'Должности работников (из профиля)' }
     : activeDict === 'vacationTypes'
     ? { name: 'Отпуск', icon: Plane, color: 'from-emerald-500 to-teal-600', desc: 'Типы отпусков' }
-    : { name: 'Навыки', icon: Wrench, color: 'from-violet-500 to-purple-600', desc: 'Каталог навыков компании' }
+    : { name: 'Теги', icon: Tag, color: 'from-violet-500 to-purple-600', desc: 'Каталог тегов компании' }
   const ActiveIcon = tabInfo.icon
 
   return (
@@ -288,7 +289,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
           {activeDict === 'skills' && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Input placeholder="Новый навык" value={newSkill} onChange={e => setNewSkill(e.target.value)} className="h-9 text-sm" onKeyDown={e => e.key === 'Enter' && addSkill()} />
+                <Input placeholder="Новый тег" value={newSkill} onChange={e => setNewSkill(e.target.value)} className="h-9 text-sm" onKeyDown={e => e.key === 'Enter' && addSkill()} />
                 <Button size="sm" onClick={addSkill} disabled={!newSkill.trim()}>
                   <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
                 </Button>
@@ -296,8 +297,8 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
               <div className="space-y-0.5">
                 {data.skills.length === 0 && (
                   <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-                    <Wrench className="h-8 w-8 opacity-20" />
-                    <p className="text-sm">Нет навыков</p>
+                    <Tag className="h-8 w-8 opacity-20" />
+                    <p className="text-sm">Нет тегов</p>
                   </div>
                 )}
                 {data.skills.map((s) => (
@@ -312,6 +313,9 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
                       <>
                         <span className="text-sm font-medium">{s.name}</span>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => setAssigningTag({ id: s.id, name: s.name })} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Назначить работникам">
+                            <UserPlus className="h-3.5 w-3.5" />
+                          </button>
                           <button onClick={() => { setEditSkillId(s.id); setEditSkillName(s.name) }} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                             <Edit3 className="h-3.5 w-3.5" />
                           </button>
@@ -331,6 +335,14 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
 
       {showPositionUsers && (
         <PositionUsersModal position={showPositionUsers} isAdmin={isAdmin} onClose={() => setShowPositionUsers(null)} />
+      )}
+
+      {assigningTag && (
+        <AssignTagModal
+          tag={assigningTag}
+          onClose={() => setAssigningTag(null)}
+          onAssigned={() => fetchData(true)}
+        />
       )}
     </div>
   )
@@ -395,6 +407,156 @@ function PositionUsersModal({ position, isAdmin, onClose }: { position: string; 
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function AssignTagModal({ tag, onClose, onAssigned }: { tag: { id: number; name: string }; onClose: () => void; onAssigned: () => void }) {
+  const [search, setSearch] = useState('')
+  const [users, setUsers] = useState<{ id: number; first_name: string; last_name: string; middle_name: string | null; position: string | null; department_name: string | null; skills?: string[] }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{ assigned: number; total: number } | null>(null)
+
+  useEffect(() => {
+    fetchWithRetry(`${API_BASE_URL}/users?limit=1000`, { headers: getAuthHeaders() })
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => setUsers(data.users || data || []))
+      .catch(() => setUsers([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = users.filter(u => {
+    const q = search.toLowerCase()
+    return !q || `${u.last_name} ${u.first_name} ${u.position || ''} ${u.department_name || ''}`.toLowerCase().includes(q)
+  })
+
+  const toggle = (id: number) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAllFiltered = () => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      filtered.forEach(u => { if (!u.skills?.includes(tag.name)) next.add(u.id) })
+      return next
+    })
+  }
+
+  const handleAssign = async () => {
+    if (selected.size === 0) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/skills/${tag.id}/assign`, {
+        method: 'POST', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ userIds: [...selected] }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setResult({ assigned: data.assigned, total: data.total })
+        onAssigned()
+      } else {
+        const d = await res.json()
+        setError(d.error || 'Ошибка')
+      }
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-border shrink-0">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
+            <Tag className="h-5 w-5 text-muted-foreground" /> Назначить тег «{tag.name}»
+          </h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-5 w-5" /></button>
+        </div>
+
+        {result ? (
+          <div className="p-6 text-center space-y-4">
+            <p className="text-sm">
+              Тег «{tag.name}» назначен {result.assigned} из {result.total} выбранных работников
+              {result.total - result.assigned > 0 ? ` (у остальных ${result.total - result.assigned} тег уже был)` : ''}.
+            </p>
+            <Button onClick={onClose}>Готово</Button>
+          </div>
+        ) : (
+          <>
+            <div className="p-4 border-b border-border shrink-0 space-y-2">
+              <Input
+                placeholder="Поиск по имени, должности, отделу…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="h-9 text-sm"
+                autoFocus
+              />
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Выбрано: {selected.size}</span>
+                <button type="button" onClick={selectAllFiltered} className="text-primary hover:underline">
+                  Выбрать всех в списке
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="mx-4 mt-3 p-2.5 rounded-lg bg-destructive/10 text-destructive text-xs">{error}</div>
+            )}
+
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-2">
+              {loading ? (
+                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+              ) : filtered.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">Ничего не найдено</div>
+              ) : (
+                filtered.map(u => {
+                  const already = u.skills?.includes(tag.name) ?? false
+                  return (
+                    <label
+                      key={u.id}
+                      className={`flex items-center gap-3 p-2.5 rounded-lg text-sm ${already ? 'opacity-50' : 'hover:bg-muted/40 cursor-pointer'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={already || selected.has(u.id)}
+                        disabled={already}
+                        onChange={() => toggle(u.id)}
+                        className="rounded"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">{personName(u.last_name, u.first_name, u.middle_name)}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {[u.position, u.department_name].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                      {already && <span className="text-[10px] text-muted-foreground shrink-0">уже добавлен</span>}
+                    </label>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="p-4 border-t border-border shrink-0 flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
+              <Button className="flex-1" onClick={handleAssign} disabled={selected.size === 0 || saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Назначить{selected.size > 0 ? ` (${selected.size})` : ''}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

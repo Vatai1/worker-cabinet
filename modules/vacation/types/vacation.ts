@@ -110,8 +110,8 @@ export interface VacationRequest {
   
   statusHistory: VacationRequestStatusHistory[]
 
-  substitutes?: Array<{ id: number; first_name: string; last_name: string; position: string; avatar?: string }>
-  delegated_to?: { id: number; first_name: string; last_name: string; position: string; avatar?: string } | null
+  substitutes?: Array<{ id: number; first_name: string; last_name: string; middle_name?: string | null; position: string; avatar?: string }>
+  delegated_to?: { id: number; first_name: string; last_name: string; middle_name?: string | null; position: string; avatar?: string } | null
 }
 
 interface VacationRequestStatusHistory {
@@ -216,6 +216,7 @@ export interface VacationEmployee {
   id: number
   first_name: string
   last_name: string
+  middle_name?: string | null
   position: string | null
   department_id?: number | null
   department_name?: string | null

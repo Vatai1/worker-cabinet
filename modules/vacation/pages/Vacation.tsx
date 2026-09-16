@@ -25,7 +25,7 @@ import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { apiGet } from '@/shared/lib/apiClient'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
 import { hasAnyRole } from '@/shared/lib/permissions'
 import {
@@ -84,7 +84,7 @@ export function Vacation() {
   const [vacationBlocked, setVacationBlocked] = useState(false)
   const [year, setYear] = useState(new Date().getFullYear())
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
-  const [pickerEmployees, setPickerEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
+  const [pickerEmployees, setPickerEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; middle_name?: string | null; position: string }>>([])
   const [reqFilters, setReqFilters] = useState(EMPTY_REQUEST_FILTERS)
   const [activeTab, setActiveTab] = useState<VacationTab>('mine')
   const [calendarScope, setCalendarScope] = useState<CalendarScope>('mine')
@@ -357,7 +357,7 @@ export function Vacation() {
       const hasOverlap = requestStart <= otherEnd && requestEnd >= otherStart
 
       if (hasOverlap) {
-        const employeeName = `${otherRequest.userLastName} ${otherRequest.userFirstName}`
+        const employeeName = personName(otherRequest.userLastName, otherRequest.userFirstName, otherRequest.userMiddleName)
         const dates = `${new Date(otherRequest.startDate).toLocaleDateString('ru-RU')} - ${new Date(otherRequest.endDate).toLocaleDateString('ru-RU')}`
         warnings.push({
           message: `Пересечение с отпуском работника`,
@@ -476,7 +476,7 @@ export function Vacation() {
       const raw: VacationEmployee[] = Array.isArray(data) ? data : data.users || []
       const list = raw
         .filter((u) => u.id !== Number(user?.id))
-        .map((u) => ({ id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || '' }))
+        .map((u) => ({ id: u.id, first_name: u.first_name, last_name: u.last_name, middle_name: u.middle_name, position: u.position || '' }))
       setPickerEmployees(list)
       setShowSubstitutePicker(requestId)
     } catch {}
@@ -1009,7 +1009,7 @@ export function Vacation() {
                                           <div className="flex flex-wrap gap-1.5">
                                             {request.substitutes.map((s) => (
                                               <span key={s.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
-                                                {s.last_name} {s.first_name}
+                                                {personName(s.last_name, s.first_name, s.middle_name)}
                                                 <button
                                                   type="button"
                                                   onClick={(e) => { e.stopPropagation(); handleRemoveSubstitute(request.id, s.id) }}
@@ -1032,7 +1032,7 @@ export function Vacation() {
                                             onClick={(ev) => { ev.stopPropagation(); handleAddSubstitute(request.id, e.id); setShowSubstitutePicker(null) }}
                                             className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted text-sm text-left"
                                           >
-                                            {e.last_name} {e.first_name}
+                                            {personName(e.last_name, e.first_name, e.middle_name)}
                                             {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
                                           </button>
                                         ))}
@@ -1165,14 +1165,14 @@ export function Vacation() {
                           className="flex flex-1 min-w-0 items-center gap-4 text-left"
                         >
                           <Avatar className="w-10 h-10 rounded-lg shrink-0">
-                            <AvatarImage src={request.userAvatar || generateAvatarUrl(request.userId, request.userGender)} alt={`${request.userLastName} ${request.userFirstName}`} />
+                            <AvatarImage src={request.userAvatar || generateAvatarUrl(request.userId, request.userGender)} alt={personName(request.userLastName, request.userFirstName, request.userMiddleName)} />
                             <AvatarFallback className="rounded-lg bg-primary/10 text-primary font-semibold">
                               {request.userFirstName[0]}{request.userLastName[0]}
                             </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-semibold text-sm">{request.userLastName} {request.userFirstName}</span>
+                              <span className="font-semibold text-sm">{personName(request.userLastName, request.userFirstName, request.userMiddleName)}</span>
                               <Badge variant="warning">На согласовании</Badge>
                             </div>
                             <div className="text-xs text-muted-foreground">{request.userPosition}</div>

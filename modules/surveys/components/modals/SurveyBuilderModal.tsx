@@ -57,7 +57,7 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
   const [questions, setQuestions] = useState<LocalQuestion[]>([])
   const rawDepartments = useDepartmentsStore((s) => s.departments)
   const departments = rawDepartments.map((d) => ({ id: String(d.id), name: d.name }))
-  const [employees, setEmployees] = useState<{ id: string; firstName: string; lastName: string }[]>([])
+  const [employees, setEmployees] = useState<{ id: string; firstName: string; lastName: string; middleName: string | null }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -95,7 +95,7 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
     useDepartmentsStore.getState().fetchDepartments()
     fetch(`${API_BASE_URL}/users`, { headers })
       .then((r) => r.json())
-      .then((data) => setEmployees(Array.isArray(data) ? data.map((e: { id: number; firstName: string; lastName: string }) => ({ id: String(e.id), firstName: e.firstName, lastName: e.lastName })) : []))
+      .then((data) => setEmployees(Array.isArray(data) ? data.map((e: { id: number; first_name: string; last_name: string; middle_name: string | null }) => ({ id: String(e.id), firstName: e.first_name, lastName: e.last_name, middleName: e.middle_name })) : []))
       .catch(() => {})
   }, [])
 
@@ -364,7 +364,7 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
                           )
                         }}
                       />
-                      {personName(emp.lastName, emp.firstName)}
+                      {personName(emp.lastName, emp.firstName, emp.middleName)}
                     </label>
                   ))}
                   {employees.length === 0 && <p className="text-xs text-muted-foreground">Загрузка...</p>}

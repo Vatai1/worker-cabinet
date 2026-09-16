@@ -14,7 +14,8 @@ async function getProjectWithMembers(projectId, req) {
     SELECT
        p.*,
        u.first_name AS creator_first_name,
-       u.last_name  AS creator_last_name
+       u.last_name  AS creator_last_name,
+       u.middle_name AS creator_middle_name
      FROM company_projects p
      LEFT JOIN users u ON p.created_by = u.id
      WHERE p.id = $1`
@@ -36,6 +37,7 @@ async function getProjectWithMembers(projectId, req) {
         u.id,
         u.first_name,
         u.last_name,
+        u.middle_name,
         u.position,
         u.avatar,
        d.name AS department_name
@@ -105,6 +107,7 @@ router.get('/', authenticateToken, async (req, res) => {
               'id',         u.id,
               'first_name', u.first_name,
               'last_name',  u.last_name,
+              'middle_name', u.middle_name,
               'position',   u.position,
               'role',       m.role,
               'avatar',     u.avatar
@@ -564,7 +567,8 @@ router.get('/:id/documents', authenticateToken, async (req, res) => {
       SELECT
          d.*,
          u.first_name AS uploader_first_name,
-         u.last_name  AS uploader_last_name
+         u.last_name  AS uploader_last_name,
+         u.middle_name AS uploader_middle_name
        FROM project_documents d
        LEFT JOIN users u ON d.uploaded_by = u.id
        WHERE d.project_id = $1`

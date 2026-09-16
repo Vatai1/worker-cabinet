@@ -216,7 +216,7 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(
 router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT mc.id, mc.title, mc.channel, mc.recipient_count, mc.created_at,
-            u.first_name, u.last_name
+            u.first_name, u.last_name, u.middle_name
      FROM mailing_campaigns mc
      LEFT JOIN users u ON mc.created_by = u.id
      ${req.org ? 'WHERE mc.organization_id = $1' : ''}
@@ -260,7 +260,7 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandle
 
   const recipientsResult = await query(
     `SELECT mcr.status, mcr.error, mcr.created_at,
-            u.first_name, u.last_name, u.email, u.position
+            u.first_name, u.last_name, u.middle_name, u.email, u.position
      FROM mailing_campaign_recipients mcr
      JOIN users u ON mcr.user_id = u.id
      WHERE mcr.campaign_id = $1${req.org ? ' AND mcr.organization_id = $2' : ''}

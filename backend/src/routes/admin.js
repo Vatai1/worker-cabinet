@@ -333,7 +333,7 @@ router.get('/users', asyncHandler(async (req, res) => {
       u.status, u.role, u.department_id, u.hire_date, u.phone, u.avatar,
       u.manager_id, u.responsibility_area, u.office, u.cabinet, u.created_at,
       d.name as department_name,
-      m.first_name as manager_first_name, m.last_name as manager_last_name,
+      m.first_name as manager_first_name, m.last_name as manager_last_name, m.middle_name as manager_middle_name,
       (
         SELECT string_agg(o.name, ', ')
         FROM user_organizations uo2
@@ -707,7 +707,7 @@ router.get('/audit-log', asyncHandler(async (req, res) => {
     SELECT a.id, a.user_id, a.user_name, a.action, a.entity_type, a.entity_id,
       a.details, a.ip_address, a.created_at, a.real_user_id,
       ru.email AS real_user_email,
-      NULLIF(TRIM(COALESCE(ru.first_name, '') || ' ' || COALESCE(ru.last_name, '')), '') AS real_user_name
+      NULLIF(TRIM(COALESCE(ru.last_name, '') || ' ' || COALESCE(ru.first_name, '') || COALESCE(' ' || NULLIF(ru.middle_name, ''), '')), '') AS real_user_name
     FROM audit_log a
     LEFT JOIN users ru ON a.real_user_id = ru.id
     ${where}
@@ -1057,7 +1057,7 @@ router.get('/security/failed-logins', asyncHandler(async (req, res) => {
  */
 router.get('/security/locked-accounts', asyncHandler(async (req, res) => {
   const result = await query(`
-    SELECT u.id, u.email, u.first_name, u.last_name, u.locked_until, u.failed_login_count,
+    SELECT u.id, u.email, u.first_name, u.last_name, u.middle_name, u.locked_until, u.failed_login_count,
       d.name as department
     FROM users u
     LEFT JOIN departments d ON u.department_id = d.id
@@ -1453,7 +1453,7 @@ router.get('/reports/hires', asyncHandler(async (req, res) => {
   const result = await query(`
     SELECT u.id, u.first_name, u.last_name, u.middle_name, u.email, u.position, u.hire_date,
       u.status, u.role, d.name as department,
-      m.first_name as manager_first, m.last_name as manager_last
+      m.first_name as manager_first, m.last_name as manager_last, m.middle_name as manager_middle
     FROM users u
     LEFT JOIN departments d ON u.department_id = d.id
     LEFT JOIN users m ON u.manager_id = m.id
@@ -1465,7 +1465,8 @@ router.get('/reports/hires', asyncHandler(async (req, res) => {
     const sep = ';'
     const header = ['Фамилия', 'Имя', 'Отчество', 'Email', 'Должность', 'Отдел', 'Дата найма', 'Статус', 'Роль', 'Руководитель'].join(sep)
     const rows = result.rows.map(r =>
-      [r.last_name, r.first_name, r.middle_name || '', r.email, r.position, r.department || '', r.hire_date || '', r.status, r.role, r.manager_first ? `${r.manager_first} ${r.manager_last}` : ''].join(sep)
+      [r.last_name, r.first_name, r.middle_name || '', r.email, r.position, r.department || '', r.hire_date || '', r.status, r.role,
+        r.manager_first ? [r.manager_last, r.manager_first, r.manager_middle].filter(Boolean).join(' ') : ''].join(sep)
     )
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
     res.setHeader('Content-Disposition', 'attachment; filename=hires_report.csv')
@@ -1505,7 +1506,7 @@ router.get('/dictionaries', asyncHandler(async (req, res) => {
  * /admin/dictionaries/skills:
  *   post:
  *     tags: [Admin]
- *     summary: Добавить навык в справочник
+ *     summary: Добавить тег в справочник
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -1518,7 +1519,7 @@ router.get('/dictionaries', asyncHandler(async (req, res) => {
  *               name: { type: string }
  *     responses:
  *       201:
- *         description: Навык добавлен
+ *         description: Тег добавлен
  */
 router.post('/dictionaries/skills', asyncHandler(async (req, res) => {
   const { name } = req.body
@@ -1528,7 +1529,7 @@ router.post('/dictionaries/skills', asyncHandler(async (req, res) => {
     `INSERT INTO skills_dictionary (name, organization_id) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING RETURNING *`,
     [name.trim(), orgId]
   )
-  if (result.rows.length === 0) throw new ValidationError('Такой навык уже существует')
+  if (result.rows.length === 0) throw new ValidationError('Такой тег уже существует')
   res.status(201).json(result.rows[0])
 }))
 
@@ -1537,13 +1538,13 @@ router.post('/dictionaries/skills', asyncHandler(async (req, res) => {
  * /admin/dictionaries/skills/{id}:
  *   delete:
  *     tags: [Admin]
- *     summary: Удалить навык из справочника
+ *     summary: Удалить тег из справочника
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { name: id, in: path, required: true, schema: { type: integer } }
  *     responses:
  *       200:
- *         description: Навык удалён
+ *         description: Тег удалён
  */
 router.delete('/dictionaries/skills/:id', asyncHandler(async (req, res) => {
   const { text, values } = orgScopedQuery('DELETE FROM skills_dictionary WHERE id = $1', [req.params.id], req)

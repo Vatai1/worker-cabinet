@@ -6,11 +6,13 @@ import { UserPlus, X, Search, Check } from 'lucide-react'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAvatarColor } from '@/shared/lib/constants'
+import { personName } from '@/shared/lib/utils'
 
 interface User {
   id: string
   first_name: string
   last_name: string
+  middle_name?: string | null
   position: string
   department_name?: string
 }
@@ -133,7 +135,7 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{u.last_name} {u.first_name}</div>
+                    <div className="text-sm font-medium">{personName(u.last_name, u.first_name, u.middle_name)}</div>
                     <div className="text-xs text-muted-foreground truncate">{u.position}</div>
                   </div>
                   {selected && <Check className="h-4 w-4 text-primary shrink-0" />}

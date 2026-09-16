@@ -32,7 +32,7 @@ import {
   ConnectionMode,
   NodeResizer,
 } from '@xyflow/react'
-import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeft, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle, BookOpen, Plus, ChevronDown } from 'lucide-react'
+import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeft, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle, BookOpen, Plus, ChevronDown, Briefcase, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { Switch } from '@/shared/components/ui/Switch'
@@ -41,7 +41,7 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { useOrgStore } from '@/shared/store/orgStore'
-import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { useUIStore } from '@/shared/store/uiStore'
 
 const SaveSnapshotContext = createContext<() => void>(() => {})
@@ -50,6 +50,7 @@ interface DeptEmployee {
   id: number
   first_name: string
   last_name: string
+  middle_name?: string | null
   position: string
   departmentName?: string
   departmentId?: number
@@ -60,6 +61,7 @@ interface OrgMemberRow {
   id: number
   first_name: string
   last_name: string
+  middle_name?: string | null
   position: string | null
   department_id: number | null
   department_name: string | null
@@ -74,6 +76,7 @@ interface ChildOrgItem {
   head_id?: number | null
   head_first_name?: string | null
   head_last_name?: string | null
+  head_middle_name?: string | null
 }
 
 function buildChildOrgNodes(baseNodes: Node[], childOrgs: ChildOrgItem[], savedPositions: Record<string, { x: number; y: number }> = {}): Node[] {
@@ -89,7 +92,7 @@ function buildChildOrgNodes(baseNodes: Node[], childOrgs: ChildOrgItem[], savedP
     data: {
       name: o.name,
       memberCount: o.member_count,
-      headName: o.head_id ? [o.head_last_name, o.head_first_name].filter(Boolean).join(' ') || null : null,
+      headName: o.head_id ? personName(o.head_last_name, o.head_first_name, o.head_middle_name) || null : null,
     },
     selectable: false,
     deletable: false,
@@ -108,7 +111,7 @@ function buildRootOrgNode(baseNodes: Node[], org: ChildOrgItem, savedPos?: { x: 
     data: {
       name: org.name,
       memberCount: org.member_count,
-      headName: org.head_id ? [org.head_last_name, org.head_first_name].filter(Boolean).join(' ') || null : null,
+      headName: org.head_id ? personName(org.head_last_name, org.head_first_name, org.head_middle_name) || null : null,
     },
     selectable: false,
     deletable: false,
@@ -156,9 +159,10 @@ interface Department {
 }
 
 function nodeName(n: Node): string {
-  const d = n.data as { name?: string; firstName?: string; lastName?: string; text?: string } | undefined
+  const d = n.data as { name?: string; firstName?: string; lastName?: string; middleName?: string; title?: string; text?: string } | undefined
   if (d?.name) return d.name
-  if (d?.lastName || d?.firstName) return `${d.lastName || ''} ${d.firstName || ''}`.trim()
+  if (d?.lastName || d?.firstName) return personName(d.lastName, d.firstName, d.middleName)
+  if (d?.title) return d.title
   if (d?.text) return d.text.slice(0, 30)
   return 'Блок'
 }
@@ -221,7 +225,7 @@ function DepartmentNode({ data }: NodeProps) {
 }
 
 function EmployeeNode({ data }: NodeProps) {
-  const d = data as { firstName: string; lastName: string; position: string; department?: string; description?: string; color?: string }
+  const d = data as { firstName: string; lastName: string; middleName?: string; position: string; department?: string; description?: string; color?: string }
   const initials = `${d.firstName[0]}${d.lastName[0]}`
   return (
     <div className="group min-w-[180px] rounded-xl overflow-hidden shadow-md border-2 bg-card hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
@@ -230,11 +234,34 @@ function EmployeeNode({ data }: NodeProps) {
           <span className="text-white text-xs font-semibold">{initials}</span>
         </div>
         <div className="overflow-hidden min-w-0">
-          <div className="text-sm font-medium truncate">{d.lastName} {d.firstName}</div>
+          <div className="text-sm font-medium truncate">{personName(d.lastName, d.firstName, d.middleName)}</div>
           <div className="text-xs text-muted-foreground truncate">{d.position}</div>
           {d.department && (
             <div className="text-[10px] text-muted-foreground truncate">{d.department}</div>
           )}
+        </div>
+      </div>
+      {d.description && (
+        <div className="px-3 pb-2.5 text-xs text-foreground/70 border-t border-border/50 pt-2 max-w-[220px] whitespace-pre-wrap">
+          {d.description}
+        </div>
+      )}
+      {HANDLES}
+    </div>
+  )
+}
+
+function PositionNode({ data }: NodeProps) {
+  const d = data as { title: string; department?: string; description?: string; color?: string }
+  return (
+    <div className="group min-w-[180px] rounded-xl overflow-hidden shadow-md border-2 border-dashed bg-card hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
+      <div className="px-3 py-2.5 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 border-2 border-dashed" style={{ borderColor: d.color ?? '#6b7280' }}>
+          <Briefcase className="h-4 w-4" style={{ color: d.color ?? '#6b7280' }} />
+        </div>
+        <div className="overflow-hidden min-w-0">
+          <div className="text-sm font-medium truncate">{d.title}</div>
+          <div className="text-xs text-muted-foreground truncate">Вакансия{d.department ? ` · ${d.department}` : ''}</div>
         </div>
       </div>
       {d.description && (
@@ -503,6 +530,7 @@ function ChildOrgNode({ data }: NodeProps) {
 const nodeTypes: NodeTypes = {
   department: DepartmentNode,
   employee: EmployeeNode,
+  position: PositionNode,
   text: TextNode,
   group: GroupNode,
   organization: ChildOrgNode,
@@ -640,7 +668,7 @@ function SelectEmployeeModal({
   const filtered = employees.filter(e => {
     const matchDept = deptId == null || e.departmentId === deptId
     const matchSearch =
-      `${e.last_name} ${e.first_name} ${e.position}`.toLowerCase().includes(search.toLowerCase())
+      `${personName(e.last_name, e.first_name, e.middle_name)} ${e.position}`.toLowerCase().includes(search.toLowerCase())
     return matchDept && matchSearch
   })
 
@@ -696,7 +724,7 @@ function SelectEmployeeModal({
                   </span>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{emp.last_name} {emp.first_name}</div>
+                  <div className="text-sm font-medium truncate">{personName(emp.last_name, emp.first_name, emp.middle_name)}</div>
                   <div className="text-xs text-muted-foreground truncate">
                     {emp.position}{emp.departmentName ? ` · ${emp.departmentName}` : ''}
                   </div>
@@ -768,6 +796,73 @@ function TextInputModal({
   )
 }
 
+function PositionInputModal({
+  departments,
+  onConfirm,
+  onClose,
+  initialTitle = '',
+  initialDepartmentId = null,
+  initialDescription = '',
+}: {
+  departments: Department[]
+  onConfirm: (title: string, departmentId: number | null, description: string) => void
+  onClose: () => void
+  initialTitle?: string
+  initialDepartmentId?: number | null
+  initialDescription?: string
+}) {
+  const [title, setTitle] = useState(initialTitle)
+  const [departmentId, setDepartmentId] = useState<number | null>(initialDepartmentId)
+  const [description, setDescription] = useState(initialDescription)
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-2">
+            <Briefcase className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">Должность</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="px-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain space-y-3">
+          <input
+            autoFocus
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="Название должности..."
+            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors"
+          />
+          <select
+            value={departmentId ?? ''}
+            onChange={e => setDepartmentId(e.target.value === '' ? null : Number(e.target.value))}
+            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors"
+          >
+            <option value="">Без отдела</option>
+            {departments.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Краткое описание (необязательно)..."
+            rows={2}
+            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors resize-none"
+          />
+        </div>
+        <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
+          <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
+          <Button className="flex-1" disabled={!title.trim()} onClick={() => onConfirm(title.trim(), departmentId, description)}>
+            {initialTitle ? 'Сохранить' : 'Добавить'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 type EdgeRelation = 'plain' | 'parent'
 
 type EdgeDraft = {
@@ -779,8 +874,8 @@ type EdgeDraft = {
   targetHandle: string | null
   sourceName: string
   targetName: string
-  sourceType: 'department' | 'employee' | 'text'
-  targetType: 'department' | 'employee' | 'text'
+  sourceType: 'department' | 'employee' | 'text' | 'position'
+  targetType: 'department' | 'employee' | 'text' | 'position'
   relation: EdgeRelation
   parentIsSource: boolean
   strokeWidth: number
@@ -811,10 +906,12 @@ function EdgeSettingsModal({
   const [parentSeesChild, setParentSeesChild] = useState(draft.vacationVisibility?.parentSeesChild ?? true)
   const [parentApproves, setParentApproves] = useState(draft.vacationVisibility?.parentApproves ?? true)
   const parentAvailable = draft.sourceType !== 'text' && draft.targetType !== 'text' &&
+    draft.sourceType !== 'position' && draft.targetType !== 'position' &&
     (draft.sourceType === 'department' || draft.targetType === 'department' || (draft.sourceType === 'employee' && draft.targetType === 'employee'))
   const effectiveRelation: EdgeRelation = parentAvailable ? relation : 'plain'
   const isEmpToEmp = draft.sourceType === 'employee' && draft.targetType === 'employee'
-  const vacationApplicable = effectiveRelation === 'parent' && draft.sourceType !== 'text' && draft.targetType !== 'text'
+  const vacationApplicable = effectiveRelation === 'parent' && draft.sourceType !== 'text' && draft.targetType !== 'text' &&
+    draft.sourceType !== 'position' && draft.targetType !== 'position'
   const buildVacationVisibility = (): VacationVisibility | undefined =>
     effectiveRelation === 'parent'
       ? { childSeesParent, parentSeesChild, parentApproves: isEmpToEmp ? true : parentApproves }
@@ -1025,7 +1122,7 @@ function validateGraphEdges(nodes: Node[], edges: Edge[]): string | null {
     } else if (n.type === 'employee' && d.id != null) {
       const id = Number(d.id)
       userIdByNode.set(n.id, id)
-      nameByUser.set(id, `${String(d.lastName || '')} ${String(d.firstName || '')}`.trim() || `Пользователь #${id}`)
+      nameByUser.set(id, personName(String(d.lastName || ''), String(d.firstName || ''), d.middleName ? String(d.middleName) : undefined) || `Пользователь #${id}`)
     }
   }
 
@@ -1137,7 +1234,7 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
   )
 }
 
-type PendingDrop = { type: 'department' | 'employee' | 'text' | 'group'; position: { x: number; y: number } }
+type PendingDrop = { type: 'department' | 'employee' | 'text' | 'group' | 'position'; position: { x: number; y: number } }
 
 function ConfirmDeleteNodeModal({ edgeCount, onConfirm, onClose }: { edgeCount: number; onConfirm: () => void; onClose: () => void }) {
   return (
@@ -1246,7 +1343,7 @@ function ConfirmDeleteEdgeModal({ onConfirm, onClose }: { onConfirm: () => void;
     </div>
   )
 }
-type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text' | 'group' | 'organization'; x: number; y: number }
+type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text' | 'group' | 'organization' | 'position'; x: number; y: number }
 type EdgeContextMenu = { edgeId: string; x: number; y: number }
 
 interface Props {
@@ -1270,7 +1367,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
   const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [edgeContextMenu, setEdgeContextMenu] = useState<EdgeContextMenu | null>(null)
-  const [editingNode, setEditingNode] = useState<{ id: string; type: 'department' | 'employee' | 'text' | 'group' } | null>(null)
+  const [editingNode, setEditingNode] = useState<{ id: string; type: 'department' | 'employee' | 'text' | 'group' | 'position' } | null>(null)
   const [activeDepartment, setActiveDepartment] = useState<{ id: number; name: string } | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<EdgeDraft | null>(null)
   const [parentEdgeId, setParentEdgeId] = useState<string | null>(null)
@@ -1408,6 +1505,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             id: u.id,
             first_name: u.first_name,
             last_name: u.last_name,
+            middle_name: u.middle_name,
             position: u.position ?? '',
             departmentName: u.department_name ?? undefined,
             departmentId: u.department_id ?? undefined,
@@ -1420,6 +1518,38 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     }
     load()
   }, [orgId, orgHeaders])
+
+  useEffect(() => {
+    if (departments.length === 0) return
+    const byId = new Map(departments.map(d => [d.id, d]))
+    setNodes(nds => nds.map(n => {
+      if (n.type !== 'department') return n
+      const d = n.data as { id?: number; name?: string; managerName?: string | null; employeeCount?: number }
+      if (d?.id == null) return n
+      const fresh = byId.get(d.id)
+      if (!fresh) return n
+      if (d.name === fresh.name && d.managerName === fresh.manager_name && d.employeeCount === fresh.employee_count) return n
+      return { ...n, data: { ...n.data, name: fresh.name, managerName: fresh.manager_name, employeeCount: fresh.employee_count } }
+    }))
+  }, [departments, setNodes])
+
+  useEffect(() => {
+    if (orgMembers.length === 0) return
+    const byId = new Map(orgMembers.map(m => [m.id, m]))
+    setNodes(nds => nds.map(n => {
+      if (n.type !== 'employee') return n
+      const d = n.data as { id?: number; firstName?: string; lastName?: string; middleName?: string | null; position?: string; department?: string }
+      if (d?.id == null) return n
+      const fresh = byId.get(d.id)
+      if (!fresh) return n
+      if (d.firstName === fresh.first_name && d.lastName === fresh.last_name && d.middleName === fresh.middle_name &&
+        d.position === fresh.position && d.department === fresh.departmentName) return n
+      return {
+        ...n,
+        data: { ...n.data, firstName: fresh.first_name, lastName: fresh.last_name, middleName: fresh.middle_name, position: fresh.position, department: fresh.departmentName },
+      }
+    }))
+  }, [orgMembers, setNodes])
 
   const onConnect = useCallback((params: Connection) => {
     const inst = rfInstanceRef.current
@@ -1478,8 +1608,8 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       targetHandle: params.targetHandle ?? null,
       sourceName: nodeName(s),
       targetName: nodeName(t),
-      sourceType: (s.type as 'department' | 'employee' | 'text') || 'text',
-      targetType: (t.type as 'department' | 'employee' | 'text') || 'text',
+      sourceType: (s.type as 'department' | 'employee' | 'text' | 'position') || 'text',
+      targetType: (t.type as 'department' | 'employee' | 'text' | 'position') || 'text',
       relation: 'parent',
       parentIsSource: true,
       strokeWidth: 2,
@@ -1516,8 +1646,8 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       targetHandle: edge.targetHandle ?? null,
       sourceName: nodeName(s),
       targetName: nodeName(t),
-      sourceType: (s.type as 'department' | 'employee' | 'text') || 'text',
-      targetType: (t.type as 'department' | 'employee' | 'text') || 'text',
+      sourceType: (s.type as 'department' | 'employee' | 'text' | 'position') || 'text',
+      targetType: (t.type as 'department' | 'employee' | 'text' | 'position') || 'text',
       relation: data?.relation === 'plain' ? 'plain' : 'parent',
       parentIsSource: !edge.markerStart,
       strokeWidth: (edge.style as { strokeWidth?: number } | undefined)?.strokeWidth ?? 2,
@@ -1668,10 +1798,50 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       id: `employee-${emp.id}-${Date.now()}`,
       type: 'employee',
       position: pendingDrop.position,
-      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, position: emp.position, department: emp.departmentName, description },
+      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, description },
     } as Node])
     setPendingDrop(null)
   }
+
+  const handleSelectPosition = (title: string, departmentId: number | null, description: string) => {
+    if (!pendingDrop) return
+    saveSnapshot()
+    const dept = departmentId != null ? departments.find(d => d.id === departmentId) : undefined
+    setNodes(nds => [...nds, {
+      id: `position-${Date.now()}`,
+      type: 'position',
+      position: pendingDrop.position,
+      data: { title, departmentId: departmentId ?? undefined, department: dept?.name, description },
+    } as Node])
+    setPendingDrop(null)
+  }
+
+  const [convertingPositionId, setConvertingPositionId] = useState<string | null>(null)
+
+  const handleConvertToEmployee = (emp: DeptEmployee) => {
+    if (!convertingPositionId) return
+    saveSnapshot()
+    setNodes(nds => nds.map(n => {
+      if (n.id !== convertingPositionId) return n
+      const prevDescription = (n.data as { description?: string } | undefined)?.description ?? ''
+      return {
+        ...n,
+        type: 'employee',
+        data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, description: prevDescription },
+      }
+    }))
+    setConvertingPositionId(null)
+  }
+
+  const convertEmployeeToPosition = useCallback((nodeId: string) => {
+    saveSnapshot()
+    setNodes(nds => nds.map(n => {
+      if (n.id !== nodeId) return n
+      const d = n.data as { position?: string; department?: string; description?: string }
+      return { ...n, type: 'position', data: { title: d.position || 'Должность', department: d.department, description: d.description ?? '' } }
+    }))
+    setContextMenu(null)
+  }, [setNodes, saveSnapshot])
 
   const diveToNode = useCallback((node: Node, after: () => void) => {
     const inst = rfInstanceRef.current
@@ -1755,7 +1925,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     setContextMenu(null)
   }, [setNodes, saveSnapshot])
 
-  const startEdit = useCallback((nodeId: string, nodeType: 'department' | 'employee' | 'text' | 'group') => {
+  const startEdit = useCallback((nodeId: string, nodeType: 'department' | 'employee' | 'text' | 'group' | 'position') => {
     setEditingNode({ id: nodeId, type: nodeType })
     setContextMenu(null)
   }, [])
@@ -1814,7 +1984,18 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     saveSnapshot()
     setNodes(nds => nds.map(n => n.id === editingNode.id ? {
       ...n,
-      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, position: emp.position, department: emp.departmentName, description },
+      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, description },
+    } : n))
+    setEditingNode(null)
+  }
+
+  const handleEditPosition = (title: string, departmentId: number | null, description: string) => {
+    if (!editingNode) return
+    saveSnapshot()
+    const dept = departmentId != null ? departments.find(d => d.id === departmentId) : undefined
+    setNodes(nds => nds.map(n => n.id === editingNode.id ? {
+      ...n,
+      data: { title, departmentId: departmentId ?? undefined, department: dept?.name, description },
     } : n))
     setEditingNode(null)
   }
@@ -1890,7 +2071,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       }
     }
     const managerById = new Map(orgMembers.map(m => [m.id, m.managerId ?? null]))
-    const nameById = new Map(orgMembers.map(m => [m.id, `${m.last_name} ${m.first_name}`.trim()]))
+    const nameById = new Map(orgMembers.map(m => [m.id, personName(m.last_name, m.first_name, m.middle_name)]))
     const cleared: string[] = []
     for (const uid of empNodeIds) {
       if (Number.isNaN(uid) || hasIncomingParent.has(uid)) continue
@@ -2014,6 +2195,20 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             <div>
               <div className="text-sm font-semibold">Работник</div>
               <div className="text-[10px] text-muted-foreground">Перетащите на холст</div>
+            </div>
+          </div>
+
+          <div
+            draggable
+            onDragStart={e => { e.dataTransfer.setData('reactflow-type', 'position'); e.dataTransfer.effectAllowed = 'move' }}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-border bg-muted/30 cursor-grab active:cursor-grabbing hover:bg-muted/60 hover:border-border transition-all select-none"
+          >
+            <div className="w-9 h-9 rounded-lg bg-muted border-2 border-dashed border-border flex items-center justify-center flex-shrink-0">
+              <Briefcase className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold">Должность</div>
+              <div className="text-[10px] text-muted-foreground">Вакансия, перетащите на холст</div>
             </div>
           </div>
 
@@ -2191,6 +2386,21 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
           onClose={() => setPendingDrop(null)}
         />
       )}
+      {pendingDrop?.type === 'position' && (
+        <PositionInputModal
+          departments={departments}
+          onConfirm={handleSelectPosition}
+          onClose={() => setPendingDrop(null)}
+        />
+      )}
+      {convertingPositionId && (
+        <SelectEmployeeModal
+          departments={departments}
+          members={orgMembers}
+          onSelect={handleConvertToEmployee}
+          onClose={() => setConvertingPositionId(null)}
+        />
+      )}
       {pendingDrop?.type === 'text' && (
         <TextInputModal
           onConfirm={handleSelectText}
@@ -2289,6 +2499,20 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             onSelect={handleEditEmployee}
             onClose={() => setEditingNode(null)}
             initialId={d?.id}
+            initialDescription={d?.description ?? ''}
+          />
+        )
+      })()}
+      {editingNode?.type === 'position' && (() => {
+        const n = nodes.find(n => n.id === editingNode.id)
+        const d = n?.data as { title?: string; departmentId?: number; description?: string } | undefined
+        return (
+          <PositionInputModal
+            departments={departments}
+            onConfirm={handleEditPosition}
+            onClose={() => setEditingNode(null)}
+            initialTitle={d?.title ?? ''}
+            initialDepartmentId={d?.departmentId ?? null}
             initialDescription={d?.description ?? ''}
           />
         )
@@ -2436,8 +2660,32 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
               <div className="h-px bg-border mx-2" />
             </>
           )}
+          {contextMenu.nodeType === 'position' && (
+            <>
+              <button
+                onClick={() => { setConvertingPositionId(contextMenu.nodeId); setContextMenu(null) }}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+              >
+                <UserPlus className="h-4 w-4 text-muted-foreground" />
+                Назначить работника
+              </button>
+              <div className="h-px bg-border mx-2" />
+            </>
+          )}
+          {contextMenu.nodeType === 'employee' && (
+            <>
+              <button
+                onClick={() => convertEmployeeToPosition(contextMenu.nodeId)}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+              >
+                <Briefcase className="h-4 w-4 text-muted-foreground" />
+                Заменить на должность
+              </button>
+              <div className="h-px bg-border mx-2" />
+            </>
+          )}
           <button
-            onClick={() => startEdit(contextMenu.nodeId, contextMenu.nodeType as 'department' | 'employee' | 'text' | 'group')}
+            onClick={() => startEdit(contextMenu.nodeId, contextMenu.nodeType as 'department' | 'employee' | 'text' | 'group' | 'position')}
             className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
           >
             <Pencil className="h-4 w-4 text-muted-foreground" />

@@ -10,11 +10,13 @@ import { ru } from 'date-fns/locale'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useAuthStore } from '@/core/auth/store/authStore'
+import { personName } from '@/shared/lib/utils'
 
 interface Employee {
   id: number
   first_name: string
   last_name: string
+  middle_name?: string | null
   position: string
   department_id?: number | null
   department_name?: string | null
@@ -102,6 +104,7 @@ export function CreateVacationModal({
               id: u.id,
               first_name: u.first_name,
               last_name: u.last_name,
+              middle_name: u.middle_name,
               position: u.position || '',
               department_id: u.department_id,
               department_name: u.department_name,
@@ -188,7 +191,7 @@ export function CreateVacationModal({
   const userDeptId = user?.departmentId ? Number(user.departmentId) : null
   const filteredEmployees = employees.filter((e) => {
     const q = pickerSearch.toLowerCase()
-    return !q || `${e.last_name} ${e.first_name} ${e.position}`.toLowerCase().includes(q)
+    return !q || `${personName(e.last_name, e.first_name, e.middle_name)} ${e.position}`.toLowerCase().includes(q)
   })
   const myDeptEmployees = filteredEmployees.filter(e => e.department_id != null && e.department_id === userDeptId)
   const otherEmployees = filteredEmployees.filter(e => e.department_id !== userDeptId)
@@ -205,7 +208,7 @@ export function CreateVacationModal({
         className="rounded h-4 w-4"
       />
       <div className="flex-1 min-w-0">
-        <div className="font-medium truncate">{e.last_name} {e.first_name}</div>
+        <div className="font-medium truncate">{personName(e.last_name, e.first_name, e.middle_name)}</div>
         {e.position && <div className="text-xs text-muted-foreground truncate">{e.position}</div>}
       </div>
     </label>

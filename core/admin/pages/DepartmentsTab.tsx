@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
-import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -479,7 +479,7 @@ export function DepartmentsTab() {
 
 function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: string) => void; onClose: () => void }) {
   const [search, setSearch] = useState('')
-  const [users, setUsers] = useState<{ id: number; first_name: string; last_name: string; email: string; position: string | null }[]>([])
+  const [users, setUsers] = useState<{ id: number; first_name: string; last_name: string; middle_name?: string | null; email: string; position: string | null }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -499,7 +499,7 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
   const filtered = users.filter(u => {
     if (!search.trim()) return true
     const q = search.toLowerCase()
-    return `${u.last_name} ${u.first_name} ${u.email} ${u.position || ''}`.toLowerCase().includes(q)
+    return `${personName(u.last_name, u.first_name, u.middle_name)} ${u.email} ${u.position || ''}`.toLowerCase().includes(q)
   })
 
   return (
@@ -531,7 +531,7 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
           ) : (
             <div className="space-y-0.5">
               {filtered.map(u => {
-                const fullName = `${u.last_name} ${u.first_name}`
+                const fullName = personName(u.last_name, u.first_name, u.middle_name)
                 return (
                   <button
                     key={u.id}

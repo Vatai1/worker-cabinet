@@ -13,6 +13,68 @@ const AUTO_NODE_GAP_Y = 220
 
 const AUTO_EDGE_STYLE = { stroke: '#6b7280', strokeWidth: 2 }
 
+async function enrichHierarchyData(data) {
+  const nodes = data?.nodes ?? []
+  const deptIds = [...new Set(
+    nodes.filter((n) => n.type === 'department' && n.data?.id != null).map((n) => Number(n.data.id))
+  )]
+  const userIds = [...new Set(
+    nodes.filter((n) => n.type === 'employee' && n.data?.id != null).map((n) => Number(n.data.id))
+  )]
+  if (deptIds.length === 0 && userIds.length === 0) return data
+
+  const [deptResult, userResult] = await Promise.all([
+    deptIds.length
+      ? query(
+          `SELECT d.id, d.name,
+                  m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
+                  (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
+           FROM departments d
+           LEFT JOIN users m ON d.manager_id = m.id
+           WHERE d.id = ANY($1::int[])`,
+          [deptIds]
+        )
+      : Promise.resolve({ rows: [] }),
+    userIds.length
+      ? query(
+          `SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, dep.name as department_name
+           FROM users u
+           LEFT JOIN departments dep ON u.department_id = dep.id
+           WHERE u.id = ANY($1::int[])`,
+          [userIds]
+        )
+      : Promise.resolve({ rows: [] }),
+  ])
+  const deptById = new Map(deptResult.rows.map((r) => [r.id, r]))
+  const userById = new Map(userResult.rows.map((r) => [r.id, r]))
+
+  const enrichedNodes = nodes.map((n) => {
+    if (n.type === 'department' && n.data?.id != null) {
+      const fresh = deptById.get(Number(n.data.id))
+      if (fresh) {
+        return { ...n, data: { ...n.data, name: fresh.name, managerName: fresh.manager_name, employeeCount: Number(fresh.employee_count) } }
+      }
+    } else if (n.type === 'employee' && n.data?.id != null) {
+      const fresh = userById.get(Number(n.data.id))
+      if (fresh) {
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            firstName: fresh.first_name,
+            lastName: fresh.last_name,
+            middleName: fresh.middle_name,
+            position: fresh.position,
+            department: fresh.department_name ?? undefined,
+          },
+        }
+      }
+    }
+    return n
+  })
+  return { ...data, nodes: enrichedNodes }
+}
+
 function buildAutoHierarchy(rows) {
   const byId = new Map(rows.map((r) => [r.id, r]))
   const nodeOf = new Map()
@@ -31,6 +93,7 @@ function buildAutoHierarchy(rows) {
           id: r.parent_user_id,
           firstName: r.parent_user_first_name,
           lastName: r.parent_user_last_name || '',
+          middleName: r.parent_user_middle_name || '',
           position: r.parent_user_position || '',
         },
       })
@@ -341,6 +404,7 @@ router.get('/', authenticateToken, async (req, res) => {
                 m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
                 pu.first_name as parent_user_first_name,
                 pu.last_name as parent_user_last_name,
+                pu.middle_name as parent_user_middle_name,
                 pu.position as parent_user_position,
                 (SELECT COUNT(*) FROM users WHERE department_id = d.id ${excludeTest(req, 'users')}) as employee_count
          FROM departments d
@@ -353,7 +417,8 @@ router.get('/', authenticateToken, async (req, res) => {
       const auto = buildAutoHierarchy(deptResult.rows)
       return res.json({ data: auto, updated_at: null, updated_by: null, version: 0 })
     }
-    res.json(result.rows[0])
+    const row = result.rows[0]
+    res.json({ ...row, data: await enrichHierarchyData(row.data) })
   } catch (error) {
     console.error('GET /hierarchy error:', error)
     res.status(500).json({ error: 'Не удалось загрузить иерархию' })
@@ -599,7 +664,8 @@ router.get('/department/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.json({ data: DEFAULT_DATA, updated_at: null, updated_by: null })
     }
-    res.json(result.rows[0])
+    const row = result.rows[0]
+    res.json({ ...row, data: await enrichHierarchyData(row.data) })
   } catch (error) {
     console.error('GET /hierarchy/department/:id error:', error)
     res.status(500).json({ error: 'Не удалось загрузить иерархию отдела' })

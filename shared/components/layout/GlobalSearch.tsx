@@ -8,15 +8,17 @@ import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { cn } from '@/shared/lib/utils'
+import { cn, personName } from '@/shared/lib/utils'
 
 interface UserResult {
   id: number
   first_name: string
   last_name: string
+  middle_name?: string | null
   position?: string | null
   department_name?: string | null
   avatar?: string | null
+  skills?: string[]
 }
 
 interface DepartmentResult {
@@ -214,25 +216,34 @@ export function GlobalSearch({ className, autoFocus, onNavigate }: GlobalSearchP
           {employees.length > 0 && (
             <div>
               <p className="px-3 py-1.5 text-xs uppercase text-muted-foreground">Работники</p>
-              {employees.map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => handleSelectEmployee(u.id)}
-                  className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted"
-                >
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarImage src={u.avatar || generateAvatarUrl(String(u.id))} alt={`${u.last_name} ${u.first_name}`} />
-                    <AvatarFallback className="text-xs">{u.first_name[0]}{u.last_name[0]}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{u.last_name} {u.first_name}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {[u.position, u.department_name].filter(Boolean).join(' · ')}
-                    </p>
-                  </div>
-                </button>
-              ))}
+              {employees.map((u) => {
+                const q = query.trim().toLowerCase()
+                const matchedTag = q ? u.skills?.find((s) => s.toLowerCase().includes(q)) : undefined
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => handleSelectEmployee(u.id)}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted"
+                  >
+                    <Avatar className="h-8 w-8 shrink-0">
+                      <AvatarImage src={u.avatar || generateAvatarUrl(String(u.id))} alt={personName(u.last_name, u.first_name, u.middle_name)} />
+                      <AvatarFallback className="text-xs">{u.first_name[0]}{u.last_name[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{personName(u.last_name, u.first_name, u.middle_name)}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {[u.position, u.department_name].filter(Boolean).join(' · ')}
+                      </p>
+                      {matchedTag && (
+                        <span className="mt-0.5 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                          {matchedTag}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
 

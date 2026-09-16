@@ -59,7 +59,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
       SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
              o.is_active, o.created_at, o.head_id, o.parent_id,
              po.name as parent_name,
-             h.first_name as head_first_name, h.last_name as head_last_name,
+             h.first_name as head_first_name, h.last_name as head_last_name, h.middle_name as head_middle_name,
              (SELECT COUNT(*) FROM user_organizations WHERE org_id = o.id AND is_active = true) as member_count
       FROM organizations o
       LEFT JOIN organizations po ON o.parent_id = po.id
@@ -74,7 +74,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
            o.is_active, o.head_id, o.parent_id, uo.org_role, uo.is_active as membership_active,
            po.name as parent_name,
-           h.first_name as head_first_name, h.last_name as head_last_name
+           h.first_name as head_first_name, h.last_name as head_last_name, h.middle_name as head_middle_name
     FROM user_organizations uo
     JOIN organizations o ON uo.org_id = o.id
     LEFT JOIN organizations po ON o.parent_id = po.id
@@ -108,7 +108,7 @@ router.get('/tree', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin
     SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
            o.is_active, o.created_at, o.head_id, o.parent_id,
            po.name as parent_name,
-           h.first_name as head_first_name, h.last_name as head_last_name,
+           h.first_name as head_first_name, h.last_name as head_last_name, h.middle_name as head_middle_name,
            (SELECT COUNT(*) FROM user_organizations WHERE org_id = o.id AND is_active = true) as member_count
     FROM organizations o
     LEFT JOIN organizations po ON o.parent_id = po.id

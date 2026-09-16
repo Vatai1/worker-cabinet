@@ -283,7 +283,7 @@ router.get('/:id', async (req, res) => {
     if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
 
     const entriesResult = await query(
-      `SELECT te.*, u.first_name, u.last_name
+      `SELECT te.*, u.first_name, u.last_name, u.middle_name
        FROM timesheet_entries te
        JOIN users u ON te.employee_id = u.id
        WHERE te.timesheet_id = $1${req.org ? ' AND te.organization_id = $2' : ''}
@@ -292,7 +292,7 @@ router.get('/:id', async (req, res) => {
     )
 
     const empResult = await query(
-      `SELECT id, first_name, last_name FROM users
+      `SELECT id, first_name, last_name, middle_name FROM users
        WHERE department_id = $1 AND role IN ('employee', 'manager') ${excludeTest(req, 'users')}
        ORDER BY last_name, first_name`,
       [tsResult.rows[0].department_id]
@@ -357,7 +357,7 @@ router.get('/:id', async (req, res) => {
           await client.query('COMMIT')
 
           const refreshed = await query(
-            `SELECT te.*, u.first_name, u.last_name
+            `SELECT te.*, u.first_name, u.last_name, u.middle_name
              FROM timesheet_entries te
              JOIN users u ON te.employee_id = u.id
              WHERE te.timesheet_id = $1${req.org ? ' AND te.organization_id = $2' : ''}

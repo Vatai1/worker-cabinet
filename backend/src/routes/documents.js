@@ -51,7 +51,8 @@ router.get('/', authenticateToken, async (req, res) => {
          p.name AS project_name,
          p.id AS project_id,
          u.first_name AS uploader_first_name,
-         u.last_name  AS uploader_last_name
+         u.last_name  AS uploader_last_name,
+         u.middle_name AS uploader_middle_name
        FROM project_documents d
        JOIN company_projects p ON d.project_id = p.id
        LEFT JOIN users u ON d.uploaded_by = u.id
@@ -72,7 +73,7 @@ router.get('/', authenticateToken, async (req, res) => {
       mimeType: doc.mime_type,
       projectId: doc.project_id,
       projectName: doc.project_name,
-      uploader: `${doc.uploader_first_name || ''} ${doc.uploader_last_name || ''}`.trim(),
+      uploader: [doc.uploader_last_name, doc.uploader_first_name, doc.uploader_middle_name].filter(Boolean).join(' '),
       uploadedAt: doc.created_at,
       description: doc.description,
       tags: doc.tags,

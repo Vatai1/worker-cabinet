@@ -43,7 +43,8 @@ router.get('/', authenticateToken, async (req, res) => {
       `SELECT 
         ud.*,
         u.first_name AS uploader_first_name,
-        u.last_name AS uploader_last_name
+        u.last_name AS uploader_last_name,
+        u.middle_name AS uploader_middle_name
        FROM user_documents ud
        LEFT JOIN users u ON ud.uploaded_by = u.id
        WHERE ud.user_id = $1${req.org ? ' AND ud.organization_id = $2' : ''}
@@ -60,7 +61,7 @@ router.get('/', authenticateToken, async (req, res) => {
       category: doc.category || 'other',
       uploadedAt: doc.created_at,
       description: doc.description,
-      uploader: `${doc.uploader_first_name || ''} ${doc.uploader_last_name || ''}`.trim(),
+      uploader: [doc.uploader_last_name, doc.uploader_first_name, doc.uploader_middle_name].filter(Boolean).join(' '),
     }))
 
     res.json(documents)

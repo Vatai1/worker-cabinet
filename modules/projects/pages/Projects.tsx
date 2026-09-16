@@ -14,7 +14,7 @@ import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAvatarColor } from '@/shared/lib/constants'
-import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import type { ProjectMember as ProjectMemberType } from '@/shared/types'
 
 export type { ProjectMemberType as ProjectMember }
@@ -285,7 +285,7 @@ export function Projects() {
                           <div className="flex -space-x-1.5">
                             {leads.slice(0, 3).map((m) => (
                               <Avatar key={m.id} className="h-6 w-6 ring-2 ring-background">
-                                <AvatarImage src={m.avatar || generateAvatarUrl(m.id, m.gender)} alt={`${m.first_name} ${m.last_name}`} />
+                                <AvatarImage src={m.avatar || generateAvatarUrl(m.id, m.gender)} alt={personName(m.last_name, m.first_name, m.middle_name)} />
                                 <AvatarFallback className={cn('bg-gradient-to-br text-white text-[9px] font-semibold', getAvatarColor(m.id))}>
                                   {m.first_name?.[0]}{m.last_name?.[0]}
                                 </AvatarFallback>

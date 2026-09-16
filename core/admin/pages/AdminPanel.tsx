@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry, apiGet, apiPost, apiDelete } from '@/shared/lib/apiClient'
-import { getErrorMessage, cn } from '@/shared/lib/utils'
+import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { ChangelogModal } from '@/shared/components/ChangelogModal'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -81,7 +81,7 @@ const TAB_GROUPS: TabGroup[] = [
     tabs: [
       { id: 'dict_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', color: 'from-pink-500 to-rose-600' },
       { id: 'dict_vacation', name: 'Отпуск', icon: Plane, description: 'Типы отпусков', color: 'from-sky-500 to-cyan-600', module: 'vacation' },
-      { id: 'dict_skills', name: 'Навыки', icon: Package, description: 'Справочник навыков', color: 'from-violet-500 to-purple-600', module: 'skills' },
+      { id: 'dict_skills', name: 'Теги', icon: Tag, description: 'Справочник тегов', color: 'from-violet-500 to-purple-600', module: 'skills' },
     ],
   },
   {
@@ -461,7 +461,7 @@ function UsersTab({ mode }: { mode?: 'global' | 'org' }) {
     const user = users.find(u => u.id === userId)
     const confirmed = await confirmDialog({
       title: 'Изменить роль',
-      message: `Изменить роль ${user?.first_name} ${user?.last_name} на «${ROLE_LABELS[role] || role}»?`,
+      message: `Изменить роль ${personName(user?.last_name, user?.first_name, user?.middle_name)} на «${ROLE_LABELS[role] || role}»?`,
       confirmText: 'Изменить',
     })
     if (!confirmed) return
@@ -483,7 +483,7 @@ function UsersTab({ mode }: { mode?: 'global' | 'org' }) {
     const user = users.find(u => u.id === userId)
     const confirmed = await confirmDialog({
       title: status === 'active' ? 'Активировать' : 'Деактивировать',
-      message: `${status === 'active' ? 'Активировать' : 'Деактивировать'} ${user?.first_name} ${user?.last_name}?`,
+      message: `${status === 'active' ? 'Активировать' : 'Деактивировать'} ${personName(user?.last_name, user?.first_name, user?.middle_name)}?`,
       confirmText: status === 'active' ? 'Активировать' : 'Деактивировать',
       variant: status === 'inactive' ? 'danger' : 'default',
     })
@@ -851,7 +851,7 @@ function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChan
   const removeMembership = async (org: UserOrgMembership) => {
     const confirmed = await confirmDialog({
       title: 'Исключить из организации',
-      message: `Исключить ${user.first_name} ${user.last_name} из «${org.name}»?`,
+      message: `Исключить ${personName(user.last_name, user.first_name, user.middle_name)} из «${org.name}»?`,
       confirmText: 'Исключить',
       variant: 'danger',
     })
@@ -916,7 +916,7 @@ function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChan
   }
 
   const saveEdit = async () => {
-    const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Обновить данные ${user.first_name} ${user.last_name}?`, confirmText: 'Сохранить' })
+    const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Обновить данные ${personName(user.last_name, user.first_name, user.middle_name)}?`, confirmText: 'Сохранить' })
     if (!confirmed) return
     setSaving(true)
     try {
@@ -1001,7 +1001,7 @@ function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChan
               <InfoRow label="Телефон" value={user.phone || '—'} />
               <InfoRow label="Дата приёма" value={user.hire_date || '—'} />
               {user.manager_first_name && (
-                <InfoRow label="Руководитель" value={`${user.manager_last_name} ${user.manager_first_name}`} />
+                <InfoRow label="Руководитель" value={personName(user.manager_last_name, user.manager_first_name, user.manager_middle_name)} />
               )}
               <div className="pt-2 flex gap-2">
                 <Button
@@ -2655,7 +2655,7 @@ function ErrorsTab() {
 
 function SecurityTab() {
   const [failedLogins, setFailedLogins] = useState<{ attempts: { id: number; email: string; ip_address: string; created_at: string }[]; byIp: { ip_address: string; count: string; last_attempt: string }[]; byEmail: { email: string; count: string; last_attempt: string }[] } | null>(null)
-  const [lockedAccounts, setLockedAccounts] = useState<{ id: number; email: string; first_name: string; last_name: string; locked_until: string; failed_login_count: number; department: string | null }[]>([])
+  const [lockedAccounts, setLockedAccounts] = useState<{ id: number; email: string; first_name: string; last_name: string; middle_name: string | null; locked_until: string; failed_login_count: number; department: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(30)
 
@@ -2698,7 +2698,7 @@ function SecurityTab() {
               {lockedAccounts.map((a) => (
                 <div key={a.id} className="flex items-center justify-between p-3 rounded-xl bg-red-50 dark:bg-red-900/20">
                   <div>
-                    <p className="font-medium">{a.last_name} {a.first_name}</p>
+                    <p className="font-medium">{personName(a.last_name, a.first_name, a.middle_name)}</p>
                     <p className="text-xs text-muted-foreground">{a.email} · Попыток: {a.failed_login_count} · До: {new Date(a.locked_until).toLocaleString('ru-RU')}</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => unlockAccount(a.id)}>

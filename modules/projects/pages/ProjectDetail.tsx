@@ -19,7 +19,7 @@ import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { hasAnyRole } from '@/shared/lib/permissions'
 import { getAvatarColor } from '@/shared/lib/constants'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, personName } from '@/shared/lib/utils'
 import type { ProjectMember } from '@/shared/types'
 
 type Member = ProjectMember
@@ -36,6 +36,7 @@ interface ProjectDetail {
   created_at: string
   creator_first_name?: string
   creator_last_name?: string
+  creator_middle_name?: string | null
   leads: Member[]
   participants: Member[]
   members: Member[]
@@ -76,7 +77,7 @@ function MemberCard({ member, canRemove, onRemove, onContextMenu, isRemoving }: 
         <Avatar className="h-9 w-9 shrink-0">
           <AvatarImage
             src={member.avatar || generateAvatarUrl(member.id, member.gender)}
-            alt={`${member.first_name} ${member.last_name}`}
+            alt={personName(member.last_name, member.first_name, member.middle_name)}
           />
           <AvatarFallback className={`bg-gradient-to-br ${color} text-white text-xs font-bold`}>
             {member.first_name?.[0]}{member.last_name?.[0]}
@@ -84,7 +85,7 @@ function MemberCard({ member, canRemove, onRemove, onContextMenu, isRemoving }: 
         </Avatar>
         <div className="min-w-0">
           <div className="text-sm font-medium truncate">
-            {member.last_name} {member.first_name}
+            {personName(member.last_name, member.first_name, member.middle_name)}
           </div>
           <div className="text-xs text-muted-foreground truncate">{member.position}</div>
           {member.department_name && (

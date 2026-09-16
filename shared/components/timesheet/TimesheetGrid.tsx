@@ -1,7 +1,7 @@
 ﻿import { useState, useMemo, useEffect } from 'react'
 import { TIMESHEET_CODES, CODE_COLORS } from '@/shared/lib/timesheetCodes'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { Button } from '@/shared/components/ui/Button'
 import { hasAnyRole } from '@/shared/lib/permissions'
@@ -14,12 +14,14 @@ export interface TimesheetEntry {
   is_submitted: boolean
   first_name: string
   last_name: string
+  middle_name?: string | null
 }
 
 interface Employee {
   id: number
   first_name: string
   last_name: string
+  middle_name?: string | null
 }
 
 interface Props {
@@ -286,7 +288,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, on
                 ].join(' ')}
               >
                 <td className="sticky left-0 z-10 border-r border-b border-border px-3 py-2 font-medium bg-inherit whitespace-nowrap">
-                  {emp.last_name} {emp.first_name}
+                  {personName(emp.last_name, emp.first_name, emp.middle_name)}
                 </td>
                 {days.map(day => {
                   const cell = getCell(emp.id, day)

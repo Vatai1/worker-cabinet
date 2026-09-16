@@ -4,7 +4,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { AddSkillModal } from '@/modules/skills/components/modals/AddSkillModal'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { Wrench, Loader2, Plus, Trash } from 'lucide-react'
+import { Tag, Loader2, Plus, Trash } from 'lucide-react'
 
 const SKILL_COLORS = [
   'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
@@ -91,8 +91,8 @@ export function SkillsCard({ skills, userId, isOwnProfile, onSkillsChange }: Pro
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
-              <Wrench className="h-4 w-4 text-primary" />
-              Навыки и компетенции
+              <Tag className="h-4 w-4 text-primary" />
+              Теги
             </CardTitle>
             {isOwnProfile && (
               <Button size="sm" onClick={() => setIsAddSkillModalOpen(true)} disabled={addingSkill}>
@@ -118,8 +118,8 @@ export function SkillsCard({ skills, userId, isOwnProfile, onSkillsChange }: Pro
             </div>
           ) : (
             <EmptySection
-              icon={<Wrench className="h-8 w-8 text-muted-foreground/40" />}
-              text="Навыки не указаны"
+              icon={<Tag className="h-8 w-8 text-muted-foreground/40" />}
+              text="Теги не указаны"
             />
           )}
         </CardContent>
@@ -145,7 +145,7 @@ export function SkillsCard({ skills, userId, isOwnProfile, onSkillsChange }: Pro
                 className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md disabled:opacity-50"
               >
                 {removingSkill ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash className="h-4 w-4" />}
-                Удалить навык
+                Удалить тег
               </button>
             </div>
           </div>

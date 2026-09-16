@@ -3,7 +3,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { Label } from '@/shared/components/ui/Label'
 import { User, X, Calendar, Shield, Save } from 'lucide-react'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import type { ProjectMember } from '@/shared/types'
 
@@ -73,7 +73,7 @@ export function MemberProjectInfoModal({ member, projectId, open, onClose, onUpd
               <User className="h-6 w-6 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-xl font-semibold">{member.last_name} {member.first_name}</h2>
+              <h2 className="text-xl font-semibold">{personName(member.last_name, member.first_name, member.middle_name)}</h2>
               <p className="text-sm text-muted-foreground truncate">{member.position}</p>
             </div>
           </div>

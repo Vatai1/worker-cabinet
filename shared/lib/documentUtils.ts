@@ -125,6 +125,7 @@ export interface DocItem {
   folder_path: string
   uploader_first_name?: string
   uploader_last_name?: string
+  uploader_middle_name?: string | null
   uploaded_by: string
   created_at: string
   tags?: string[]

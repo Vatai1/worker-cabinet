@@ -357,7 +357,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
               'statusName', vrsh_rs.name,
               'changedAt', vrsh.changed_at,
               'changedBy', vrsh.changed_by,
-              'changedByName', hu.last_name || ' ' || hu.first_name,
+              'changedByName', hu.last_name || ' ' || hu.first_name || COALESCE(' ' || NULLIF(hu.middle_name, ''), ''),
               'comment', vrsh.comment
             ) ORDER BY vrsh.changed_at
           ) FILTER (WHERE vrsh.id IS NOT NULL),
@@ -383,7 +383,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
     let delegatedByUser = {}
     if (requestIds.length > 0) {
       const subsResult = await query(
-        `SELECT vs.vacation_request_id, u.id, u.first_name, u.last_name, u.position, u.avatar
+        `SELECT vs.vacation_request_id, u.id, u.first_name, u.last_name, u.middle_name, u.position, u.avatar
          FROM vacation_substitutions vs
          JOIN users u ON vs.substitute_user_id = u.id
          WHERE vs.vacation_request_id = ANY($1)`,
@@ -392,7 +392,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       for (const row of subsResult.rows) {
         if (!subsByRequest[row.vacation_request_id]) subsByRequest[row.vacation_request_id] = []
         subsByRequest[row.vacation_request_id].push({
-          id: row.id, first_name: row.first_name, last_name: row.last_name,
+          id: row.id, first_name: row.first_name, last_name: row.last_name, middle_name: row.middle_name,
           position: row.position, avatar: row.avatar
         })
       }
@@ -403,7 +403,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       if (onApprovalUserIds.length > 0 && await isSubstitutionEnabled(req)) {
         const delegationResult = await query(
           `SELECT DISTINCT u.id as user_id, sub.id as delegate_id,
-                  sub.first_name, sub.last_name, sub.position, sub.avatar
+                  sub.first_name, sub.last_name, sub.middle_name, sub.position, sub.avatar
            FROM users u
            JOIN departments d ON u.department_id = d.id
            JOIN vacation_requests mvr ON mvr.user_id = d.manager_id
@@ -417,7 +417,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
         )
         for (const row of delegationResult.rows) {
           delegatedByUser[row.user_id] = {
-            id: row.delegate_id, first_name: row.first_name, last_name: row.last_name,
+            id: row.delegate_id, first_name: row.first_name, last_name: row.last_name, middle_name: row.middle_name,
             position: row.position, avatar: row.avatar
           }
         }

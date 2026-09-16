@@ -215,16 +215,17 @@ router.post('/chat', authenticateToken, async (req, res) => {
     }
 
     const userResult = await query(
-      'SELECT first_name, last_name, position, role FROM users WHERE id = $1',
+      'SELECT first_name, last_name, middle_name, position, role FROM users WHERE id = $1',
       [userId]
     )
     const u = userResult.rows[0]
+    const uFullName = [u?.last_name, u?.first_name, u?.middle_name].filter(Boolean).join(' ')
     const assistantToken = generateAssistantToken(userId)
     const apiBaseUrl = process.env.ASSISTANT_API_BASE_URL || 'http://127.0.0.1:5000/api'
 
     const systemMessage = {
       role: 'system',
-      content: `${config.systemPrompt}\n\nИнформация о пользователе:\n- Имя: ${u?.first_name || ''} ${u?.last_name || ''}\n- Должность: ${u?.position || 'не указана'}\n- Роль: ${u?.role || 'employee'}\n- ID: ${userId}\n\nAPI доступ:\n- Base URL: ${apiBaseUrl}\n- Токен авторизации: Bearer ${assistantToken}\n- Токен действителен 5 минут, для новых запросов используй текущий токен из контекста\n- Заголовок: Authorization: Bearer ${assistantToken}\n\nПравила работы с API:\n- Ты можешь выполнять действия от имени этого пользователя через API\n- Используй только GET/POST/PUT/DELETE запросы к ${apiBaseUrl}\n- Никогда не показывай токен пользователю в ответе\n- Перед выполнением деструктивных действий подтверждай у пользователя`,
+      content: `${config.systemPrompt}\n\nИнформация о пользователе:\n- ФИО: ${uFullName}\n- Должность: ${u?.position || 'не указана'}\n- Роль: ${u?.role || 'employee'}\n- ID: ${userId}\n\nAPI доступ:\n- Base URL: ${apiBaseUrl}\n- Токен авторизации: Bearer ${assistantToken}\n- Токен действителен 5 минут, для новых запросов используй текущий токен из контекста\n- Заголовок: Authorization: Bearer ${assistantToken}\n\nПравила работы с API:\n- Ты можешь выполнять действия от имени этого пользователя через API\n- Используй только GET/POST/PUT/DELETE запросы к ${apiBaseUrl}\n- Никогда не показывай токен пользователю в ответе\n- Перед выполнением деструктивных действий подтверждай у пользователя`,
     }
 
     const messages = [
@@ -245,7 +246,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
           message,
           context: {
             user_id: userId,
-            user_name: `${u?.first_name || ''} ${u?.last_name || ''}`,
+            user_name: uFullName,
             user_position: u?.position || '',
             user_role: u?.role || 'employee',
             api_url: apiBaseUrl,

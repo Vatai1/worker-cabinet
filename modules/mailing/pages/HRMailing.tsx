@@ -7,7 +7,7 @@ import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { apiGet, apiPost } from '@/shared/lib/apiClient'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { getErrorMessage, formatDateTime, cn } from '@/shared/lib/utils'
+import { getErrorMessage, formatDateTime, cn, personName } from '@/shared/lib/utils'
 
 interface UploadedImage {
   file_key: string
@@ -20,6 +20,7 @@ interface Employee {
   id: number
   first_name: string
   last_name: string
+  middle_name?: string | null
   email: string
   position: string
   department_id: number
@@ -40,6 +41,7 @@ interface Recipient {
   error: string | null
   first_name: string
   last_name: string
+  middle_name?: string | null
   email: string
   position: string
 }
@@ -52,6 +54,7 @@ interface Campaign {
   created_at: string
   first_name: string
   last_name: string
+  middle_name?: string | null
   recipients: Recipient[]
   sentCount: number
   failedCount: number
@@ -190,7 +193,7 @@ export function HRMailing() {
   }, [])
 
   const filteredEmployees = employees.filter(e =>
-    `${e.first_name} ${e.last_name} ${e.email}`.toLowerCase().includes(employeeSearch.toLowerCase())
+    `${personName(e.last_name, e.first_name, e.middle_name)} ${e.email}`.toLowerCase().includes(employeeSearch.toLowerCase())
   )
   const filteredPositions = positions.filter(p => p.name.toLowerCase().includes(positionSearch.toLowerCase()))
   const filteredDepartments = departments.filter(d => d.name.toLowerCase().includes(departmentSearch.toLowerCase()))
@@ -396,7 +399,7 @@ export function HRMailing() {
               title="Работники"
               search={employeeSearch}
               onSearchChange={setEmployeeSearch}
-              items={filteredEmployees.slice(0, 50).map(e => ({ id: e.id, label: `${e.last_name} ${e.first_name}` }))}
+              items={filteredEmployees.slice(0, 50).map(e => ({ id: e.id, label: personName(e.last_name, e.first_name, e.middle_name) }))}
               selected={selectedUserIds}
               onToggle={toggleUser}
               onToggleAll={toggleAllUsers}
@@ -505,7 +508,7 @@ export function HRMailing() {
                         )}
                       </div>
                     </div>
-                    <span className="text-xs text-muted-foreground">{c.first_name} {c.last_name}</span>
+                    <span className="text-xs text-muted-foreground">{personName(c.last_name, c.first_name, c.middle_name)}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -568,7 +571,7 @@ export function HRMailing() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate">
-                          <span className="font-medium">{r.last_name} {r.first_name}</span>
+                          <span className="font-medium">{personName(r.last_name, r.first_name, r.middle_name)}</span>
                           <span className="text-muted-foreground"> — {r.position}</span>
                         </p>
                         {failed && r.error && (

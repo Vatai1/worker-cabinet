@@ -1,16 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
-import { getErrorMessage, cn, formatDateTime } from '@/shared/lib/utils'
+import { getErrorMessage, cn, formatDateTime, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useOrgStore } from '@/shared/store/orgStore'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import {
   Building2, Plus, X, Search, Loader2, AlertTriangle, Save,
-  Users, FolderOpen, Boxes, Settings as SettingsIcon, ChevronLeft, ExternalLink,
+  Users, FolderOpen, Boxes, Settings as SettingsIcon, ChevronLeft, ChevronRight, ChevronDown, ExternalLink,
+  CornerDownRight, Crown,
 } from 'lucide-react'
 
 interface Organization {
@@ -27,6 +27,7 @@ interface Organization {
   head_id?: number | null
   head_first_name?: string | null
   head_last_name?: string | null
+  head_middle_name?: string | null
   parent_id?: number | null
   parent_name?: string | null
 }
@@ -48,8 +49,7 @@ interface OrgMember {
 interface OrgDepartment {
   id: number
   name: string
-  manager_first_name: string | null
-  manager_last_name: string | null
+  manager_name: string | null
   employee_count?: number
 }
 
@@ -70,12 +70,51 @@ const ORG_ROLE_COLORS: Record<string, string> = {
   admin: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 }
 
+// Учреждения образуют дерево (головная организация → подчинённые). Список
+// строится в порядке обхода дерева, чтобы иерархия была видна сразу, без
+// необходимости открывать каждую карточку.
+function buildOrgTree(orgs: Organization[], collapsed: Set<number>): { org: Organization; depth: number; hasChildren: boolean }[] {
+  const ids = new Set(orgs.map((o) => o.id))
+  const byParent = new Map<number, Organization[]>()
+  const roots: Organization[] = []
+  for (const o of orgs) {
+    if (o.parent_id != null && ids.has(o.parent_id)) {
+      if (!byParent.has(o.parent_id)) byParent.set(o.parent_id, [])
+      byParent.get(o.parent_id)!.push(o)
+    } else {
+      roots.push(o)
+    }
+  }
+  const result: { org: Organization; depth: number; hasChildren: boolean }[] = []
+  const visit = (list: Organization[], depth: number) => {
+    for (const o of [...list].sort((a, b) => a.name.localeCompare(b.name))) {
+      const children = byParent.get(o.id)
+      result.push({ org: o, depth, hasChildren: !!children?.length })
+      if (children && !collapsed.has(o.id)) visit(children, depth + 1)
+    }
+  }
+  visit(roots, 0)
+  return result
+}
+
 export function OrganizationsTab() {
   const [orgs, setOrgs] = useState<Organization[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null)
+  const [search, setSearch] = useState('')
+  const [onlyActive, setOnlyActive] = useState(false)
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+
+  const toggleCollapse = (id: number) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => { fetchOrgs() }, [])
 
@@ -91,88 +130,89 @@ export function OrganizationsTab() {
     finally { setLoading(false) }
   }
 
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" /> Учреждения</CardTitle>
-              <CardDescription>Всего учреждений: {orgs.length}</CardDescription>
-            </div>
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Добавить
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm mb-4">
-              <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
-              <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
-            </div>
-          )}
+  const q = search.trim().toLowerCase()
+  const isFiltering = q.length > 0 || onlyActive
 
-          {loading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-          ) : orgs.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Building2 className="h-10 w-10 mx-auto mb-3 opacity-40" />
-              <p>Учреждения не найдены</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {orgs.map((org) => (
-                <button
-                  key={org.id}
-                  onClick={() => setSelectedOrg(org)}
-                  className="text-left p-5 rounded-2xl border-2 border-border/40 bg-card hover:border-primary/40 hover:shadow-md transition-all duration-200"
-                >
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white shrink-0">
-                      <Building2 className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-foreground truncate">{org.name}</h3>
-                      <p className="font-mono text-xs text-muted-foreground mt-0.5">{org.slug}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5 text-sm">
-                    {org.inn && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <span className="text-xs">ИНН:</span>
-                        <span className="font-mono">{org.inn}</span>
-                      </div>
-                    )}
-                    {(org.head_first_name || org.head_last_name) && (
-                      <div className="flex items-center gap-2 text-muted-foreground truncate">
-                        <span className="text-xs shrink-0">Руководитель:</span>
-                        <span className="truncate">{org.head_last_name} {org.head_first_name}</span>
-                      </div>
-                    )}
-                    {org.parent_name && (
-                      <div className="flex items-center gap-2 text-muted-foreground truncate">
-                        <span className="text-xs shrink-0">Вышестоящая:</span>
-                        <span className="truncate">{org.parent_name}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <Badge className={cn('text-[10px] border-transparent', org.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400')}>
-                        {org.is_active ? 'Активна' : 'Неактивна'}
-                      </Badge>
-                      {org.member_count !== undefined && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Users className="h-3 w-3" /> {org.member_count}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+  // При активном поиске/фильтре дерево не даёт ничего полезного — часть
+  // предков может не подходить под запрос, поэтому просто плоский список.
+  const rows = useMemo(() => {
+    if (!isFiltering) return buildOrgTree(orgs, collapsed)
+    return orgs
+      .filter((o) => (!onlyActive || o.is_active) && (!q || o.name.toLowerCase().includes(q) || o.slug.toLowerCase().includes(q) || (o.inn ?? '').includes(q)))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((org) => ({ org, depth: 0, hasChildren: false }))
+  }, [orgs, isFiltering, onlyActive, q, collapsed])
+
+  const activeCount = orgs.filter((o) => o.is_active).length
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-muted-foreground" /> Учреждения
+          </h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {orgs.length} всего · {activeCount} активных
+          </p>
+        </div>
+        <Button onClick={() => setShowCreate(true)}>
+          <Plus className="h-4 w-4 mr-1.5" /> Учреждение
+        </Button>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+          <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Поиск по названию, slug или ИНН..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setOnlyActive((v) => !v)}
+          className={cn(
+            'flex items-center gap-2 px-3.5 rounded-lg border text-sm font-medium transition-colors shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            onlyActive ? 'bg-primary/10 border-primary/30 text-primary' : 'border-border bg-background text-muted-foreground hover:text-foreground'
           )}
-        </CardContent>
-      </Card>
+        >
+          <span className={cn('h-1.5 w-1.5 rounded-full', onlyActive ? 'bg-primary' : 'bg-muted-foreground/40')} />
+          Только активные
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+      ) : rows.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">{orgs.length === 0 ? 'Учреждения не найдены' : 'Ничего не найдено по заданным условиям'}</p>
+        </div>
+      ) : (
+        <div className="space-y-0.5">
+          {rows.map(({ org, depth, hasChildren }) => (
+            <OrgRow
+              key={org.id}
+              org={org}
+              depth={depth}
+              hasChildren={hasChildren}
+              collapsed={collapsed.has(org.id)}
+              onToggleCollapse={() => toggleCollapse(org.id)}
+              onClick={() => setSelectedOrg(org)}
+            />
+          ))}
+        </div>
+      )}
 
       {showCreate && (
         <CreateOrgModal
@@ -192,7 +232,73 @@ export function OrganizationsTab() {
           }}
         />
       )}
-    </>
+    </div>
+  )
+}
+
+function OrgRow({ org, depth, hasChildren, collapsed, onToggleCollapse, onClick }: {
+  org: Organization
+  depth: number
+  hasChildren: boolean
+  collapsed: boolean
+  onToggleCollapse: () => void
+  onClick: () => void
+}) {
+  const isRoot = depth === 0
+  const headName = (org.head_first_name || org.head_last_name)
+    ? personName(org.head_last_name, org.head_first_name, org.head_middle_name)
+    : null
+
+  return (
+    <button
+      onClick={onClick}
+      style={depth > 0 ? { paddingLeft: `${12 + depth * 28}px` } : undefined}
+      className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors hover:bg-muted/40 hover:border-border/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {hasChildren ? (
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={collapsed ? 'Развернуть' : 'Свернуть'}
+          onClick={(e) => { e.stopPropagation(); onToggleCollapse() }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onToggleCollapse() }
+          }}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-muted-foreground/15 text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', collapsed && '-rotate-90')} />
+        </span>
+      ) : (
+        <span className="w-5 shrink-0" />
+      )}
+      {!isRoot && <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />}
+      <div className={cn(
+        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+        isRoot ? 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white' : 'bg-muted text-muted-foreground'
+      )}>
+        {isRoot ? <Building2 className="h-4 w-4" /> : <Building2 className="h-3.5 w-3.5" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={cn('truncate', isRoot ? 'font-semibold text-[15px]' : 'font-medium text-sm')}>{org.name}</span>
+          {org.head_id != null && <Crown className="h-3 w-3 text-amber-500 shrink-0" />}
+          <Badge variant={org.is_active ? 'success' : 'destructive'} className="text-[10px] px-1.5 py-0 shrink-0">
+            {org.is_active ? 'Активна' : 'Неактивна'}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap text-[11px] text-muted-foreground">
+          <span className="font-mono">{org.slug}</span>
+          {org.inn && <span>· ИНН {org.inn}</span>}
+          {headName && <span className="truncate">· {headName}</span>}
+        </div>
+      </div>
+      {org.member_count !== undefined && (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+          <Users className="h-3.5 w-3.5" /> {org.member_count}
+        </span>
+      )}
+      <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0 transition-transform group-hover:translate-x-0.5" />
+    </button>
   )
 }
 
@@ -337,7 +443,12 @@ function OrganizationDetailModal({
               <Building2 className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-semibold text-lg truncate">{org.name}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-lg truncate">{org.name}</h3>
+                <Badge variant={org.is_active ? 'success' : 'destructive'} className="text-[10px] px-1.5 py-0 shrink-0">
+                  {org.is_active ? 'Активна' : 'Неактивна'}
+                </Badge>
+              </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-mono">{org.slug}</span>
                 {org.inn && <span>· ИНН {org.inn}</span>}
@@ -434,7 +545,7 @@ function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; 
         onUpdated({
           [field]: value,
           ...(field === 'head_id'
-            ? { head_id: value, head_first_name: head?.first_name ?? null, head_last_name: head?.last_name ?? null }
+            ? { head_id: value, head_first_name: head?.first_name ?? null, head_last_name: head?.last_name ?? null, head_middle_name: head?.middle_name ?? null }
             : { parent_id: value, parent_name: parent?.name ?? null }),
         } as Partial<Organization>)
       } else {
@@ -465,22 +576,10 @@ function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; 
     finally { setSavingField(false) }
   }
 
-  const headName = org.head_id
-    ? (members.find((m) => m.id === org.head_id)
-        ? `${members.find((m) => m.id === org.head_id)!.last_name} ${members.find((m) => m.id === org.head_id)!.first_name}`
-        : [org.head_last_name, org.head_first_name].filter(Boolean).join(' '))
-    : null
-  const parentName = org.parent_id
-    ? (orgs.find((o) => o.id === org.parent_id)?.name ?? org.parent_name ?? null)
-    : null
-
   const rows: { label: string; value: string | null }[] = [
     { label: 'Slug', value: org.slug },
     { label: 'ИНН', value: org.inn },
     { label: 'Адрес', value: org.address },
-    { label: 'Руководитель учреждения', value: headName },
-    { label: 'Вышестоящая организация', value: parentName },
-    { label: 'Статус', value: org.is_active ? 'Активна' : 'Неактивна' },
     { label: 'Дата создания', value: formatDateTime(org.created_at) },
   ]
 
@@ -631,9 +730,9 @@ function DepartmentsTabContent({ orgId, onSelectDept }: { orgId: number; onSelec
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-medium text-sm">{dept.name}</p>
-            {dept.manager_first_name && (
+            {dept.manager_name && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Рук: {dept.manager_last_name} {dept.manager_first_name}
+                Рук: {dept.manager_name}
               </p>
             )}
           </div>

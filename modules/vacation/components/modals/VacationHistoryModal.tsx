@@ -4,7 +4,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { cn } from '@/shared/lib/utils'
+import { cn, personName } from '@/shared/lib/utils'
 import { VacationRequestStatus, VACATION_TYPES } from '@/shared/types'
 import type { VacationRequest } from '@/shared/types'
 import {
@@ -174,12 +174,12 @@ export function VacationHistoryList({ requests }: VacationHistoryListProps) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Avatar className="h-6 w-6 rounded-lg">
-                        <AvatarImage src={request.userAvatar || generateAvatarUrl(request.userId, request.userGender)} alt={`${request.userLastName} ${request.userFirstName}`} />
+                        <AvatarImage src={request.userAvatar || generateAvatarUrl(request.userId, request.userGender)} alt={personName(request.userLastName, request.userFirstName, request.userMiddleName)} />
                         <AvatarFallback className="rounded-lg bg-primary/10 text-[10px] font-semibold text-primary">
                           {request.userFirstName[0]}{request.userLastName[0]}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-sm font-semibold">{request.userLastName} {request.userFirstName}</span>
+                      <span className="text-sm font-semibold">{personName(request.userLastName, request.userFirstName, request.userMiddleName)}</span>
                       <Badge className={cn('border-transparent', meta.className)}>{meta.label}</Badge>
                     </div>
 

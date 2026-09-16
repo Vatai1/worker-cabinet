@@ -4,6 +4,7 @@ import { VacationType, VACATION_TYPES } from '@/shared/types'
 import type { VacationEmployee, VacationValidationErrorDetails } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
 import { X, FileText, Upload, AlertTriangle, Plus, Trash2 } from 'lucide-react'
+import { personName } from '@/shared/lib/utils'
 
 interface CreateVacationFormModalProps {
   isOpen: boolean
@@ -60,7 +61,7 @@ export function CreateVacationFormModal({
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const [selectedSubstitutes, setSelectedSubstitutes] = useState<number[]>([])
   const [employeeSearch, setEmployeeSearch] = useState('')
-  const [employees, setEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; position: string }>>([])
+  const [employees, setEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; middle_name?: string | null; position: string }>>([])
 
   useEffect(() => {
     if (isOpen && showSubstitutes) {
@@ -71,7 +72,7 @@ export function CreateVacationFormModal({
             .then((data) => {
               const raw: VacationEmployee[] = Array.isArray(data) ? data : data.users || []
               const list = raw.map((u) => ({
-                id: u.id, first_name: u.first_name, last_name: u.last_name, position: u.position || ''
+                id: u.id, first_name: u.first_name, last_name: u.last_name, middle_name: u.middle_name, position: u.position || ''
               })).filter((u) => u.id !== parseInt(userId || '0'))
               setEmployees(list)
             })
@@ -397,7 +398,7 @@ export function CreateVacationFormModal({
                 {employees
                   .filter((e) => {
                     const q = employeeSearch.toLowerCase()
-                    return !q || `${e.last_name} ${e.first_name} ${e.position}`.toLowerCase().includes(q)
+                    return !q || `${personName(e.last_name, e.first_name, e.middle_name)} ${e.position}`.toLowerCase().includes(q)
                   })
                   .map((e) => (
                     <label
@@ -414,7 +415,7 @@ export function CreateVacationFormModal({
                         }}
                         className="rounded"
                       />
-                      <span>{e.last_name} {e.first_name}</span>
+                      <span>{personName(e.last_name, e.first_name, e.middle_name)}</span>
                       {e.position && <span className="text-muted-foreground text-xs">— {e.position}</span>}
                     </label>
                   ))}
@@ -426,7 +427,7 @@ export function CreateVacationFormModal({
                     if (!emp) return null
                     return (
                       <span key={id} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary text-xs">
-                        {emp.last_name} {emp.first_name}
+                        {personName(emp.last_name, emp.first_name, emp.middle_name)}
                         <button
                           type="button"
                           onClick={() => setSelectedSubstitutes((prev) => prev.filter((x) => x !== id))}

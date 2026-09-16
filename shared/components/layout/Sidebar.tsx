@@ -10,9 +10,9 @@ import {
   LogOut, Menu, X, Users, Plane, Settings, Sun, Moon, Undo2,
   ChevronDown, Building2, ClipboardList,
   Calendar, Bell, Crown, Bot, UserCheck,
-  Send, UserPlus, Network, Briefcase, Wrench,
-  Key, ShieldCheck, Boxes, Settings2, Package,
-  Activity, AlertCircle, Bug, Server, Palette, FlaskConical,
+  Send, UserPlus, Network, Briefcase,
+  Key, ShieldCheck, Boxes, Settings2,
+  Activity, Palette,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -92,11 +92,13 @@ const getHRSectionItems = (): NavItem[] => [
   { name: 'Отпуск', href: '/hr?tab=vacation', icon: Plane, module: 'vacation', section: 'HR' },
   { name: 'Иерархия', href: '/hr?tab=hierarchy', icon: Network, module: 'hierarchy', section: 'HR' },
   { name: 'Шаблоны документов', href: '/hr?tab=doc-templates', icon: FileText, module: 'documents', section: 'HR' },
-  { name: 'Учреждение', href: '/hr?tab=institution', icon: Building2, module: 'dictionaries', section: 'HR' },
-  { name: 'Отделы', href: '/hr?tab=hr_departments', icon: Building2, module: 'dictionaries', section: 'HR' },
-  { name: 'Должности', href: '/hr?tab=hr_positions', icon: Briefcase, module: 'dictionaries', section: 'HR' },
-  { name: 'Типы отпусков', href: '/hr?tab=hr_vacation_types', icon: Plane, module: 'vacation', section: 'HR' },
-  { name: 'Навыки', href: '/hr?tab=hr_skills', icon: Wrench, module: 'skills', section: 'HR' },
+  { name: 'Справочники', icon: Boxes, section: 'HR', children: [
+    { name: 'Учреждение', href: '/hr?tab=institution', module: 'dictionaries' },
+    { name: 'Отделы', href: '/hr?tab=hr_departments', module: 'dictionaries' },
+    { name: 'Должности', href: '/hr?tab=hr_positions', module: 'dictionaries' },
+    { name: 'Типы отпусков', href: '/hr?tab=hr_vacation_types', module: 'vacation' },
+    { name: 'Теги', href: '/hr?tab=hr_skills', module: 'skills' },
+  ]},
 ]
 
 const getHRNavigation = (userId?: string): NavItem[] => [
@@ -128,25 +130,39 @@ const ORG_HIDDEN_ITEM_NAMES = new Set([
 const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg: boolean): NavItem[] => {
   const items: NavItem[] = [
     { name: 'Пользователи', href: `${basePath}?tab=users`, icon: Users, section },
-    { name: 'Роли и доступы', href: `${basePath}?tab=roles`, icon: Key, section },
-    { name: 'Роли по должности', href: `${basePath}?tab=role-mappings`, icon: ShieldCheck, section },
-    { name: 'Отделы', href: `${basePath}?tab=departments`, icon: Building2, section },
-    { name: 'Учреждения', href: `${basePath}?tab=organizations`, icon: Building2, section },
-    { name: 'Иерархия', href: `${basePath}?tab=global-hierarchy`, icon: Network, section },
+    { name: 'Роли и доступ', icon: Key, section, children: [
+      { name: 'Роли и доступы', href: `${basePath}?tab=roles` },
+      { name: 'Роли по должности', href: `${basePath}?tab=role-mappings` },
+    ]},
+    { name: 'Организация', icon: Building2, section, children: [
+      { name: 'Отделы', href: `${basePath}?tab=departments` },
+      { name: 'Учреждения', href: `${basePath}?tab=organizations` },
+      { name: 'Иерархия', href: `${basePath}?tab=global-hierarchy` },
+    ]},
     { name: 'Модули', href: `${basePath}?tab=modules`, icon: Boxes, section },
     { name: 'Настройки системы', href: `${basePath}?tab=settings`, icon: Settings2, section },
     { name: 'Безопасность', href: `${basePath}?tab=security`, icon: ShieldCheck, section },
-    { name: 'Аудит', href: `${basePath}?tab=audit`, icon: Activity, section },
-    { name: 'Ошибки', href: `${basePath}?tab=errors`, icon: AlertCircle, section },
-    { name: 'Баг-репорты', href: `${basePath}?tab=bug-reports`, icon: Bug, section },
-    { name: 'Система', href: `${basePath}?tab=health`, icon: Server, section },
-    { name: 'Тестовые данные', href: `${basePath}?tab=test-data`, icon: FlaskConical, section },
-    { name: 'Должности', href: `${basePath}?tab=dict_positions`, icon: Briefcase, section },
-    { name: 'Типы отпусков', href: `${basePath}?tab=dict_vacation`, icon: Plane, module: 'vacation', section },
-    { name: 'Навыки', href: `${basePath}?tab=dict_skills`, icon: Package, module: 'skills', section },
+    { name: 'Диагностика', icon: Activity, section, children: [
+      { name: 'Аудит', href: `${basePath}?tab=audit` },
+      { name: 'Ошибки', href: `${basePath}?tab=errors` },
+      { name: 'Баг-репорты', href: `${basePath}?tab=bug-reports` },
+      { name: 'Система', href: `${basePath}?tab=health` },
+      { name: 'Тестовые данные', href: `${basePath}?tab=test-data` },
+    ]},
+    { name: 'Справочники', icon: Briefcase, section, children: [
+      { name: 'Должности', href: `${basePath}?tab=dict_positions` },
+      { name: 'Типы отпусков', href: `${basePath}?tab=dict_vacation`, module: 'vacation' },
+      { name: 'Теги', href: `${basePath}?tab=dict_skills`, module: 'skills' },
+    ]},
     { name: 'Темы', href: `${basePath}?tab=appearance`, icon: Palette, section },
   ]
-  return restrictToOrg ? items.filter((item) => !ORG_HIDDEN_ITEM_NAMES.has(item.name)) : items
+  if (!restrictToOrg) return items
+  return items
+    .filter((item) => !ORG_HIDDEN_ITEM_NAMES.has(item.name))
+    .map((item) => (item.children
+      ? { ...item, children: item.children.filter((c) => !ORG_HIDDEN_ITEM_NAMES.has(c.name)) }
+      : item))
+    .filter((item) => !item.children || item.children.length > 0)
 }
 
 const getAdminNavigation = (userId?: string, isSuper?: boolean): NavItem[] => [
@@ -398,7 +414,7 @@ export function Sidebar() {
                         </button>
                         <div className={cn(
                           'overflow-hidden transition-all duration-300',
-                          isExpanded ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
+                          isExpanded ? 'max-h-72 opacity-100' : 'max-h-0 opacity-0'
                         )}>
                           <div className="mt-0.5 space-y-0.5 py-1">
                             {item.children.map((child) => {

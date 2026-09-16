@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Input } from '@/shared/components/ui/Input'
 import { Loader2, Search, Users, ArrowLeft, Crown, Mail, Phone, UserCircle, ChevronRight } from 'lucide-react'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 
@@ -138,7 +138,7 @@ export function DepartmentDetail() {
               </div>
               <div className="flex items-center gap-4">
                 <Avatar className="h-14 w-14 ring-2 ring-primary/15 shadow-md shrink-0">
-                  <AvatarImage src={manager.avatar || generateAvatarUrl(manager.id.toString(), manager.gender)} alt={`${manager.first_name} ${manager.last_name}`} />
+                  <AvatarImage src={manager.avatar || generateAvatarUrl(manager.id.toString(), manager.gender)} alt={personName(manager.last_name, manager.first_name, manager.middle_name)} />
                   <AvatarFallback className="text-base font-bold bg-primary/10 text-primary">
                     {manager.first_name?.[0]}{manager.last_name?.[0]}
                   </AvatarFallback>
@@ -203,7 +203,7 @@ export function DepartmentDetail() {
                       <Avatar className="h-12 w-12 ring-2 ring-border/50 transition-all duration-200 group-hover:ring-primary/20">
                         <AvatarImage
                           src={employee.avatar || generateAvatarUrl(employee.id.toString(), employee.gender)}
-                          alt={`${employee.first_name} ${employee.last_name}`}
+                          alt={personName(employee.last_name, employee.first_name, employee.middle_name)}
                         />
                         <AvatarFallback className="bg-primary/8 text-primary text-sm font-bold">
                           {employee.first_name?.[0]}{employee.last_name?.[0]}

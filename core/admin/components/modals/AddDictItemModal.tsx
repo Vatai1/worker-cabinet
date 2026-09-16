@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react'
-import { Building2, Wrench, Palmtree, FileText, Plus, X, Upload, Paperclip, Copy, Check as CheckIcon } from 'lucide-react'
+import { Building2, Tag, Palmtree, FileText, Plus, X, Upload, Paperclip, Copy, Check as CheckIcon } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
@@ -38,7 +38,7 @@ interface Props {
 
 const TAB_CONFIG: Record<DictTab, { label: string; icon: typeof Building2; showCode: boolean }> = {
   departments: { label: 'отдел', icon: Building2, showCode: false },
-  skills: { label: 'навык', icon: Wrench, showCode: false },
+  skills: { label: 'тег', icon: Tag, showCode: false },
   'vacation-types': { label: 'тип отпуска', icon: Palmtree, showCode: true },
   'doc-templates': { label: 'шаблон документа', icon: FileText, showCode: false },
 }

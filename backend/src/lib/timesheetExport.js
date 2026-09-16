@@ -11,7 +11,7 @@ export async function getTimesheetExportData(id) {
 
   const entriesResult = await query(
     `SELECT te.employee_id, te.date, te.code,
-            u.first_name, u.last_name
+            u.first_name, u.last_name, u.middle_name
      FROM timesheet_entries te
      JOIN users u ON te.employee_id = u.id
      WHERE te.timesheet_id = $1
@@ -24,7 +24,7 @@ export async function getTimesheetExportData(id) {
   const byEmployee = {}
   for (const e of entriesResult.rows) {
     if (!byEmployee[e.employee_id]) {
-      byEmployee[e.employee_id] = { name: `${e.last_name} ${e.first_name}`, days: {} }
+      byEmployee[e.employee_id] = { name: [e.last_name, e.first_name, e.middle_name].filter(Boolean).join(' '), days: {} }
     }
     byEmployee[e.employee_id].days[e.date] = e.code
   }

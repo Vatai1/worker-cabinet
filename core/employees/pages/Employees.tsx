@@ -6,13 +6,13 @@ import { Badge } from '@/shared/components/ui/Badge'
 import { Input } from '@/shared/components/ui/Input'
 import { useAuthStore } from '@/core/auth/store/authStore'
 
-import { Users, Search, Mail, Phone, Building2, Sparkles, UserCheck, UserX, ArrowRight } from 'lucide-react'
+import { Users, Search, Mail, Phone, Building2, Sparkles, UserCheck, UserX, ArrowRight, Tag } from 'lucide-react'
 
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getAvatarColor as getAvatarGradient } from '@/shared/lib/constants'
-import { getErrorMessage } from '@/shared/lib/utils'
+import { getErrorMessage, personName } from '@/shared/lib/utils'
 
 interface Employee {
   id: string
@@ -27,6 +27,7 @@ interface Employee {
   role: string
   gender?: 'male' | 'female' | 'other'
   avatar?: string
+  skills?: string[]
 }
 
 const statusConfig: Record<string, { label: string; variant: 'success' | 'destructive' | 'warning'; dot: string; icon: typeof UserCheck; color: string }> = {
@@ -42,6 +43,8 @@ export function Employees() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [allTags, setAllTags] = useState<string[]>([])
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -60,15 +63,29 @@ export function Employees() {
     fetchEmployees()
   }, [user?.departmentId])
 
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/users/skills/all`, { headers: getAuthHeadersWithContentType() })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: { name: string }[]) => setAllTags(data.map((s) => s.name)))
+      .catch(() => setAllTags([]))
+  }, [])
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
+  }
+
   const filtered = employees.filter((e) => {
     const q = search.toLowerCase()
-    return (
+    const matchesSearch = !q || (
       e.first_name?.toLowerCase().includes(q) ||
       e.last_name?.toLowerCase().includes(q) ||
       e.position?.toLowerCase().includes(q) ||
       e.department_name?.toLowerCase().includes(q) ||
-      e.email?.toLowerCase().includes(q)
+      e.email?.toLowerCase().includes(q) ||
+      e.skills?.some((s) => s.toLowerCase().includes(q))
     )
+    const matchesTags = selectedTags.length === 0 || selectedTags.some((t) => e.skills?.includes(t))
+    return matchesSearch && matchesTags
   })
 
 
@@ -120,12 +137,44 @@ export function Employees() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
           <Input
             className="pl-10 h-10"
-            placeholder="Поиск по имени, должности…"
+            placeholder="Поиск по имени, должности, тегам…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
       </div>
+
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Tag className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+          {allTags.map((tag) => {
+            const active = selectedTags.includes(tag)
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => toggleTag(tag)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  active
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-muted/40 text-muted-foreground border-transparent hover:bg-muted/70'
+                }`}
+              >
+                {tag}
+              </button>
+            )
+          })}
+          {selectedTags.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedTags([])}
+              className="px-2.5 py-1 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Сбросить
+            </button>
+          )}
+        </div>
+      )}
 
       {filtered.length > 0 ? (
         <div className="page-grid grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -146,7 +195,7 @@ export function Employees() {
                       <Avatar className="h-14 w-14 ring-2 ring-primary/10 transition-transform duration-200 group-hover:scale-105">
                         <AvatarImage
                           src={employee.avatar || generateAvatarUrl(employee.id, employee.gender)}
-                          alt={`${employee.first_name} ${employee.last_name}`}
+                          alt={personName(employee.last_name, employee.first_name, employee.middle_name)}
                         />
                         <AvatarFallback className={`bg-gradient-to-br ${color} text-white text-base font-bold`}>
                           {employee.first_name?.[0]}{employee.last_name?.[0]}
@@ -188,6 +237,21 @@ export function Employees() {
                       </div>
                     )}
                   </div>
+
+                  {employee.skills && employee.skills.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {employee.skills.slice(0, 4).map((tag) => (
+                        <span key={tag} className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted/60 text-muted-foreground">
+                          {tag}
+                        </span>
+                      ))}
+                      {employee.skills.length > 4 && (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium text-muted-foreground/60">
+                          +{employee.skills.length - 4}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <div className="mt-4 pt-3 border-t border-border/40 flex items-center gap-2">
                     <span className={`h-2 w-2 rounded-full ${status.dot}`} />

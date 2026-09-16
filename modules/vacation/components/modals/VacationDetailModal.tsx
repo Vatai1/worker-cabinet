@@ -7,7 +7,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { X, UserCheck } from 'lucide-react'
-import { formatDate } from '@/shared/lib/utils'
+import { formatDate, personName } from '@/shared/lib/utils'
 
 interface VacationDetailModalProps {
   isOpen: boolean
@@ -104,7 +104,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
                       {s.last_name[0]}{s.first_name[0]}
                     </div>
                     <div className="text-sm">
-                      <div className="font-medium leading-tight">{s.last_name} {s.first_name}</div>
+                      <div className="font-medium leading-tight">{personName(s.last_name, s.first_name, s.middle_name)}</div>
                       {s.position && <div className="text-xs text-muted-foreground leading-tight">{s.position}</div>}
                     </div>
                   </Link>
@@ -124,7 +124,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
                     onClick={onClose}
                     className="font-medium text-foreground hover:underline"
                   >
-                    {request.delegated_to.last_name} {request.delegated_to.first_name}
+                    {personName(request.delegated_to.last_name, request.delegated_to.first_name, request.delegated_to.middle_name)}
                   </Link>
                 </span>
               </div>
