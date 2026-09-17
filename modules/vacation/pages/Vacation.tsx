@@ -10,6 +10,7 @@ import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
+import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { YearCalendar } from '@/shared/components/calendar/YearCalendar'
 import { VacationLegend } from '@/shared/components/calendar/VacationLegend'
 import { VacationHistoryList } from '@/modules/vacation/components/modals/VacationHistoryModal'
@@ -39,7 +40,7 @@ const REQUEST_STATUS_OPTIONS = [
   { value: VacationRequestStatus.ON_APPROVAL, label: 'На согласовании' },
 ]
 
-const EMPTY_REQUEST_FILTERS: { departmentIds: string[]; statuses: string[]; vacationTypes: string[] } = { departmentIds: [], statuses: [], vacationTypes: [] }
+const EMPTY_REQUEST_FILTERS: { departmentIds: string[]; statuses: string[]; vacationTypes: string[]; tagId: string } = { departmentIds: [], statuses: [], vacationTypes: [], tagId: '' }
 
 type VacationTab = 'mine' | 'approvals' | 'restrictions' | 'requests' | 'history'
 type CalendarScope = 'mine' | 'team'
@@ -96,7 +97,10 @@ export function Vacation() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([])
   const [calendarDeptRequests, setCalendarDeptRequests] = useState<VacationRequest[] | null>(null)
+  const [tags, setTags] = useState<Array<{ id: number; name: string }>>([])
   const currentOrgId = useOrgStore((s) => s.currentOrgId)
+  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+  const skillsEnabled = isModuleEnabled('skills')
 
   const isManager = hasAnyRole('manager', 'hr', 'admin')
   const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id)
@@ -124,9 +128,9 @@ export function Vacation() {
 
   const reloadRequests = useCallback(() => {
     if (!user) return
-    fetchAllRequests()
+    fetchAllRequests(reqFilters.tagId ? { tagId: reqFilters.tagId } : undefined)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, currentOrgId, year, fetchAllRequests])
+  }, [user?.id, currentOrgId, year, fetchAllRequests, reqFilters.tagId])
 
   useEffect(() => {
     reloadRequests()
@@ -139,6 +143,14 @@ export function Vacation() {
   useEffect(() => {
     apiGet<Array<{ id: number; name: string }>>('/departments').then(setDepartments).catch(() => {})
   }, [currentOrgId])
+
+  useEffect(() => {
+    if (!skillsEnabled) {
+      setTags([])
+      return
+    }
+    apiGet<Array<{ id: number; name: string }>>('/users/skills/all').then(setTags).catch(() => setTags([]))
+  }, [skillsEnabled, currentOrgId])
 
   useEffect(() => {
     deptTouched.current = false
@@ -170,7 +182,8 @@ export function Vacation() {
       return
     }
     let cancelled = false
-    Promise.all(reqFilters.departmentIds.map((id) => vacationApi.getDepartmentRequests(id)))
+    const tagFilter = reqFilters.tagId ? { tagId: reqFilters.tagId } : undefined
+    Promise.all(reqFilters.departmentIds.map((id) => vacationApi.getDepartmentRequests(id, tagFilter)))
       .then((results) => {
         if (cancelled) return
         const merged = new Map<string, VacationRequest>()
@@ -179,7 +192,7 @@ export function Vacation() {
       })
       .catch(() => { if (!cancelled) setCalendarDeptRequests([]) })
     return () => { cancelled = true }
-  }, [reqFilters.departmentIds, currentOrgId])
+  }, [reqFilters.departmentIds, reqFilters.tagId, currentOrgId])
 
   const calendarVersionInitRef = useRef(true)
   useEffect(() => {
@@ -191,11 +204,12 @@ export function Vacation() {
     let cancelled = false
 
     fetchUserRequests(user.id)
-    fetchAllRequests()
+    fetchAllRequests(reqFilters.tagId ? { tagId: reqFilters.tagId } : undefined)
     fetchConnectionRequests()
 
     if (reqFilters.departmentIds.length > 0) {
-      Promise.all(reqFilters.departmentIds.map((id) => vacationApi.getDepartmentRequests(id)))
+      const tagFilter = reqFilters.tagId ? { tagId: reqFilters.tagId } : undefined
+      Promise.all(reqFilters.departmentIds.map((id) => vacationApi.getDepartmentRequests(id, tagFilter)))
         .then((results) => {
           if (cancelled) return
           const merged = new Map<string, VacationRequest>()
@@ -688,6 +702,13 @@ export function Vacation() {
               placeholder="Все отделы"
               countLabel="Отделов"
             />
+            {skillsEnabled && tags.length > 0 && (
+              <SelectDropdown
+                options={[{ value: '', label: 'Все теги' }, ...tags.map((t) => ({ value: String(t.id), label: t.name }))]}
+                value={reqFilters.tagId}
+                onChange={(v) => setReqFilters((f) => ({ ...f, tagId: v }))}
+              />
+            )}
             {isManager && (
               <MultiSelectDropdown
                 options={REQUEST_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}

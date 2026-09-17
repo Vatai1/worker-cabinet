@@ -255,6 +255,27 @@ async function seed() {
       console.log('  ✓ petrov@example.com set as manager of Отдел разработки')
     }
 
+    const USER_SKILLS = [
+      { email: 'ivanov@example.com', skills: ['Node.js', 'PostgreSQL'] },
+      { email: 'petrov@example.com', skills: ['React', 'TypeScript'] },
+      { email: 'morozova@crct.ru', skills: ['React'] },
+    ]
+    let assignedSkills = 0
+    for (const item of USER_SKILLS) {
+      const u = await query('SELECT id FROM users WHERE email = $1', [item.email])
+      if (u.rows.length === 0) continue
+      for (const skillName of item.skills) {
+        const s = await query('SELECT id FROM skills_dictionary WHERE name = $1', [skillName])
+        if (s.rows.length === 0) continue
+        const res = await query(
+          'INSERT INTO user_skills (user_id, skill_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          [u.rows[0].id, s.rows[0].id]
+        )
+        assignedSkills += res.rowCount
+      }
+    }
+    console.log(`  ✓ user skills seeded (${assignedSkills} new assignments)`)
+
     const ORG_USERS = [
       { email: 'volkov@crct.ru', orgId: crctId, orgRole: 'manager' },
       { email: 'morozova@crct.ru', orgId: crctId, orgRole: 'employee' },

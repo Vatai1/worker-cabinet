@@ -218,6 +218,17 @@ function extractYear(date) {
   return new Date(date).getFullYear()
 }
 
+function applyYearPlaceholders(zip, year) {
+  const yearStr = String(year)
+  for (const fileName of Object.keys(zip.files)) {
+    const file = zip.files[fileName]
+    if (file.dir) continue
+    const content = file.asText()
+    if (!content.includes('{{selected_year}}') && !content.includes('{{year}}')) continue
+    zip.file(fileName, content.replaceAll('{{selected_year}}', yearStr).replaceAll('{{year}}', yearStr))
+  }
+}
+
 /**
  * @swagger
  * /vacation/requests:
@@ -248,6 +259,10 @@ function extractYear(date) {
  *         name: vacationType
  *         schema: { type: string }
  *         description: 'Код типа отпуска (annual_paid, unpaid, ...)'
+ *       - in: query
+ *         name: tagId
+ *         schema: { type: integer }
+ *         description: 'Тег (справочник skills): только заявки работников с этим тегом'
  *     responses:
  *       200:
  *         description: Список заявок
@@ -259,7 +274,7 @@ function extractYear(date) {
  */
 router.get('/requests', authenticateToken, async (req, res) => {
   try {
-    const { userId, status, departmentId, year, scope, vacationType } = req.query
+    const { userId, status, departmentId, year, scope, vacationType, tagId } = req.query
     const user = req.user
 
     let whereClause = 'WHERE 1=1'
@@ -331,6 +346,14 @@ router.get('/requests', authenticateToken, async (req, res) => {
     if (vacationType) {
       whereClause += ' AND vt.code = $' + (params.length + 1)
       params.push(vacationType)
+    }
+
+    if (tagId) {
+      const tagIdInt = parseInt(tagId)
+      if (!Number.isNaN(tagIdInt)) {
+        whereClause += ` AND vr.user_id IN (SELECT user_id FROM user_skills WHERE skill_id = $${params.length + 1})`
+        params.push(tagIdInt)
+      }
     }
 
     const sql = `
@@ -1156,19 +1179,6 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
 
-    notify({
-      userId: request.rows[0].user_id,
-      type: 'vacation_status_changed',
-      data: {
-        employeeName: await getEmpName(request.rows[0].user_id),
-        status: 'approved',
-        startDate: fmtDate(request.rows[0].start_date),
-        endDate: fmtDate(request.rows[0].end_date),
-        comment: null,
-        link: '/vacation'
-      }
-    }).catch((err) => console.warn(`[NOTIFY] vacation approve #${id}: ${err.message}`))
-
     res.json({ ...result.rows[0], status: 'approved' })
     notifyVacationChanged(req, id, 'approved')
   } catch (error) {
@@ -1225,19 +1235,6 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
     const result = await client.query(rejUpdText, rejUpdValues)
 
     await client.query('COMMIT')
-
-    notify({
-      userId: request.rows[0].user_id,
-      type: 'vacation_status_changed',
-      data: {
-        employeeName: await getEmpName(request.rows[0].user_id),
-        status: 'rejected',
-        startDate: fmtDate(request.rows[0].start_date),
-        endDate: fmtDate(request.rows[0].end_date),
-        comment: reason,
-        link: '/vacation'
-      }
-    }).catch((err) => console.warn(`[NOTIFY] vacation reject #${id}: ${err.message}`))
 
     res.json({ ...result.rows[0], status: 'rejected' })
     notifyVacationChanged(req, id, 'rejected')
@@ -1561,19 +1558,6 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
 
     await client.query('COMMIT')
 
-    notify({
-      userId: newRequest.user_id,
-      type: 'vacation_status_changed',
-      data: {
-        employeeName: await getEmpName(newRequest.user_id),
-        status: 'approved',
-        startDate: fmtDate(newRequest.start_date),
-        endDate: fmtDate(newRequest.end_date),
-        comment: 'Перенос одобрен',
-        link: '/vacation'
-      }
-    }).catch((err) => console.warn(`[NOTIFY] vacation transfer approve #${id}: ${err.message}`))
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -1704,19 +1688,6 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
     )
 
     await client.query('COMMIT')
-
-    notify({
-      userId: newRequest.user_id,
-      type: 'vacation_status_changed',
-      data: {
-        employeeName: await getEmpName(newRequest.user_id),
-        status: 'rejected',
-        startDate: fmtDate(newRequest.start_date),
-        endDate: fmtDate(newRequest.end_date),
-        comment: reason,
-        link: '/vacation'
-      }
-    }).catch((err) => console.warn(`[NOTIFY] vacation transfer reject #${id}: ${err.message}`))
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
@@ -2106,6 +2077,7 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
     const buffer = Buffer.from(await s3Response.Body.transformToByteArray())
 
     const zip = new PizZip(buffer)
+    applyYearPlaceholders(zip, year)
     const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true })
     doc.render(data)
     const output = doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' })
@@ -2318,7 +2290,11 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
     const s3Response = await getFromS3(tmpl.file_key)
     const buffer = Buffer.from(await s3Response.Body.transformToByteArray())
 
+    const transferYear = transfersResult.rows[0]?.new_start
+      ? extractYear(transfersResult.rows[0].new_start)
+      : today.getFullYear()
     const zip = new PizZip(buffer)
+    applyYearPlaceholders(zip, transferYear)
     const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true })
     doc.render(data)
     const output = doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' })
@@ -2371,6 +2347,7 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
       departmentId: r.department_id,
       type: r.restriction_type,
       employeeIds: r.employee_ids.map(String),
+      tagIds: (r.tag_ids || []).map(String),
       maxConcurrent: r.max_concurrent,
       description: r.description,
       createdAt: r.created_at,
@@ -2398,11 +2375,12 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [departmentId, type, employeeIds]
+ *             required: [departmentId, type]
  *             properties:
  *               departmentId: { type: integer }
  *               type: { type: string, enum: [pair, group] }
  *               employeeIds: { type: array, items: { type: integer } }
+ *               tagIds: { type: array, items: { type: integer } }
  *               maxConcurrent: { type: integer }
  *               description: { type: string }
  *     responses:
@@ -2411,7 +2389,7 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
  */
 router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   try {
-    const { departmentId, type, employeeIds: rawEmployeeIds, maxConcurrent, description } = req.body
+    const { departmentId, type, employeeIds: rawEmployeeIds, tagIds: rawTagIds, maxConcurrent, description } = req.body
     const createdBy = req.user.id
 
     if (!departmentId || !type) {
@@ -2426,31 +2404,47 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
     const parsedIds = Array.isArray(rawEmployeeIds)
       ? rawEmployeeIds.map(id => parseInt(id)).filter(id => !Number.isNaN(id))
       : []
+    const parsedTagIds = [...new Set(
+      Array.isArray(rawTagIds)
+        ? rawTagIds.map(id => parseInt(id)).filter(id => !Number.isNaN(id))
+        : []
+    )]
 
     let employeeIds = []
+    let tagIds = []
     let maxConc = maxConcurrent || null
 
     if (type === 'pair') {
-      if (parsedIds.length !== 2) {
-        return res.status(400).json({ error: 'Для парного ограничения выберите ровно двух работников' })
+      if (parsedIds.length + parsedTagIds.length !== 2) {
+        return res.status(400).json({ error: 'Для парного ограничения выберите ровно двух работников и/или тегов' })
       }
-      employeeIds = [parsedIds[0], parsedIds[1]]
+      employeeIds = [parsedIds[0], parsedIds[1]].filter(id => id !== undefined)
+      tagIds = parsedTagIds
       maxConc = null
     } else if (type === 'group') {
-      if (parsedIds.length < 2) {
-        return res.status(400).json({ error: 'Для группового ограничения выберите минимум двух работников' })
+      const membersResult = await query(
+        `SELECT COUNT(DISTINCT uid)::int as c FROM (
+           SELECT unnest($1::int[]) as uid
+           UNION
+           SELECT user_id FROM user_skills WHERE skill_id = ANY($2)
+         ) t`,
+        [parsedIds, parsedTagIds]
+      )
+      if (membersResult.rows[0].c < 2) {
+        return res.status(400).json({ error: 'Для группового ограничения нужно минимум два работника (с учётом тегов)' })
       }
       employeeIds = parsedIds
+      tagIds = parsedTagIds
       maxConc = maxConcurrent || 1
     } else {
       return res.status(400).json({ error: 'Некорректный тип ограничения' })
     }
 
     const result = await query(
-      `INSERT INTO vacation_restrictions (department_id, restriction_type, employee_ids, max_concurrent, description, created_by, organization_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO vacation_restrictions (department_id, restriction_type, employee_ids, tag_ids, max_concurrent, description, created_by, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [deptId, type, employeeIds, maxConc, description || null, createdBy, currentOrgId(req)]
+      [deptId, type, employeeIds, tagIds, maxConc, description || null, createdBy, currentOrgId(req)]
     )
 
     const r = result.rows[0]
@@ -2461,6 +2455,7 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
       departmentId: r.department_id,
       type: r.restriction_type,
       employeeIds: r.employee_ids.map(String),
+      tagIds: (r.tag_ids || []).map(String),
       maxConcurrent: r.max_concurrent,
       description: r.description,
       createdAt: r.created_at,
@@ -2546,8 +2541,26 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
     )
     const restrictions = await query(chkRestText, chkRestValues)
 
+    const allTagIds = [...new Set(restrictions.rows.flatMap(r => r.tag_ids || []))]
+    const tagUserMap = new Map()
+    if (allTagIds.length > 0) {
+      const tagUsers = await query('SELECT skill_id, user_id FROM user_skills WHERE skill_id = ANY($1)', [allTagIds])
+      for (const row of tagUsers.rows) {
+        if (!tagUserMap.has(row.skill_id)) tagUserMap.set(row.skill_id, new Set())
+        tagUserMap.get(row.skill_id).add(row.user_id)
+      }
+    }
+
+    const restrictionRows = restrictions.rows.map(r => {
+      const ids = new Set((r.employee_ids || []).map(id => parseInt(id)))
+      for (const tagId of (r.tag_ids || [])) {
+        for (const uid of (tagUserMap.get(tagId) || new Set())) ids.add(uid)
+      }
+      return { ...r, employee_ids: [...ids] }
+    })
+
     const allOtherUserIds = new Set()
-    for (const restriction of restrictions.rows) {
+    for (const restriction of restrictionRows) {
       const others = (restriction.employee_ids || []).filter(id => id !== parseInt(userId))
       others.forEach(id => allOtherUserIds.add(id))
     }
@@ -2576,18 +2589,19 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
 
     const violations = []
 
-    for (const restriction of restrictions.rows) {
+    for (const restriction of restrictionRows) {
       const memberIds = (restriction.employee_ids || []).map(id => parseInt(id))
       if (!memberIds.includes(parseInt(userId))) continue
 
       if (restriction.restriction_type === 'pair') {
-        const otherUserId = restriction.employee_ids.find(id => id !== parseInt(userId))
-        if (!otherUserId) continue
-
-        if (overlapSet.has(otherUserId)) {
+        const othersOnVacation = restriction.employee_ids
+          .filter(id => id !== parseInt(userId) && overlapSet.has(id))
+          .map(id => nameMap.get(id) || '')
+          .filter(Boolean)
+        if (othersOnVacation.length > 0) {
           violations.push({
             field: 'restriction',
-            message: `Невозможно: ${nameMap.get(otherUserId) || ''} уже в отпуске в эти даты (парное ограничение)`,
+            message: `Невозможно: ${othersOnVacation.join(', ')} уже в отпуске в эти даты (парное ограничение)`,
           })
         }
       } else if (restriction.restriction_type === 'group') {

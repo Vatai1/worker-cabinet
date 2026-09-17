@@ -32,7 +32,7 @@ interface VacationStore {
   loading: boolean
   error: string | null
 
-  fetchAllRequests: (filters?: { departmentId?: string; year?: number; status?: string; vacationType?: string }) => Promise<void>
+  fetchAllRequests: (filters?: { departmentId?: string; year?: number; status?: string; vacationType?: string; tagId?: string }) => Promise<void>
   fetchConnectionRequests: () => Promise<void>
   fetchUserRequests: (userId: string) => Promise<void>
   fetchDepartmentRequests: (departmentId: string, filters?: { status?: string; year?: number; vacationType?: string }) => Promise<void>

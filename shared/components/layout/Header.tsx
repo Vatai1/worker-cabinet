@@ -43,6 +43,7 @@ export function Header() {
     const current = location.pathname + location.search
     const candidates: Array<{ href: string; section: string; title: string }> = [
       { href: '/settings', section: '', title: 'Настройки' },
+      { href: '/search', section: '', title: 'Поиск' },
     ]
     navigation.forEach((item) => {
       if (item.href) candidates.push({ href: item.href, section: item.section || '', title: item.name })

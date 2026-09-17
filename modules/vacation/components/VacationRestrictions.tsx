@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Search, Check, Trash2, Plus, GitCompareArrows, Link2 } from 'lucide-react'
+import { Users, Search, Check, Trash2, Plus, GitCompareArrows, Link2, Tag } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
+import { useModulesStore } from '@/shared/store/modulesStore'
 import { Button } from '@/shared/components/ui/Button'
 import { Card } from '@/shared/components/ui/Card'
 import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
 import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
-import { cn } from '@/shared/lib/utils'
+import { apiGet } from '@/shared/lib/apiClient'
+import { cn, getErrorMessage } from '@/shared/lib/utils'
 
 interface DepartmentUser {
   id: string
@@ -21,15 +23,27 @@ export function VacationRestrictions() {
   const departmentRequests = useVacationStore((state) => state.departmentRequests)
   const restrictions = useVacationStore((state) => state.restrictions)
   const fetchRestrictions = useVacationStore((state) => state.fetchRestrictions)
+  const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+  const skillsEnabled = isModuleEnabled('skills')
 
   const [restrictionType, setRestrictionType] = useState<'pair' | 'group'>('pair')
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
   const [maxConcurrent, setMaxConcurrent] = useState<number>(1)
   const [description, setDescription] = useState('')
+  const [tags, setTags] = useState<Array<{ id: number; name: string }>>([])
 
   const [search, setSearch] = useState('')
   const [positionFilter, setPositionFilter] = useState<string[]>([])
   const [selectedDepartmentId, setSelectedDepartmentId] = useState('')
+
+  useEffect(() => {
+    if (!skillsEnabled) {
+      setTags([])
+      return
+    }
+    apiGet<Array<{ id: number; name: string }>>('/users/skills/all').then(setTags).catch(() => setTags([]))
+  }, [skillsEnabled])
 
   const departments = useMemo(() => {
     const map = new Map<string, string>()
@@ -95,15 +109,10 @@ export function VacationRestrictions() {
   }, [departmentUsers, search, positionFilter])
 
   const handleCreateRestriction = async () => {
-    if (!selectedDepartmentId || selectedEmployees.length === 0) return
+    if (!selectedDepartmentId || (selectedEmployees.length === 0 && selectedTagIds.length === 0)) return
 
-    if (restrictionType === 'pair' && selectedEmployees.length !== 2) {
-      toast.error('Для парного ограничения нужно выбрать ровно 2 работника')
-      return
-    }
-
-    if (restrictionType === 'group' && selectedEmployees.length < 2) {
-      toast.error('Для группового ограничения нужно выбрать минимум 2 работника')
+    if (restrictionType === 'pair' && selectedEmployees.length + selectedTagIds.length !== 2) {
+      toast.error('Для парного ограничения нужно выбрать ровно 2 работника и/или тега')
       return
     }
 
@@ -111,16 +120,18 @@ export function VacationRestrictions() {
       await useVacationStore.getState().createRestriction(selectedDepartmentId, {
         type: restrictionType,
         employeeIds: selectedEmployees,
+        tagIds: selectedTagIds,
         maxConcurrent: restrictionType === 'group' ? maxConcurrent : undefined,
         description: description || undefined,
       })
       await fetchRestrictions(selectedDepartmentId)
       setSelectedEmployees([])
+      setSelectedTagIds([])
       setMaxConcurrent(1)
       setDescription('')
       toast.success('Ограничение создано')
-    } catch {
-      // handled in store
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err))
     }
   }
 
@@ -146,6 +157,8 @@ export function VacationRestrictions() {
     return employee ? `${employee.lastName} ${employee.firstName}` : employeeId
   }
 
+  const getTagName = (tagId: string) => tags.find((t) => String(t.id) === tagId)?.name ?? tagId
+
   const selectedDepartmentLabel = departments.find((d) => d.value === selectedDepartmentId)?.label ?? ''
 
   return (
@@ -169,6 +182,7 @@ export function VacationRestrictions() {
               onChange={(v) => {
                 setSelectedDepartmentId(v)
                 setSelectedEmployees([])
+                setSelectedTagIds([])
                 setSearch('')
                 setPositionFilter([])
               }}
@@ -281,7 +295,7 @@ export function VacationRestrictions() {
                   ) : (
                     filteredUsers.map((employee) => {
                       const isChecked = selectedEmployees.includes(employee.id)
-                      const atPairLimit = restrictionType === 'pair' && selectedEmployees.length >= 2 && !isChecked
+                      const atPairLimit = restrictionType === 'pair' && selectedEmployees.length + selectedTagIds.length >= 2 && !isChecked
                       return (
                         <button
                           key={employee.id}
@@ -289,7 +303,7 @@ export function VacationRestrictions() {
                           onClick={() => toggleEmployee(employee.id)}
                           title={
                             atPairLimit
-                              ? 'Для парного ограничения выбирается ровно 2 работника — выбор заменит одного из выбранных'
+                              ? 'Для парного ограничения выбирается ровно 2 участника — выбор заменит одного из выбранных'
                               : undefined
                           }
                           className={cn(
@@ -320,13 +334,16 @@ export function VacationRestrictions() {
 
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>
-                    Выбрано: {selectedEmployees.length}
+                    Выбрано: {selectedEmployees.length + selectedTagIds.length}
                     {restrictionType === 'pair' && ' из 2'}
                   </span>
-                  {selectedEmployees.length > 0 && (
+                  {(selectedEmployees.length > 0 || selectedTagIds.length > 0) && (
                     <button
                       type="button"
-                      onClick={() => setSelectedEmployees([])}
+                      onClick={() => {
+                        setSelectedEmployees([])
+                        setSelectedTagIds([])
+                      }}
                       className="underline hover:text-foreground"
                     >
                       Очистить
@@ -334,6 +351,22 @@ export function VacationRestrictions() {
                   )}
                 </div>
               </div>
+
+              {skillsEnabled && tags.length > 0 && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">Теги</label>
+                  <MultiSelectDropdown
+                    options={tags.map((t) => ({ value: String(t.id), label: t.name }))}
+                    selected={selectedTagIds}
+                    onChange={setSelectedTagIds}
+                    placeholder="Теги не выбраны"
+                    countLabel="Теги"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    В ограничение войдут все работники с выбранными тегами (список обновляется автоматически)
+                  </p>
+                </div>
+              )}
 
               {restrictionType === 'group' && (
                 <div className="space-y-2">
@@ -363,7 +396,7 @@ export function VacationRestrictions() {
               <Button
                 type="button"
                 onClick={handleCreateRestriction}
-                disabled={selectedEmployees.length === 0}
+                disabled={selectedEmployees.length === 0 && selectedTagIds.length === 0}
                 className="w-full gap-2"
               >
                 <Plus className="h-4 w-4" />
@@ -412,8 +445,21 @@ export function VacationRestrictions() {
                         </button>
                       </div>
                       <p className="text-sm">
-                        {restriction.employeeIds.map((id) => getEmployeeName(id)).join(', ')}
+                        {restriction.employeeIds.map((id) => getEmployeeName(id)).join(', ') || 'Только теги'}
                       </p>
+                      {(restriction.tagIds?.length ?? 0) > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {restriction.tagIds!.map((tid) => (
+                            <span
+                              key={tid}
+                              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                            >
+                              <Tag className="h-3 w-3" />
+                              {getTagName(tid)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {restriction.description && (
                         <p className="mt-1 text-xs italic text-muted-foreground">{restriction.description}</p>
                       )}

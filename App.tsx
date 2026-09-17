@@ -38,6 +38,7 @@ const CalendarPage = lazy(() => import('@/modules/calendar/pages/CalendarPage').
 const Notifications = lazy(() => import('@/modules/notifications/pages/Notifications').then(m => ({ default: m.Notifications })))
 const AdminPanel = lazy(() => import('@/core/admin/pages/AdminPanel').then(m => ({ default: m.AdminPanel })))
 const HRPanel = lazy(() => import('@/shared/pages/HRPanel').then(m => ({ default: m.HRPanel })))
+const SearchPage = lazy(() => import('@/shared/pages/SearchPage').then(m => ({ default: m.SearchPage })))
 const Assistant = lazy(() => import('@/modules/assistant/pages/Assistant').then(m => ({ default: m.Assistant })))
 
 function PageLoader() {
@@ -194,6 +195,7 @@ function App() {
                 <Route path="settings" element={<Settings />} />
                 <Route path="notifications" element={<ModuleGuard module="notifications"><BlockOnboardingRoute><Notifications /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="requests" element={<BlockOnboardingRoute><Requests /></BlockOnboardingRoute>} />
+                <Route path="search" element={<BlockOnboardingRoute><SearchPage /></BlockOnboardingRoute>} />
                 <Route path="documents" element={<ModuleGuard module="documents"><BlockOnboardingRoute><Documents /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="calendar" element={<ModuleGuard module="calendar"><BlockOnboardingRoute><CalendarPage /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="employees/:id" element={<EmployeeProfile />} />

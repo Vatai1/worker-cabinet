@@ -849,7 +849,7 @@ function TemplateModal({ template, departments, positions, onClose, onSuccess }:
                 onChange={e => setPosition(e.target.value)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <option value="">Все должности</option>
+                <option value="">Любая должность</option>
                 {positions.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>

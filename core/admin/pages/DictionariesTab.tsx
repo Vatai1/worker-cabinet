@@ -429,10 +429,17 @@ function AssignTagModal({ tag, onClose, onAssigned }: { tag: { id: number; name:
       .finally(() => setLoading(false))
   }, [])
 
-  const filtered = users.filter(u => {
-    const q = search.toLowerCase()
-    return !q || `${u.last_name} ${u.first_name} ${u.position || ''} ${u.department_name || ''}`.toLowerCase().includes(q)
-  })
+  const filtered = users
+    .filter(u => {
+      const q = search.toLowerCase()
+      return !q || `${u.last_name} ${u.first_name} ${u.position || ''} ${u.department_name || ''}`.toLowerCase().includes(q)
+    })
+    .sort((a, b) => {
+      const aHas = a.skills?.includes(tag.name) ? 0 : 1
+      const bHas = b.skills?.includes(tag.name) ? 0 : 1
+      if (aHas !== bHas) return aHas - bHas
+      return `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, 'ru')
+    })
 
   const toggle = (id: number) => {
     setSelected(prev => {

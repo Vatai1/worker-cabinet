@@ -145,10 +145,11 @@ export interface VacationBalance {
 export interface VacationRestriction {
   id: string
   departmentId: string
-  
+
   type: 'pair' | 'group'
-  
+
   employeeIds: string[]
+  tagIds?: string[]
   maxConcurrent?: number
   
   description?: string

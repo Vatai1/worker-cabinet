@@ -1683,6 +1683,7 @@ async function runMigrations() {
     await migrateTravelChildren(db)
     await migrateTravelBalance(db)
     await migrateMailingTables(db)
+    await migrateRestrictionTags(db)
     await migrateApprovalHierarchy(db)
     await migrateAvatarUrls(db)
 
@@ -1946,6 +1947,16 @@ async function migrateTravelChildren(db) {
     console.log('  ✓ travel_children + travel_children_count ready')
   } catch (e) {
     console.log('  - travel_children:', e.message)
+  }
+}
+
+async function migrateRestrictionTags(db) {
+  console.log('Checking vacation_restrictions tag_ids column...')
+  try {
+    await db.query("ALTER TABLE vacation_restrictions ADD COLUMN IF NOT EXISTS tag_ids INTEGER[] DEFAULT '{}'")
+    console.log('  ✓ vacation_restrictions.tag_ids ready')
+  } catch (e) {
+    console.log('  - vacation_restrictions tag_ids:', e.message)
   }
 }
 
