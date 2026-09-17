@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FileText, Plus, Pencil, Trash2, Search, X, Download, Eye, FileUp, Loader2, FolderOpen } from 'lucide-react'
+import { FileText, Plus, Pencil, Trash2, Search, X, Download, Eye, Loader2, FolderOpen } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
-import { Badge } from '@/shared/components/ui/Badge'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { AddDictItemModal } from '@/core/admin/components/modals/AddDictItemModal'
 import { OnlyOfficePreviewModal } from '@/shared/components/OnlyOfficePreviewModal'
@@ -10,13 +9,23 @@ import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { PLACEHOLDERS_BY_PURPOSE, getAllGroups } from '@/shared/lib/docPlaceholders'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
-import { formatFileSize } from '@/shared/lib/documentUtils'
+import { formatFileSize, getFileTypeLabel } from '@/shared/lib/documentUtils'
 import { API_BASE_URL } from '@/shared/lib/api'
 
 const PURPOSE_LABELS: Record<string, string> = {
   vacation_template: 'Шаблон отпуска',
   vacation_transfer_template: 'Шаблон переноса',
 }
+
+const PURPOSE_STYLES: Record<string, { icon: string; dot: string }> = {
+  vacation_template: { icon: 'bg-amber-500/10 text-amber-600 dark:text-amber-400', dot: 'bg-amber-500' },
+  vacation_transfer_template: { icon: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400', dot: 'bg-indigo-500' },
+  none: { icon: 'bg-slate-500/10 text-slate-600 dark:text-slate-400', dot: 'bg-slate-400' },
+}
+
+const purposeStyle = (purpose?: string) => PURPOSE_STYLES[purpose || 'none'] ?? PURPOSE_STYLES.none
+const purposeLabel = (purpose?: string) => (purpose ? PURPOSE_LABELS[purpose] || purpose : 'Без назначения')
+const PURPOSE_ORDER = ['vacation_template', 'vacation_transfer_template']
 
 interface DocTemplate {
   id: number
@@ -63,6 +72,22 @@ export function HRDocTemplates() {
     const q = search.toLowerCase()
     return t.name.toLowerCase().includes(q) || (t.purpose && t.purpose.toLowerCase().includes(q))
   })
+
+  const lanes = useMemo(() => {
+    const map = new Map<string, DocTemplate[]>()
+    for (const t of filtered) {
+      const key = t.purpose || 'none'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(t)
+    }
+    const otherKeys = [...map.keys()].filter((k) => !PURPOSE_ORDER.includes(k) && k !== 'none').sort()
+    const orderedKeys = [
+      ...PURPOSE_ORDER.filter((k) => map.has(k)),
+      ...otherKeys,
+      ...(map.has('none') ? ['none'] : []),
+    ]
+    return orderedKeys.map((key) => ({ key, items: map.get(key)! }))
+  }, [filtered])
 
   const handleDownload = async (item: DocTemplate) => {
     setDownloadingId(item.id)
@@ -165,8 +190,8 @@ export function HRDocTemplates() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-border/40 bg-card p-16 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 mb-4">
-            <FolderOpen className="h-8 w-8 text-white/80" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
+            <FolderOpen className="h-8 w-8 text-primary/70" />
           </div>
           <p className="text-lg font-medium text-muted-foreground">
             {search ? 'Ничего не найдено' : 'Шаблонов пока нет'}
@@ -176,95 +201,92 @@ export function HRDocTemplates() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-          {filtered.map((item) => {
-            const purposeLabel = item.purpose ? PURPOSE_LABELS[item.purpose] || item.purpose : null
+        <div className="space-y-6">
+          {lanes.map(({ key, items }) => {
+            const style = purposeStyle(key === 'none' ? undefined : key)
             return (
-              <div
-                key={item.id}
-                className="group relative rounded-2xl border border-border/40 bg-card overflow-hidden hover:border-border hover:shadow-md transition-all duration-200"
-              >
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-pink-500 to-rose-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div key={key}>
+                <p className="flex items-center gap-2 text-[13px] font-semibold mb-2.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                  {purposeLabel(key === 'none' ? undefined : key)}
+                  <span className="font-normal text-muted-foreground">{items.length}</span>
+                </p>
+                <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+                  {items.map((item) => {
+                    const ext = item.file_key ? getFileTypeLabel(item.mime_type || '', item.name) : null
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-2xl border border-border/40 bg-card overflow-hidden hover:border-border hover:shadow-md transition-all duration-200"
+                      >
+                        <div className="p-4">
+                          <div className="flex items-start gap-3 mb-3">
+                            <div className={`relative flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${style.icon}`}>
+                              <FileText className="h-4.5 w-4.5" />
+                              {ext && (
+                                <span className="absolute -bottom-1 -right-1.5 rounded border border-border bg-card px-1 py-px font-mono text-[8px] font-bold text-muted-foreground">
+                                  {ext}
+                                </span>
+                              )}
+                            </div>
+                            <p className="flex-1 min-w-0 font-semibold text-[13.5px] leading-snug truncate" title={item.name}>{item.name}</p>
+                          </div>
 
-                <div className="p-5">
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white shadow-sm">
-                      <FileText className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold truncate" title={item.name}>{item.name}</p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        {purposeLabel ? (
-                          <Badge variant="secondary" className="text-[11px]">{purposeLabel}</Badge>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground/50">Без назначения</span>
-                        )}
+                          {item.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{item.description}</p>
+                          )}
+
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-3">
+                            {item.file_key ? (
+                              <span>{item.size ? formatFileSize(item.size) : 'Файл'}</span>
+                            ) : (
+                              <span className="text-muted-foreground/40">Без файла</span>
+                            )}
+                            {item.created_at && <span>· {formatDate(item.created_at)}</span>}
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleDownload(item)}
+                              disabled={!item.file_key || downloadingId === item.id}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              title="Скачать"
+                            >
+                              {downloadingId === item.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Download className="h-3 w-3" />
+                              )}
+                              Скачать
+                            </button>
+                            <button
+                              onClick={() => setPreviewItem(item)}
+                              disabled={!item.file_key}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              title="Предпросмотр"
+                            >
+                              <Eye className="h-3 w-3" />
+                              Просмотр
+                            </button>
+                            <button
+                              onClick={() => setEditItem(item)}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                              title="Редактировать"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(item)}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              title="Удалить"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {item.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-3 min-h-[2rem]">{item.description}</p>
-                  )}
-
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mb-4">
-                    {item.file_key ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                        <FileUp className="h-3 w-3" />
-                        {item.size ? formatFileSize(item.size) : 'Файл'}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-muted-foreground/40">
-                        <FileUp className="h-3 w-3" />
-                        Без файла
-                      </span>
-                    )}
-                    {item.created_at && (
-                      <span className="inline-flex items-center gap-1">
-                        {formatDate(item.created_at)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      onClick={() => handleDownload(item)}
-                      disabled={!item.file_key || downloadingId === item.id}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Скачать"
-                    >
-                      {downloadingId === item.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Download className="h-3.5 w-3.5" />
-                      )}
-                      Скачать
-                    </button>
-                    <button
-                      onClick={() => setPreviewItem(item)}
-                      disabled={!item.file_key}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      title="Предпросмотр"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      Предпросмотр
-                    </button>
-                    <div className="flex-1" />
-                    <button
-                      onClick={() => setEditItem(item)}
-                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      title="Редактировать"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClick(item)}
-                      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      title="Удалить"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                    )
+                  })}
                 </div>
               </div>
             )

@@ -174,10 +174,12 @@ try {
 
 Each role has its own navigation function (`getEmployeeNavigation`, `getManagerNavigation`, `getHRNavigation`). When adding items to one role, verify all other roles also have the equivalent items where appropriate. The current expected items per role:
 
-- **employee**: Дашборд, Отпуск, Опросы, Работники, Отделы, Проекты, Профиль, Заявления, Документы, Уведомления
-- **manager**: Дашборд, Профиль, Работники, Отделы, Проекты, Рассмотреть заявки, Отпуск, Табель, Опросы, Документы, Уведомления
-- **hr/admin**: Дашборд, Профиль, HR (Опросы, Онбординг, Отпуск, Иерархия, Справочники, Табель), Мои опросы, Отпуск, Работники, Отделы, Проекты, Документы, Уведомления
+- **employee**: Дашборд, Отпуск, Опросы, Работники, Проекты, Профиль, Заявления, Документы, Уведомления
+- **manager**: Дашборд, Профиль, Работники, Проекты, Рассмотреть заявки, Отпуск, Табель, Опросы, Документы, Уведомления
+- **hr/admin**: Дашборд, Профиль, HR (Опросы, Онбординг, Отпуск, Иерархия, Справочники, Табель), Мои опросы, Отпуск, Работники, Проекты, Документы, Уведомления
 - **onboarding**: Онбординг, Работники, Отделы
+
+Top-level standalone "Отделы"/"Отдел" nav items were removed from employee/manager/hr/admin — "Отпуск" and "Работники" now live as flat items directly under the "Работа" section (previously nested under an "Отдел" accordion for employee/manager). Department management for HR/admin still lives under Справочники → Отделы (a tab, not a top-level nav item). "Основное" and "Работа" section groups are expanded by default; all section expand/collapse state persists in the `sidebar_expanded_sections` cookie.
 
 ## Key Subsystems
 

@@ -1,15 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
-import { Badge } from '@/shared/components/ui/Badge'
 import {
   Briefcase, Plane, Tag, Plus, Trash2, Edit3, Check, X,
-  AlertTriangle, Loader2, Users, UserPlus,
+  AlertTriangle, Loader2, Users, UserPlus, Search, MoreVertical,
 } from 'lucide-react'
 
 const ROLE_LABELS: Record<string, string> = {
@@ -27,10 +25,110 @@ const STATUS_LABELS: Record<string, string> = {
   active: 'Активен', inactive: 'Неактивен', on_leave: 'В отпуске',
 }
 
+const pluralRu = (n: number, one: string, few: string, many: string) => {
+  const a = n % 10
+  const b = n % 100
+  if (a === 1 && b !== 11) return one
+  if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return few
+  return many
+}
+
 interface DictionariesData {
   positions: { name: string; count: string }[]
   vacationTypes: { id: number; code: string; name: string }[]
   skills: { id: number; name: string }[]
+}
+
+function StatPill({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="flex min-w-[120px] flex-col gap-0.5 rounded-xl border border-border bg-card px-4 py-2.5">
+      <b className="text-lg font-bold leading-tight">{value}</b>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  )
+}
+
+function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="relative min-w-[200px] flex-1">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+      />
+    </div>
+  )
+}
+
+function EmptyState({ icon: Icon, title, hint }: { icon: React.ComponentType<{ className?: string }>; title: string; hint: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
+      <Icon className="h-8 w-8 opacity-20" />
+      <b className="text-[15px] text-foreground">{title}</b>
+      {hint}
+    </div>
+  )
+}
+
+function RowCard({ children }: { children: React.ReactNode }) {
+  return (
+    <article className="flex items-center gap-3.5 rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-muted-foreground/30">
+      {children}
+    </article>
+  )
+}
+
+function IconChip({ icon: Icon, className }: { icon: React.ComponentType<{ className?: string }>; className: string }) {
+  return (
+    <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', className)}>
+      <Icon className="h-5 w-5" />
+    </div>
+  )
+}
+
+function RowMenu({ open, onToggle, children, label }: { open: boolean; onToggle: () => void; children: React.ReactNode; label: string }) {
+  return (
+    <div className="relative">
+      <button
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={e => { e.stopPropagation(); onToggle() }}
+        className={cn(
+          'grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+          open && 'bg-muted text-foreground',
+        )}
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          onClick={e => e.stopPropagation()}
+          className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[180px] rounded-xl border border-border bg-card p-1.5 shadow-xl"
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MenuItem({ icon: Icon, label, danger, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; danger?: boolean; onClick: () => void }) {
+  return (
+    <button
+      role="menuitem"
+      onClick={onClick}
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium hover:bg-muted',
+        danger && 'text-destructive hover:bg-destructive/10',
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" /> {label}
+    </button>
+  )
 }
 
 export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }: { initialTab?: string; variant?: 'admin' | 'hr' }) {
@@ -38,6 +136,8 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   const activeDict = initialTab
   const [data, setData] = useState<DictionariesData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
   const [newSkill, setNewSkill] = useState('')
   const [newVacationName, setNewVacationName] = useState('')
   const [newVacationCode, setNewVacationCode] = useState('')
@@ -51,6 +151,15 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   const [error, setError] = useState<string | null>(null)
   const [showPositionUsers, setShowPositionUsers] = useState<string | null>(null)
   const [assigningTag, setAssigningTag] = useState<{ id: number; name: string } | null>(null)
+
+  useEffect(() => { setSearch('') }, [activeDict])
+
+  useEffect(() => {
+    if (openMenuKey === null) return
+    const close = () => setOpenMenuKey(null)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [openMenuKey])
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -161,13 +270,24 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
     } catch {}
   }
 
+  const q = search.trim().toLowerCase()
+  const filteredPositions = useMemo(() =>
+    !q ? (data?.positions ?? []) : (data?.positions ?? []).filter(p => p.name.toLowerCase().includes(q)),
+    [data, q])
+  const filteredVacationTypes = useMemo(() =>
+    !q ? (data?.vacationTypes ?? []) : (data?.vacationTypes ?? []).filter(v => `${v.name} ${v.code}`.toLowerCase().includes(q)),
+    [data, q])
+  const filteredSkills = useMemo(() =>
+    !q ? (data?.skills ?? []) : (data?.skills ?? []).filter(s => s.name.toLowerCase().includes(q)),
+    [data, q])
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
   if (!data) return null
 
   const tabInfo = activeDict === 'positions'
     ? { name: 'Должности', icon: Briefcase, color: 'from-blue-500 to-indigo-600', desc: 'Должности работников (из профиля)' }
     : activeDict === 'vacationTypes'
-    ? { name: 'Отпуск', icon: Plane, color: 'from-emerald-500 to-teal-600', desc: 'Типы отпусков' }
+    ? { name: 'Типы отпусков', icon: Plane, color: 'from-emerald-500 to-teal-600', desc: 'Виды отпусков, доступные при подаче заявления' }
     : { name: 'Теги', icon: Tag, color: 'from-violet-500 to-purple-600', desc: 'Каталог тегов компании' }
   const ActiveIcon = tabInfo.icon
 
@@ -180,158 +300,184 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <div className={cn('p-2 rounded-xl bg-gradient-to-br text-white', tabInfo.color)}>
-              <ActiveIcon className="h-4 w-4" />
-            </div>
-            <div>
-              <CardTitle className="text-base">{tabInfo.name}</CardTitle>
-              <CardDescription>{tabInfo.desc}</CardDescription>
-            </div>
+      <div className="flex items-center gap-3">
+        <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white', tabInfo.color)}>
+          <ActiveIcon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold leading-tight">{tabInfo.name}</h2>
+          <p className="text-sm text-muted-foreground">{tabInfo.desc}</p>
+        </div>
+      </div>
+
+      {activeDict === 'positions' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <StatPill value={data.positions.length} label={pluralRu(data.positions.length, 'должность', 'должности', 'должностей')} />
+            <SearchBox value={search} onChange={setSearch} placeholder="Поиск должности…" />
           </div>
-        </CardHeader>
-        <CardContent>
-          {activeDict === 'positions' && (
-            <div className="space-y-0.5">
-              {data.positions.length === 0 && (
-                <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-                  <Briefcase className="h-8 w-8 opacity-20" />
-                  <p className="text-sm">Нет должностей</p>
-                </div>
-              )}
-              {data.positions.map((p, i) => (
-                <div key={p.name} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/30 transition-colors group">
-                  {editPositionName === p.name ? (
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-muted-foreground/50 font-mono w-6">{i + 1}.</span>
-                      <Input value={editPositionNewName} onChange={e => setEditPositionNewName(e.target.value)} className="h-8 text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && renamePosition(p.name)} />
-                      <Button size="sm" variant="outline" onClick={() => renamePosition(p.name)}><Check className="h-3.5 w-3.5" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditPositionName(null)}><X className="h-3.5 w-3.5" /></Button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground/50 font-mono w-6">{i + 1}.</span>
-                        <span className="text-sm font-medium">{p.name}</span>
+
+          {filteredPositions.length === 0 ? (
+            <EmptyState
+              icon={Briefcase}
+              title={data.positions.length === 0 ? 'Нет должностей' : 'Должности не найдены'}
+              hint={data.positions.length === 0 ? 'Должности появятся, когда их укажут в профилях работников' : 'Измените запрос поиска'}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {filteredPositions.map((p) => {
+                const count = Number(p.count) || 0
+                const key = `pos-${p.name}`
+                return (
+                  <RowCard key={p.name}>
+                    {editPositionName === p.name ? (
+                      <div className="flex flex-1 items-center gap-2">
+                        <Input value={editPositionNewName} onChange={e => setEditPositionNewName(e.target.value)} className="h-9 text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && renamePosition(p.name)} />
+                        <Button size="sm" variant="outline" onClick={() => renamePosition(p.name)}><Check className="h-3.5 w-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditPositionName(null)}><X className="h-3.5 w-3.5" /></Button>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className="text-[10px]">{p.count} чел.</Badge>
-                        <button onClick={() => setShowPositionUsers(p.name)} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Работники">
-                          <Users className="h-3.5 w-3.5" />
-                        </button>
-                        {isAdmin && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => { setEditPositionName(p.name); setEditPositionNewName(p.name) }} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
-                              <Edit3 className="h-3.5 w-3.5" />
-                            </button>
-                            <button onClick={() => deletePosition(p.name)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
+                    ) : (
+                      <>
+                        <IconChip icon={Briefcase} className="bg-blue-500/10 text-blue-600 dark:text-blue-400" />
+                        <h3 className="min-w-0 flex-1 truncate text-[14.5px] font-semibold">{p.name}</h3>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold',
+                            count === 0 ? 'bg-muted text-muted-foreground/60' : 'bg-primary/10 text-primary',
+                          )}>
+                            <Users className="h-3 w-3" /> {count} чел.
+                          </span>
+                          <button onClick={() => setShowPositionUsers(p.name)} className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" title="Работники">
+                            <Users className="h-3.5 w-3.5" />
+                          </button>
+                          {isAdmin && (
+                            <RowMenu open={openMenuKey === key} onToggle={() => setOpenMenuKey(openMenuKey === key ? null : key)} label={`Действия: ${p.name}`}>
+                              <MenuItem icon={Edit3} label="Переименовать" onClick={() => { setOpenMenuKey(null); setEditPositionName(p.name); setEditPositionNewName(p.name) }} />
+                              <MenuItem icon={Trash2} label="Удалить" danger onClick={() => { setOpenMenuKey(null); deletePosition(p.name) }} />
+                            </RowMenu>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </RowCard>
+                )
+              })}
             </div>
           )}
+        </div>
+      )}
 
-          {activeDict === 'vacationTypes' && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Input placeholder="Название" value={newVacationName} onChange={e => setNewVacationName(e.target.value)} className="h-9 text-sm" />
-                <Input placeholder="Код" value={newVacationCode} onChange={e => setNewVacationCode(e.target.value)} className="h-9 text-sm w-24" />
-                <Button size="sm" onClick={addVacationType} disabled={!newVacationName.trim() || !newVacationCode.trim()}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
-                </Button>
-              </div>
-              <div className="space-y-0.5">
-                {data.vacationTypes.length === 0 && (
-                  <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-                    <Plane className="h-8 w-8 opacity-20" />
-                    <p className="text-sm">Нет типов отпусков</p>
-                  </div>
-                )}
-                {data.vacationTypes.map((vt) => (
-                  <div key={vt.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/30 transition-colors group">
+      {activeDict === 'vacationTypes' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <StatPill value={data.vacationTypes.length} label={pluralRu(data.vacationTypes.length, 'тип', 'типа', 'типов')} />
+            <SearchBox value={search} onChange={setSearch} placeholder="Поиск по названию или коду…" />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
+            <Input placeholder="Название" value={newVacationName} onChange={e => setNewVacationName(e.target.value)} className="h-9 min-w-[160px] flex-1 text-sm" />
+            <Input placeholder="Код" value={newVacationCode} onChange={e => setNewVacationCode(e.target.value)} className="h-9 w-24 text-sm" />
+            <Button size="sm" onClick={addVacationType} disabled={!newVacationName.trim() || !newVacationCode.trim()}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
+            </Button>
+          </div>
+
+          {filteredVacationTypes.length === 0 ? (
+            <EmptyState
+              icon={Plane}
+              title={data.vacationTypes.length === 0 ? 'Нет типов отпусков' : 'Ничего не найдено'}
+              hint={data.vacationTypes.length === 0 ? 'Добавьте первый тип отпуска' : 'Измените запрос поиска'}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {filteredVacationTypes.map((vt) => {
+                const key = `vac-${vt.id}`
+                return (
+                  <RowCard key={vt.id}>
                     {editVacationId === vt.id ? (
-                      <div className="flex items-center gap-2 flex-1">
-                        <Input value={editVacationName} onChange={e => setEditVacationName(e.target.value)} className="h-8 text-sm" autoFocus />
-                        <Input value={editVacationCode} onChange={e => setEditVacationCode(e.target.value)} className="h-8 text-sm w-20" />
+                      <div className="flex flex-1 items-center gap-2">
+                        <Input value={editVacationName} onChange={e => setEditVacationName(e.target.value)} className="h-9 text-sm" autoFocus />
+                        <Input value={editVacationCode} onChange={e => setEditVacationCode(e.target.value)} className="h-9 w-20 text-sm" />
                         <Button size="sm" variant="outline" onClick={() => updateVacationType(vt.id)}><Check className="h-3.5 w-3.5" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => setEditVacationId(null)}><X className="h-3.5 w-3.5" /></Button>
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{vt.code}</span>
-                          <span className="text-sm font-medium">{vt.name}</span>
+                        <IconChip icon={Plane} className="bg-amber-500/10 text-amber-600 dark:text-amber-400" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="truncate text-[14.5px] font-semibold">{vt.name}</h3>
+                            <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">{vt.code}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => { setEditVacationId(vt.id); setEditVacationName(vt.name); setEditVacationCode(vt.code) }} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </button>
-                          <button onClick={() => deleteVacationType(vt.id)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        <RowMenu open={openMenuKey === key} onToggle={() => setOpenMenuKey(openMenuKey === key ? null : key)} label={`Действия: ${vt.name}`}>
+                          <MenuItem icon={Edit3} label="Редактировать" onClick={() => { setOpenMenuKey(null); setEditVacationId(vt.id); setEditVacationName(vt.name); setEditVacationCode(vt.code) }} />
+                          <MenuItem icon={Trash2} label="Удалить" danger onClick={() => { setOpenMenuKey(null); deleteVacationType(vt.id) }} />
+                        </RowMenu>
                       </>
                     )}
-                  </div>
-                ))}
-              </div>
+                  </RowCard>
+                )
+              })}
             </div>
           )}
+        </div>
+      )}
 
-          {activeDict === 'skills' && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Input placeholder="Новый тег" value={newSkill} onChange={e => setNewSkill(e.target.value)} className="h-9 text-sm" onKeyDown={e => e.key === 'Enter' && addSkill()} />
-                <Button size="sm" onClick={addSkill} disabled={!newSkill.trim()}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
-                </Button>
-              </div>
-              <div className="space-y-0.5">
-                {data.skills.length === 0 && (
-                  <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-                    <Tag className="h-8 w-8 opacity-20" />
-                    <p className="text-sm">Нет тегов</p>
-                  </div>
-                )}
-                {data.skills.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/30 transition-colors group">
+      {activeDict === 'skills' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <StatPill value={data.skills.length} label={pluralRu(data.skills.length, 'тег', 'тега', 'тегов')} />
+            <SearchBox value={search} onChange={setSearch} placeholder="Поиск тега…" />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
+            <Input placeholder="Новый тег" value={newSkill} onChange={e => setNewSkill(e.target.value)} className="h-9 min-w-[160px] flex-1 text-sm" onKeyDown={e => e.key === 'Enter' && addSkill()} />
+            <Button size="sm" onClick={addSkill} disabled={!newSkill.trim()}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
+            </Button>
+          </div>
+
+          {filteredSkills.length === 0 ? (
+            <EmptyState
+              icon={Tag}
+              title={data.skills.length === 0 ? 'Нет тегов' : 'Ничего не найдено'}
+              hint={data.skills.length === 0 ? 'Добавьте первый тег' : 'Измените запрос поиска'}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {filteredSkills.map((s) => {
+                const key = `skl-${s.id}`
+                return (
+                  <RowCard key={s.id}>
                     {editSkillId === s.id ? (
-                      <div className="flex items-center gap-2 flex-1">
-                        <Input value={editSkillName} onChange={e => setEditSkillName(e.target.value)} className="h-8 text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && updateSkill(s.id)} />
+                      <div className="flex flex-1 items-center gap-2">
+                        <Input value={editSkillName} onChange={e => setEditSkillName(e.target.value)} className="h-9 text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && updateSkill(s.id)} />
                         <Button size="sm" variant="outline" onClick={() => updateSkill(s.id)}><Check className="h-3.5 w-3.5" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => setEditSkillId(null)}><X className="h-3.5 w-3.5" /></Button>
                       </div>
                     ) : (
                       <>
-                        <span className="text-sm font-medium">{s.name}</span>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => setAssigningTag({ id: s.id, name: s.name })} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Назначить работникам">
+                        <IconChip icon={Tag} className="bg-violet-500/10 text-violet-600 dark:text-violet-400" />
+                        <h3 className="min-w-0 flex-1 truncate text-[14.5px] font-semibold">{s.name}</h3>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button onClick={() => setAssigningTag({ id: s.id, name: s.name })} className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" title="Назначить работникам">
                             <UserPlus className="h-3.5 w-3.5" />
                           </button>
-                          <button onClick={() => { setEditSkillId(s.id); setEditSkillName(s.name) }} className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </button>
-                          <button onClick={() => deleteSkill(s.id)} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          <RowMenu open={openMenuKey === key} onToggle={() => setOpenMenuKey(openMenuKey === key ? null : key)} label={`Действия: ${s.name}`}>
+                            <MenuItem icon={Edit3} label="Переименовать" onClick={() => { setOpenMenuKey(null); setEditSkillId(s.id); setEditSkillName(s.name) }} />
+                            <MenuItem icon={Trash2} label="Удалить" danger onClick={() => { setOpenMenuKey(null); deleteSkill(s.id) }} />
+                          </RowMenu>
                         </div>
                       </>
                     )}
-                  </div>
-                ))}
-              </div>
+                  </RowCard>
+                )
+              })}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      )}
 
       {showPositionUsers && (
         <PositionUsersModal position={showPositionUsers} isAdmin={isAdmin} onClose={() => setShowPositionUsers(null)} />
@@ -384,7 +530,7 @@ function PositionUsersModal({ position, isAdmin, onClose }: { position: string; 
           ) : (
             <div className="space-y-1">
               {users.map(u => {
-                const fullName = `${u.last_name} ${u.first_name}${u.middle_name ? ' ' + u.middle_name : ''}`
+                const fullName = personName(u.last_name, u.first_name, u.middle_name)
                 return (
                   <div key={u.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/30 transition-colors">
                     <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
@@ -393,7 +539,7 @@ function PositionUsersModal({ position, isAdmin, onClose }: { position: string; 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium truncate">{fullName}</span>
-                        <Badge className={cn('text-[10px]', STATUS_COLORS[u.status])}>{STATUS_LABELS[u.status]}</Badge>
+                        <span className={cn('inline-flex items-center rounded-lg border border-transparent px-2.5 py-0.5 text-[10px] font-medium', STATUS_COLORS[u.status])}>{STATUS_LABELS[u.status]}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                         <span className="truncate">{u.email}</span>

@@ -5,6 +5,14 @@ import { Button } from '@/shared/components/ui/Button'
 import { useGlobalSearch } from '@/shared/hooks/useGlobalSearch'
 import { EmployeeResultRow, DepartmentResultRow, ProjectResultRow } from '@/shared/components/search/SearchResultRows'
 
+function pluralize(n: number, one: string, few: string, many: string) {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return one
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few
+  return many
+}
+
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -37,13 +45,20 @@ export function SearchPage() {
   const handleSelectProject = () => navigate('/projects')
 
   const hasQuery = query.trim().length >= 2
-  const hasResults = employees.length > 0 || departments.length > 0 || projects.length > 0
+  const total = employees.length + departments.length + projects.length
+  const hasResults = total > 0
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold">Поиск</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Работники, отделы и проекты по одному запросу</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {hasQuery
+            ? loading
+              ? 'Ищем…'
+              : `${total} ${pluralize(total, 'результат', 'результата', 'результатов')} по запросу «${query}»`
+            : 'Работники, отделы и проекты по одному запросу'}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex items-center gap-2">
@@ -68,8 +83,14 @@ export function SearchPage() {
       </form>
 
       {!hasQuery ? (
-        <div className="rounded-2xl border border-dashed border-border/60 py-16 text-center text-sm text-muted-foreground">
-          Введите запрос (минимум 2 символа) и нажмите Enter
+        <div className="flex flex-col items-center py-16 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <Search className="h-6 w-6" />
+          </div>
+          <p className="mt-4 text-sm font-medium">Начните вводить запрос</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Имя работника, название отдела или проекта — минимум 2 символа
+          </p>
         </div>
       ) : loading && !hasResults ? (
         <div className="flex justify-center py-16">
@@ -77,53 +98,74 @@ export function SearchPage() {
         </div>
       ) : !hasResults ? (
         searched ? (
-          <div className="rounded-2xl border border-dashed border-border/60 py-16 text-center text-sm text-muted-foreground">
-            По запросу «{query}» ничего не найдено
+          <div className="flex flex-col items-center py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground/60">
+              <Search className="h-6 w-6" />
+            </div>
+            <p className="mt-4 text-sm font-medium">Ничего не найдено</p>
+            <p className="mt-1 text-sm text-muted-foreground">По запросу «{query}» нет совпадений</p>
           </div>
         ) : null
       ) : (
         <div className="space-y-4">
-          {employees.length > 0 && (
-            <section>
-              <p className="mb-1.5 flex items-center gap-2 px-1 text-xs uppercase tracking-wide text-muted-foreground">
-                Работники
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold">{employees.length}</span>
-              </p>
-              <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                {employees.map((u) => (
-                  <EmployeeResultRow key={u.id} user={u} query={query} onClick={() => handleSelectEmployee(u.id)} />
-                ))}
-              </div>
-            </section>
-          )}
+          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5">
+            <span className="text-2xl font-bold tabular-nums">{total}</span>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {employees.length > 0 && (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                  {employees.length} {pluralize(employees.length, 'работник', 'работника', 'работников')}
+                </span>
+              )}
+              {departments.length > 0 && (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  {departments.length} {pluralize(departments.length, 'отдел', 'отдела', 'отделов')}
+                </span>
+              )}
+              {projects.length > 0 && (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  {projects.length} {pluralize(projects.length, 'проект', 'проекта', 'проектов')}
+                </span>
+              )}
+            </div>
+          </div>
 
-          {departments.length > 0 && (
-            <section>
-              <p className="mb-1.5 flex items-center gap-2 px-1 text-xs uppercase tracking-wide text-muted-foreground">
-                Отделы
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold">{departments.length}</span>
-              </p>
-              <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                {departments.map((d) => (
-                  <DepartmentResultRow key={d.id} department={d} onClick={handleSelectDepartment} />
-                ))}
+          <div className="overflow-hidden rounded-2xl border border-border bg-card">
+            {employees.length > 0 && (
+              <div className="border-l-[3px] border-accent">
+                <p className="px-4 pb-1 pt-3 text-xs font-medium text-muted-foreground">Работники</p>
+                <div className="pb-1">
+                  {employees.map((u) => (
+                    <EmployeeResultRow key={u.id} user={u} query={query} onClick={() => handleSelectEmployee(u.id)} variant="cozy" />
+                  ))}
+                </div>
               </div>
-            </section>
-          )}
+            )}
 
-          {projects.length > 0 && (
-            <section>
-              <p className="mb-1.5 flex items-center gap-2 px-1 text-xs uppercase tracking-wide text-muted-foreground">
-                Проекты
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold">{projects.length}</span>
-              </p>
-              <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                {projects.map((p) => (
-                  <ProjectResultRow key={p.id} project={p} onClick={handleSelectProject} />
-                ))}
+            {departments.length > 0 && (
+              <div className={`border-l-[3px] border-primary ${employees.length > 0 ? 'border-t border-t-border' : ''}`}>
+                <p className="px-4 pb-1 pt-3 text-xs font-medium text-muted-foreground">Отделы</p>
+                <div className="pb-1">
+                  {departments.map((d) => (
+                    <DepartmentResultRow key={d.id} department={d} query={query} onClick={handleSelectDepartment} variant="cozy" />
+                  ))}
+                </div>
               </div>
-            </section>
-          )}
+            )}
+
+            {projects.length > 0 && (
+              <div className={`border-l-[3px] border-amber-500 ${employees.length > 0 || departments.length > 0 ? 'border-t border-t-border' : ''}`}>
+                <p className="px-4 pb-1 pt-3 text-xs font-medium text-muted-foreground">Проекты</p>
+                <div className="pb-1">
+                  {projects.map((p) => (
+                    <ProjectResultRow key={p.id} project={p} query={query} onClick={handleSelectProject} variant="cozy" />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

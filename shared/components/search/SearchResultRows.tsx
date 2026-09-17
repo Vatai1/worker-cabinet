@@ -5,15 +5,59 @@ import { personName } from '@/shared/lib/utils'
 import { PROJECT_STATUS_LABELS } from '@/shared/hooks/useGlobalSearch'
 import type { GlobalSearchUser, GlobalSearchDepartment, GlobalSearchProject } from '@/shared/hooks/useGlobalSearch'
 
+type RowVariant = 'compact' | 'cozy'
+
+export function highlightMatch(text: string, query: string) {
+  const q = query.trim()
+  if (!q) return text
+  const idx = text.toLowerCase().indexOf(q.toLowerCase())
+  if (idx === -1) return text
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="rounded-[3px] bg-primary/15 px-0.5 -mx-0.5 font-semibold text-primary">
+        {text.slice(idx, idx + q.length)}
+      </mark>
+      {text.slice(idx + q.length)}
+    </>
+  )
+}
+
 interface EmployeeRowProps {
   user: GlobalSearchUser
   query: string
   onClick: () => void
+  variant?: RowVariant
 }
 
-export function EmployeeResultRow({ user, query, onClick }: EmployeeRowProps) {
+export function EmployeeResultRow({ user, query, onClick, variant = 'compact' }: EmployeeRowProps) {
   const q = query.trim().toLowerCase()
   const matchedTag = q ? user.skills?.find((s) => s.toLowerCase().includes(q)) : undefined
+  const name = personName(user.last_name, user.first_name, user.middle_name)
+
+  if (variant === 'cozy') {
+    return (
+      <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+        <Avatar className="h-8 w-8 shrink-0">
+          <AvatarImage src={user.avatar || generateAvatarUrl(String(user.id))} alt={name} />
+          <AvatarFallback className="text-xs">{user.first_name[0]}{user.last_name[0]}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{highlightMatch(name, query)}</p>
+          {matchedTag && (
+            <span className="mt-0.5 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+              {matchedTag}
+            </span>
+          )}
+        </div>
+        <div className="ml-auto shrink-0 text-right">
+          {user.position && <p className="text-sm font-medium">{user.position}</p>}
+          {user.department_name && <p className="text-xs text-muted-foreground">{user.department_name}</p>}
+        </div>
+      </button>
+    )
+  }
+
   return (
     <button
       type="button"
@@ -21,11 +65,11 @@ export function EmployeeResultRow({ user, query, onClick }: EmployeeRowProps) {
       className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted"
     >
       <Avatar className="h-8 w-8 shrink-0">
-        <AvatarImage src={user.avatar || generateAvatarUrl(String(user.id))} alt={personName(user.last_name, user.first_name, user.middle_name)} />
+        <AvatarImage src={user.avatar || generateAvatarUrl(String(user.id))} alt={name} />
         <AvatarFallback className="text-xs">{user.first_name[0]}{user.last_name[0]}</AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{personName(user.last_name, user.first_name, user.middle_name)}</p>
+        <p className="truncate text-sm font-medium">{name}</p>
         <p className="truncate text-xs text-muted-foreground">
           {[user.position, user.department_name].filter(Boolean).join(' · ')}
         </p>
@@ -41,10 +85,26 @@ export function EmployeeResultRow({ user, query, onClick }: EmployeeRowProps) {
 
 interface DepartmentRowProps {
   department: GlobalSearchDepartment
+  query?: string
   onClick: () => void
+  variant?: RowVariant
 }
 
-export function DepartmentResultRow({ department, onClick }: DepartmentRowProps) {
+export function DepartmentResultRow({ department, query = '', onClick, variant = 'compact' }: DepartmentRowProps) {
+  if (variant === 'cozy') {
+    return (
+      <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Building2 className="h-4 w-4" />
+        </div>
+        <p className="min-w-0 truncate text-sm font-medium">{highlightMatch(department.name, query)}</p>
+        {department.manager_name && (
+          <p className="ml-auto shrink-0 text-right text-sm font-medium">{department.manager_name}</p>
+        )}
+      </button>
+    )
+  }
+
   return (
     <button
       type="button"
@@ -64,10 +124,26 @@ export function DepartmentResultRow({ department, onClick }: DepartmentRowProps)
 
 interface ProjectRowProps {
   project: GlobalSearchProject
+  query?: string
   onClick: () => void
+  variant?: RowVariant
 }
 
-export function ProjectResultRow({ project, onClick }: ProjectRowProps) {
+export function ProjectResultRow({ project, query = '', onClick, variant = 'compact' }: ProjectRowProps) {
+  const statusLabel = project.status ? PROJECT_STATUS_LABELS[project.status] ?? project.status : null
+
+  if (variant === 'cozy') {
+    return (
+      <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+          <FolderKanban className="h-4 w-4" />
+        </div>
+        <p className="min-w-0 truncate text-sm font-medium">{highlightMatch(project.name, query)}</p>
+        {statusLabel && <p className="ml-auto shrink-0 text-right text-sm font-medium">{statusLabel}</p>}
+      </button>
+    )
+  }
+
   return (
     <button
       type="button"
@@ -79,9 +155,7 @@ export function ProjectResultRow({ project, onClick }: ProjectRowProps) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{project.name}</p>
-        {project.status && (
-          <p className="truncate text-xs text-muted-foreground">{PROJECT_STATUS_LABELS[project.status] ?? project.status}</p>
-        )}
+        {statusLabel && <p className="truncate text-xs text-muted-foreground">{statusLabel}</p>}
       </div>
     </button>
   )

@@ -12,12 +12,13 @@ import { Badge } from '@/shared/components/ui/Badge'
 import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
 import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { YearCalendar } from '@/shared/components/calendar/YearCalendar'
-import { VacationLegend } from '@/shared/components/calendar/VacationLegend'
+import { CalendarLegendSwatches } from '@/shared/components/calendar/CalendarLegendSwatches'
 import { VacationHistoryList } from '@/modules/vacation/components/modals/VacationHistoryModal'
 import { CreateVacationModal } from '@/modules/vacation/components/modals/CreateVacationModal'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { VacationRestrictions } from '@/modules/vacation/components/VacationRestrictions'
+import { VacationIntroModal } from '@/modules/vacation/components/VacationIntroModal'
 import { VacationTransferModal } from '@/modules/vacation/components/modals/VacationTransferModal'
 import { VacationRequestStatus, VacationType, VACATION_TYPES } from '@/shared/types'
 import type { VacationRequest, VacationBalance, VacationValidationError, VacationEmployee } from '@/shared/types'
@@ -29,11 +30,14 @@ import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
 import { hasAnyRole } from '@/shared/lib/permissions'
+import { getCookie, setCookie } from '@/shared/lib/cookies'
 import {
   ChevronLeft, ChevronRight, ChevronDown, FileText, Clock, CheckCircle2, CheckCircle,
   UserCheck, Search, RotateCcw, XCircle, PieChart,
-  Calendar as CalendarIcon, Lightbulb,
+  Calendar as CalendarIcon, Lightbulb, HelpCircle,
 } from 'lucide-react'
+
+const VACATION_INTRO_COOKIE = 'vacation_intro_seen'
 
 const REQUEST_STATUS_OPTIONS = [
   { value: VacationRequestStatus.APPROVED, label: 'Согласовано' },
@@ -87,6 +91,15 @@ export function Vacation() {
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
   const [pickerEmployees, setPickerEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; middle_name?: string | null; position: string }>>([])
   const [reqFilters, setReqFilters] = useState(EMPTY_REQUEST_FILTERS)
+  const [approvalFilters, setApprovalFilters] = useState<{ departmentIds: string[]; vacationTypes: string[] }>({ departmentIds: [], vacationTypes: [] })
+  const [approvalSearch, setApprovalSearch] = useState('')
+  const [showIntroModal, setShowIntroModal] = useState(false)
+
+  useEffect(() => {
+    if (getCookie(VACATION_INTRO_COOKIE)) return
+    setShowIntroModal(true)
+    setCookie(VACATION_INTRO_COOKIE, '1')
+  }, [])
   const [activeTab, setActiveTab] = useState<VacationTab>('mine')
   const [calendarScope, setCalendarScope] = useState<CalendarScope>('mine')
   const [leavingApprovalIds, setLeavingApprovalIds] = useState<Set<string>>(new Set())
@@ -103,6 +116,7 @@ export function Vacation() {
   const skillsEnabled = isModuleEnabled('skills')
 
   const isManager = hasAnyRole('manager', 'hr', 'admin')
+  const isAdminOrSuperAdmin = hasAnyRole('admin')
   const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id)
 
   useEffect(() => {
@@ -561,6 +575,27 @@ export function Vacation() {
 
   const pendingApprovals = departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
 
+  const filteredPendingApprovals = useMemo(() => {
+    if (!isAdminOrSuperAdmin) return pendingApprovals
+    let list = pendingApprovals
+    if (approvalFilters.departmentIds.length > 0) {
+      list = list.filter((r) => r.departmentId && approvalFilters.departmentIds.includes(r.departmentId))
+    }
+    if (approvalFilters.vacationTypes.length > 0) {
+      list = list.filter((r) => approvalFilters.vacationTypes.includes(r.vacationType))
+    }
+    const q = approvalSearch.trim().toLowerCase()
+    if (q) {
+      list = list.filter((r) => `${r.userLastName} ${r.userFirstName} ${r.userMiddleName ?? ''}`.toLowerCase().includes(q))
+    }
+    return list
+  }, [pendingApprovals, isAdminOrSuperAdmin, approvalFilters, approvalSearch])
+
+  const resetApprovalFilters = () => {
+    setApprovalFilters({ departmentIds: [], vacationTypes: [] })
+    setApprovalSearch('')
+  }
+
   const myRequests = useMemo(() =>
     [...currentUserRequests]
       .filter((r) =>
@@ -806,14 +841,26 @@ export function Vacation() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="relative overflow-hidden gradient-primary text-white rounded-lg animate-slide-up">
-        <div className="relative z-10 px-6 py-8">
-          <span className="text-[11px] font-medium uppercase tracking-widest text-white/60">Управление · Отпуска</span>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">Отпуск</h1>
-          <p className="mt-2 text-sm text-white/70">
-            {isManager ? 'Управление отпусками работников' : 'Управление вашими отпусками'}
-          </p>
+        <div className="relative z-10 flex items-start justify-between gap-4 px-6 py-8">
+          <div>
+            <span className="text-[11px] font-medium uppercase tracking-widest text-white/60">Управление · Отпуска</span>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">Отпуск</h1>
+            <p className="mt-2 text-sm text-white/70">
+              {isManager ? 'Управление отпусками работников' : 'Управление вашими отпусками'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowIntroModal(true)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-white/20"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            Как это работает
+          </button>
         </div>
       </div>
+
+      <VacationIntroModal open={showIntroModal} onClose={() => setShowIntroModal(false)} isManager={isManager} isAdminOrSuperAdmin={isAdminOrSuperAdmin} />
 
       {error && (
         <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -911,7 +958,11 @@ export function Vacation() {
 
           {calendarSection}
 
-          <VacationLegend departmentId={user?.departmentId || ''} year={year} currentUserId={user?.id} />
+          <Card>
+            <div className="p-5">
+              <CalendarLegendSwatches />
+            </div>
+          </Card>
 
           <Card>
             <div
@@ -1154,6 +1205,41 @@ export function Vacation() {
               </span>
             )}
           </div>
+          {isAdminOrSuperAdmin && (
+            <div className="flex flex-wrap items-center gap-[10px] border-b border-border bg-muted/40 px-5 py-[13px]">
+              <MultiSelectDropdown
+                options={departments.map((d) => ({ value: String(d.id), label: d.name }))}
+                selected={approvalFilters.departmentIds}
+                onChange={(ids) => setApprovalFilters((f) => ({ ...f, departmentIds: ids }))}
+                placeholder="Все отделы"
+                countLabel="Отделов"
+              />
+              <MultiSelectDropdown
+                options={Object.entries(VACATION_TYPES).map(([code, info]) => ({ value: code, label: info.name }))}
+                selected={approvalFilters.vacationTypes}
+                onChange={(values) => setApprovalFilters((f) => ({ ...f, vacationTypes: values }))}
+                placeholder="Все типы"
+                countLabel="Типов"
+              />
+              <div className="flex h-9 items-center gap-2 rounded-[10px] border border-border bg-card px-3 transition-shadow focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/15">
+                <Search className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
+                <input
+                  value={approvalSearch}
+                  onChange={(e) => setApprovalSearch(e.target.value)}
+                  placeholder="Поиск по ФИО"
+                  className="w-[170px] border-0 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={resetApprovalFilters}
+                className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-card px-[15px] py-[9px] text-[13px] font-semibold text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
+              >
+                <RotateCcw className="h-[14px] w-[14px]" />
+                Сбросить
+              </button>
+            </div>
+          )}
           <div className="p-5">
             {loading ? (
               <div className="flex items-center justify-center py-10"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
@@ -1165,9 +1251,17 @@ export function Vacation() {
                 <p className="mt-3 text-sm font-medium">Все заявки обработаны</p>
                 <p className="mt-1 text-xs text-muted-foreground">Новые заявки появятся здесь</p>
               </div>
+            ) : filteredPendingApprovals.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 py-12 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground/60">
+                  <Search className="h-6 w-6" />
+                </div>
+                <p className="mt-3 text-sm font-medium">Ничего не найдено</p>
+                <p className="mt-1 text-xs text-muted-foreground">Измените фильтры или сбросьте их</p>
+              </div>
             ) : (
               <div className="space-y-3">
-                {pendingApprovals.map((request) => {
+                {filteredPendingApprovals.map((request) => {
                   const isLeaving = leavingApprovalIds.has(request.id)
                   const isRejecting = rejectingApprovalId === request.id
                   return (

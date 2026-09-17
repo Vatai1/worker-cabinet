@@ -19,9 +19,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avat
 import { Logo } from '@/shared/components/brand/Logo'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
+import { getCookie, setCookie } from '@/shared/lib/cookies'
 import { BugReportButton } from '@/shared/components/BugReportButton'
 import { TestSwitcher, stopImpersonation } from '@/shared/components/TestSwitcher'
 import { ChangelogModal } from '@/shared/components/ChangelogModal'
+
+const SIDEBAR_SECTIONS_COOKIE = 'sidebar_expanded_sections'
 
 export interface NavItem {
   name: string
@@ -46,17 +49,14 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
-  { name: 'Отдел', icon: Building2, section: 'Работа', children: [
-    { name: 'Отпуск', href: '/vacation', module: 'vacation' },
-    { name: 'Работники', href: '/employees' },
-  ]},
+  { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Работа' },
+  { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
   { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Заявления', href: '/requests', icon: FileText, section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
-  { name: 'Отделы', href: '/departments', icon: Building2, section: 'Справочники' },
   { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
     { name: 'Ваши документы', href: '/documents' },
   ]},
@@ -67,18 +67,15 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
-  { name: 'Отдел', icon: Building2, section: 'Управление', children: [
-    { name: 'Табель', href: '/leader/timesheet', module: 'timesheet' },
-    { name: 'Отпуск', href: '/vacation', module: 'vacation' },
-    { name: 'Работники', href: '/employees' },
-  ]},
+  { name: 'Табель', href: '/leader/timesheet', icon: Calendar, module: 'timesheet', section: 'Управление' },
   { name: 'Рассмотреть заявки', href: '/manager', icon: FileText, section: 'Управление' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Управление' },
+  { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Работа' },
+  { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
   { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
-  { name: 'Отделы', href: '/departments', icon: Building2, section: 'Справочники' },
   { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
     { name: 'Ваши документы', href: '/documents' },
   ]},
@@ -106,14 +103,13 @@ const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
-  { name: 'Работники', href: '/employees', icon: Users, section: 'Управление' },
-  { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Управление' },
+  { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Работа' },
+  { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
   { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
-  { name: 'Отделы', href: '/departments', icon: Building2, section: 'Справочники' },
   { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
     { name: 'Ваши документы', href: '/documents' },
   ]},
@@ -170,14 +166,13 @@ const getAdminNavigation = (userId?: string, isSuper?: boolean): NavItem[] => [
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
-  { name: 'Работники', href: '/employees', icon: Users, section: 'Управление' },
-  { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Управление' },
+  { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Работа' },
+  { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
   { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
-  { name: 'Отделы', href: '/departments', icon: Building2, section: 'Справочники' },
   { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
     { name: 'Ваши документы', href: '/documents' },
   ]},
@@ -237,7 +232,16 @@ export function Sidebar() {
   const isHrefActive = (href?: string) =>
     !!href && (href === currentPath || (!href.includes('?') && href === location.pathname))
   const [expandedItems, setExpandedItems] = useState<string[]>([])
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set(['Основное']))
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    const raw = getCookie(SIDEBAR_SECTIONS_COOKIE)
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return new Set(parsed.filter((v): v is string => typeof v === 'string'))
+      } catch {}
+    }
+    return new Set(['Основное', 'Работа'])
+  })
   const [changelogOpen, setChangelogOpen] = useState(false)
 
   const navigation = useNavigation()
@@ -275,6 +279,10 @@ export function Sidebar() {
       }
     }
   }, [location.pathname, sections])
+
+  useEffect(() => {
+    setCookie(SIDEBAR_SECTIONS_COOKIE, JSON.stringify(Array.from(expandedSections)))
+  }, [expandedSections])
 
   const toggleSection = (name: string) => {
     setExpandedSections((prev) => {

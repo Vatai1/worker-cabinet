@@ -236,7 +236,7 @@ export function YearCalendar({
         </>
       )}
 
-      <div className="grid gap-[14px]" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(212px, 1fr))' }}>
+      <div className="grid grid-cols-4 gap-[14px]">
         {months.map(month => (
           <div
             key={month.index}
@@ -271,7 +271,6 @@ export function YearCalendar({
                 const visibleVacations = vacations.slice(0, 3)
                 const remainingCount = vacations.length > 3 ? vacations.length - 3 : 0
                 const isMineDay = !!currentUserId && vacations.some(v => v.userId === currentUserId)
-                const singleVacation = !isMineDay && vacations.length === 1 ? vacations[0] : null
                 const matchesSearch = !normalizedSearch || vacations.some(v =>
                   `${v.userLastName} ${v.userFirstName} ${v.userMiddleName ?? ''}`.toLowerCase().includes(normalizedSearch)
                 )
@@ -281,10 +280,8 @@ export function YearCalendar({
                 let stateClass = 'text-foreground'
                 if (isMineDay) {
                   stateClass = 'font-bold'
-                } else if (singleVacation) {
+                } else if (hasVacation) {
                   stateClass = 'text-foreground font-semibold'
-                } else if (vacations.length > 1) {
-                  stateClass = 'bg-muted/40'
                 } else if (holiday) {
                   stateClass = 'bg-muted text-muted-foreground'
                 } else if (weekend) {
@@ -292,17 +289,20 @@ export function YearCalendar({
                 }
 
                 let vacationStyle: { backgroundColor?: string; backgroundImage?: string } | undefined
-                if (!isSelected && singleVacation) {
-                  const hex = colorMap.get(singleVacation.userId) ?? PARTICIPANT_COLORS[0]
-                  if (singleVacation.status === VacationRequestStatus.APPROVED) {
-                    vacationStyle = { backgroundColor: `${hex}26` }
+                if (!isSelected && hasVacation) {
+                  const hasApproved = vacations.some(v => v.status === VacationRequestStatus.APPROVED)
+                  const hasPending = vacations.some(v => v.status === VacationRequestStatus.ON_APPROVAL)
+                  if (hasApproved && hasPending) {
+                    vacationStyle = { backgroundImage: 'linear-gradient(135deg, hsl(var(--success) / 0.3) 50%, hsl(var(--warning) / 0.3) 50%)' }
+                  } else if (hasApproved) {
+                    vacationStyle = { backgroundColor: 'hsl(var(--success) / 0.22)' }
                   } else {
-                    vacationStyle = { backgroundImage: `repeating-linear-gradient(45deg, ${hex}59 0 2px, transparent 2px 6px)` }
+                    vacationStyle = { backgroundColor: 'hsl(var(--warning) / 0.22)' }
                   }
                 }
 
                 const liftShadow = '0 3px 8px -2px rgb(0 0 0 / 0.25)'
-                const mineRing = 'inset 0 0 0 1.5px hsl(var(--primary))'
+                const mineRing = 'inset 0 0 0 1px hsl(var(--primary))'
                 let boxShadow: string | undefined
                 if (isMineDay) boxShadow = isHoveringCell ? `${mineRing}, ${liftShadow}` : mineRing
                 else if (isHoveringCell) boxShadow = liftShadow
