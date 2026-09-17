@@ -397,7 +397,7 @@ describe('Модуль отпусков — user stories', () => {
       assert.ok(!after.data.some((r) => r.id === created.data.id))
     })
 
-    it('approve: reserved→used, история, без уведомления автору', async () => {
+    it('approve: reserved→used, история, уведомление автору', async () => {
       const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
       const res = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
       assert.strictEqual(res.status, 200)
@@ -407,15 +407,12 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(balance.used_days, 5)
       assert.strictEqual(balance.reserved_days, 0)
       assert.deepStrictEqual(await historyOf(created.data.id), ['on_approval', 'approved'])
-      await new Promise((resolve) => setTimeout(resolve, 700))
-      const notifications = (await query(
-        "SELECT id FROM notification_queue WHERE user_id = $1 AND type = 'vacation_status_changed'",
-        [emp.id]
-      )).rows
-      assert.strictEqual(notifications.length, 0, 'уведомление vacation_status_changed больше не создаётся')
+      const notification = await waitNotification(emp.id, 'vacation_status_changed', (n) => n.data.status === 'approved')
+      assert.ok(notification, 'уведомление vacation_status_changed не получено')
+      assert.strictEqual(notification.data.comment, null)
     })
 
-    it('reject с причиной: rejected, rejection_reason, без уведомления автору', async () => {
+    it('reject с причиной: rejected, rejection_reason, уведомление с комментарием', async () => {
       const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
       const res = await call('POST', `/vacation/requests/${created.data.id}/reject`, await tokenFor(mgr), { reason: 'Производственная необходимость' })
       assert.strictEqual(res.status, 200)
@@ -424,12 +421,9 @@ describe('Модуль отпусков — user stories', () => {
       const row = (await query('SELECT rejection_reason FROM vacation_requests WHERE id = $1', [created.data.id])).rows[0]
       assert.strictEqual(row.rejection_reason, 'Производственная необходимость')
       assert.strictEqual((await balanceOf(emp.id, yearOf(shift(10)))).reserved_days, 0)
-      await new Promise((resolve) => setTimeout(resolve, 700))
-      const notifications = (await query(
-        "SELECT id FROM notification_queue WHERE user_id = $1 AND type = 'vacation_status_changed'",
-        [emp.id]
-      )).rows
-      assert.strictEqual(notifications.length, 0, 'уведомление об отклонении больше не создаётся')
+      const notification = await waitNotification(emp.id, 'vacation_status_changed', (n) => n.data.status === 'rejected')
+      assert.ok(notification, 'уведомление об отклонении не получено')
+      assert.strictEqual(notification.data.comment, 'Производственная необходимость')
     })
 
     it('reject без причины → 400', async () => {

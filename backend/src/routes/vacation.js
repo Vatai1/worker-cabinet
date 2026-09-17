@@ -1179,6 +1179,19 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT')
 
+    notify({
+      userId: request.rows[0].user_id,
+      type: 'vacation_status_changed',
+      data: {
+        employeeName: await getEmpName(request.rows[0].user_id),
+        status: 'approved',
+        startDate: fmtDate(request.rows[0].start_date),
+        endDate: fmtDate(request.rows[0].end_date),
+        comment: null,
+        link: '/vacation'
+      }
+    }).catch((err) => console.warn(`[NOTIFY] vacation approve #${id}: ${err.message}`))
+
     res.json({ ...result.rows[0], status: 'approved' })
     notifyVacationChanged(req, id, 'approved')
   } catch (error) {
@@ -1235,6 +1248,19 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
     const result = await client.query(rejUpdText, rejUpdValues)
 
     await client.query('COMMIT')
+
+    notify({
+      userId: request.rows[0].user_id,
+      type: 'vacation_status_changed',
+      data: {
+        employeeName: await getEmpName(request.rows[0].user_id),
+        status: 'rejected',
+        startDate: fmtDate(request.rows[0].start_date),
+        endDate: fmtDate(request.rows[0].end_date),
+        comment: reason,
+        link: '/vacation'
+      }
+    }).catch((err) => console.warn(`[NOTIFY] vacation reject #${id}: ${err.message}`))
 
     res.json({ ...result.rows[0], status: 'rejected' })
     notifyVacationChanged(req, id, 'rejected')
@@ -1558,6 +1584,19 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
 
     await client.query('COMMIT')
 
+    notify({
+      userId: newRequest.user_id,
+      type: 'vacation_status_changed',
+      data: {
+        employeeName: await getEmpName(newRequest.user_id),
+        status: 'approved',
+        startDate: fmtDate(newRequest.start_date),
+        endDate: fmtDate(newRequest.end_date),
+        comment: 'Перенос одобрен',
+        link: '/vacation'
+      }
+    }).catch((err) => console.warn(`[NOTIFY] vacation transfer approve #${id}: ${err.message}`))
+
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
@@ -1688,6 +1727,19 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
     )
 
     await client.query('COMMIT')
+
+    notify({
+      userId: newRequest.user_id,
+      type: 'vacation_status_changed',
+      data: {
+        employeeName: await getEmpName(newRequest.user_id),
+        status: 'rejected',
+        startDate: fmtDate(newRequest.start_date),
+        endDate: fmtDate(newRequest.end_date),
+        comment: reason,
+        link: '/vacation'
+      }
+    }).catch((err) => console.warn(`[NOTIFY] vacation transfer reject #${id}: ${err.message}`))
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
