@@ -192,21 +192,22 @@ const HANDLES = (
   </>
 )
 
-function DepartmentNode({ data }: NodeProps) {
+function DepartmentNode({ data, selected }: NodeProps) {
   const d = data as { name: string; employeeCount: number; managerName: string | null; description?: string; color?: string }
   return (
-    <div className="group min-w-[200px] rounded-xl overflow-hidden shadow-lg border-2 hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
-      <div className="px-4 py-3" style={{ backgroundColor: d.color ?? '#6b7280' }}>
-        <div className="flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-white/80 flex-shrink-0" />
-          <span className="text-white font-semibold text-sm">{d.name}</span>
+    <div className="group w-full min-h-full min-w-[200px] min-h-[92px] rounded-xl overflow-hidden shadow-lg border-2 hover:shadow-md transition-all duration-200 select-none flex flex-col" style={{ borderColor: d.color ?? '#6b7280' }}>
+      <NodeResizer isVisible={selected} minWidth={200} minHeight={92} lineClassName="pointer-events-auto" handleClassName="pointer-events-auto" />
+      <div className="px-4 py-3 shrink-0" style={{ backgroundColor: d.color ?? '#6b7280' }}>
+        <div className="flex items-start gap-2">
+          <Building2 className="h-4 w-4 text-white/80 flex-shrink-0 mt-0.5" />
+          <span className="text-white font-semibold text-sm break-words min-w-0 flex-1">{d.name}</span>
         </div>
         {d.employeeCount > 0 && (
           <div className="text-white/70 text-xs mt-1">{d.employeeCount} сотр.</div>
         )}
       </div>
       {d.managerName ? (
-        <div className="bg-card px-4 py-2 text-xs text-muted-foreground border-t border-border/50">
+        <div className="bg-card px-4 py-2 text-xs text-muted-foreground border-t border-border/50 break-words">
           Начальник: <span className="font-medium text-foreground/80">{d.managerName}</span>
         </div>
       ) : (
@@ -215,7 +216,7 @@ function DepartmentNode({ data }: NodeProps) {
         </div>
       )}
       {d.description && (
-        <div className="bg-card px-4 py-2 text-xs text-foreground/70 border-t border-border/50 max-w-[240px] whitespace-pre-wrap">
+        <div className="bg-card px-4 py-2 text-xs text-foreground/70 border-t border-border/50 whitespace-pre-wrap break-words">
           {d.description}
         </div>
       )}
@@ -224,25 +225,26 @@ function DepartmentNode({ data }: NodeProps) {
   )
 }
 
-function EmployeeNode({ data }: NodeProps) {
+function EmployeeNode({ data, selected }: NodeProps) {
   const d = data as { firstName: string; lastName: string; middleName?: string; position: string; department?: string; description?: string; color?: string }
   const initials = `${d.firstName[0]}${d.lastName[0]}`
   return (
-    <div className="group min-w-[180px] rounded-xl overflow-hidden shadow-md border-2 bg-card hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
-      <div className="px-3 py-2.5 flex items-center gap-3">
+    <div className="group w-full min-h-full min-w-[180px] min-h-[68px] rounded-xl overflow-hidden shadow-md border-2 bg-card hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
+      <NodeResizer isVisible={selected} minWidth={180} minHeight={68} lineClassName="pointer-events-auto" handleClassName="pointer-events-auto" />
+      <div className="px-3 py-2.5 flex items-start gap-3">
         <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: d.color ?? '#6b7280' }}>
           <span className="text-white text-xs font-semibold">{initials}</span>
         </div>
-        <div className="overflow-hidden min-w-0">
-          <div className="text-sm font-medium truncate">{personName(d.lastName, d.firstName, d.middleName)}</div>
-          <div className="text-xs text-muted-foreground truncate">{d.position}</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium break-words">{personName(d.lastName, d.firstName, d.middleName)}</div>
+          <div className="text-xs text-muted-foreground break-words">{d.position}</div>
           {d.department && (
-            <div className="text-[10px] text-muted-foreground truncate">{d.department}</div>
+            <div className="text-[10px] text-muted-foreground break-words">{d.department}</div>
           )}
         </div>
       </div>
       {d.description && (
-        <div className="px-3 pb-2.5 text-xs text-foreground/70 border-t border-border/50 pt-2 max-w-[220px] whitespace-pre-wrap">
+        <div className="px-3 pb-2.5 text-xs text-foreground/70 border-t border-border/50 pt-2 whitespace-pre-wrap break-words">
           {d.description}
         </div>
       )}
@@ -251,21 +253,22 @@ function EmployeeNode({ data }: NodeProps) {
   )
 }
 
-function PositionNode({ data }: NodeProps) {
+function PositionNode({ data, selected }: NodeProps) {
   const d = data as { title: string; department?: string; description?: string; color?: string }
   return (
-    <div className="group min-w-[180px] rounded-xl overflow-hidden shadow-md border-2 border-dashed bg-card hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
-      <div className="px-3 py-2.5 flex items-center gap-3">
+    <div className="group w-full min-h-full min-w-[180px] min-h-[68px] rounded-xl overflow-hidden shadow-md border-2 border-dashed bg-card hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
+      <NodeResizer isVisible={selected} minWidth={180} minHeight={68} lineClassName="pointer-events-auto" handleClassName="pointer-events-auto" />
+      <div className="px-3 py-2.5 flex items-start gap-3">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 border-2 border-dashed" style={{ borderColor: d.color ?? '#6b7280' }}>
           <Briefcase className="h-4 w-4" style={{ color: d.color ?? '#6b7280' }} />
         </div>
-        <div className="overflow-hidden min-w-0">
-          <div className="text-sm font-medium truncate">{d.title}</div>
-          <div className="text-xs text-muted-foreground truncate">Вакансия{d.department ? ` · ${d.department}` : ''}</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium break-words">{d.title}</div>
+          <div className="text-xs text-muted-foreground break-words">Вакансия{d.department ? ` · ${d.department}` : ''}</div>
         </div>
       </div>
       {d.description && (
-        <div className="px-3 pb-2.5 text-xs text-foreground/70 border-t border-border/50 pt-2 max-w-[220px] whitespace-pre-wrap">
+        <div className="px-3 pb-2.5 text-xs text-foreground/70 border-t border-border/50 pt-2 whitespace-pre-wrap break-words">
           {d.description}
         </div>
       )}
@@ -274,15 +277,16 @@ function PositionNode({ data }: NodeProps) {
   )
 }
 
-function TextNode({ data }: NodeProps) {
+function TextNode({ data, selected }: NodeProps) {
   const d = data as { text: string; color?: string }
   return (
-    <div className="group min-w-[180px] max-w-[280px] rounded-xl overflow-hidden shadow-md border-2 bg-card hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
+    <div className="group w-full min-h-full min-w-[180px] min-h-[70px] rounded-xl overflow-hidden shadow-md border-2 bg-card hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
+      <NodeResizer isVisible={selected} minWidth={180} minHeight={70} lineClassName="pointer-events-auto" handleClassName="pointer-events-auto" />
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50" style={{ backgroundColor: d.color ?? '#6b7280' }}>
         <AlignLeft className="h-3.5 w-3.5 text-white/80 flex-shrink-0" />
         <span className="text-xs font-medium text-white">Описание</span>
       </div>
-      <div className="px-3 py-2.5 text-sm text-foreground whitespace-pre-wrap">
+      <div className="px-3 py-2.5 text-sm text-foreground whitespace-pre-wrap break-words">
         {d.text}
       </div>
       {HANDLES}
@@ -291,18 +295,23 @@ function TextNode({ data }: NodeProps) {
 }
 
 function GroupNode({ data, selected }: NodeProps) {
-  const d = data as { title?: string; color?: string }
+  const d = data as { title?: string; description?: string; color?: string }
   const color = d.color ?? '#6b7280'
   return (
-    <div className={cn('w-full h-full rounded-2xl border-2 border-dashed', selected ? 'pointer-events-auto cursor-grab' : 'pointer-events-none')} style={{ borderColor: color, background: `${color}0F` }}>
+    <div className={cn('w-full h-full rounded-2xl border-2 border-dashed flex flex-col', selected ? 'pointer-events-auto cursor-grab' : 'pointer-events-none')} style={{ borderColor: color, background: `${color}0F` }}>
       <NodeResizer color={color} isVisible={selected} minWidth={200} minHeight={140} lineClassName="!border-dashed pointer-events-auto" handleClassName="pointer-events-auto" />
       <div
-        className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider truncate pointer-events-auto cursor-grab select-none"
+        className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider truncate pointer-events-auto cursor-grab select-none shrink-0"
         style={{ color }}
         title="Перетащите группу за эту полосу; клик выделяет группу — после этого её можно тянуть за любую точку"
       >
         {d.title || 'Группа'}
       </div>
+      {d.description && (
+        <div className="mt-auto px-3 py-2 text-xs text-foreground/70 border-t whitespace-pre-wrap pointer-events-auto" style={{ borderColor: `${color}40` }}>
+          {d.description}
+        </div>
+      )}
     </div>
   )
 }
@@ -757,37 +766,51 @@ function TextInputModal({
   onConfirm,
   onClose,
   initialText = '',
+  showDescription = false,
+  initialDescription = '',
 }: {
-  onConfirm: (text: string) => void
+  onConfirm: (text: string, description?: string) => void
   onClose: () => void
   initialText?: string
+  showDescription?: boolean
+  initialDescription?: string
 }) {
   const [text, setText] = useState(initialText)
+  const [description, setDescription] = useState(initialDescription)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <AlignLeft className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">Текстовый блок</h2>
+            <h2 className="text-lg font-semibold">{showDescription ? 'Группа' : 'Текстовый блок'}</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
-        <div className="px-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
+        <div className="px-4 py-4 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain space-y-3">
           <textarea
             autoFocus
             value={text}
             onChange={e => setText(e.target.value)}
-            placeholder="Введите текст..."
-            rows={4}
+            placeholder={showDescription ? 'Название группы...' : 'Введите текст...'}
+            rows={showDescription ? 2 : 4}
             className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors resize-none"
           />
+          {showDescription && (
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Описание (необязательно)..."
+              rows={3}
+              className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors resize-none"
+            />
+          )}
         </div>
         <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" disabled={!text.trim()} onClick={() => onConfirm(text)}>
+          <Button className="flex-1" disabled={!text.trim()} onClick={() => onConfirm(text, description)}>
             {initialText ? 'Сохранить' : 'Добавить'}
           </Button>
         </div>
@@ -885,6 +908,38 @@ type EdgeDraft = {
   vacationVisibility?: Partial<VacationVisibility>
 }
 
+function VacationVisibilityRow({
+  label, hint, checked, onCheckedChange, cascade, onCascadeChange,
+}: {
+  label: string
+  hint?: string
+  checked: boolean
+  onCheckedChange: (v: boolean) => void
+  cascade: boolean
+  onCascadeChange: (v: boolean) => void
+}) {
+  return (
+    <div className="rounded-lg border border-border px-4 py-3 space-y-2">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium">{label}</p>
+          {hint && <p className="text-xs text-muted-foreground mt-1">{hint}</p>}
+        </div>
+        <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      </div>
+      <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={cascade}
+          onChange={e => onCascadeChange(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-border accent-primary"
+        />
+        Каскадом — распространить на все уровни ниже
+      </label>
+    </div>
+  )
+}
+
 function EdgeSettingsModal({
   draft,
   onConfirm,
@@ -905,16 +960,23 @@ function EdgeSettingsModal({
   const [childSeesParent, setChildSeesParent] = useState(draft.vacationVisibility?.childSeesParent ?? true)
   const [parentSeesChild, setParentSeesChild] = useState(draft.vacationVisibility?.parentSeesChild ?? true)
   const [parentApproves, setParentApproves] = useState(draft.vacationVisibility?.parentApproves ?? true)
+  const [cascadeChildSeesParent, setCascadeChildSeesParent] = useState(draft.vacationVisibility?.cascadeChildSeesParent ?? false)
+  const [cascadeParentSeesChild, setCascadeParentSeesChild] = useState(draft.vacationVisibility?.cascadeParentSeesChild ?? false)
+  const [cascadeParentApproves, setCascadeParentApproves] = useState(draft.vacationVisibility?.cascadeParentApproves ?? false)
   const parentAvailable = draft.sourceType !== 'text' && draft.targetType !== 'text' &&
-    draft.sourceType !== 'position' && draft.targetType !== 'position' &&
-    (draft.sourceType === 'department' || draft.targetType === 'department' || (draft.sourceType === 'employee' && draft.targetType === 'employee'))
+    (draft.sourceType === 'department' || draft.targetType === 'department' ||
+      (draft.sourceType === 'employee' && draft.targetType === 'employee') ||
+      draft.sourceType === 'position' || draft.targetType === 'position')
   const effectiveRelation: EdgeRelation = parentAvailable ? relation : 'plain'
   const isEmpToEmp = draft.sourceType === 'employee' && draft.targetType === 'employee'
-  const vacationApplicable = effectiveRelation === 'parent' && draft.sourceType !== 'text' && draft.targetType !== 'text' &&
-    draft.sourceType !== 'position' && draft.targetType !== 'position'
+  const vacationApplicable = effectiveRelation === 'parent' && draft.sourceType !== 'text' && draft.targetType !== 'text'
   const buildVacationVisibility = (): VacationVisibility | undefined =>
     effectiveRelation === 'parent'
-      ? { childSeesParent, parentSeesChild, parentApproves: isEmpToEmp ? true : parentApproves }
+      ? {
+          childSeesParent, parentSeesChild, parentApproves: isEmpToEmp ? true : parentApproves,
+          cascadeChildSeesParent, cascadeParentSeesChild,
+          cascadeParentApproves: isEmpToEmp ? false : cascadeParentApproves,
+        }
       : undefined
 
   return (
@@ -957,7 +1019,11 @@ function EdgeSettingsModal({
               </button>
             ))}
           </div>
-          {relation === 'parent' && ((draft.sourceType === 'department' && draft.targetType === 'department') || (draft.sourceType === 'employee' && draft.targetType === 'employee')) && (
+          {relation === 'parent' && (
+            (draft.sourceType === 'department' && draft.targetType === 'department') ||
+            (draft.sourceType === 'employee' && draft.targetType === 'employee') ||
+            draft.sourceType === 'position' || draft.targetType === 'position'
+          ) && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Кто родитель</p>
               {([
@@ -1056,24 +1122,23 @@ function EdgeSettingsModal({
           {vacationApplicable && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Видимость отпусков</p>
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-                <p className="text-sm font-medium">Отпуск родителя виден подчинённым</p>
-                <Switch checked={childSeesParent} onCheckedChange={setChildSeesParent} />
-              </div>
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-                <p className="text-sm font-medium">Родитель видит отпуска подчинённых</p>
-                <Switch checked={parentSeesChild} onCheckedChange={setParentSeesChild} />
-              </div>
+              <VacationVisibilityRow
+                label="Отпуск родителя виден подчинённым"
+                checked={childSeesParent} onCheckedChange={setChildSeesParent}
+                cascade={cascadeChildSeesParent} onCascadeChange={setCascadeChildSeesParent}
+              />
+              <VacationVisibilityRow
+                label="Родитель видит отпуска подчинённых"
+                checked={parentSeesChild} onCheckedChange={setParentSeesChild}
+                cascade={cascadeParentSeesChild} onCascadeChange={setCascadeParentSeesChild}
+              />
               {!isEmpToEmp && (
-                <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-                  <div>
-                    <p className="text-sm font-medium">Родитель согласовывает отпуска подчинённых</p>
-                    {!parentApproves && (
-                      <p className="text-xs text-muted-foreground mt-1">Согласование уйдёт на уровень выше</p>
-                    )}
-                  </div>
-                  <Switch checked={parentApproves} onCheckedChange={setParentApproves} />
-                </div>
+                <VacationVisibilityRow
+                  label="Родитель согласовывает отпуска подчинённых"
+                  hint={!parentApproves ? 'Согласование уйдёт на уровень выше' : undefined}
+                  checked={parentApproves} onCheckedChange={setParentApproves}
+                  cascade={cascadeParentApproves} onCascadeChange={setCascadeParentApproves}
+                />
               )}
             </div>
           )}
@@ -1106,7 +1171,14 @@ function EdgeSettingsModal({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type VacationVisibility = { childSeesParent: boolean; parentSeesChild: boolean; parentApproves?: boolean }
+type VacationVisibility = {
+  childSeesParent: boolean
+  parentSeesChild: boolean
+  parentApproves?: boolean
+  cascadeChildSeesParent?: boolean
+  cascadeParentSeesChild?: boolean
+  cascadeParentApproves?: boolean
+}
 
 function validateGraphEdges(nodes: Node[], edges: Edge[]): string | null {
   const deptIdByNode = new Map<string, number>()
@@ -1126,15 +1198,50 @@ function validateGraphEdges(nodes: Node[], edges: Edge[]): string | null {
     }
   }
 
+  // «Должность» прозрачна для родительских связей: X → Должность → Y
+  // трактуется как X → Y. Поднимаемся от источника связи вверх, пропуская
+  // узлы-должности, до первого реального (отдел/работник) узла.
+  const nodeTypeById = new Map<string, string | undefined>()
+  const nodeById = new Map<string, Node>()
+  for (const n of nodes) { nodeTypeById.set(n.id, n.type); nodeById.set(n.id, n) }
+  const parentEdgesByTarget = new Map<string, string[]>()
+  for (const e of edges) {
+    if ((e.data as { relation?: string } | undefined)?.relation === 'plain') continue
+    if (!parentEdgesByTarget.has(e.target)) parentEdgesByTarget.set(e.target, [])
+    parentEdgesByTarget.get(e.target)!.push(e.source)
+  }
+  for (const [targetId, sources] of parentEdgesByTarget) {
+    if (sources.length > 1 && nodeTypeById.get(targetId) === 'position') {
+      const posLabel = (nodeById.get(targetId)?.data as { title?: string } | undefined)?.title || 'Должность'
+      return `У блока «${posLabel}» может быть только один родитель`
+    }
+  }
+  const parentOfNode = new Map<string, string>()
+  for (const [targetId, sources] of parentEdgesByTarget) parentOfNode.set(targetId, sources[0])
+  const resolveThroughPositions = (nodeId: string): string | null => {
+    if (nodeTypeById.get(nodeId) !== 'position') return nodeId
+    let cur: string | null | undefined = parentOfNode.get(nodeId)
+    const seen = new Set([nodeId])
+    while (cur != null) {
+      if (seen.has(cur)) return null
+      seen.add(cur)
+      if (nodeTypeById.get(cur) !== 'position') return cur
+      cur = parentOfNode.get(cur)
+    }
+    return null
+  }
+
   const deptParents = new Map<number, Set<number>>()
   const deptCurator = new Map<number, number>()
   const empParent = new Map<number, number>()
 
   for (const e of edges) {
     if ((e.data as { relation?: string } | undefined)?.relation === 'plain') continue
-    const sD = deptIdByNode.get(e.source)
+    if (nodeTypeById.get(e.target) === 'position') continue
+    const resolvedSource = resolveThroughPositions(e.source)
+    const sD = resolvedSource != null ? deptIdByNode.get(resolvedSource) : undefined
     const tD = deptIdByNode.get(e.target)
-    const sU = userIdByNode.get(e.source)
+    const sU = resolvedSource != null ? userIdByNode.get(resolvedSource) : undefined
     const tU = userIdByNode.get(e.target)
     if (sD != null && tD != null) {
       if (!deptParents.has(tD)) deptParents.set(tD, new Set())
@@ -1181,7 +1288,7 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
   edge: Edge
   sourceType?: string
   targetType?: string
-  onConfirm: (childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean) => void
+  onConfirm: (childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean, cascade?: { childSeesParent: boolean; parentSeesChild: boolean; parentApproves: boolean }) => void
   onClose: () => void
 }) {
   const vis = (edge.data as { vacationVisibility?: Partial<VacationVisibility> } | undefined)?.vacationVisibility
@@ -1189,6 +1296,9 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
   const [childSeesParent, setChildSeesParent] = useState(vis?.childSeesParent ?? true)
   const [parentSeesChild, setParentSeesChild] = useState(vis?.parentSeesChild ?? true)
   const [parentApproves, setParentApproves] = useState(vis?.parentApproves ?? true)
+  const [cascadeChildSeesParent, setCascadeChildSeesParent] = useState(vis?.cascadeChildSeesParent ?? false)
+  const [cascadeParentSeesChild, setCascadeParentSeesChild] = useState(vis?.cascadeParentSeesChild ?? false)
+  const [cascadeParentApproves, setCascadeParentApproves] = useState(vis?.cascadeParentApproves ?? false)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -1203,29 +1313,32 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
           </button>
         </div>
         <div className="px-6 py-4 space-y-3 overflow-y-auto scrollbar-thin overscroll-contain">
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-            <p className="text-sm font-medium">Отпуск родителя виден подчинённым</p>
-            <Switch checked={childSeesParent} onCheckedChange={setChildSeesParent} />
-          </div>
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-            <p className="text-sm font-medium">Родитель видит отпуска подчинённых</p>
-            <Switch checked={parentSeesChild} onCheckedChange={setParentSeesChild} />
-          </div>
+          <VacationVisibilityRow
+            label="Отпуск родителя виден подчинённым"
+            checked={childSeesParent} onCheckedChange={setChildSeesParent}
+            cascade={cascadeChildSeesParent} onCascadeChange={setCascadeChildSeesParent}
+          />
+          <VacationVisibilityRow
+            label="Родитель видит отпуска подчинённых"
+            checked={parentSeesChild} onCheckedChange={setParentSeesChild}
+            cascade={cascadeParentSeesChild} onCascadeChange={setCascadeParentSeesChild}
+          />
           {!isEmpToEmp && (
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-              <div>
-                <p className="text-sm font-medium">Родитель согласовывает отпуска подчинённых</p>
-                {!parentApproves && (
-                  <p className="text-xs text-muted-foreground mt-1">Согласование уйдёт на уровень выше</p>
-                )}
-              </div>
-              <Switch checked={parentApproves} onCheckedChange={setParentApproves} />
-            </div>
+            <VacationVisibilityRow
+              label="Родитель согласовывает отпуска подчинённых"
+              hint={!parentApproves ? 'Согласование уйдёт на уровень выше' : undefined}
+              checked={parentApproves} onCheckedChange={setParentApproves}
+              cascade={cascadeParentApproves} onCascadeChange={setCascadeParentApproves}
+            />
           )}
         </div>
         <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(childSeesParent, parentSeesChild, isEmpToEmp ? true : parentApproves)}>
+          <Button className="flex-1" onClick={() => onConfirm(childSeesParent, parentSeesChild, isEmpToEmp ? true : parentApproves, {
+            childSeesParent: cascadeChildSeesParent,
+            parentSeesChild: cascadeParentSeesChild,
+            parentApproves: isEmpToEmp ? false : cascadeParentApproves,
+          })}>
             Сохранить
           </Button>
         </div>
@@ -1894,11 +2007,19 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     setEdgeContextMenu(null)
   }, [setEdges, saveSnapshot])
 
-  const saveParentEdgeSettings = useCallback((childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean) => {
+  const saveParentEdgeSettings = useCallback((
+    childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean,
+    cascade?: { childSeesParent: boolean; parentSeesChild: boolean; parentApproves: boolean },
+  ) => {
     if (!parentEdgeId) return
     saveSnapshot()
     setEdges(eds => eds.map(e => e.id === parentEdgeId
-      ? { ...e, data: { ...(e.data as Record<string, unknown>), vacationVisibility: { childSeesParent, parentSeesChild, parentApproves } } }
+      ? { ...e, data: { ...(e.data as Record<string, unknown>), vacationVisibility: {
+          childSeesParent, parentSeesChild, parentApproves,
+          cascadeChildSeesParent: cascade?.childSeesParent ?? false,
+          cascadeParentSeesChild: cascade?.parentSeesChild ?? false,
+          cascadeParentApproves: cascade?.parentApproves ?? false,
+        } } }
       : e))
     setParentEdgeId(null)
   }, [parentEdgeId, saveSnapshot, setEdges])
@@ -1959,7 +2080,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     setEditingNode(null)
   }
 
-  const handleSelectGroup = (title: string) => {
+  const handleSelectGroup = (title: string, description?: string) => {
     if (!pendingDrop) return
     saveSnapshot()
     setNodes(nds => [...nds, {
@@ -1967,15 +2088,15 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       type: 'group',
       position: { x: pendingDrop.position.x - 200, y: pendingDrop.position.y - 14 },
       style: { width: 400, height: 260 },
-      data: { title },
+      data: { title, description },
     } as Node])
     setPendingDrop(null)
   }
 
-  const handleEditGroup = (title: string) => {
+  const handleEditGroup = (title: string, description?: string) => {
     if (!editingNode) return
     saveSnapshot()
-    setNodes(nds => nds.map(n => n.id === editingNode.id ? { ...n, data: { ...n.data, title } } : n))
+    setNodes(nds => nds.map(n => n.id === editingNode.id ? { ...n, data: { ...n.data, title, description } } : n))
     setEditingNode(null)
   }
 
@@ -2412,6 +2533,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
           onConfirm={handleSelectGroup}
           onClose={() => setPendingDrop(null)}
           initialText="Группа"
+          showDescription
         />
       )}
 
@@ -2530,12 +2652,14 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       })()}
       {editingNode?.type === 'group' && (() => {
         const n = nodes.find(n => n.id === editingNode.id)
-        const d = n?.data as { title?: string } | undefined
+        const d = n?.data as { title?: string; description?: string } | undefined
         return (
           <TextInputModal
             onConfirm={handleEditGroup}
             onClose={() => setEditingNode(null)}
             initialText={d?.title ?? ''}
+            showDescription
+            initialDescription={d?.description ?? ''}
           />
         )
       })()}

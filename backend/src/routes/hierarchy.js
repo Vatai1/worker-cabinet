@@ -188,6 +188,46 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     }
   }
 
+  // «Должность» (position) — визуальный блок без своей записи в БД. В цепочке
+  // родительских связей он прозрачен: X → Должность → Y трактуется так же,
+  // как прямая связь X → Y. Собираем узловой граф родителей по ВСЕМ типам
+  // узлов и для каждого реального (department/employee) источника связи,
+  // указывающего на должность, поднимаемся вверх до первого не-«position» узла.
+  const nodeTypeById = new Map()
+  for (const n of (Array.isArray(nodes) ? nodes : [])) {
+    if (n?.id != null) nodeTypeById.set(n.id, n?.type)
+  }
+  const parentEdgesByTarget = new Map()
+  for (const e of Array.isArray(edges) ? edges : []) {
+    if (e?.data?.relation === 'plain') continue
+    if (e?.source == null || e?.target == null) continue
+    if (!parentEdgesByTarget.has(e.target)) parentEdgesByTarget.set(e.target, [])
+    parentEdgesByTarget.get(e.target).push(e.source)
+  }
+  for (const [targetId, sources] of parentEdgesByTarget) {
+    if (sources.length > 1 && nodeTypeById.get(targetId) === 'position') {
+      const posNode = (Array.isArray(nodes) ? nodes : []).find((n) => n.id === targetId)
+      const posLabel = posNode?.data?.title || 'Должность'
+      const err = new Error(`У блока «${posLabel}» может быть только один родитель`)
+      err.statusCode = 400
+      throw err
+    }
+  }
+  const parentOfNode = new Map()
+  for (const [targetId, sources] of parentEdgesByTarget) parentOfNode.set(targetId, sources[0])
+  const resolveThroughPositions = (nodeId) => {
+    if (nodeTypeById.get(nodeId) !== 'position') return nodeId
+    let cur = parentOfNode.get(nodeId)
+    const seen = new Set([nodeId])
+    while (cur != null) {
+      if (seen.has(cur)) return null
+      seen.add(cur)
+      if (nodeTypeById.get(cur) !== 'position') return cur
+      cur = parentOfNode.get(cur)
+    }
+    return null
+  }
+
   const parentsByDept = new Map()
   const parentUserByDept = new Map()
   const parentUserByUser = new Map()
@@ -195,9 +235,15 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
   const visByUser = new Map()
   for (const e of Array.isArray(edges) ? edges : []) {
     if (e?.data?.relation === 'plain') continue
-    const sourceDept = deptIdByNode.get(e?.source)
+    // Связь, ведущая В блок должности, сама по себе не создаёт изменений —
+    // у должности нет department_id/manager_id для обновления. Эффект этой
+    // связи применяется ниже по цепочке, когда реальный узел резолвит
+    // своего родителя через resolveThroughPositions.
+    if (nodeTypeById.get(e?.target) === 'position') continue
+    const resolvedSource = e?.source != null ? resolveThroughPositions(e.source) : null
+    const sourceDept = resolvedSource != null ? deptIdByNode.get(resolvedSource) : null
     const targetDept = deptIdByNode.get(e?.target)
-    const sourceUser = userIdByNode.get(e?.source)
+    const sourceUser = resolvedSource != null ? userIdByNode.get(resolvedSource) : null
     const targetUser = userIdByNode.get(e?.target)
     if (sourceDept != null && targetDept != null) {
       if (!parentsByDept.has(targetDept)) parentsByDept.set(targetDept, new Set())
@@ -218,6 +264,11 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
         throw err
       }
       parentUserByUser.set(targetUser, sourceUser)
+    } else if (sourceDept != null && targetUser != null) {
+      // Отдел не может быть родителем конкретного работника — ни напрямую,
+      // ни через должность. Пропускаем без обновления (как и для прямой
+      // связи «отдел → работник», которая тоже не поддерживается).
+      continue
     } else {
       continue
     }
@@ -318,11 +369,84 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     }
   }
 
+  // ─── Каскад настроек видимости отпусков ──────────────────────────────
+  // На родительской связи HR может включить «каскад» для отдельного пункта
+  // (видит/виден/согласовывает) — тогда это значение течёт вниз через все
+  // уровни поддерева, а не только на прямого потомка. Явная настройка на
+  // более глубокой связи имеет приоритет для своего узла, но не обрывает
+  // каскад для узлов ещё ниже — течёт дальше не изменившись.
+  const deptChildrenByParentDept = new Map()
+  for (const [child, parents] of parentsByDept) {
+    const parent = parents.size > 0 ? [...parents][0] : null
+    if (parent == null) continue
+    if (!deptChildrenByParentDept.has(parent)) deptChildrenByParentDept.set(parent, [])
+    deptChildrenByParentDept.get(parent).push(child)
+  }
+  const deptChildrenByParentUser = new Map()
+  for (const [dept, user] of parentUserByDept) {
+    if (!deptChildrenByParentUser.has(user)) deptChildrenByParentUser.set(user, [])
+    deptChildrenByParentUser.get(user).push(dept)
+  }
+  const userChildrenByParentUser = new Map()
+  for (const [child, parent] of parentUserByUser) {
+    if (!userChildrenByParentUser.has(parent)) userChildrenByParentUser.set(parent, [])
+    userChildrenByParentUser.get(parent).push(child)
+  }
+  const childrenOfNode = (node) => {
+    const result = []
+    if (node.kind === 'dept') {
+      for (const c of deptChildrenByParentDept.get(node.id) ?? []) result.push({ kind: 'dept', id: c })
+    } else {
+      for (const c of deptChildrenByParentUser.get(node.id) ?? []) result.push({ kind: 'dept', id: c })
+      for (const c of userChildrenByParentUser.get(node.id) ?? []) result.push({ kind: 'user', id: c })
+    }
+    return result
+  }
+  const VIS_FIELDS = [
+    ['parentSeesChild', 'cascadeParentSeesChild'],
+    ['childSeesParent', 'cascadeChildSeesParent'],
+    ['parentApproves', 'cascadeParentApproves'],
+  ]
+  const effectiveVisByDept = new Map()
+  const effectiveVisByUser = new Map()
+  const visitCascade = (node, inherited, seen) => {
+    const key = `${node.kind}:${node.id}`
+    if (seen.has(key)) return
+    seen.add(key)
+    const ownVis = node.kind === 'dept' ? visByDept.get(node.id) : visByUser.get(node.id)
+    const effective = {}
+    const toChildren = {}
+    for (const [field, cascadeField] of VIS_FIELDS) {
+      const ownValue = ownVis && ownVis[field] !== undefined ? ownVis[field] : undefined
+      effective[field] = ownValue !== undefined ? ownValue : (inherited[field] !== undefined ? inherited[field] : true)
+      toChildren[field] = (ownVis && ownVis[cascadeField]) ? effective[field] : inherited[field]
+    }
+    if (node.kind === 'dept') effectiveVisByDept.set(node.id, effective)
+    else effectiveVisByUser.set(node.id, effective)
+    for (const child of childrenOfNode(node)) visitCascade(child, toChildren, seen)
+  }
+  const deptsWithParent = new Set([...parentsByDept.keys(), ...parentUserByDept.keys()])
+  const deptKeys = new Set([
+    ...parentsByDept.keys(), ...[...parentsByDept.values()].flatMap((s) => [...s]),
+    ...parentUserByDept.keys(),
+  ])
+  const userKeys = new Set([
+    ...parentUserByUser.keys(), ...parentUserByUser.values(),
+    ...parentUserByDept.values(),
+  ])
+  const seenCascade = new Set()
+  for (const id of deptKeys) {
+    if (!deptsWithParent.has(id)) visitCascade({ kind: 'dept', id }, {}, seenCascade)
+  }
+  for (const id of userKeys) {
+    if (!parentUserByUser.has(id)) visitCascade({ kind: 'user', id }, {}, seenCascade)
+  }
+
   const deptChanges = []
   for (const n of deptNodes) {
     const deptId = Number(n.data.id)
     const parents = parentsByDept.get(deptId)
-    const vis = visByDept.get(deptId)
+    const vis = effectiveVisByDept.get(deptId) ?? visByDept.get(deptId)
     deptChanges.push({
       deptId,
       parentId: parents && parents.size > 0 ? [...parents][0] : null,
@@ -340,7 +464,7 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     const userId = Number(n.data.id)
     if (seenUserIds.has(userId)) continue
     seenUserIds.add(userId)
-    const vis = visByUser.get(userId)
+    const vis = effectiveVisByUser.get(userId) ?? visByUser.get(userId)
     userChanges.push({
       userId,
       managerId: parentUserByUser.get(userId) ?? null,
