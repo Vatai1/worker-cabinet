@@ -6,7 +6,7 @@ import { useModulesStore } from '@/shared/store/modulesStore'
 import { useThemeStore } from '@/shared/theme/themeStore'
 import { cn, personName } from '@/shared/lib/utils'
 import {
-  LayoutDashboard, User, FileText, FolderOpen, FolderKanban,
+  LayoutDashboard, User, FileText, FolderKanban,
   LogOut, Menu, X, Users, Plane, Settings, Sun, Moon, Undo2,
   ChevronDown, Building2, ClipboardList,
   Calendar, Bell, Crown, Bot, UserCheck,
@@ -57,9 +57,6 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Заявления', href: '/requests', icon: FileText, section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
-  { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
-    { name: 'Ваши документы', href: '/documents' },
-  ]},
 ]
 
 const getManagerNavigation = (userId?: string): NavItem[] => [
@@ -76,9 +73,6 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
-  { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
-    { name: 'Ваши документы', href: '/documents' },
-  ]},
 ]
 
 const getHRSectionItems = (): NavItem[] => [
@@ -110,9 +104,6 @@ const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
-  { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
-    { name: 'Ваши документы', href: '/documents' },
-  ]},
   ...getHRSectionItems(),
 ]
 
@@ -173,9 +164,6 @@ const getAdminNavigation = (userId?: string, isSuper?: boolean): NavItem[] => [
   { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'substitution', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
-  { name: 'Документы', icon: FolderOpen, module: 'documents', section: 'Справочники', children: [
-    { name: 'Ваши документы', href: '/documents' },
-  ]},
   ...(isSuper ? getAdminSettingsItems('/admin/global', 'Глобальные настройки', false) : []),
   ...getAdminSettingsItems('/admin/org', 'Настройки организации', true),
   ...getHRSectionItems(),
