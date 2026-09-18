@@ -35,7 +35,7 @@ import { getCookie, setCookie } from '@/shared/lib/cookies'
 import {
   ChevronLeft, ChevronRight, ChevronDown, FileText, Clock, CheckCircle2, CheckCircle,
   UserCheck, Search, RotateCcw, XCircle, PieChart,
-  Calendar as CalendarIcon, Lightbulb, HelpCircle,
+  Calendar as CalendarIcon, Lightbulb, HelpCircle, AlertTriangle,
 } from 'lucide-react'
 
 const VACATION_INTRO_COOKIE = 'vacation_intro_seen'
@@ -90,6 +90,7 @@ export function Vacation() {
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<VacationValidationError[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
   const [vacationBlocked, setVacationBlocked] = useState(false)
+  const [dateErrorMessage, setDateErrorMessage] = useState<string | null>(null)
   const [year, setYear] = useState(new Date().getFullYear())
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
   const [pickerEmployees, setPickerEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; middle_name?: string | null; position: string }>>([])
@@ -409,6 +410,21 @@ export function Vacation() {
     setShowDetailModal(true)
   }
 
+  const MIN_ADVANCE_NOTICE_DAYS = 14
+
+  const validateVacationStartDate = (startDate: string): string | null => {
+    if (vacationBlocked) return 'Подача заявок на отпуск для вашего отдела временно заблокирована HR'
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const [y, m, d] = startDate.split('-').map(Number)
+    const start = new Date(y, m - 1, d)
+    if (start < today) return 'Нельзя выбрать дату отпуска в прошлом'
+    const minDate = new Date(today)
+    minDate.setDate(minDate.getDate() + MIN_ADVANCE_NOTICE_DAYS)
+    if (start < minDate) return `Заявление на отпуск нужно подавать не менее чем за ${MIN_ADVANCE_NOTICE_DAYS} дней до даты начала`
+    return null
+  }
+
   const handleDateRangeSelect = (startDate: string | null, endDate: string | null) => {
 
     if (startDate && !endDate && startDate.startsWith('vr-')) {
@@ -418,6 +434,17 @@ export function Vacation() {
         handleOpenDetailModal(request)
       }
       return
+    }
+
+    if (startDate) {
+      const validationError = validateVacationStartDate(startDate)
+      if (validationError) {
+        setDateErrorMessage(validationError)
+        setSelectedStartDate(null)
+        setSelectedEndDate(null)
+        setShowCreateFromCalendar(false)
+        return
+      }
     }
 
     setSelectedStartDate(startDate)
@@ -457,6 +484,7 @@ export function Vacation() {
       reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
+      setDateErrorMessage(getErrorMessage(err))
     }
   }
 
@@ -809,9 +837,11 @@ export function Vacation() {
             </span>
           )}
           <button
+            type="button"
             onClick={() => handleDateRangeSelect(null, null)}
-            className="text-muted-foreground hover:text-foreground underline"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-card px-[15px] py-[9px] text-[13px] font-semibold text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
           >
+            <RotateCcw className="h-[14px] w-[14px]" />
             Очистить выбор
           </button>
         </div>
@@ -821,7 +851,7 @@ export function Vacation() {
         year={year}
         requests={calendarRequests}
         searchQuery={debouncedSearch}
-        onDateRangeSelect={vacationBlocked ? () => {} : handleDateRangeSelect}
+        onDateRangeSelect={handleDateRangeSelect}
         selectedStartDate={selectedStartDate}
         selectedEndDate={selectedEndDate}
         currentUserId={user?.id}
@@ -844,6 +874,26 @@ export function Vacation() {
           onCheckRestrictions={handleCheckRestrictionsCalendar}
           showSubstitutes
         />
+      )}
+
+      {dateErrorMessage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setDateErrorMessage(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-border/60 bg-card p-6 shadow-xl animate-scale-in">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1 pt-1">
+                <h3 className="text-base font-semibold">Не удалось выбрать даты отпуска</h3>
+                <p className="mt-1.5 text-sm text-muted-foreground">{dateErrorMessage}</p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <Button onClick={() => setDateErrorMessage(null)}>Понятно</Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

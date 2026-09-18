@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isWithinInterval } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
 import type { VacationRequest } from '@/shared/types'
 import { VacationRequestStatus } from '@/shared/types'
 import { cn } from '@/shared/lib/utils'
@@ -207,9 +207,11 @@ export function YearCalendar({
               <h2 className="text-xl font-semibold">Календарь отпусков {year}</h2>
               {(selectedStartDate || selectedEndDate) && (
                 <button
+                  type="button"
                   onClick={() => onDateRangeSelect?.(null, null)}
-                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                  className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-card px-[15px] py-[9px] text-[13px] font-semibold text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
                 >
+                  <RotateCcw className="h-[14px] w-[14px]" />
                   Очистить выбор
                 </button>
               )}
