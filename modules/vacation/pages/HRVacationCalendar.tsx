@@ -2,23 +2,20 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import type { CSSProperties } from 'react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { Card } from '@/shared/components/ui/Card'
-import { Button } from '@/shared/components/ui/Button'
 import { YearCalendar } from '@/shared/components/calendar/YearCalendar'
 import { CalendarLegendSwatches } from '@/shared/components/calendar/CalendarLegendSwatches'
 import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
 import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
+import { VacationDayRulesCard } from '@/modules/vacation/components/VacationDayRulesCard'
+import { VacationAccessCard } from '@/modules/vacation/components/VacationAccessCard'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
 import { useWsStore } from '@/shared/store/wsStore'
-import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { API_BASE_URL } from '@/shared/lib/api'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { cn, personName } from '@/shared/lib/utils'
 import {
   Plane, Calendar, Search, ChevronLeft, ChevronRight, Loader2,
-  Lock, Unlock, Filter, Users, Server, Check, BarChart3, Shield,
-  PenTool, Megaphone, Phone, Headphones, TrendingUp, Box, Code, Wallet, Scale,
   RotateCcw,
 } from 'lucide-react'
 import type { VacationRequest } from '@/shared/types'
@@ -81,26 +78,6 @@ interface EmployeeCard {
   hue: number
 }
 
-function getDeptIcon(name: string): React.ReactNode {
-  const iconKey: Record<string, React.ReactNode> = {
-    'HR отдел': <Users className="w-5 h-5" />,
-    'Отдел DevOps': <Server className="w-5 h-5" />,
-    'Отдел QA': <Check className="w-5 h-5" />,
-    'Отдел аналитики': <BarChart3 className="w-5 h-5" />,
-    'Отдел безопасности': <Shield className="w-5 h-5" />,
-    'Отдел дизайна': <PenTool className="w-5 h-5" />,
-    'Отдел маркетинга': <Megaphone className="w-5 h-5" />,
-    'Отдел мобильной разработки': <Phone className="w-5 h-5" />,
-    'Отдел поддержки': <Headphones className="w-5 h-5" />,
-    'Отдел продаж': <TrendingUp className="w-5 h-5" />,
-    'Отдел продукта': <Box className="w-5 h-5" />,
-    'Отдел разработки': <Code className="w-5 h-5" />,
-    'Финансовый отдел': <Wallet className="w-5 h-5" />,
-    'Юридический отдел': <Scale className="w-5 h-5" />,
-  }
-  return iconKey[name] || <Users className="w-5 h-5" />
-}
-
 export function HRVacationCalendar() {
   const user = useAuthStore((state) => state.user)
   const calendarVersion = useVacationStore((s) => s.calendarVersion)
@@ -116,8 +93,6 @@ export function HRVacationCalendar() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [year, setYear] = useState(new Date().getFullYear())
-  const [togglingBlock, setTogglingBlock] = useState<number | null>(null)
-  const [togglingAll, setTogglingAll] = useState(false)
 
   const [query, setQuery] = useState('')
   const [month, setMonth] = useState(-1)
@@ -127,6 +102,7 @@ export function HRVacationCalendar() {
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [detailRequest, setDetailRequest] = useState<VacationRequest | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [activeTab, setActiveTab] = useState<'calendar' | 'days' | 'access'>('calendar')
 
   const PER_PAGE = 15
 
@@ -168,32 +144,6 @@ export function HRVacationCalendar() {
         setShowDetailModal(true)
       }
     }
-  }
-
-  const handleToggleBlock = async (deptId: number, blocked: boolean) => {
-    setTogglingBlock(deptId)
-    try {
-      const res = await fetch(`${API_BASE_URL}/departments/${deptId}/vacation-block`, {
-        method: 'PATCH', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ blocked }),
-      })
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Ошибка') }
-      setDepartments((prev) => prev.map((d) => d.id === deptId ? { ...d, vacation_requests_blocked: blocked } : d))
-    } catch { } finally { setTogglingBlock(null) }
-  }
-
-  const allBlocked = departments.length > 0 && departments.every((d) => d.vacation_requests_blocked)
-
-  const handleToggleAll = async () => {
-    setTogglingAll(true)
-    try {
-      const res = await fetch(`${API_BASE_URL}/departments/vacation-block-all`, {
-        method: 'PATCH', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ blocked: !allBlocked }),
-      })
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Ошибка') }
-      setDepartments((prev) => prev.map((d) => ({ ...d, vacation_requests_blocked: !allBlocked })))
-    } catch { } finally { setTogglingAll(false) }
   }
 
   const visibleRequests = useMemo(() => {
@@ -302,6 +252,32 @@ export function HRVacationCalendar() {
         </div>
       </div>
 
+      {/* ── Табы ── */}
+      <div className="flex flex-wrap gap-1.5 border-b border-border pb-3">
+        {([
+          { id: 'calendar', label: 'Календарь' },
+          { id: 'days', label: 'Дни отпуска' },
+          { id: 'access', label: 'Доступ' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
+              activeTab === tab.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'days' && <VacationDayRulesCard />}
+      {activeTab === 'access' && <VacationAccessCard />}
+
+      {activeTab === 'calendar' && (
+      <>
       {/* ── Панель инструментов ── */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex h-9 flex-1 min-w-[200px] max-w-md items-center gap-2 rounded-[10px] border border-border bg-card px-3 transition-shadow focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/15">
@@ -401,91 +377,6 @@ export function HRVacationCalendar() {
       <Card>
         <div className="p-5">
           <CalendarLegendSwatches />
-        </div>
-      </Card>
-
-      {/* ── Управление заявками по отделам ── */}
-      <Card>
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Filter className="w-5 h-5 text-primary" />
-              Доступ к подаче заявлений
-            </h2>
-            {departments.length > 0 && (
-              <Button
-                variant={allBlocked ? 'outline' : 'destructive'}
-                size="sm"
-                onClick={handleToggleAll}
-                disabled={togglingAll}
-                className="gap-1.5"
-              >
-                {togglingAll ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : allBlocked ? (
-                  <Unlock className="w-3.5 h-3.5" />
-                ) : (
-                  <Lock className="w-3.5 h-3.5" />
-                )}
-                {allBlocked ? 'Разблокировать все' : 'Заблокировать все'}
-              </Button>
-            )}
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {departments.map((dd) => {
-              const blocked = !!dd.vacation_requests_blocked
-              return (
-                <div
-                  key={dd.id}
-                  className={cn(
-                    'relative flex flex-col gap-3 p-4 rounded-xl border transition-all',
-                    blocked
-                      ? 'border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20'
-                      : 'border-border/50 hover:bg-muted/30'
-                  )}
-                >
-                  {blocked && <div className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-red-500" />}
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 dept-chip-bg" style={hueStyle(deptHue(dd.name))}>
-                      {getDeptIcon(dd.name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium leading-snug break-words" title={dd.name}>{dd.name}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {typeof dd.employee_count === 'number' ? dd.employee_count : (dd.employee_count || '—')} работник(ов)
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 pl-[52px]">
-                    <span className={cn(
-                      'text-xs font-semibold px-2 py-0.5 rounded-full',
-                      blocked
-                        ? 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/40'
-                        : 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/40'
-                    )}>
-                      {togglingBlock === dd.id ? '…' : blocked ? 'Заблокирован' : 'Активно'}
-                    </span>
-                    <button
-                      role="switch"
-                      aria-checked={!blocked}
-                      aria-label={`Доступ: ${dd.name}`}
-                      onClick={() => handleToggleBlock(dd.id, !blocked)}
-                      disabled={togglingBlock === dd.id}
-                      className={cn(
-                        'w-11 h-[22px] rounded-full border-0 cursor-pointer relative transition-colors flex-shrink-0',
-                        blocked ? 'bg-red-600' : 'bg-emerald-500'
-                      )}
-                    >
-                      <div className={cn(
-                        'absolute top-[2px] w-[18px] h-[18px] rounded-full bg-white shadow transition-transform',
-                        blocked ? 'translate-x-[26px]' : 'translate-x-[2px]'
-                      )} />
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
         </div>
       </Card>
 
@@ -599,6 +490,8 @@ export function HRVacationCalendar() {
             >›</button>
           </div>
         </nav>
+      )}
+      </>
       )}
 
       <VacationDetailModal

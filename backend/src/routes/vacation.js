@@ -8,6 +8,7 @@ import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
+import { resolveVacationDays, applyRuleToExistingBalances } from '../lib/vacationDays.js'
 
 const router = express.Router()
 
@@ -656,12 +657,13 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
     )
 
     if (result.rows.length === 0) {
+      const resolvedDays = await resolveVacationDays(userId, currentOrgId(req))
       const newBalance = await query(
         `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days, year, organization_id)
-         VALUES ($1, 47, 0, 0, $2, $3)
+         VALUES ($1, $4, 0, 0, $2, $3)
          ON CONFLICT (user_id, organization_id, year) DO UPDATE SET organization_id = EXCLUDED.organization_id
          RETURNING *`,
-        [userId, targetYear, currentOrgId(req)]
+        [userId, targetYear, currentOrgId(req), resolvedDays]
       ).catch(() => null)
       if (newBalance && newBalance.rows.length > 0) {
         const updtOrgClause = req.org ? ' AND vacation_balances.organization_id = $2' : ''
@@ -2810,6 +2812,149 @@ router.delete('/requests/:id/substitutes/:userId', authenticateToken, async (req
     notifyVacationChanged(req, id, 'substitutes_changed')
   } catch (error) {
     res.status(500).json({ error: 'Не удалось удалить замещающего' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/day-rules:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Получить настройки количества дней отпуска по умолчанию, должностям и работникам
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Настройки дней отпуска
+ */
+router.get('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const orgId = currentOrgId(req)
+    const result = await query(
+      `SELECT r.id, r.position, r.user_id, r.days, u.first_name, u.last_name, u.middle_name, u.position as user_position
+       FROM vacation_day_rules r
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE r.organization_id = $1
+       ORDER BY r.position NULLS LAST, u.last_name NULLS LAST`,
+      [orgId]
+    )
+    const defaultRule = result.rows.find((r) => r.user_id === null && r.position === null)
+    const positionRules = result.rows
+      .filter((r) => r.position !== null)
+      .map((r) => ({ id: r.id, position: r.position, days: r.days }))
+    const userRules = result.rows
+      .filter((r) => r.user_id !== null)
+      .map((r) => ({
+        id: r.id,
+        userId: String(r.user_id),
+        userName: `${r.last_name} ${r.first_name}${r.middle_name ? ' ' + r.middle_name : ''}`,
+        position: r.user_position,
+        days: r.days,
+      }))
+    res.json({ defaultDays: defaultRule ? defaultRule.days : 28, positionRules, userRules })
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось получить настройки дней отпуска' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/day-rules:
+ *   put:
+ *     tags: [Vacation]
+ *     summary: Задать количество дней отпуска по умолчанию, для должности или для работника
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [days]
+ *             properties:
+ *               position: { type: string }
+ *               userId: { type: integer }
+ *               days: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Настройка сохранена
+ */
+router.put('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const { position, userId, days } = req.body
+    const parsedDays = parseInt(days)
+    if (Number.isNaN(parsedDays) || parsedDays < 0) {
+      return res.status(400).json({ error: 'Некорректное число дней' })
+    }
+    const trimmedPosition = position ? String(position).trim() : null
+    if (trimmedPosition && userId) {
+      return res.status(400).json({ error: 'Укажите либо должность, либо работника, не оба' })
+    }
+    const orgId = currentOrgId(req)
+    if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
+    const parsedUserId = userId ? parseInt(userId) : null
+    if (userId && Number.isNaN(parsedUserId)) return res.status(400).json({ error: 'Некорректный работник' })
+
+    const existing = await query(
+      `SELECT id FROM vacation_day_rules
+       WHERE organization_id = $1
+         AND position IS NOT DISTINCT FROM $2
+         AND user_id IS NOT DISTINCT FROM $3`,
+      [orgId, trimmedPosition, parsedUserId]
+    )
+
+    let row
+    if (existing.rows.length > 0) {
+      const upd = await query(
+        `UPDATE vacation_day_rules SET days = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+        [parsedDays, existing.rows[0].id]
+      )
+      row = upd.rows[0]
+    } else {
+      const ins = await query(
+        `INSERT INTO vacation_day_rules (organization_id, position, user_id, days) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [orgId, trimmedPosition, parsedUserId, parsedDays]
+      )
+      row = ins.rows[0]
+    }
+
+    await applyRuleToExistingBalances(orgId, { position: trimmedPosition, userId: parsedUserId }, parsedDays)
+
+    res.json({ success: true, id: row.id })
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось сохранить настройку' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/day-rules/{id}:
+ *   delete:
+ *     tags: [Vacation]
+ *     summary: Удалить настройку дней отпуска
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Настройка удалена
+ */
+router.delete('/day-rules/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const orgId = currentOrgId(req)
+    const result = await query(
+      'DELETE FROM vacation_day_rules WHERE id = $1 AND organization_id = $2 RETURNING *',
+      [req.params.id, orgId]
+    )
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Настройка не найдена' })
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось удалить настройку' })
   }
 })
 

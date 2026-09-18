@@ -4,9 +4,14 @@ import { cn } from '@/shared/lib/utils'
 import {
   Users, ClipboardList, UserPlus, Plane, Network,
   Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Tag, Send,
+  HelpCircle,
 } from 'lucide-react'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
+import { getCookie, setCookie } from '@/shared/lib/cookies'
+import { HRPanelIntroModal } from '@/shared/components/HRPanelIntroModal'
+
+const HR_PANEL_INTRO_COOKIE = 'hr_panel_intro_seen'
 import { HRSurveys } from '@/modules/surveys/pages/HRSurveys'
 import { HROnboarding } from '@/modules/onboarding/pages/HROnboarding'
 import { HRVacationCalendar } from '@/modules/vacation/pages/HRVacationCalendar'
@@ -97,20 +102,39 @@ export function HRPanel() {
     setVisitedTabs(prev => prev.has(safeActiveTab) ? prev : new Set(prev).add(safeActiveTab))
   }, [safeActiveTab])
 
+  const [showIntroModal, setShowIntroModal] = useState(false)
+  useEffect(() => {
+    if (getCookie(HR_PANEL_INTRO_COOKIE)) return
+    setShowIntroModal(true)
+    setCookie(HR_PANEL_INTRO_COOKIE, '1')
+  }, [])
+
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-2xl gradient-primary p-8">
         <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/2 translate-x-1/3" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/2 -translate-x-1/4" />
         <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/5 rounded-full" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <Sparkles className="h-6 w-6 text-white/80" />
-            <h1 className="text-2xl font-bold text-white">HR-панель</h1>
+        <div className="relative z-10 flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <Sparkles className="h-6 w-6 text-white/80" />
+              <h1 className="text-2xl font-bold text-white">HR-панель</h1>
+            </div>
+            <p className="text-sm text-white/60">Управление персоналом и процессами</p>
           </div>
-          <p className="text-sm text-white/60">Управление персоналом и процессами</p>
+          <button
+            type="button"
+            onClick={() => setShowIntroModal(true)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-white/20"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            Как это работает
+          </button>
         </div>
       </div>
+
+      <HRPanelIntroModal open={showIntroModal} onClose={() => setShowIntroModal(false)} groups={filteredGroups} activeTabId={safeActiveTab} />
 
       {filteredGroups.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground animate-fade-in">

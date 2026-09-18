@@ -18,6 +18,7 @@ import { CreateVacationModal } from '@/modules/vacation/components/modals/Create
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { VacationRestrictions } from '@/modules/vacation/components/VacationRestrictions'
+import { DepartmentBalanceTable } from '@/modules/vacation/components/DepartmentBalanceTable'
 import { VacationIntroModal } from '@/modules/vacation/components/VacationIntroModal'
 import { VacationTransferModal } from '@/modules/vacation/components/modals/VacationTransferModal'
 import { VacationRequestStatus, VacationType, VACATION_TYPES } from '@/shared/types'
@@ -94,6 +95,7 @@ export function Vacation() {
   const [approvalFilters, setApprovalFilters] = useState<{ departmentIds: string[]; vacationTypes: string[] }>({ departmentIds: [], vacationTypes: [] })
   const [approvalSearch, setApprovalSearch] = useState('')
   const [showIntroModal, setShowIntroModal] = useState(false)
+  const [deptTableExpanded, setDeptTableExpanded] = useState(false)
 
   useEffect(() => {
     if (getCookie(VACATION_INTRO_COOKIE)) return
@@ -963,6 +965,31 @@ export function Vacation() {
               <CalendarLegendSwatches />
             </div>
           </Card>
+
+          {calendarScope === 'team' && (
+            <Card>
+              <div className="p-5">
+                <button
+                  type="button"
+                  onClick={() => setDeptTableExpanded((v) => !v)}
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-1 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  Работники отдела
+                  <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform duration-200', deptTableExpanded && 'rotate-180')} />
+                </button>
+                <div
+                  className="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-out"
+                  style={{ gridTemplateRows: deptTableExpanded ? '1fr' : '0fr' }}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                    <div className="pt-3">
+                      <DepartmentBalanceTable departmentId={user?.departmentId || ''} year={year} currentUserId={user?.id} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
 
           <Card>
             <div

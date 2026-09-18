@@ -7,6 +7,7 @@ import { uploadTemplate as uploadTemplateMiddleware } from '../middleware/upload
 import { excludeTest } from '../utils/testScope.js'
 import { uploadToS3, getS3FileUrl, deleteFromS3, getPresignedUrl, getFromS3 } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { resolveVacationDays } from '../lib/vacationDays.js'
 
 const router = express.Router()
 
@@ -677,10 +678,11 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
         [email, passwordHash, first_name, last_name, position, department_id || null]
       )
       const userId = userResult.rows[0].id
+      const resolvedDays = await resolveVacationDays(userId, currentOrgId(req))
 
       await client.query(
-        'INSERT INTO vacation_balances (user_id, total_days, organization_id) VALUES ($1, 28, $2)',
-        [userId, currentOrgId(req)]
+        'INSERT INTO vacation_balances (user_id, total_days, organization_id) VALUES ($1, $2, $3)',
+        [userId, resolvedDays, currentOrgId(req)]
       )
       const vbUpd = orgScopedQuery(
         `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'

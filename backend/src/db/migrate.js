@@ -1686,6 +1686,7 @@ async function runMigrations() {
     await migrateRestrictionTags(db)
     await migrateApprovalHierarchy(db)
     await migrateAvatarUrls(db)
+    await migrateVacationDayRules(db)
 
     console.log('Adding multi-tenancy organization_id columns...')
     const orgScopedTables = [
@@ -2011,5 +2012,38 @@ async function migrateAvatarUrls(db) {
     console.log(`  ✓ avatar urls rewritten to public prefix: ${result.rowCount}`)
   } catch (e) {
     console.log('  - avatar urls:', e.message)
+  }
+}
+
+async function migrateVacationDayRules(db) {
+  console.log('Checking vacation_day_rules table...')
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS vacation_day_rules (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        position VARCHAR(255),
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        days INTEGER NOT NULL CHECK (days >= 0),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CHECK (NOT (position IS NOT NULL AND user_id IS NOT NULL))
+      )
+    `)
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_vdr_org_position
+      ON vacation_day_rules (organization_id, position) WHERE position IS NOT NULL
+    `)
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_vdr_org_user
+      ON vacation_day_rules (organization_id, user_id) WHERE user_id IS NOT NULL
+    `)
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_vdr_org_default
+      ON vacation_day_rules (organization_id) WHERE position IS NULL AND user_id IS NULL
+    `)
+    console.log('  ✓ vacation_day_rules ready')
+  } catch (e) {
+    console.log('  - vacation_day_rules:', e.message)
   }
 }
