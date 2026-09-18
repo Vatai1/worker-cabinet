@@ -26,6 +26,38 @@ export async function resolveVacationDays(userId, organizationId) {
   return FALLBACK_DAYS
 }
 
+function shortName(lastName, firstName, middleName) {
+  if (!lastName) return ''
+  const initials = [firstName, middleName].map((p) => p?.trim()?.[0]).filter(Boolean).map((ch) => `${ch}.`).join('')
+  return initials ? `${lastName} ${initials}` : lastName
+}
+
+export async function vacationStatusBatch(userIds, orgId) {
+  const map = new Map()
+  if (!userIds || userIds.length === 0) return map
+  const orgClause = orgId ? ' AND vr.organization_id = $2' : ''
+  const params = orgId ? [userIds, orgId] : [userIds]
+  const result = await query(
+    `SELECT vr.user_id, vr.start_date, vr.end_date, u2.last_name, u2.first_name, u2.middle_name
+     FROM vacation_requests vr
+     JOIN request_statuses rs ON vr.status_id = rs.id
+     LEFT JOIN vacation_substitutions vs ON vs.vacation_request_id = vr.id
+     LEFT JOIN users u2 ON vs.substitute_user_id = u2.id
+     WHERE vr.user_id = ANY($1) AND rs.code = 'approved'
+       AND vr.start_date <= CURRENT_DATE AND vr.end_date >= CURRENT_DATE${orgClause}`,
+    params
+  )
+  for (const row of result.rows) {
+    if (!map.has(row.user_id)) {
+      map.set(row.user_id, { active: true, startDate: row.start_date, endDate: row.end_date, substitutes: [] })
+    }
+    if (row.last_name) {
+      map.get(row.user_id).substitutes.push(shortName(row.last_name, row.first_name, row.middle_name))
+    }
+  }
+  return map
+}
+
 export async function applyRuleToExistingBalances(organizationId, target, days) {
   const year = new Date().getFullYear()
   if (target.userId) {

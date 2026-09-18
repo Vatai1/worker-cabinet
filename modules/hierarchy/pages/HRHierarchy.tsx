@@ -41,7 +41,7 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { useOrgStore } from '@/shared/store/orgStore'
-import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
+import { getErrorMessage, cn, personName, formatDate } from '@/shared/lib/utils'
 import { useUIStore } from '@/shared/store/uiStore'
 
 const SaveSnapshotContext = createContext<() => void>(() => {})
@@ -226,8 +226,13 @@ function DepartmentNode({ data, selected }: NodeProps) {
 }
 
 function EmployeeNode({ data, selected }: NodeProps) {
-  const d = data as { firstName: string; lastName: string; middleName?: string; position: string; department?: string; description?: string; color?: string }
+  const d = data as { firstName: string; lastName: string; middleName?: string; position: string; department?: string; description?: string; color?: string; vacation?: { active: true; startDate: string; endDate: string; substitutes: string[] } }
   const initials = `${d.firstName[0]}${d.lastName[0]}`
+  const onVacation = d.vacation?.active
+  const datesLabel = d.vacation ? `В отпуске с ${formatDate(d.vacation.startDate)} по ${formatDate(d.vacation.endDate)}` : ''
+  const substitutesLabel = d.vacation?.substitutes?.join(', ')
+  const substitutionText = substitutesLabel ? `Замещает: ${substitutesLabel}` : 'Без замещения'
+  const vacationTooltip = `${datesLabel}. ${substitutionText}`
   return (
     <div className="group w-full min-h-full min-w-[180px] min-h-[68px] rounded-xl overflow-hidden shadow-md border-2 bg-card hover:shadow-md transition-all duration-200 select-none" style={{ borderColor: d.color ?? '#6b7280' }}>
       <NodeResizer isVisible={selected} minWidth={180} minHeight={68} lineClassName="pointer-events-auto" handleClassName="pointer-events-auto" />
@@ -236,10 +241,30 @@ function EmployeeNode({ data, selected }: NodeProps) {
           <span className="text-white text-xs font-semibold">{initials}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium break-words">{personName(d.lastName, d.firstName, d.middleName)}</div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="text-sm font-medium break-words">{personName(d.lastName, d.firstName, d.middleName)}</div>
+            {onVacation && (
+              <span
+                title={vacationTooltip}
+                className="inline-flex shrink-0 items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 dark:text-amber-400"
+              >
+                В отпуске
+              </span>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground break-words">{d.position}</div>
           {d.department && (
             <div className="text-[10px] text-muted-foreground break-words">{d.department}</div>
+          )}
+          {onVacation && (
+            <div className="text-[10px] text-muted-foreground break-words" title={datesLabel}>
+              {datesLabel}
+            </div>
+          )}
+          {onVacation && (
+            <div className="text-[10px] text-muted-foreground break-words" title={substitutionText}>
+              {substitutionText}
+            </div>
           )}
         </div>
       </div>

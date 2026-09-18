@@ -167,14 +167,13 @@ export function EmployeeProfile() {
 
   useEffect(() => {
     if (!id || employee?.status !== 'on_leave') return
-    if (!isModuleEnabled('substitution')) return
     apiGet<{ substitutes?: SubstituteInfo[] }[]>(`/vacation/requests?userId=${id}&status=approved`)
       .then((data) => {
         const subs = (data || []).flatMap((r) => r.substitutes || [])
         setSubstitutes(subs)
       })
       .catch(() => {})
-  }, [id, employee?.status, isModuleEnabled])
+  }, [id, employee?.status])
 
   const handleAddProject: (project: Omit<Project, 'id'>) => void | Promise<void> = (project) => {
     if (!employee) return
@@ -702,12 +701,20 @@ export function EmployeeProfile() {
   )
 }
 
+interface PlannedVacationSubstitute {
+  id: number
+  last_name: string
+  first_name: string
+  middle_name?: string | null
+}
+
 interface PlannedVacation {
   id: number
   start_date: string
   end_date: string
   status: 'approved' | 'on_approval'
   created_at?: string
+  substitutes: PlannedVacationSubstitute[]
 }
 
 function PlannedVacationsBlock({ userId }: { userId: string }) {
@@ -737,6 +744,7 @@ function PlannedVacationsBlock({ userId }: { userId: string }) {
           end={nearest.end_date}
           createdAt={nearest.created_at}
           status={nearest.status}
+          substitutes={nearest.substitutes}
         />
       </div>
     </Card>

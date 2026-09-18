@@ -69,16 +69,8 @@ async function resolveApproverId(userId, orgId, req) {
   return null
 }
 
-async function isSubstitutionEnabled(req) {
-  const r = await query(
-    `SELECT is_enabled FROM modules WHERE code = 'substitution' AND is_enabled = true LIMIT 1`
-  )
-  return r.rows.length > 0
-}
-
 async function getApproverIds(approverId, req) {
   if (!approverId) return []
-  if (!(await isSubstitutionEnabled(req))) return [approverId]
   const orgClause = req.org ? ' AND vs.organization_id = $2' : ''
   const r = await query(
     `SELECT vs.substitute_user_id
@@ -115,6 +107,17 @@ const childSeesParentVacations = (n) => `EXISTS (
 const userParentSeesChildVacations = (n) => `vr.user_id IN (SELECT id FROM users WHERE manager_id = $${n} AND vac_parent_sees_child)`
 
 const userChildSeesParentVacations = (n) => `(vr.user_id = (SELECT manager_id FROM users WHERE id = $${n}) AND (SELECT vac_child_sees_parent FROM users WHERE id = $${n}) AND rs.code = 'approved')`
+
+const substExistsClause = (n) => `EXISTS (
+  SELECT 1
+  FROM vacation_substitutions vs
+  JOIN vacation_requests mvr ON vs.vacation_request_id = mvr.id
+  JOIN request_statuses mrs ON mvr.status_id = mrs.id
+  WHERE vr.approver_id = mvr.user_id
+    AND vs.substitute_user_id = $${n}
+    AND mrs.code = 'approved'
+    AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
+)`
 
 async function notifyVacationCreated(request, employeeId, req) {
   const empName = await getEmpName(employeeId)
@@ -314,22 +317,11 @@ router.get('/requests', authenticateToken, async (req, res) => {
         params.push(departmentId)
       }
     } else {
+      const substExists = ` OR ${substExistsClause(params.length + 1)}`
       if (user.role === 'employee') {
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)}${substExists})`
         params.push(user.id)
       } else if (user.role === 'manager') {
-        const substExists = await isSubstitutionEnabled(req)
-          ? ` OR EXISTS (
-              SELECT 1
-              FROM vacation_substitutions vs
-              JOIN vacation_requests mvr ON vs.vacation_request_id = mvr.id
-              JOIN request_statuses mrs ON mvr.status_id = mrs.id
-              WHERE vr.approver_id = mvr.user_id
-                AND vs.substitute_user_id = $${params.length + 1}
-                AND mrs.code = 'approved'
-                AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
-            )`
-          : ''
         whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userParentSeesChildVacations(params.length + 1)}${substExists})`
         params.push(user.id)
       }
@@ -425,7 +417,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       const onApprovalUserIds = result.rows
         .filter((r) => r.status === 'on_approval')
         .map((r) => r.user_id)
-      if (onApprovalUserIds.length > 0 && await isSubstitutionEnabled(req)) {
+      if (onApprovalUserIds.length > 0) {
         const delegationResult = await query(
           `SELECT DISTINCT u.id as user_id, sub.id as delegate_id,
                   sub.first_name, sub.last_name, sub.middle_name, sub.position, sub.avatar
@@ -497,6 +489,15 @@ router.get('/requests', authenticateToken, async (req, res) => {
  *                   vacation_type: { type: string, nullable: true }
  *                   vacation_type_name: { type: string, nullable: true }
  *                   created_at: { type: string, format: date-time }
+ *                   substitutes:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: integer }
+ *                         last_name: { type: string }
+ *                         first_name: { type: string }
+ *                         middle_name: { type: string, nullable: true }
  *       400:
  *         description: Некорректный идентификатор
  *         content:
@@ -538,7 +539,26 @@ router.get('/upcoming/:userId', authenticateToken, async (req, res) => {
        LIMIT 10`,
       params
     )
-    res.json(result.rows)
+
+    const requestIds = result.rows.map((r) => r.id)
+    let subsByRequest = {}
+    if (requestIds.length > 0) {
+      const subsResult = await query(
+        `SELECT vs.vacation_request_id, u.id, u.last_name, u.first_name, u.middle_name
+         FROM vacation_substitutions vs
+         JOIN users u ON vs.substitute_user_id = u.id
+         WHERE vs.vacation_request_id = ANY($1)`,
+        [requestIds]
+      )
+      for (const row of subsResult.rows) {
+        if (!subsByRequest[row.vacation_request_id]) subsByRequest[row.vacation_request_id] = []
+        subsByRequest[row.vacation_request_id].push({
+          id: row.id, last_name: row.last_name, first_name: row.first_name, middle_name: row.middle_name
+        })
+      }
+    }
+
+    res.json(result.rows.map((r) => ({ ...r, substitutes: subsByRequest[r.id] || [] })))
   } catch (error) {
     res.status(500).json({ error: 'Не удалось загрузить запланированные отпуска' })
   }
@@ -967,7 +987,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req)
 
-    if (Array.isArray(substitute_ids) && substitute_ids.length > 0 && await isSubstitutionEnabled(req)) {
+    if (Array.isArray(substitute_ids) && substitute_ids.length > 0) {
       for (const subId of substitute_ids) {
         await client.query(
           `INSERT INTO vacation_substitutions (vacation_request_id, substitute_user_id, assigned_by, organization_id)
@@ -981,7 +1001,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     await notifyVacationCreated(request, userId, req)
 
-    if (Array.isArray(substitute_ids) && substitute_ids.length > 0 && await isSubstitutionEnabled(req)) {
+    if (Array.isArray(substitute_ids) && substitute_ids.length > 0) {
       const empName = await getEmpName(userId)
       for (const subId of substitute_ids) {
         notify({
@@ -1438,7 +1458,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       [insertResult.rows[0].id, userId, `Запрос на перенос от заявки #${id}`, currentOrgId(req)]
     )
 
-    if (Array.isArray(substitute_ids) && substitute_ids.length > 0 && await isSubstitutionEnabled(req)) {
+    if (Array.isArray(substitute_ids) && substitute_ids.length > 0) {
       for (const subId of substitute_ids) {
         await client.query(
           `INSERT INTO vacation_substitutions (vacation_request_id, substitute_user_id, assigned_by, organization_id)
@@ -2683,7 +2703,6 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
 
 router.get('/my-substitutions', authenticateToken, async (req, res) => {
   try {
-    if (!(await isSubstitutionEnabled(req))) return res.json([])
     const result = await query(
       `SELECT vr.id, vr.start_date, vr.end_date, vr.duration,
               u.id as user_id, u.first_name, u.last_name, u.middle_name,
@@ -2706,9 +2725,6 @@ router.get('/my-substitutions', authenticateToken, async (req, res) => {
 
 router.post('/requests/:id/substitutes', authenticateToken, async (req, res) => {
   try {
-    if (!(await isSubstitutionEnabled(req))) {
-      return res.status(403).json({ error: 'Модуль замещения отключён' })
-    }
     const { id } = req.params
     const { substitute_ids } = req.body
     if (!Array.isArray(substitute_ids) || substitute_ids.length === 0) {

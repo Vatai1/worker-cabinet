@@ -68,6 +68,8 @@ export function Vacation() {
     approveTransferRequest,
     rejectTransferRequest,
     rejectRequest,
+    mySubstitutions,
+    fetchMySubstitutions,
   } = useVacationStore()
 
   const [balance, setBalance] = useState<VacationBalance | null>(null)
@@ -569,11 +571,17 @@ export function Vacation() {
   const location = useLocation()
   const navigate = useNavigate()
   const isMySubstitutions = location.pathname.includes('my-substitutions')
-  const { mySubstitutions, fetchMySubstitutions } = useVacationStore()
 
   useEffect(() => {
-    if (isMySubstitutions) fetchMySubstitutions()
-  }, [isMySubstitutions, fetchMySubstitutions])
+    fetchMySubstitutions()
+  }, [fetchMySubstitutions])
+
+  const hasActiveSubstitution = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return mySubstitutions.some((s) => s.status === 'approved' && s.start_date <= today && s.end_date >= today)
+  }, [mySubstitutions])
+
+  const canApprove = isManager || hasActiveSubstitution
 
   const pendingApprovals = departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
 
@@ -668,7 +676,7 @@ export function Vacation() {
 
   const tabs: Array<{ id: VacationTab; label: string; badge?: number }> = [
     { id: 'mine', label: 'Отпуск' },
-    ...(isManager ? [{ id: 'approvals' as VacationTab, label: 'Согласование', badge: pendingApprovals.length }] : []),
+    ...(canApprove ? [{ id: 'approvals' as VacationTab, label: 'Согласование', badge: pendingApprovals.length }] : []),
     ...(isManager ? [{ id: 'restrictions' as VacationTab, label: 'Пересечения' }] : []),
     { id: 'requests', label: 'Заявления' },
     { id: 'history', label: 'История' },
@@ -834,7 +842,7 @@ export function Vacation() {
           userId={user?.id}
           restrictionWarnings={restrictionWarningsCalendar}
           onCheckRestrictions={handleCheckRestrictionsCalendar}
-          showSubstitutes={useModulesStore.getState().isModuleEnabled('substitution')}
+          showSubstitutes
         />
       )}
     </div>
@@ -1100,7 +1108,7 @@ export function Vacation() {
                                         </div>
                                       </div>
                                     )}
-                                    {useModulesStore.getState().isModuleEnabled('substitution') && request.substitutes && request.substitutes.length > 0 && (
+                                    {request.substitutes && request.substitutes.length > 0 && (
                                       <div className="flex items-start gap-2">
                                         <UserCheck className="w-4 h-4 text-muted-foreground mt-0.5" />
                                         <div>
@@ -1122,7 +1130,7 @@ export function Vacation() {
                                         </div>
                                       </div>
                                     )}
-                                    {useModulesStore.getState().isModuleEnabled('substitution') && showSubstitutePicker === request.id && (
+                                    {showSubstitutePicker === request.id && (
                                       <div className="max-h-40 overflow-y-auto border border-input rounded-lg">
                                         {pickerEmployees.map((e) => (
                                           <button
@@ -1150,7 +1158,7 @@ export function Vacation() {
                                         >
                                           Добавить комментарий
                                         </Button>
-                                        {useModulesStore.getState().isModuleEnabled('substitution') && request.status === VacationRequestStatus.APPROVED && (
+                                        {request.status === VacationRequestStatus.APPROVED && (
                                           <Button
                                             size="sm"
                                             variant="outline"
@@ -1216,7 +1224,7 @@ export function Vacation() {
 
       {activeTab === 'restrictions' && isManager && <VacationRestrictions />}
 
-      {activeTab === 'approvals' && isManager && (
+      {activeTab === 'approvals' && canApprove && (
         <Card className="overflow-hidden p-0">
           <div className="flex items-center gap-2.5 border-b border-border px-5 py-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">

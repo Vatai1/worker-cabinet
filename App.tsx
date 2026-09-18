@@ -186,7 +186,7 @@ function App() {
                 <Route path="vacation" element={<ModuleGuard module="vacation"><BlockOnboardingRoute><Vacation /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="vacation/application" element={<ModuleGuard module="vacation"><BlockOnboardingRoute><VacationApplicationPage /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="vacation/transfer-application" element={<ModuleGuard module="vacation"><BlockOnboardingRoute><VacationTransferApplicationPage /></BlockOnboardingRoute></ModuleGuard>} />
-                <Route path="vacation/my-substitutions" element={<ModuleGuard module="substitution"><BlockOnboardingRoute><Vacation /></BlockOnboardingRoute></ModuleGuard>} />
+                <Route path="vacation/my-substitutions" element={<ModuleGuard module="vacation"><BlockOnboardingRoute><Vacation /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="my-hierarchy" element={<BlockOnboardingRoute><MyHierarchy /></BlockOnboardingRoute>} />
                 <Route path="employees" element={<Employees />} />
                 <Route path="departments" element={<Departments />} />

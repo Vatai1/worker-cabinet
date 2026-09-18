@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays } from 'lucide-react'
+import { CalendarDays, UserCheck } from 'lucide-react'
+import { personNameShort } from '@/shared/lib/utils'
+
+interface PlannedVacationSubstitute {
+  id: number
+  last_name: string
+  first_name: string
+  middle_name?: string | null
+}
 
 interface Props {
   start: string
   end: string
   createdAt?: string
   status: 'approved' | 'on_approval'
+  substitutes: PlannedVacationSubstitute[]
 }
 
 const MS_PER_DAY = 86400000
@@ -54,7 +63,7 @@ const STATUS_BADGES = {
   on_approval: { label: 'На согласовании', className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
 } as const
 
-export function PlannedVacationCard({ start, end, createdAt, status }: Props) {
+export function PlannedVacationCard({ start, end, createdAt, status, substitutes }: Props) {
   const [today, setToday] = useState(startOfToday)
 
   useEffect(() => {
@@ -93,6 +102,8 @@ export function PlannedVacationCard({ start, end, createdAt, status }: Props) {
     labelElapsed = `Завершён ${fmt(endDate, true)}`
     countdown = <>Отпуск завершён</>
   }
+  const substitutesLabel = substitutes.map((s) => personNameShort(s.last_name, s.first_name, s.middle_name)).join(', ')
+
   return (
     <div className="w-full max-w-[520px] border border-border rounded-xl p-5 bg-card max-[560px]:p-4">
       <div className="flex items-center gap-3 mb-[18px]">
@@ -125,6 +136,14 @@ export function PlannedVacationCard({ start, end, createdAt, status }: Props) {
         </div>
       </div>
       <div className="mt-3.5 text-sm text-muted-foreground">{countdown}</div>
+      <div className="mt-2 flex items-center gap-1.5 text-xs" title={substitutes.length > 0 ? substitutesLabel : undefined}>
+        <UserCheck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        {substitutes.length > 0 ? (
+          <span className="truncate text-muted-foreground">Замещает: {substitutesLabel}</span>
+        ) : (
+          <span className="text-muted-foreground/70">Замещающий не назначен</span>
+        )}
+      </div>
     </div>
   )
 }

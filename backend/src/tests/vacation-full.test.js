@@ -84,8 +84,8 @@ async function waitNotification(userId, type, predicate = () => true, timeoutMs 
 }
 
 async function enableModules() {
-  const snap = (await query("SELECT code, is_enabled FROM modules WHERE code IN ('notifications','substitution')")).rows
-  await query("UPDATE modules SET is_enabled = true WHERE code IN ('notifications','substitution')")
+  const snap = (await query("SELECT code, is_enabled FROM modules WHERE code IN ('notifications')")).rows
+  await query("UPDATE modules SET is_enabled = true WHERE code IN ('notifications')")
   return snap
 }
 

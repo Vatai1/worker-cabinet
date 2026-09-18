@@ -3,6 +3,7 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
+import { vacationStatusBatch } from '../lib/vacationDays.js'
 
 const router = express.Router()
 
@@ -13,7 +14,7 @@ const AUTO_NODE_GAP_Y = 220
 
 const AUTO_EDGE_STYLE = { stroke: '#6b7280', strokeWidth: 2 }
 
-async function enrichHierarchyData(data) {
+async function enrichHierarchyData(data, orgId) {
   const nodes = data?.nodes ?? []
   const deptIds = [...new Set(
     nodes.filter((n) => n.type === 'department' && n.data?.id != null).map((n) => Number(n.data.id))
@@ -23,7 +24,7 @@ async function enrichHierarchyData(data) {
   )]
   if (deptIds.length === 0 && userIds.length === 0) return data
 
-  const [deptResult, userResult] = await Promise.all([
+  const [deptResult, userResult, vacationMap] = await Promise.all([
     deptIds.length
       ? query(
           `SELECT d.id, d.name,
@@ -44,6 +45,7 @@ async function enrichHierarchyData(data) {
           [userIds]
         )
       : Promise.resolve({ rows: [] }),
+    vacationStatusBatch(userIds, orgId),
   ])
   const deptById = new Map(deptResult.rows.map((r) => [r.id, r]))
   const userById = new Map(userResult.rows.map((r) => [r.id, r]))
@@ -66,6 +68,7 @@ async function enrichHierarchyData(data) {
             middleName: fresh.middle_name,
             position: fresh.position,
             department: fresh.department_name ?? undefined,
+            vacation: vacationMap.get(Number(n.data.id)),
           },
         }
       }
@@ -500,7 +503,11 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
  *                 data:
  *                   type: object
  *                   properties:
- *                     nodes: { type: array, items: { type: object } }
+ *                     nodes:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         description: 'У employee-нод (при наличии data.id) поле data.vacation описывает текущий отпуск: { active: true, startDate, endDate, substitutes: string[] } если работник сейчас в одобренном отпуске (startDate/endDate — даты этого отпуска, substitutes — «Фамилия И.О.» замещающих), иначе отсутствует'
  *                     edges: { type: array, items: { type: object } }
  *                     viewport: { type: object }
  *                 updated_at: { type: string, format: date-time, nullable: true }
@@ -542,7 +549,7 @@ router.get('/', authenticateToken, async (req, res) => {
       return res.json({ data: auto, updated_at: null, updated_by: null, version: 0 })
     }
     const row = result.rows[0]
-    res.json({ ...row, data: await enrichHierarchyData(row.data) })
+    res.json({ ...row, data: await enrichHierarchyData(row.data, targetOrgId) })
   } catch (error) {
     console.error('GET /hierarchy error:', error)
     res.status(500).json({ error: 'Не удалось загрузить иерархию' })
@@ -693,7 +700,11 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
  *                   type: object
  *                   nullable: true
  *                   properties:
- *                     nodes: { type: array, items: { type: object } }
+ *                     nodes:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         description: 'У employee-нод поле data.vacation — как в GET /hierarchy'
  *                     edges: { type: array, items: { type: object } }
  *                     viewport: { type: object }
  *                 updated_at: { type: string, format: date-time, nullable: true }
@@ -704,7 +715,8 @@ router.get('/global', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.json({ data: null, updated_at: null })
     }
-    res.json(result.rows[0])
+    const row = result.rows[0]
+    res.json({ ...row, data: await enrichHierarchyData(row.data, currentOrgId(req)) })
   } catch (error) {
     console.error('GET /hierarchy/global error:', error)
     res.status(500).json({ error: 'Не удалось загрузить глобальную иерархию' })
@@ -774,7 +786,7 @@ router.put('/global', authenticateToken, authorizeRoles('superadmin'), async (re
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Данные иерархии отдела
+ *         description: 'Данные иерархии отдела; у employee-нод поле data.vacation — как в GET /hierarchy'
  */
 router.get('/department/:id', authenticateToken, async (req, res) => {
   const { id } = req.params
@@ -789,7 +801,7 @@ router.get('/department/:id', authenticateToken, async (req, res) => {
       return res.json({ data: DEFAULT_DATA, updated_at: null, updated_by: null })
     }
     const row = result.rows[0]
-    res.json({ ...row, data: await enrichHierarchyData(row.data) })
+    res.json({ ...row, data: await enrichHierarchyData(row.data, currentOrgId(req)) })
   } catch (error) {
     console.error('GET /hierarchy/department/:id error:', error)
     res.status(500).json({ error: 'Не удалось загрузить иерархию отдела' })

@@ -1563,7 +1563,7 @@ async function runMigrations() {
       vacation: 'hr', surveys: 'work', projects: 'work', documents: 'docs',
       timesheet: 'work', onboarding: 'hr', hierarchy: 'hr',
       dictionaries: 'admin', skills: 'hr', calendar: 'admin',
-      notifications: 'docs', assistant: 'general', substitution: 'work',
+      notifications: 'docs', assistant: 'general',
     }
     for (const [code, category] of Object.entries(categoryMap)) {
       await db.query(`UPDATE modules SET category = $1 WHERE code = $2 AND (category IS NULL OR category = 'general')`, [category, code])
@@ -1585,7 +1585,6 @@ async function runMigrations() {
       { code: 'assistant', name: 'AI Ассистент', description: 'Кадровый AI-ассистент для ответов на вопросы работников', icon: 'Bot', route: '/assistant', sort: 15, category: 'general' },
       { code: 'appearance', name: 'Внешний вид', description: 'Тема оформления системы', icon: 'Palette', route: null, sort: 3, category: 'core' },
       { code: 'mailing', name: 'Рассылки', description: 'Рассылка информации работникам', icon: 'Send', route: '/hr/mailing', sort: 25, category: 'hr' },
-      { code: 'substitution', name: 'Замещение', description: 'Делегирование обязанностей на время отпуска', icon: 'UserCheck', route: null, sort: 55, category: 'work' },
     ]
     for (const m of defaultModules) {
       await db.query(
@@ -1599,6 +1598,9 @@ async function runMigrations() {
     await db.query("UPDATE modules SET description = 'Справочники должностей, тегов, типов' WHERE code = 'dictionaries'").catch(() => {})
     await db.query("DELETE FROM modules WHERE code = 'analytics'").catch(() => {})
     await db.query("DELETE FROM permissions WHERE module = 'analytics'").catch(() => {})
+    await db.query("DELETE FROM modules WHERE code = 'substitution'").catch(() => {})
+    await db.query("DELETE FROM permissions WHERE module = 'substitution'").catch(() => {})
+    await db.query("DELETE FROM module_overrides WHERE module_code = 'substitution'").catch(() => {})
     const appearanceResult = await db.query("SELECT settings FROM modules WHERE code = 'appearance'")
     if (appearanceResult.rows.length > 0 && !appearanceResult.rows[0].settings) {
       await db.query("UPDATE modules SET settings = '{\"activeTheme\":\"crct\"}'::jsonb WHERE code = 'appearance'")

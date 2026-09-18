@@ -44,3 +44,10 @@ export function getErrorMessage(error: unknown): string {
 export function personName(last?: string | null, first?: string | null, middle?: string | null): string {
   return [last, first, middle].map(part => part?.trim()).filter(Boolean).join(' ')
 }
+
+export function personNameShort(last?: string | null, first?: string | null, middle?: string | null): string {
+  const l = last?.trim()
+  if (!l) return personName(last, first, middle)
+  const initials = [first, middle].map(part => part?.trim()?.[0]).filter(Boolean).map(ch => `${ch}.`).join('')
+  return initials ? `${l} ${initials}` : l
+}
