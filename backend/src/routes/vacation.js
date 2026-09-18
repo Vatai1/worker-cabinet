@@ -1,4 +1,5 @@
 import express from 'express'
+import { randomUUID } from 'node:crypto'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { getFromS3 } from '../config/s3.js'
@@ -2831,7 +2832,7 @@ router.get('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
   try {
     const orgId = currentOrgId(req)
     const result = await query(
-      `SELECT r.id, r.position, r.user_id, r.days, u.first_name, u.last_name, u.middle_name, u.position as user_position
+      `SELECT r.id, r.position, r.user_id, r.days, r.group_id, u.first_name, u.last_name, u.middle_name, u.position as user_position
        FROM vacation_day_rules r
        LEFT JOIN users u ON u.id = r.user_id
        WHERE r.organization_id = $1
@@ -2841,7 +2842,7 @@ router.get('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
     const defaultRule = result.rows.find((r) => r.user_id === null && r.position === null)
     const positionRules = result.rows
       .filter((r) => r.position !== null)
-      .map((r) => ({ id: r.id, position: r.position, days: r.days }))
+      .map((r) => ({ id: r.id, position: r.position, days: r.days, groupId: r.group_id }))
     const userRules = result.rows
       .filter((r) => r.user_id !== null)
       .map((r) => ({
@@ -2850,6 +2851,7 @@ router.get('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
         userName: `${r.last_name} ${r.first_name}${r.middle_name ? ' ' + r.middle_name : ''}`,
         position: r.user_position,
         days: r.days,
+        groupId: r.group_id,
       }))
     res.json({ defaultDays: defaultRule ? defaultRule.days : 28, positionRules, userRules })
   } catch (error) {
@@ -2875,6 +2877,9 @@ router.get('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
  *             properties:
  *               position: { type: string }
  *               userId: { type: integer }
+ *               positions: { type: array, items: { type: string } }
+ *               userIds: { type: array, items: { type: integer } }
+ *               groupId: { type: string }
  *               days: { type: integer }
  *     responses:
  *       200:
@@ -2882,17 +2887,113 @@ router.get('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
  */
 router.put('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
   try {
-    const { position, userId, days } = req.body
+    const { position, userId, positions, userIds, groupId, days } = req.body
     const parsedDays = parseInt(days)
     if (Number.isNaN(parsedDays) || parsedDays < 0) {
       return res.status(400).json({ error: 'Некорректное число дней' })
     }
+    const orgId = currentOrgId(req)
+    if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
+
+    // Bulk create: one grouped rule covering several positions at once
+    if (Array.isArray(positions)) {
+      const trimmed = [...new Set(positions.map((p) => String(p).trim()).filter(Boolean))]
+      if (trimmed.length === 0) return res.status(400).json({ error: 'Не выбраны должности' })
+      const newGroupId = randomUUID()
+      const client = await getClient()
+      try {
+        await client.query('BEGIN')
+        for (const pos of trimmed) {
+          const existing = await client.query(
+            `SELECT id FROM vacation_day_rules WHERE organization_id = $1 AND position = $2`,
+            [orgId, pos]
+          )
+          if (existing.rows.length > 0) {
+            await client.query(
+              `UPDATE vacation_day_rules SET days = $1, group_id = $2, updated_at = NOW() WHERE id = $3`,
+              [parsedDays, newGroupId, existing.rows[0].id]
+            )
+          } else {
+            await client.query(
+              `INSERT INTO vacation_day_rules (organization_id, position, days, group_id) VALUES ($1, $2, $3, $4)`,
+              [orgId, pos, parsedDays, newGroupId]
+            )
+          }
+        }
+        await client.query('COMMIT')
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+      for (const pos of trimmed) {
+        await applyRuleToExistingBalances(orgId, { position: pos }, parsedDays)
+      }
+      return res.json({ success: true, groupId: newGroupId })
+    }
+
+    // Bulk create: one grouped rule covering several employees at once
+    if (Array.isArray(userIds)) {
+      const parsedIds = [...new Set(userIds.map((id) => parseInt(id)).filter((id) => !Number.isNaN(id)))]
+      if (parsedIds.length === 0) return res.status(400).json({ error: 'Не выбраны работники' })
+      const newGroupId = randomUUID()
+      const client = await getClient()
+      try {
+        await client.query('BEGIN')
+        for (const uid of parsedIds) {
+          const existing = await client.query(
+            `SELECT id FROM vacation_day_rules WHERE organization_id = $1 AND user_id = $2`,
+            [orgId, uid]
+          )
+          if (existing.rows.length > 0) {
+            await client.query(
+              `UPDATE vacation_day_rules SET days = $1, group_id = $2, updated_at = NOW() WHERE id = $3`,
+              [parsedDays, newGroupId, existing.rows[0].id]
+            )
+          } else {
+            await client.query(
+              `INSERT INTO vacation_day_rules (organization_id, user_id, days, group_id) VALUES ($1, $2, $3, $4)`,
+              [orgId, uid, parsedDays, newGroupId]
+            )
+          }
+        }
+        await client.query('COMMIT')
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+      for (const uid of parsedIds) {
+        await applyRuleToExistingBalances(orgId, { userId: uid }, parsedDays)
+      }
+      return res.json({ success: true, groupId: newGroupId })
+    }
+
+    // Edit an existing grouped rule: update all its members together
+    if (groupId) {
+      const members = await query(
+        `SELECT id, position, user_id FROM vacation_day_rules WHERE organization_id = $1 AND group_id = $2`,
+        [orgId, groupId]
+      )
+      if (members.rows.length === 0) return res.status(404).json({ error: 'Правило не найдено' })
+      await query(
+        `UPDATE vacation_day_rules SET days = $1, updated_at = NOW() WHERE organization_id = $2 AND group_id = $3`,
+        [parsedDays, orgId, groupId]
+      )
+      for (const m of members.rows) {
+        if (m.user_id) await applyRuleToExistingBalances(orgId, { userId: m.user_id }, parsedDays)
+        else if (m.position) await applyRuleToExistingBalances(orgId, { position: m.position }, parsedDays)
+      }
+      return res.json({ success: true, groupId })
+    }
+
+    // Single rule: default value, or an ungrouped legacy position/employee rule
     const trimmedPosition = position ? String(position).trim() : null
     if (trimmedPosition && userId) {
       return res.status(400).json({ error: 'Укажите либо должность, либо работника, не оба' })
     }
-    const orgId = currentOrgId(req)
-    if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
     const parsedUserId = userId ? parseInt(userId) : null
     if (userId && Number.isNaN(parsedUserId)) return res.status(400).json({ error: 'Некорректный работник' })
 
@@ -2924,6 +3025,37 @@ router.put('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
     res.json({ success: true, id: row.id })
   } catch (error) {
     res.status(500).json({ error: 'Не удалось сохранить настройку' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/day-rules/group/{groupId}:
+ *   delete:
+ *     tags: [Vacation]
+ *     summary: Удалить сгруппированное правило дней отпуска целиком
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: groupId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Правило удалено
+ */
+router.delete('/day-rules/group/:groupId', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const orgId = currentOrgId(req)
+    const result = await query(
+      'DELETE FROM vacation_day_rules WHERE group_id = $1 AND organization_id = $2 RETURNING *',
+      [req.params.groupId, orgId]
+    )
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Правило не найдено' })
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось удалить настройку' })
   }
 })
 

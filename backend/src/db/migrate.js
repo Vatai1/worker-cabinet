@@ -2042,6 +2042,11 @@ async function migrateVacationDayRules(db) {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_vdr_org_default
       ON vacation_day_rules (organization_id) WHERE position IS NULL AND user_id IS NULL
     `)
+    await db.query(`ALTER TABLE vacation_day_rules ADD COLUMN IF NOT EXISTS group_id UUID`)
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_vdr_group_id
+      ON vacation_day_rules (organization_id, group_id) WHERE group_id IS NOT NULL
+    `)
     console.log('  ✓ vacation_day_rules ready')
   } catch (e) {
     console.log('  - vacation_day_rules:', e.message)

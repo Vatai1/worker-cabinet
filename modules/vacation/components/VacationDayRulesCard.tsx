@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { CalendarRange, Briefcase, User, Plus, Trash2, Pencil, Check, X, Search, Loader2, HelpCircle } from 'lucide-react'
 import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
-import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
+import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { apiGet, apiPut, apiDelete } from '@/shared/lib/apiClient'
 import { getErrorMessage, personName, cn } from '@/shared/lib/utils'
@@ -14,6 +14,7 @@ interface PositionRule {
   id: number
   position: string
   days: number
+  groupId: string | null
 }
 
 interface UserRule {
@@ -22,12 +23,29 @@ interface UserRule {
   userName: string
   position: string | null
   days: number
+  groupId: string | null
 }
 
 interface DayRulesResponse {
   defaultDays: number
   positionRules: PositionRule[]
   userRules: UserRule[]
+}
+
+interface PositionRuleGroup {
+  key: string
+  groupId: string | null
+  id: number
+  positions: string[]
+  days: number
+}
+
+interface UserRuleGroup {
+  key: string
+  groupId: string | null
+  id: number
+  users: { userId: string; userName: string; position: string | null }[]
+  days: number
 }
 
 interface PickerUser {
@@ -57,10 +75,19 @@ function DaysEditor({ value, onSave, onCancel }: { value: number; onSave: (days:
   )
 }
 
-function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: string) => void; onClose: () => void }) {
+function UserPickerModal({
+  initialSelected,
+  onConfirm,
+  onClose,
+}: {
+  initialSelected: { id: number; name: string }[]
+  onConfirm: (users: { id: number; name: string }[]) => void
+  onClose: () => void
+}) {
   const [search, setSearch] = useState('')
   const [users, setUsers] = useState<PickerUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<Map<number, string>>(() => new Map(initialSelected.map((u) => [u.id, u.name])))
 
   useEffect(() => {
     apiGet<{ users?: PickerUser[] } | PickerUser[]>('/users?limit=1000')
@@ -75,15 +102,33 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
     return `${personName(u.last_name, u.first_name, u.middle_name)} ${u.position || ''}`.toLowerCase().includes(q)
   })
 
+  const toggle = (u: PickerUser) => {
+    const fullName = personName(u.last_name, u.first_name, u.middle_name)
+    setSelected((prev) => {
+      const next = new Map(prev)
+      if (next.has(u.id)) next.delete(u.id)
+      else next.set(u.id, fullName)
+      return next
+    })
+  }
+
+  const selectAllFiltered = () => {
+    setSelected((prev) => {
+      const next = new Map(prev)
+      filtered.forEach((u) => next.set(u.id, personName(u.last_name, u.first_name, u.middle_name)))
+      return next
+    })
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden border border-border" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border shrink-0">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-foreground">Выбор работника</h3>
+            <h3 className="font-semibold text-foreground">Выбор работников</h3>
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
           </div>
-          <div className="relative">
+          <div className="relative mb-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               autoFocus
@@ -92,6 +137,12 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Выбрано: {selected.size}</span>
+            <button type="button" onClick={selectAllFiltered} className="font-medium text-primary hover:underline">
+              Выбрать всех в списке
+            </button>
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-2">
@@ -103,12 +154,18 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
             <div className="space-y-0.5">
               {filtered.map((u) => {
                 const fullName = personName(u.last_name, u.first_name, u.middle_name)
+                const checked = selected.has(u.id)
                 return (
-                  <button
+                  <label
                     key={u.id}
-                    onClick={() => onSelect(u.id, fullName)}
-                    className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/40 transition-colors text-left"
+                    className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/40 transition-colors text-left cursor-pointer"
                   >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(u)}
+                      className="h-3.5 w-3.5 shrink-0 rounded border-border accent-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
                     <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
                       {u.first_name?.[0]}{u.last_name?.[0]}
                     </div>
@@ -116,11 +173,21 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
                       <p className="text-sm font-medium text-foreground truncate">{fullName}</p>
                       <p className="text-xs text-muted-foreground truncate">{u.position || '—'}</p>
                     </div>
-                  </button>
+                  </label>
                 )
               })}
             </div>
           )}
+        </div>
+        <div className="flex items-center gap-2 border-t border-border p-3 shrink-0">
+          <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
+          <Button
+            className="flex-1"
+            disabled={selected.size === 0}
+            onClick={() => onConfirm(Array.from(selected, ([id, name]) => ({ id, name })))}
+          >
+            Выбрать{selected.size > 0 ? ` (${selected.size})` : ''}
+          </Button>
         </div>
       </div>
     </div>
@@ -184,14 +251,14 @@ export function VacationDayRulesCard() {
   const [positions, setPositions] = useState<string[]>([])
 
   const [editingDefault, setEditingDefault] = useState(false)
-  const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
+  const [editingGroupKey, setEditingGroupKey] = useState<string | null>(null)
 
-  const [newPosition, setNewPosition] = useState('')
+  const [newPositions, setNewPositions] = useState<string[]>([])
   const [newPositionDays, setNewPositionDays] = useState('28')
   const [savingPosition, setSavingPosition] = useState(false)
 
   const [showUserPicker, setShowUserPicker] = useState(false)
-  const [pickedUser, setPickedUser] = useState<{ id: number; name: string } | null>(null)
+  const [pickedUsers, setPickedUsers] = useState<{ id: number; name: string }[]>([])
   const [newUserDays, setNewUserDays] = useState('28')
   const [savingUser, setSavingUser] = useState(false)
 
@@ -208,15 +275,22 @@ export function VacationDayRulesCard() {
     apiGet<{ name: string }[]>('/dictionaries/positions').then((rows) => setPositions(rows.map((r) => r.name))).catch(() => setPositions([]))
   }, [])
 
-  const saveRule = async (payload: { position?: string; userId?: number; days: number }) => {
+  type RulePayload = { position?: string; userId?: number; positions?: string[]; userIds?: number[]; groupId?: string; days: number }
+
+  const saveRuleRaw = async (payload: RulePayload) => {
     try {
       await apiPut('/vacation/day-rules', payload)
-      fetchData()
       return true
     } catch (err) {
       toast.error(getErrorMessage(err))
       return false
     }
+  }
+
+  const saveRule = async (payload: RulePayload) => {
+    const ok = await saveRuleRaw(payload)
+    if (ok) fetchData()
+    return ok
   }
 
   const deleteRule = async (id: number) => {
@@ -229,25 +303,66 @@ export function VacationDayRulesCard() {
     }
   }
 
+  const deleteGroup = async (groupId: string) => {
+    try {
+      await apiDelete(`/vacation/day-rules/group/${groupId}`)
+      toast.success('Настройка удалена')
+      fetchData()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    }
+  }
+
+  const deleteRuleGroup = (g: { groupId: string | null; id: number }) =>
+    g.groupId ? deleteGroup(g.groupId) : deleteRule(g.id)
+
   const handleAddPosition = async () => {
     const days = Number(newPositionDays)
-    if (!newPosition || Number.isNaN(days) || days < 0) return
+    if (newPositions.length === 0 || Number.isNaN(days) || days < 0) return
     setSavingPosition(true)
-    const ok = await saveRule({ position: newPosition, days })
+    const ok = await saveRuleRaw({ positions: newPositions, days })
     setSavingPosition(false)
-    if (ok) { setNewPosition(''); setNewPositionDays('28') }
+    if (ok) fetchData()
+    setNewPositions([])
+    setNewPositionDays('28')
   }
 
   const handleAddUser = async () => {
     const days = Number(newUserDays)
-    if (!pickedUser || Number.isNaN(days) || days < 0) return
+    if (pickedUsers.length === 0 || Number.isNaN(days) || days < 0) return
     setSavingUser(true)
-    const ok = await saveRule({ userId: pickedUser.id, days })
+    const ok = await saveRuleRaw({ userIds: pickedUsers.map((u) => u.id), days })
     setSavingUser(false)
-    if (ok) { setPickedUser(null); setNewUserDays('28') }
+    if (ok) fetchData()
+    setPickedUsers([])
+    setNewUserDays('28')
   }
 
   const availablePositions = positions.filter((p) => !data?.positionRules.some((r) => r.position === p))
+
+  const positionGroups = useMemo<PositionRuleGroup[]>(() => {
+    if (!data) return []
+    const map = new Map<string, PositionRuleGroup>()
+    for (const r of data.positionRules) {
+      const key = r.groupId ?? `row-${r.id}`
+      const g = map.get(key)
+      if (g) g.positions.push(r.position)
+      else map.set(key, { key, groupId: r.groupId, id: r.id, positions: [r.position], days: r.days })
+    }
+    return Array.from(map.values())
+  }, [data])
+
+  const userGroups = useMemo<UserRuleGroup[]>(() => {
+    if (!data) return []
+    const map = new Map<string, UserRuleGroup>()
+    for (const r of data.userRules) {
+      const key = r.groupId ?? `row-${r.id}`
+      const g = map.get(key)
+      if (g) g.users.push({ userId: r.userId, userName: r.userName, position: r.position })
+      else map.set(key, { key, groupId: r.groupId, id: r.id, users: [{ userId: r.userId, userName: r.userName, position: r.position }], days: r.days })
+    }
+    return Array.from(map.values())
+  }, [data])
 
   if (loading && !data) {
     return (
@@ -311,22 +426,25 @@ export function VacationDayRulesCard() {
             <Briefcase className="h-4 w-4 text-muted-foreground" /> По должностям
           </p>
           <div className="space-y-1.5">
-            {data.positionRules.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3.5 py-2.5">
-                <span className="text-sm font-medium truncate">{r.position}</span>
-                {editingRuleId === r.id ? (
+            {positionGroups.map((g) => (
+              <div key={g.key} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3.5 py-2.5">
+                <span className="text-sm font-medium truncate" title={g.positions.join(', ')}>{g.positions.join(', ')}</span>
+                {editingGroupKey === g.key ? (
                   <DaysEditor
-                    value={r.days}
-                    onSave={async (days) => { if (await saveRule({ position: r.position, days })) setEditingRuleId(null) }}
-                    onCancel={() => setEditingRuleId(null)}
+                    value={g.days}
+                    onSave={async (days) => {
+                      const payload: RulePayload = g.groupId ? { groupId: g.groupId, days } : { position: g.positions[0], days }
+                      if (await saveRule(payload)) setEditingGroupKey(null)
+                    }}
+                    onCancel={() => setEditingGroupKey(null)}
                   />
                 ) : (
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-sm font-semibold text-primary">{r.days} дн.</span>
-                    <button onClick={() => setEditingRuleId(r.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                    <span className="text-sm font-semibold text-primary">{g.days} дн.</span>
+                    <button onClick={() => setEditingGroupKey(g.key)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => deleteRule(r.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                    <button onClick={() => deleteRuleGroup(g)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -334,16 +452,20 @@ export function VacationDayRulesCard() {
               </div>
             ))}
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border px-3.5 py-2.5">
-              <SelectDropdown
-                options={[{ value: '', label: 'Выберите должность' }, ...availablePositions.map((p) => ({ value: p, label: p }))]}
-                value={newPosition}
-                onChange={setNewPosition}
-                className="min-w-[200px] flex-1"
+              <MultiSelectDropdown
+                options={availablePositions.map((p) => ({ value: p, label: p }))}
+                selected={newPositions}
+                onChange={setNewPositions}
+                placeholder="Выберите должности"
+                countLabel="Выбрано"
+                searchable
+                searchPlaceholder="Поиск по должности…"
+                className="min-w-[200px] max-w-none flex-1"
               />
               <Input type="number" min={0} value={newPositionDays} onChange={(e) => setNewPositionDays(e.target.value)} className="h-9 w-20 text-sm" />
-              <Button size="sm" onClick={handleAddPosition} disabled={!newPosition || savingPosition}>
+              <Button size="sm" onClick={handleAddPosition} disabled={newPositions.length === 0 || savingPosition}>
                 {savingPosition ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-                Добавить
+                Добавить{newPositions.length > 0 ? ` (${newPositions.length})` : ''}
               </Button>
             </div>
           </div>
@@ -355,46 +477,57 @@ export function VacationDayRulesCard() {
             <User className="h-4 w-4 text-muted-foreground" /> По работникам
           </p>
           <div className="space-y-1.5">
-            {data.userRules.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3.5 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{r.userName}</p>
-                  {r.position && <p className="text-xs text-muted-foreground truncate">{r.position}</p>}
-                </div>
-                {editingRuleId === r.id ? (
-                  <DaysEditor
-                    value={r.days}
-                    onSave={async (days) => { if (await saveRule({ userId: Number(r.userId), days })) setEditingRuleId(null) }}
-                    onCancel={() => setEditingRuleId(null)}
-                  />
-                ) : (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-sm font-semibold text-primary">{r.days} дн.</span>
-                    <button onClick={() => setEditingRuleId(r.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button onClick={() => deleteRule(r.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+            {userGroups.map((g) => {
+              const names = g.users.map((u) => u.userName).join(', ')
+              const positionsLabel = [...new Set(g.users.map((u) => u.position).filter(Boolean))].join(', ')
+              return (
+                <div key={g.key} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3.5 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate" title={names}>{names}</p>
+                    {positionsLabel && <p className="text-xs text-muted-foreground truncate">{positionsLabel}</p>}
                   </div>
-                )}
-              </div>
-            ))}
+                  {editingGroupKey === g.key ? (
+                    <DaysEditor
+                      value={g.days}
+                      onSave={async (days) => {
+                        const payload: RulePayload = g.groupId ? { groupId: g.groupId, days } : { userId: Number(g.users[0].userId), days }
+                        if (await saveRule(payload)) setEditingGroupKey(null)
+                      }}
+                      onCancel={() => setEditingGroupKey(null)}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-sm font-semibold text-primary">{g.days} дн.</span>
+                      <button onClick={() => setEditingGroupKey(g.key)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => deleteRuleGroup(g)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border px-3.5 py-2.5">
               <button
                 type="button"
                 onClick={() => setShowUserPicker(true)}
                 className={cn(
-                  'flex h-9 min-w-[200px] flex-1 items-center rounded-[10px] border border-border bg-card px-3 text-left text-[13px] transition-colors hover:bg-muted/40',
-                  pickedUser ? 'text-foreground' : 'text-muted-foreground'
+                  'flex h-9 min-w-[200px] flex-1 items-center truncate rounded-[10px] border border-border bg-card px-3 text-left text-[13px] transition-colors hover:bg-muted/40',
+                  pickedUsers.length > 0 ? 'text-foreground' : 'text-muted-foreground'
                 )}
               >
-                {pickedUser?.name || 'Выберите работника'}
+                {pickedUsers.length === 0
+                  ? 'Выберите работников'
+                  : pickedUsers.length === 1
+                    ? pickedUsers[0].name
+                    : `Выбрано работников: ${pickedUsers.length}`}
               </button>
               <Input type="number" min={0} value={newUserDays} onChange={(e) => setNewUserDays(e.target.value)} className="h-9 w-20 text-sm" />
-              <Button size="sm" onClick={handleAddUser} disabled={!pickedUser || savingUser}>
+              <Button size="sm" onClick={handleAddUser} disabled={pickedUsers.length === 0 || savingUser}>
                 {savingUser ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-                Добавить
+                Добавить{pickedUsers.length > 0 ? ` (${pickedUsers.length})` : ''}
               </Button>
             </div>
           </div>
@@ -403,7 +536,8 @@ export function VacationDayRulesCard() {
 
       {showUserPicker && (
         <UserPickerModal
-          onSelect={(id, name) => { setPickedUser({ id, name }); setShowUserPicker(false) }}
+          initialSelected={pickedUsers}
+          onConfirm={(users) => { setPickedUsers(users); setShowUserPicker(false) }}
           onClose={() => setShowUserPicker(false)}
         />
       )}
