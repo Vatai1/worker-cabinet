@@ -76,6 +76,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
 ]
 
 const getHRSectionItems = (): NavItem[] => [
+  { name: 'Сотрудники', href: '/hr?tab=employees', icon: Users, section: 'HR' },
   { name: 'Опросы', href: '/hr?tab=surveys', icon: ClipboardList, module: 'surveys', section: 'HR' },
   { name: 'Рассылка', href: '/hr?tab=mailing', icon: Send, module: 'mailing', section: 'HR' },
   { name: 'Онбординг', href: '/hr?tab=onboarding', icon: UserPlus, module: 'onboarding', section: 'HR' },

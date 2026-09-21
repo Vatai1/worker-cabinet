@@ -1141,4 +1141,44 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(entries.length, 0)
     })
   })
+
+  describe('US-14. HR меняет баланс отпуска работника (PATCH /vacation/balances/:userId)', () => {
+    let emp, hr
+    const year = yearOf(shift(10)) + 5
+
+    beforeEach(async () => {
+      emp = await mkUser({ email: `us14.emp${SUFFIX}`, last: 'Балансов' })
+      hr = await mkUser({ email: `us14.hr${SUFFIX}`, role: 'hr', last: 'Смирнова' })
+    })
+
+    afterEach(async () => {
+      await query('DELETE FROM vacation_balances WHERE user_id = $1 AND year = $2', [emp.id, year])
+      await cleanupFixtures()
+    })
+
+    it('upsert: создаёт баланс, если строки ещё нет', async () => {
+      const res = await call('PATCH', `/vacation/balances/${emp.id}`, await tokenFor(hr), { year, total_days: 35 })
+      assert.strictEqual(res.status, 200, JSON.stringify(res.data))
+      assert.strictEqual(res.data.total_days, 35)
+      const row = (await query('SELECT total_days, used_days, reserved_days, available_days FROM vacation_balances WHERE user_id = $1 AND year = $2 AND organization_id = 1', [emp.id, year])).rows[0]
+      assert.strictEqual(row.total_days, 35)
+      assert.strictEqual(row.available_days, 35 - row.used_days - row.reserved_days)
+    })
+
+    it('upsert: обновляет total_days существующего баланса, used/reserved не трогает', async () => {
+      await mkBalance(emp.id, year, 1, 28, 4, 2)
+      const res = await call('PATCH', `/vacation/balances/${emp.id}`, await tokenFor(hr), { year, total_days: 40 })
+      assert.strictEqual(res.status, 200, JSON.stringify(res.data))
+      const row = (await query('SELECT total_days, used_days, reserved_days, available_days FROM vacation_balances WHERE user_id = $1 AND year = $2 AND organization_id = 1', [emp.id, year])).rows[0]
+      assert.strictEqual(row.total_days, 40)
+      assert.strictEqual(row.used_days, 4)
+      assert.strictEqual(row.reserved_days, 2)
+      assert.strictEqual(row.available_days, 34)
+    })
+
+    it('employee → 403', async () => {
+      const res = await call('PATCH', `/vacation/balances/${emp.id}`, await tokenFor(emp), { year, total_days: 30 })
+      assert.strictEqual(res.status, 403)
+    })
+  })
 })

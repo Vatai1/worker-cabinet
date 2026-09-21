@@ -781,6 +781,82 @@ router.get('/balances', authenticateToken, async (req, res) => {
 
 /**
  * @swagger
+ * /vacation/balances/{userId}:
+ *   patch:
+ *     tags: [Vacation]
+ *     summary: Изменить количество дней отпуска работника за год (hr/admin)
+ *     description: 'Upsert по (user_id, organization_id, year); used_days/reserved_days не трогаются, available_days пересчитывается триггером БД'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [year, total_days]
+ *             properties:
+ *               year: { type: integer }
+ *               total_days: { type: integer, minimum: 0 }
+ *     responses:
+ *       200:
+ *         description: Баланс обновлён
+ *       400:
+ *         description: Некорректные параметры или организация не выбрана
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Доступ запрещён
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       404:
+ *         description: Работник не найден в организации
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId)
+    const parsedYear = parseInt(req.body.year)
+    const parsedDays = parseInt(req.body.total_days)
+    if (Number.isNaN(userId) || Number.isNaN(parsedYear) || Number.isNaN(parsedDays) || parsedDays < 0) {
+      return res.status(400).json({ error: 'Некорректные параметры' })
+    }
+    const orgId = currentOrgId(req)
+    if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
+
+    const memberCheck = await query(
+      'SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2',
+      [userId, orgId]
+    )
+    if (memberCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Работник не найден в организации' })
+    }
+
+    const result = await query(
+      `INSERT INTO vacation_balances (user_id, organization_id, year, total_days)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, organization_id, year)
+       DO UPDATE SET total_days = EXCLUDED.total_days, updated_at = NOW()
+       RETURNING *`,
+      [userId, orgId, parsedYear, parsedDays]
+    )
+    res.json(result.rows[0])
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось обновить баланс отпуска' })
+  }
+})
+
+/**
+ * @swagger
  * /vacation/requests:
  *   post:
  *     tags: [Vacation]

@@ -12,6 +12,7 @@ import { getCookie, setCookie } from '@/shared/lib/cookies'
 import { HRPanelIntroModal } from '@/shared/components/HRPanelIntroModal'
 
 const HR_PANEL_INTRO_COOKIE = 'hr_panel_intro_seen'
+import { HREmployees } from '@/core/employees/pages/HREmployees'
 import { HRSurveys } from '@/modules/surveys/pages/HRSurveys'
 import { HROnboarding } from '@/modules/onboarding/pages/HROnboarding'
 import { HRVacationCalendar } from '@/modules/vacation/pages/HRVacationCalendar'
@@ -26,14 +27,14 @@ const HRPositionsTab = () => <DictionariesTab variant="hr" initialTab="positions
 const HRVacationTypesTab = () => <DictionariesTab variant="hr" initialTab="vacationTypes" />
 const HRSkillsTab = () => <DictionariesTab variant="hr" initialTab="skills" />
 
-type TabId = 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
+type TabId = 'employees' | 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
 
 interface TabItem {
   id: TabId
   name: string
   icon: React.ComponentType<{ className?: string }>
   description: string
-  module: string
+  module: string | null
   color: string
 }
 
@@ -44,6 +45,7 @@ interface TabGroup {
 
 const TAB_GROUPS: TabGroup[] = [
   { label: 'Управление персоналом', tabs: [
+    { id: 'employees', name: 'Сотрудники', icon: Users, description: 'Профили, роли, теги, балансы', module: null, color: 'from-slate-500 to-slate-700' },
     { id: 'surveys', name: 'Опросы', icon: ClipboardList, description: 'Создание и управление опросами', module: 'surveys', color: 'from-violet-500 to-purple-600' },
     { id: 'mailing', name: 'Рассылка', icon: Send, description: 'Массовая рассылка информации', module: 'mailing', color: 'from-fuchsia-500 to-pink-600' },
     { id: 'onboarding', name: 'Онбординг', icon: UserPlus, description: 'Шаблоны и адаптация', module: 'onboarding', color: 'from-emerald-500 to-teal-600' },
@@ -75,7 +77,7 @@ export function HRPanel() {
 
   const filteredGroups = useMemo(() =>
     TAB_GROUPS
-      .map((group) => ({ ...group, tabs: group.tabs.filter((tab) => isModuleEnabled(tab.module)) }))
+      .map((group) => ({ ...group, tabs: group.tabs.filter((tab) => tab.module === null || isModuleEnabled(tab.module)) }))
       .filter((group) => group.tabs.length > 0),
     [isModuleEnabled]
   )
@@ -164,6 +166,7 @@ export function HRPanel() {
       ) : (
         <div className="relative min-w-0 animate-fade-in">
           {([
+            ['employees', HREmployees],
             ['surveys', HRSurveys],
             ['mailing', HRMailing],
             ['institution', HRInstitution],

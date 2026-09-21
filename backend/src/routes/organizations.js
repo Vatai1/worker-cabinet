@@ -435,7 +435,8 @@ router.post('/:id/members', authenticateToken, authorizeRoles('admin', 'hr'), as
  *             required: [org_role]
  *             properties:
  *               org_role: { type: string, enum: [employee, manager, hr, admin] }
- *               department_id: { type: integer }
+ *               department_id: { type: integer, nullable: true }
+ *               is_active: { type: boolean }
  *     responses:
  *       200:
  *         description: Роль обновлена
@@ -447,7 +448,7 @@ router.post('/:id/members', authenticateToken, authorizeRoles('admin', 'hr'), as
 router.put('/:id/members/:userId', authenticateToken, authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
   const orgId = parseInt(req.params.id)
   const userId = parseInt(req.params.userId)
-  const { org_role, department_id } = req.body
+  const { org_role, department_id, is_active } = req.body
 
   if (!org_role || !VALID_ORG_ROLES.includes(org_role)) {
     throw new ValidationError('Недопустимая роль')
@@ -459,7 +460,9 @@ router.put('/:id/members/:userId', authenticateToken, authorizeRoles('admin', 'h
   )
   if (memberResult.rows.length === 0) throw new NotFoundError('Участник не найден')
 
-  if (memberResult.rows[0].org_role === 'admin' && org_role !== 'admin') {
+  const wasActiveAdmin = memberResult.rows[0].org_role === 'admin' && memberResult.rows[0].is_active
+  const losesAdmin = wasActiveAdmin && (org_role !== 'admin' || is_active === false)
+  if (losesAdmin) {
     const adminCount = await query(
       "SELECT COUNT(*) as cnt FROM user_organizations WHERE org_id = $1 AND org_role = 'admin' AND is_active = true",
       [orgId]
@@ -476,6 +479,11 @@ router.put('/:id/members/:userId', authenticateToken, authorizeRoles('admin', 'h
   if (department_id !== undefined) {
     updates.push(`department_id = $${paramIndex++}`)
     values.push(department_id)
+  }
+
+  if (is_active !== undefined) {
+    updates.push(`is_active = $${paramIndex++}`)
+    values.push(!!is_active)
   }
 
   values.push(userId, orgId)

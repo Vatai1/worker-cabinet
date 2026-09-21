@@ -19,6 +19,16 @@ async function checkProfileAccess(req, targetId) {
   return membership.rows.length > 0
 }
 
+// Stricter than checkProfileAccess: editing someone else's profile requires hr/admin,
+// not just shared org membership (which is enough to *view* a colleague's profile).
+function checkProfileEditAccess(req, targetId) {
+  const currentUser = req.user
+  if (currentUser.id === targetId || currentUser.role === 'superadmin') return true
+  if (['hr', 'admin'].includes(currentUser.role)) return true
+  if (req.org?.org_role && ['hr', 'admin'].includes(req.org.org_role)) return true
+  return false
+}
+
 function s3KeyFromAvatarUrl(url) {
   if (!url) return null
   const prefixes = S3_PUBLIC_URL
@@ -121,10 +131,33 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  *       - in: query
  *         name: q
  *         schema: { type: string }
- *         description: Поисковый запрос (ФИО, email)
+ *         description: Поисковый запрос (ФИО, email, должность, теги)
+ *       - in: query
+ *         name: tagId
+ *         schema: { type: integer }
+ *         description: Фильтр по тегу (skills_dictionary.id)
+ *       - in: query
+ *         name: orgRole
+ *         schema: { type: string, enum: [employee, manager, hr, admin] }
+ *         description: Фильтр по роли в организации (требует контекста организации)
+ *       - in: query
+ *         name: includeInactive
+ *         schema: { type: string, enum: ['true', 'false'], default: 'false' }
+ *         description: Включить неактивных членов организации (по умолчанию только активные)
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *         description: Год для баланса отпуска — при передаче в ответ добавляются total_days/used_days/reserved_days/available_days
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *         description: Номер страницы — при передаче ответ оборачивается в { data, total, page, limit } вместо плоского массива
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
  *     responses:
  *       200:
- *         description: Список пользователей
+ *         description: Список пользователей (плоский массив, либо { data, total, page, limit } если передан page)
  *         content:
  *           application/json:
  *             schema:
@@ -133,18 +166,35 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  */
 router.get('/search', authenticateToken, async (req, res) => {
   try {
-    const { departmentId, q } = req.query
-    
+    const { departmentId, q, tagId, orgRole, includeInactive, year } = req.query
+    const page = req.query.page ? Math.max(1, parseInt(req.query.page) || 1) : null
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20))
+
     const params = []
     const orgJoin = req.org ? 'JOIN user_organizations uo ON u.id = uo.user_id' : ''
     let orgWhere = ''
     if (req.org) {
-      orgWhere = ` AND uo.org_id = $${params.length + 1}`
       params.push(currentOrgId(req))
+      orgWhere = ` AND uo.org_id = $${params.length}`
+      if (includeInactive !== 'true') {
+        orgWhere += ' AND uo.is_active = true'
+      }
+    }
+
+    let balanceJoin = ''
+    if (year) {
+      params.push(parseInt(year))
+      const yearIdx = params.length
+      let balOrgClause = ''
+      if (req.org) {
+        params.push(currentOrgId(req))
+        balOrgClause = ` AND vb.organization_id = $${params.length}`
+      }
+      balanceJoin = `LEFT JOIN vacation_balances vb ON vb.user_id = u.id AND vb.year = $${yearIdx}${balOrgClause}`
     }
 
     let sql = `
-      SELECT 
+      SELECT
         u.id,
         u.email,
         u.first_name,
@@ -161,23 +211,43 @@ router.get('/search', authenticateToken, async (req, res) => {
         u.avatar,
         u.office,
         u.cabinet,
+        ${req.org ? 'uo.org_role,' : 'NULL as org_role,'}
+        ${req.org ? 'uo.is_active as org_is_active,' : 'NULL as org_is_active,'}
         m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
         COALESCE(
           (SELECT json_agg(sd.name ORDER BY sd.name)
            FROM user_skills us JOIN skills_dictionary sd ON us.skill_id = sd.id
            WHERE us.user_id = u.id),
           '[]'
-        ) as skills
+        ) as skills,
+        COALESCE(
+          (SELECT json_agg(json_build_object('id', sd.id, 'name', sd.name) ORDER BY sd.name)
+           FROM user_skills us JOIN skills_dictionary sd ON us.skill_id = sd.id
+           WHERE us.user_id = u.id),
+          '[]'
+        ) as tags
+        ${year ? ', vb.total_days, vb.used_days, vb.reserved_days, vb.available_days' : ''}
       FROM users u
       ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN users m ON u.manager_id = m.id
+      ${balanceJoin}
       WHERE 1=1${orgWhere} ${excludeTest(req, "u")}
     `
 
     if (departmentId) {
       sql += ' AND u.department_id = $' + (params.length + 1)
       params.push(departmentId)
+    }
+
+    if (tagId) {
+      sql += ` AND EXISTS (SELECT 1 FROM user_skills utf WHERE utf.user_id = u.id AND utf.skill_id = $${params.length + 1})`
+      params.push(parseInt(tagId))
+    }
+
+    if (orgRole && req.org) {
+      sql += ` AND uo.org_role = $${params.length + 1}`
+      params.push(orgRole)
     }
 
     if (q) {
@@ -188,10 +258,21 @@ router.get('/search', authenticateToken, async (req, res) => {
       params.push(`%${q}%`)
     }
 
+    if (page === null) {
+      sql += ' ORDER BY u.last_name, u.first_name'
+      const result = await query(sql, params)
+      return res.json(result.rows)
+    }
+
+    const countResult = await query(`SELECT COUNT(*) FROM (${sql}) t`, params)
+    const total = parseInt(countResult.rows[0].count)
+
     sql += ' ORDER BY u.last_name, u.first_name'
-    
+    params.push(limit, (page - 1) * limit)
+    sql += ` LIMIT $${params.length - 1} OFFSET $${params.length}`
+
     const result = await query(sql, params)
-    res.json(result.rows)
+    res.json({ data: result.rows, total, page, limit })
   } catch (error) {
     console.error('Error searching users:', error)
     res.status(500).json({ error: 'Failed to search users' })
@@ -1055,6 +1136,10 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
  *               responsibility_area: { type: string }
  *               office: { type: string, description: 'Офис (адрес)' }
  *               cabinet: { type: string, description: 'Кабинет/рабочее место' }
+ *               position: { type: string }
+ *               hire_date: { type: string, format: date, nullable: true }
+ *               department_id: { type: integer, nullable: true }
+ *               manager_id: { type: integer, nullable: true }
  *     responses:
  *       200:
  *         description: Профиль обновлён
@@ -1064,6 +1149,11 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
  *               type: object
  *               properties:
  *                 success: { type: boolean }
+ *       400:
+ *         description: Отдел или руководитель не найдены в текущей организации
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
  *       403:
  *         description: Доступ запрещён
  *         content:
@@ -1073,9 +1163,10 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
-    const { responsibility_area, phone, first_name, last_name, middle_name, office, cabinet } = req.body
+    const targetId = parseInt(id)
+    const { responsibility_area, phone, first_name, last_name, middle_name, office, cabinet, position, hire_date, department_id, manager_id } = req.body
 
-    if (!(await checkProfileAccess(req, parseInt(id)))) {
+    if (!checkProfileEditAccess(req, targetId)) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -1116,6 +1207,47 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (cabinet !== undefined && typeof cabinet === 'string') {
       updates.push(`cabinet = $${paramIndex++}`)
       values.push(cabinet.trim())
+    }
+
+    if (position !== undefined && typeof position === 'string') {
+      updates.push(`position = $${paramIndex++}`)
+      values.push(position.trim())
+    }
+
+    if (hire_date !== undefined) {
+      updates.push(`hire_date = $${paramIndex++}`)
+      values.push(hire_date || null)
+    }
+
+    if (department_id !== undefined) {
+      if (department_id !== null) {
+        const orgId = currentOrgId(req)
+        const deptCheck = orgId
+          ? await query('SELECT 1 FROM departments WHERE id = $1 AND organization_id = $2', [department_id, orgId])
+          : await query('SELECT 1 FROM departments WHERE id = $1', [department_id])
+        if (deptCheck.rows.length === 0) {
+          return res.status(400).json({ error: 'Отдел не найден в текущей организации' })
+        }
+      }
+      updates.push(`department_id = $${paramIndex++}`)
+      values.push(department_id)
+    }
+
+    if (manager_id !== undefined) {
+      if (manager_id !== null) {
+        if (parseInt(manager_id) === targetId) {
+          return res.status(400).json({ error: 'Работник не может быть руководителем самому себе' })
+        }
+        const orgId = currentOrgId(req)
+        const managerCheck = orgId
+          ? await query('SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2 AND is_active = true', [manager_id, orgId])
+          : await query('SELECT 1 FROM users WHERE id = $1', [manager_id])
+        if (managerCheck.rows.length === 0) {
+          return res.status(400).json({ error: 'Руководитель не найден в текущей организации' })
+        }
+      }
+      updates.push(`manager_id = $${paramIndex++}`)
+      values.push(manager_id)
     }
 
     if (updates.length === 0) {
