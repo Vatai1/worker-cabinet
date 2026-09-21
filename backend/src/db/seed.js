@@ -211,6 +211,28 @@ async function seed() {
     }
     console.log(`  ✓ ${FIXED_USERS.length} fixed users + ${created} generated users (${FIXED_USERS.length + created} total, password: password123)`)
 
+    console.log('Creating vacation restrictions demo data...')
+    const tsTag = await query("SELECT id FROM skills_dictionary WHERE name = 'TypeScript'")
+    if (tsTag.rows.length > 0 && devDept) {
+      const tagId = tsTag.rows[0].id
+      const tagUserIds = (await query("SELECT id FROM users WHERE email IN ('ivanov@example.com','petrov@example.com','morozova@crct.ru')")).rows.map(r => r.id)
+      for (const uid of tagUserIds) {
+        await query('INSERT INTO user_skills (user_id, skill_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [uid, tagId])
+      }
+      const existingRule = await query('SELECT 1 FROM vacation_restrictions WHERE department_id = $1 AND tag_ids @> $2::int[]', [devDept, [tagId]])
+      if (existingRule.rows.length === 0) {
+        const admin = await query("SELECT id FROM users WHERE email = 'admin@example.com'")
+        if (admin.rows.length > 0) {
+          await query(
+            `INSERT INTO vacation_restrictions (department_id, restriction_type, employee_ids, tag_ids, max_concurrent, description, created_by, organization_id)
+             VALUES ($1, 'group', '{}', $2, 1, $3, $4, (SELECT organization_id FROM departments WHERE id = $1))`,
+            [devDept, [tagId], 'Не более одного работника с тегом TypeScript в отпуске одновременно', admin.rows[0].id]
+          )
+        }
+      }
+      console.log(`  ✓ теговое правило пересечений (TypeScript → ${tagUserIds.length} работника, max 1)`)
+    }
+
     const uoResult = await query(`
       INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
       SELECT u.id, 1,

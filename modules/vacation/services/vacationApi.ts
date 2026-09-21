@@ -199,8 +199,13 @@ export const vacationApi = {
     }
   },
 
-  async getRestrictions(departmentId: string): Promise<VacationRestriction[]> {
-    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions?departmentId=${departmentId}`, {
+  async getRestrictions(filters?: { departmentId?: string; tagId?: string; search?: string }): Promise<VacationRestriction[]> {
+    const params = new URLSearchParams()
+    if (filters?.departmentId) params.set('departmentId', filters.departmentId)
+    if (filters?.tagId) params.set('tagId', filters.tagId)
+    if (filters?.search) params.set('search', filters.search)
+    const qs = params.toString()
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions${qs ? `?${qs}` : ''}`, {
       headers: getAuthHeadersWithContentType(),
     })
     return handleResponse(response)

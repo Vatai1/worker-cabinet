@@ -19,10 +19,10 @@ modules/vacation/
 ├── data/mockVacationData.ts
 ├── pages/
 │   ├── Vacation.tsx
-│   └── HRVacationCalendar.tsx
+│   ├── HRVacationCalendar.tsx
+│   └── HRVacationRestrictions.tsx
 └── components/
     ├── DepartmentBalanceTable.tsx
-    ├── VacationRestrictions.tsx
     └── modals/
         ├── VacationTransferApplicationModal.tsx
         ├── VacationTransferModal.tsx

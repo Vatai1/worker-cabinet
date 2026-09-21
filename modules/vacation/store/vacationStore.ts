@@ -147,7 +147,7 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
       fetchRestrictions: async (departmentId: string) => {
         set({ loading: true, error: null })
         try {
-          const data = await vacationApi.getRestrictions(departmentId)
+          const data = await vacationApi.getRestrictions(departmentId ? { departmentId } : undefined)
           set({ restrictions: data, loading: false })
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при загрузке ограничений'), loading: false })

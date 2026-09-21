@@ -17,7 +17,6 @@ import { VacationHistoryList } from '@/modules/vacation/components/modals/Vacati
 import { CreateVacationModal } from '@/modules/vacation/components/modals/CreateVacationModal'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
-import { VacationRestrictions } from '@/modules/vacation/components/VacationRestrictions'
 import { DepartmentBalanceTable } from '@/modules/vacation/components/DepartmentBalanceTable'
 import { VacationIntroModal } from '@/modules/vacation/components/VacationIntroModal'
 import { VacationTransferModal } from '@/modules/vacation/components/modals/VacationTransferModal'
@@ -47,7 +46,7 @@ const REQUEST_STATUS_OPTIONS = [
 
 const EMPTY_REQUEST_FILTERS: { departmentIds: string[]; statuses: string[]; vacationTypes: string[]; tagId: string } = { departmentIds: [], statuses: [], vacationTypes: [], tagId: '' }
 
-type VacationTab = 'mine' | 'approvals' | 'restrictions' | 'requests' | 'history'
+type VacationTab = 'mine' | 'approvals' | 'requests' | 'history'
 type CalendarScope = 'mine' | 'team'
 
 export function Vacation() {
@@ -705,7 +704,6 @@ export function Vacation() {
   const tabs: Array<{ id: VacationTab; label: string; badge?: number }> = [
     { id: 'mine', label: 'Отпуск' },
     ...(canApprove ? [{ id: 'approvals' as VacationTab, label: 'Согласование', badge: pendingApprovals.length }] : []),
-    ...(isManager ? [{ id: 'restrictions' as VacationTab, label: 'Пересечения' }] : []),
     { id: 'requests', label: 'Заявления' },
     { id: 'history', label: 'История' },
   ]
@@ -1271,8 +1269,6 @@ export function Vacation() {
           </Card>
         </div>
       )}
-
-      {activeTab === 'restrictions' && isManager && <VacationRestrictions />}
 
       {activeTab === 'approvals' && canApprove && (
         <Card className="overflow-hidden p-0">

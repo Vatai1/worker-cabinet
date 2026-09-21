@@ -4,7 +4,7 @@ import { cn } from '@/shared/lib/utils'
 import {
   Users, ClipboardList, UserPlus, Plane, Network,
   Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Tag, Send,
-  HelpCircle,
+  HelpCircle, ShieldAlert,
 } from 'lucide-react'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
@@ -16,6 +16,7 @@ import { HREmployees } from '@/core/employees/pages/HREmployees'
 import { HRSurveys } from '@/modules/surveys/pages/HRSurveys'
 import { HROnboarding } from '@/modules/onboarding/pages/HROnboarding'
 import { HRVacationCalendar } from '@/modules/vacation/pages/HRVacationCalendar'
+import { HRVacationRestrictions } from '@/modules/vacation/pages/HRVacationRestrictions'
 import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
 import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { HRTimesheet } from '@/modules/timesheet/pages/HRTimesheet'
@@ -27,7 +28,7 @@ const HRPositionsTab = () => <DictionariesTab variant="hr" initialTab="positions
 const HRVacationTypesTab = () => <DictionariesTab variant="hr" initialTab="vacationTypes" />
 const HRSkillsTab = () => <DictionariesTab variant="hr" initialTab="skills" />
 
-type TabId = 'employees' | 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
+type TabId = 'employees' | 'surveys' | 'onboarding' | 'vacation' | 'vacation_restrictions' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
 
 interface TabItem {
   id: TabId
@@ -53,6 +54,7 @@ const TAB_GROUPS: TabGroup[] = [
   ]},
   { label: 'Отпуска и структура', tabs: [
     { id: 'vacation', name: 'Отпуск', icon: Plane, description: 'Календарь отпусков', module: 'vacation', color: 'from-orange-500 to-amber-600' },
+    { id: 'vacation_restrictions', name: 'Пересечения', icon: ShieldAlert, description: 'Правила пересечения отпусков', module: 'vacation', color: 'from-red-500 to-orange-600' },
     { id: 'hierarchy', name: 'Иерархия', icon: Network, description: 'Оргструктура', module: 'hierarchy', color: 'from-pink-500 to-rose-600' },
   ]},
   { label: 'Документы', tabs: [
@@ -172,6 +174,7 @@ export function HRPanel() {
             ['institution', HRInstitution],
             ['onboarding', HROnboarding],
             ['vacation', HRVacationCalendar],
+            ['vacation_restrictions', HRVacationRestrictions],
             ['hr_departments', DepartmentsTab],
             ['hr_positions', HRPositionsTab],
             ['hr_vacation_types', HRVacationTypesTab],
