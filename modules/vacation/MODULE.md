@@ -23,6 +23,7 @@ modules/vacation/
 │   └── HRVacationRestrictions.tsx
 └── components/
     ├── DepartmentBalanceTable.tsx
+    ├── VacationRestrictions.tsx
     └── modals/
         ├── VacationTransferApplicationModal.tsx
         ├── VacationTransferModal.tsx

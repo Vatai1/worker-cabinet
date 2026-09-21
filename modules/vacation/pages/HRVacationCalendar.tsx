@@ -9,6 +9,7 @@ import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
 import { VacationDayRulesCard } from '@/modules/vacation/components/VacationDayRulesCard'
 import { VacationAccessCard } from '@/modules/vacation/components/VacationAccessCard'
+import { HRVacationRestrictions } from '@/modules/vacation/pages/HRVacationRestrictions'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
 import { useWsStore } from '@/shared/store/wsStore'
@@ -102,7 +103,7 @@ export function HRVacationCalendar() {
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [detailRequest, setDetailRequest] = useState<VacationRequest | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
-  const [activeTab, setActiveTab] = useState<'calendar' | 'days' | 'access'>('calendar')
+  const [activeTab, setActiveTab] = useState<'calendar' | 'days' | 'access' | 'restrictions'>('calendar')
 
   const PER_PAGE = 15
 
@@ -258,6 +259,7 @@ export function HRVacationCalendar() {
           { id: 'calendar', label: 'Календарь' },
           { id: 'days', label: 'Дни отпуска' },
           { id: 'access', label: 'Доступ' },
+          { id: 'restrictions', label: 'Пересечения' },
         ] as const).map((tab) => (
           <button
             key={tab.id}
@@ -275,6 +277,7 @@ export function HRVacationCalendar() {
 
       {activeTab === 'days' && <VacationDayRulesCard />}
       {activeTab === 'access' && <VacationAccessCard />}
+      {activeTab === 'restrictions' && <HRVacationRestrictions />}
 
       {activeTab === 'calendar' && (
       <>

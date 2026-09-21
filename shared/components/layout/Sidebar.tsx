@@ -12,7 +12,7 @@ import {
   Calendar, Bell, Crown, Bot, UserCheck,
   Send, UserPlus, Network, Briefcase,
   Key, ShieldCheck, Boxes, Settings2,
-  Activity, Palette, ShieldAlert,
+  Activity, Palette,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -82,7 +82,6 @@ const getHRSectionItems = (): NavItem[] => [
   { name: 'Онбординг', href: '/hr?tab=onboarding', icon: UserPlus, module: 'onboarding', section: 'HR' },
   { name: 'Табель', href: '/hr?tab=timesheet', icon: Calendar, module: 'timesheet', section: 'HR' },
   { name: 'Отпуск', href: '/hr?tab=vacation', icon: Plane, module: 'vacation', section: 'HR' },
-  { name: 'Пересечения', href: '/hr?tab=vacation_restrictions', icon: ShieldAlert, module: 'vacation', section: 'HR' },
   { name: 'Иерархия', href: '/hr?tab=hierarchy', icon: Network, module: 'hierarchy', section: 'HR' },
   { name: 'Шаблоны документов', href: '/hr?tab=doc-templates', icon: FileText, module: 'documents', section: 'HR' },
   { name: 'Справочники', icon: Boxes, section: 'HR', children: [
