@@ -6,6 +6,8 @@ function globalRole(): string {
 }
 
 function orgRole(): string | null {
+  const preview = useAuthStore.getState().previewRole
+  if (preview) return preview
   const s = useOrgStore.getState()
   const org = s.organizations.find((o) => o.id === s.currentOrgId)
   return org?.org_role ?? null
