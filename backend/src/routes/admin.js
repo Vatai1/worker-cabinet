@@ -2369,4 +2369,149 @@ router.delete('/test-data', requireRealSuperadmin, asyncHandler(async (req, res)
   res.json(await getTestDataState(req))
 }))
 
+const BANNER_LEVELS = ['info', 'warning', 'danger']
+
+function parseBannerPayload(body) {
+  const level = body.level
+  const text = typeof body.text === 'string' ? body.text.trim() : ''
+  const isActive = body.isActive !== false
+  if (!BANNER_LEVELS.includes(level)) {
+    throw new ValidationError('Уровень должен быть одним из: info, warning, danger')
+  }
+  if (text.length > 500) {
+    throw new ValidationError('Текст баннера не должен превышать 500 символов')
+  }
+  if (isActive && text.length === 0) {
+    throw new ValidationError('Текст баннера обязателен')
+  }
+  return { level, text, isActive }
+}
+
+async function upsertBanner(scope, organizationId, { level, text, isActive }, userId) {
+  const result = await query(
+    `INSERT INTO app_banners (scope, organization_id, level, text, is_active, updated_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (scope, COALESCE(organization_id, 0)) DO UPDATE SET
+       level = EXCLUDED.level,
+       text = EXCLUDED.text,
+       is_active = EXCLUDED.is_active,
+       updated_by = EXCLUDED.updated_by,
+       updated_at = NOW()
+     RETURNING level, text, is_active AS "isActive"`,
+    [scope, organizationId, level, text, isActive, userId]
+  )
+  return result.rows[0]
+}
+
+/**
+ * @swagger
+ * /admin/banner:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Текущий глобальный баннер (только супер-админ)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: 'Текущие значения { level, text, isActive } или null'
+ *   put:
+ *     tags: [Admin]
+ *     summary: Создать/обновить глобальный баннер (только супер-админ)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [level]
+ *             properties:
+ *               level: { type: string, enum: [info, warning, danger] }
+ *               text: { type: string, maxLength: 500 }
+ *               isActive: { type: boolean, default: true }
+ *     responses:
+ *       200:
+ *         description: Баннер сохранён
+ *       400:
+ *         description: Ошибка валидации
+ */
+router.get('/banner', authenticateToken, authorizeGlobalRoles('superadmin'), asyncHandler(async (req, res) => {
+  const result = await query(
+    'SELECT level, text, is_active AS "isActive" FROM app_banners WHERE scope = \'global\' LIMIT 1'
+  )
+  res.json(result.rows[0] || null)
+}))
+
+router.put('/banner', authenticateToken, authorizeGlobalRoles('superadmin'), asyncHandler(async (req, res) => {
+  const payload = parseBannerPayload(req.body)
+  res.json(await upsertBanner('global', null, payload, req.user.id))
+}))
+
+/**
+ * @swagger
+ * /admin/banner/org:
+ *   get:
+ *     tags: [Admin]
+ *     summary: 'Текущий баннер организации по X-Organization-Id (админ организации или супер-админ)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: X-Organization-Id, in: header, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: 'Текущие значения { level, text, isActive } или null'
+ *       400:
+ *         description: Не выбрана организация
+ *       403:
+ *         description: Нет прав на организацию
+ *   put:
+ *     tags: [Admin]
+ *     summary: 'Создать/обновить баннер организации по X-Organization-Id (админ организации или супер-админ)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: X-Organization-Id, in: header, required: true, schema: { type: integer } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [level]
+ *             properties:
+ *               level: { type: string, enum: [info, warning, danger] }
+ *               text: { type: string, maxLength: 500 }
+ *               isActive: { type: boolean, default: true }
+ *     responses:
+ *       200:
+ *         description: Баннер сохранён
+ *       400:
+ *         description: Не выбрана организация или ошибка валидации
+ *       403:
+ *         description: Нет прав на организацию
+ */
+async function requireOrgBannerAccess(req) {
+  const orgId = parseInt(req.headers['x-organization-id'])
+  if (!orgId) throw new ValidationError('Не выбрана организация')
+  if (req.user.role === 'superadmin' || req.user.role === 'admin') return orgId
+  const check = await query(
+    "SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2 AND org_role = 'admin' AND is_active = true",
+    [req.user.id, orgId]
+  )
+  if (check.rows.length === 0) throw new ForbiddenError('Нет прав на управление баннером этой организации')
+  return orgId
+}
+
+router.get('/banner/org', authenticateToken, asyncHandler(async (req, res) => {
+  const orgId = await requireOrgBannerAccess(req)
+  const result = await query(
+    'SELECT level, text, is_active AS "isActive" FROM app_banners WHERE scope = \'org\' AND organization_id = $1 LIMIT 1',
+    [orgId]
+  )
+  res.json(result.rows[0] || null)
+}))
+
+router.put('/banner/org', authenticateToken, asyncHandler(async (req, res) => {
+  const orgId = await requireOrgBannerAccess(req)
+  const payload = parseBannerPayload(req.body)
+  res.json(await upsertBanner('org', orgId, payload, req.user.id))
+}))
+
 export default router

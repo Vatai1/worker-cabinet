@@ -208,6 +208,7 @@ const options = {
       { name: 'Notifications', description: 'Уведомления' },
       { name: 'UserDocuments', description: 'Документы пользователя' },
       { name: 'Admin', description: 'Админ-панель: роли, доступы, пользователи, настройки, аудит' },
+      { name: 'Banner', description: 'Баннер предупреждения сверху страницы' },
       { name: 'Appearance', description: 'Тема оформления системы' },
     ],
   },

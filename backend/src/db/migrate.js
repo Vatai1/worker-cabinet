@@ -1652,6 +1652,27 @@ async function runMigrations() {
     console.log('  ✓ notification_queue')
     console.log('✅ Notification tables created')
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS app_banners (
+        id SERIAL PRIMARY KEY,
+        scope VARCHAR(10) NOT NULL CHECK (scope IN ('global','org')),
+        organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+        level VARCHAR(10) NOT NULL DEFAULT 'info' CHECK (level IN ('info','warning','danger')),
+        text TEXT NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        updated_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CHECK ((scope = 'global' AND organization_id IS NULL) OR
+               (scope = 'org' AND organization_id IS NOT NULL))
+      )
+    `).catch(e => console.log('  - app_banners:', e.message))
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_banner_scope
+      ON app_banners (scope, COALESCE(organization_id, 0))
+    `).catch(e => console.log('  - uq_banner_scope:', e.message))
+    console.log('  ✓ app_banners')
+
 
     try {
       await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS keycloak_guid VARCHAR(255) UNIQUE`)

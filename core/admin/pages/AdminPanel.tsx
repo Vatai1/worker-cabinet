@@ -6,13 +6,14 @@ import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { ChangelogModal } from '@/shared/components/ChangelogModal'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { isSuperAdmin } from '@/shared/lib/permissions'
+import { isSuperAdmin, hasOrgRole } from '@/shared/lib/permissions'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
 import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { OrganizationsTab } from '@/core/admin/components/OrganizationsTab'
+import { AdminBannerCard } from '@/core/admin/components/AdminBannerCard'
 import { GlobalHierarchy } from '@/modules/hierarchy/pages/GlobalHierarchy'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
@@ -373,7 +374,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
         {activeTab === 'roles' && <RolesTab />}
         {activeTab === 'role-mappings' && <AdminRoleMappings />}
         {activeTab === 'departments' && <DepartmentsTab />}
-        {activeTab === 'settings' && <SettingsTab />}
+        {activeTab === 'settings' && <SettingsTab mode={mode} />}
         {activeTab === 'audit' && <AuditTab />}
         {activeTab === 'health' && <HealthTab />}
         {activeTab === 'errors' && <ErrorsTab />}
@@ -1681,7 +1682,7 @@ function PositionPickerModal({ positions, selected, onSelect, onClose }: {
 
 // ===================== SETTINGS TAB =====================
 
-function SettingsTab() {
+function SettingsTab({ mode }: { mode: 'global' | 'org' }) {
   const [settings, setSettings] = useState<SystemSetting[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -1800,6 +1801,12 @@ function SettingsTab() {
           Сохранить
         </Button>
       </div>
+
+      {mode === 'global' ? (
+        <AdminBannerCard scope="global" />
+      ) : (
+        hasOrgRole('admin') && <AdminBannerCard scope="org" />
+      )}
     </div>
   )
 }

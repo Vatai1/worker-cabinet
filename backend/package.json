@@ -1,6 +1,6 @@
 {
   "name": "worker-cabinet-backend",
-  "version": "2.3.46",
+  "version": "2.3.47",
   "description": "Backend for Worker Cabinet",
   "main": "src/server.js",
   "type": "module",
@@ -29,6 +29,7 @@
     "test:user-documents": "node --test src/tests/user-documents.test.js",
     "test:calendar": "node --test src/tests/calendar.test.js",
     "test:admin": "node --test src/tests/admin.test.js",
+    "test:banner": "node --test src/tests/banner.test.js",
     "test:auth-extended": "node --test src/tests/auth-extended.test.js"
   },
   "dependencies": {
