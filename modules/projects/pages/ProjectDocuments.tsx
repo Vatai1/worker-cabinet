@@ -67,6 +67,14 @@ function NewFolderModal({
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
@@ -123,6 +131,14 @@ function RenameFolderModal({
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   const handleRename = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
@@ -172,6 +188,14 @@ function RenameDocModal({
   const [name, setName] = useState(doc.name)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const handleRename = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -239,6 +263,14 @@ function FolderInfoModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folder.created_by])
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
@@ -287,6 +319,14 @@ function DocInfoModal({
   doc, onClose,
 }: { doc: DocItem; onClose: () => void }) {
   const FileIcon = getFileIcon(doc.mime_type)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -368,6 +408,14 @@ function UploadModal({
   const [uploading, setUploading] = useState(false)
   const [err, setErr] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -492,6 +540,14 @@ function ConfirmDeleteModal({
     }
     return `${parts.join(' и ')} будут удалены без возможности восстановления.`
   }
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">

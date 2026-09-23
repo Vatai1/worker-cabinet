@@ -48,6 +48,16 @@ export function CreateVacationFormModal({
   showSubstitutes = false,
 }: CreateVacationFormModalProps) {
   useModalOpen(isOpen)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isOpen, onClose])
+
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)

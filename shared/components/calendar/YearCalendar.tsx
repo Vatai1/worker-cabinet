@@ -64,6 +64,8 @@ function isWeekendDay(date: Date): boolean {
   return dow === 0 || dow === 6
 }
 
+export const PENDING_STRIPE = 'repeating-linear-gradient(45deg, hsl(var(--muted-foreground) / 0.4) 0 3px, transparent 3px 7px)'
+
 export function YearCalendar({
   year,
   requests,
@@ -82,6 +84,11 @@ export function YearCalendar({
     x: number
     y: number
     date: Date
+  } | null>(null)
+  const [hoverTooltip, setHoverTooltip] = useState<{
+    x: number
+    y: number
+    vacations: VacationRequest[]
   } | null>(null)
 
   const normalizedSearch = searchQuery?.trim().toLowerCase() || ''
@@ -155,7 +162,7 @@ export function YearCalendar({
       const clicked = new Date(clickedDate)
 
       if (clicked < start) {
-        onDateRangeSelect?.(clickedDate, null)
+        onDateRangeSelect?.(clickedDate, selectedStartDate)
       } else {
         onDateRangeSelect?.(selectedStartDate, clickedDate)
       }
@@ -198,6 +205,30 @@ export function YearCalendar({
     }
   }, [contextMenu])
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setContextMenu(null)
+      if (selectedStartDate && !selectedEndDate) {
+        onDateRangeSelect?.(null, null)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedStartDate, selectedEndDate, onDateRangeSelect])
+
+  const handleCalendarMouseLeave = () => {
+    setHoverDate(null)
+    setHoverTooltip(null)
+    if (selectedStartDate && !selectedEndDate) {
+      onDateRangeSelect?.(null, null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {showHeader && (
@@ -233,12 +264,12 @@ export function YearCalendar({
           </div>
 
           <div className="text-sm text-muted-foreground">
-            💡 <strong>Подсказка:</strong> Дни отпусков окрашены цветом работника, на согласовании — штриховкой. Нажмите правой кнопкой мыши на день, чтобы увидеть детали заявки.
+            💡 <strong>Подсказка:</strong> Согласованные дни отмечены зелёным, на согласовании — серой штриховкой; точка под числом — цвет сотрудника. Наведите курсор на день, чтобы увидеть, кто отдыхает, или нажмите правой кнопкой мыши для деталей заявки.
           </div>
         </>
       )}
 
-      <div className="grid grid-cols-4 gap-[14px]">
+      <div className="grid grid-cols-4 gap-[14px]" onMouseLeave={handleCalendarMouseLeave}>
         {months.map(month => (
           <div
             key={month.index}
@@ -295,11 +326,14 @@ export function YearCalendar({
                   const hasApproved = vacations.some(v => v.status === VacationRequestStatus.APPROVED)
                   const hasPending = vacations.some(v => v.status === VacationRequestStatus.ON_APPROVAL)
                   if (hasApproved && hasPending) {
-                    vacationStyle = { backgroundImage: 'linear-gradient(135deg, hsl(var(--success) / 0.3) 50%, hsl(var(--warning) / 0.3) 50%)' }
+                    vacationStyle = {
+                      backgroundColor: 'hsl(var(--muted) / 0.5)',
+                      backgroundImage: `linear-gradient(to bottom, hsl(var(--success) / 0.32) 50%, transparent 50%), ${PENDING_STRIPE}`,
+                    }
                   } else if (hasApproved) {
                     vacationStyle = { backgroundColor: 'hsl(var(--success) / 0.22)' }
                   } else {
-                    vacationStyle = { backgroundColor: 'hsl(var(--warning) / 0.22)' }
+                    vacationStyle = { backgroundColor: 'hsl(var(--muted) / 0.5)', backgroundImage: PENDING_STRIPE }
                   }
                 }
 
@@ -319,11 +353,18 @@ export function YearCalendar({
                     onContextMenu={(e) => {
                       handleContextMenu(e, day)
                     }}
-                    onMouseEnter={() => {
+                    onMouseEnter={(e) => {
                       setHoverDate(dateStr)
+                      if (vacations.length > 0) {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setHoverTooltip({ x: rect.left + rect.width / 2, y: rect.top, vacations })
+                      } else {
+                        setHoverTooltip(null)
+                      }
                     }}
                     onMouseLeave={() => {
                       setHoverDate(null)
+                      setHoverTooltip(null)
                     }}
                     className={cn(
                       'relative flex h-[30px] cursor-pointer items-center justify-center rounded-[7px] text-center text-[12px] font-medium transition-colors',
@@ -387,24 +428,34 @@ export function YearCalendar({
                  <span>Мой отпуск</span>
                </div>
                <div className="flex items-center gap-2">
-                 <div className="w-6 h-6 rounded border border-border" style={{ backgroundColor: `${PARTICIPANT_COLORS[1]}26` }} />
-                 <span className="flex items-center gap-1.5">
-                   Согласовано
-                   <span className="text-xs text-muted-foreground">— цвет работника</span>
-                   <span className="flex gap-1">
-                     {PARTICIPANT_COLORS.slice(0, 4).map(hex => (
-                       <span key={hex} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: hex }} />
-                     ))}
-                   </span>
-                 </span>
+                 <div className="w-6 h-6 rounded border border-border" style={{ backgroundColor: 'hsl(var(--success) / 0.22)' }} />
+                 <span>Согласовано</span>
                </div>
                <div className="flex items-center gap-2">
-                 <div className="w-6 h-6 rounded border border-border" style={{ backgroundImage: `repeating-linear-gradient(45deg, ${PARTICIPANT_COLORS[0]}59 0 2px, transparent 2px 6px)` }} />
-                 <span>На согласовании <span className="text-xs text-muted-foreground">— цвет работника</span></span>
+                 <div className="w-6 h-6 rounded border border-border" style={{ backgroundColor: 'hsl(var(--muted) / 0.5)', backgroundImage: PENDING_STRIPE }} />
+                 <span>На согласовании <span className="text-xs text-muted-foreground">— серый штрих</span></span>
+               </div>
+               <div className="flex items-center gap-2">
+                 <div
+                   className="w-6 h-6 rounded border border-border"
+                   style={{
+                     backgroundColor: 'hsl(var(--muted) / 0.5)',
+                     backgroundImage: `linear-gradient(to bottom, hsl(var(--success) / 0.32) 50%, transparent 50%), ${PENDING_STRIPE}`,
+                   }}
+                 />
+                 <span>Оба статуса в один день <span className="text-xs text-muted-foreground">— сверху согласовано, снизу штрих</span></span>
                </div>
                <div className="flex items-center gap-2">
                  <div className="w-6 h-6 rounded border bg-muted" />
                  <span>Выходной</span>
+               </div>
+               <div className="flex items-center gap-2">
+                 <div className="flex gap-1">
+                   {PARTICIPANT_COLORS.slice(0, 4).map(hex => (
+                     <span key={hex} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: hex }} />
+                   ))}
+                 </div>
+                 <span>Точка — цвет сотрудника <span className="text-xs text-muted-foreground">(см. список ниже)</span></span>
                </div>
              </div>
 
@@ -422,6 +473,29 @@ export function YearCalendar({
               })}
             </div>
               </>
+            )}
+          </div>
+        )}
+
+        {hoverTooltip && (
+          <div
+            className="pointer-events-none fixed z-50 w-max max-w-[220px] -translate-x-1/2 -translate-y-[calc(100%+6px)] rounded-lg border border-border bg-card px-2.5 py-1.5 text-left shadow-xl"
+            style={{ left: hoverTooltip.x, top: hoverTooltip.y }}
+          >
+            {hoverTooltip.vacations.slice(0, 6).map(v => (
+              <div key={v.id} className="flex items-center gap-1.5 whitespace-nowrap py-0.5 text-[11px]">
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: colorMap.get(v.userId) ?? PARTICIPANT_COLORS[0] }}
+                />
+                <span className="font-medium text-foreground">{v.userLastName} {v.userFirstName}</span>
+                <span className="text-muted-foreground">
+                  {v.status === VacationRequestStatus.APPROVED ? 'согласовано' : 'на согласовании'}
+                </span>
+              </div>
+            ))}
+            {hoverTooltip.vacations.length > 6 && (
+              <div className="pt-0.5 text-[11px] text-muted-foreground">и ещё {hoverTooltip.vacations.length - 6}…</div>
             )}
           </div>
         )}

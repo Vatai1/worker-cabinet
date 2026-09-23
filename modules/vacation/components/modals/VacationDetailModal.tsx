@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import type { VacationRequest } from '@/shared/types'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
@@ -24,6 +24,15 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
   useModalOpen(isOpen)
   const [showRejectInput, setShowRejectInput] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isOpen, onClose])
 
   if (!isOpen || !request) {
     return null

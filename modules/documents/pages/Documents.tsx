@@ -11,6 +11,7 @@ import { hasAnyRole } from '@/shared/lib/permissions'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 
 interface UserDocument {
   id: string
@@ -36,6 +37,16 @@ export function Documents() {
   const [uploadCategory, setUploadCategory] = useState<string>('other')
   const [uploadDescription, setUploadDescription] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [deepLinkDocId] = useState(() => new URLSearchParams(window.location.search).get('documentId'))
+
+  useEffect(() => {
+    if (!uploadModalOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setUploadModalOpen(false)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [uploadModalOpen])
 
   const fetchDocuments = async () => {
     try {
@@ -57,6 +68,11 @@ export function Documents() {
   useEffect(() => {
     fetchDocuments()
   }, [])
+
+  useEffect(() => {
+    if (!deepLinkDocId || documents.length === 0) return
+    document.getElementById(`doc-${deepLinkDocId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [deepLinkDocId, documents])
 
   const filteredDocuments = documents.filter((doc) => {
     const matchesType = filterType === 'all' || doc.category === filterType
@@ -171,38 +187,26 @@ export function Documents() {
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <FileText className="h-5 w-5 text-white/70" />
-            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Документы</span>
-          </div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Документы</h1>
-          <p className="mt-2 text-white/50 text-sm">Личные документы: договоры, сертификаты и другие файлы</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 mt-6">
-          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-            <FileText className="h-3.5 w-3.5" />
-            {documents.length} документов
-          </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-            <FolderOpen className="h-3.5 w-3.5" />
-            {new Set(documents.map(d => d.category)).size} категорий
-          </div>
-          {hasAnyRole('manager') && (
-            <button
-              onClick={() => setUploadModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-card/10 text-white hover:bg-card/20 px-3 py-1.5 text-xs font-medium transition-colors"
-            >
+      <PageBanner
+        icon={FileText}
+        eyebrow="Документы"
+        title="Документы"
+        subtitle="Личные документы: договоры, сертификаты и другие файлы"
+        meta={
+          <>
+            <BannerPill icon={FileText}>{documents.length} документов</BannerPill>
+            <BannerPill icon={FolderOpen}>{new Set(documents.map(d => d.category)).size} категорий</BannerPill>
+          </>
+        }
+        aside={
+          hasAnyRole('manager') && (
+            <Button variant="outline" size="sm" onClick={() => setUploadModalOpen(true)}>
               <Upload className="h-3.5 w-3.5" />
               Загрузить документ
-            </button>
-          )}
-        </div>
-      </div>
+            </Button>
+          )
+        }
+      />
 
       <Card className="section-card stagger-1">
         <CardContent className="pt-6">
@@ -288,7 +292,11 @@ export function Documents() {
             const staggerClass = index < 8 ? `stagger-${index + 1}` : 'stagger-8'
 
             return (
-              <Card key={doc.id} className={`section-card hover-lift ${staggerClass}`}>
+              <Card
+                key={doc.id}
+                id={`doc-${doc.id}`}
+                className={`section-card hover-lift ${staggerClass} ${deepLinkDocId === doc.id ? 'ring-2 ring-primary' : ''}`}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">

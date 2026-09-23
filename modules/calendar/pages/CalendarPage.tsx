@@ -8,6 +8,7 @@ import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { VacationRequestStatus, VACATION_TYPES } from '@/shared/types'
 import type { VacationRequest } from '@/shared/types'
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 
 interface OutlookEvent {
   id: string
@@ -279,6 +280,17 @@ export function CalendarPage() {
     return ()=>{document.removeEventListener('click',close);document.removeEventListener('keydown',closeKey)}
   },[ctxMenu])
 
+  useEffect(()=>{
+    if(!showEwsModal && !detailEvent) return
+    const handler=(e:KeyboardEvent)=>{
+      if(e.key!=='Escape') return
+      if(showEwsModal) setShowEwsModal(false)
+      else setDetailEvent(null)
+    }
+    window.addEventListener('keydown',handler)
+    return ()=>window.removeEventListener('keydown',handler)
+  },[showEwsModal,detailEvent])
+
   const fmtEvTime = (iso:string) => {
     try { return new Date(iso).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}) } catch { return iso }
   }
@@ -482,40 +494,22 @@ export function CalendarPage() {
   return (
     <div className="cr">
       <style>{CSS}</style>
-      <div className="relative overflow-hidden gradient-primary text-white animate-slide-up rounded-2xl" style={{flexShrink:0,padding:'20px 24px',minHeight:0}}>
-        <div className="absolute -top-20 -right-20 w-48 h-48 bg-card/5 rounded-full" />
-        <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-card/5 rounded-full" />
-        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10 flex items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="h-3.5 w-3.5 text-white/60" />
-              <span className="text-white/40 text-[10px] font-medium uppercase tracking-wider">Расписание</span>
-            </div>
-            <h1 className="text-lg font-extrabold tracking-tight">Календарь</h1>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(olByDate[todayKey]?.length || 0) > 0 && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-                <Calendar className="h-3 w-3 text-white/50" />
-                {olByDate[todayKey]?.length} сегодня
-              </div>
-            )}
+      <PageBanner
+        compact
+        className="shrink-0"
+        icon={Sparkles}
+        eyebrow="Расписание"
+        title="Календарь"
+        aside={
+          <>
+            {(olByDate[todayKey]?.length || 0) > 0 && <BannerPill icon={Calendar}>{olByDate[todayKey]?.length} сегодня</BannerPill>}
             {activeVac.length > 0 && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
-                {activeVac.length} отпуск{activeVac.length === 1 ? '' : activeVac.length < 5 ? 'а' : 'ов'}
-              </div>
+              <BannerPill tone="success">{activeVac.length} отпуск{activeVac.length === 1 ? '' : activeVac.length < 5 ? 'а' : 'ов'}</BannerPill>
             )}
-            {(outlookConnected || ewsConnected) && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-300" />
-                {ewsConnected ? 'Exchange' : 'Outlook'}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+            {(outlookConnected || ewsConnected) && <BannerPill>{ewsConnected ? 'Exchange' : 'Outlook'}</BannerPill>}
+          </>
+        }
+      />
       <div className="ch">
         <div style={{display:'flex',alignItems:'center',gap:6}}>
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="cib">

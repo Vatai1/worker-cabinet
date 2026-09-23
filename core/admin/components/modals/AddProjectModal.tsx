@@ -68,11 +68,14 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose()
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
     }
-  }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
 
   if (!open) return null
 
@@ -98,7 +101,7 @@ export function AddProjectModal({ open, onClose, onAdd }: AddProjectModalProps) 
             Заполните информацию о проекте работника
           </p>
 
-          <form onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
+          <form onSubmit={handleSubmit}>
             <div className="space-y-4 mb-6">
               <div className="space-y-2">
                 <Label htmlFor="name">Название проекта *</Label>

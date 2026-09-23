@@ -66,6 +66,15 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
 
   useEffect(() => {
     if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
+  useEffect(() => {
+    if (!open) return
     if (editSurvey) {
       setTitle(editSurvey.title)
       setDescription(editSurvey.description ?? '')

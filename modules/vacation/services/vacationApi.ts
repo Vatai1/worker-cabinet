@@ -2,6 +2,7 @@
   VacationRequest,
   VacationBalance,
   VacationRestriction,
+  VacationRestrictionViolation,
   VacationFormData,
   VacationValidationError,
   VacationSubstitution,
@@ -211,6 +212,14 @@ export const vacationApi = {
     return handleResponse(response)
   },
 
+  async getRestrictionViolations(departmentId?: string): Promise<VacationRestrictionViolation[]> {
+    const qs = departmentId ? `?departmentId=${departmentId}` : ''
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions/violations${qs}`, {
+      headers: getAuthHeadersWithContentType(),
+    })
+    return handleResponse(response)
+  },
+
   async checkRestrictions(
     userId: string,
     data: { startDate: string; endDate: string }
@@ -312,7 +321,20 @@ export const vacationApi = {
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
-      body: JSON.stringify({ departmentId, ...data }),
+      body: JSON.stringify({ departmentId: departmentId || undefined, ...data }),
+    })
+    return handleResponse(response)
+  },
+
+  async updateRestriction(
+    restrictionId: string,
+    departmentId: string,
+    data: Omit<VacationRestriction, 'id' | 'departmentId' | 'createdAt' | 'createdBy' | 'createdByName'>
+  ): Promise<VacationRestriction> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions/${restrictionId}`, {
+      method: 'PUT',
+      headers: getAuthHeadersWithContentType(),
+      body: JSON.stringify({ departmentId: departmentId || undefined, ...data }),
     })
     return handleResponse(response)
   },
@@ -323,6 +345,17 @@ export const vacationApi = {
       headers: getAuthHeadersWithContentType(),
     })
     return handleResponse(response)
+  },
+
+  async previewRestrictionCount(selection: { employeeIds: string[]; tagIds: string[] }): Promise<number> {
+    const params = new URLSearchParams()
+    if (selection.employeeIds.length > 0) params.set('employeeIds', selection.employeeIds.join(','))
+    if (selection.tagIds.length > 0) params.set('tagIds', selection.tagIds.join(','))
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions/preview-count?${params.toString()}`, {
+      headers: getAuthHeadersWithContentType(),
+    })
+    const result: { count: number } = await handleResponse(response)
+    return result.count
   },
 
   async addComment(requestId: string, comment: string): Promise<VacationRequest> {

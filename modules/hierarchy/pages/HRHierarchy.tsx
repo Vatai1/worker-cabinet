@@ -598,6 +598,14 @@ function SelectDepartmentModal({
   )
   const [description, setDescription] = useState(initialDescription)
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   const filtered = departments.filter(d =>
     d.name.toLowerCase().includes(search.toLowerCase())
   )
@@ -686,6 +694,14 @@ function SelectEmployeeModal({
   const [search, setSearch] = useState('')
   const [deptId, setDeptId] = useState<number | null>(null)
   const [description, setDescription] = useState(initialDescription)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const employees: DeptEmployee[] = (() => {
     const byId = new Map<number, DeptEmployee>()
@@ -802,6 +818,15 @@ function TextInputModal({
 }) {
   const [text, setText] = useState(initialText)
   const [description, setDescription] = useState(initialDescription)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
@@ -862,6 +887,15 @@ function PositionInputModal({
   const [title, setTitle] = useState(initialTitle)
   const [departmentId, setDepartmentId] = useState<number | null>(initialDepartmentId)
   const [description, setDescription] = useState(initialDescription)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
@@ -1003,6 +1037,14 @@ function EdgeSettingsModal({
           cascadeParentApproves: isEmpToEmp ? false : cascadeParentApproves,
         }
       : undefined
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -1325,6 +1367,14 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
   const [cascadeParentSeesChild, setCascadeParentSeesChild] = useState(vis?.cascadeParentSeesChild ?? false)
   const [cascadeParentApproves, setCascadeParentApproves] = useState(vis?.cascadeParentApproves ?? false)
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden animate-scale-in flex max-h-[85vh] flex-col">
@@ -1375,6 +1425,14 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
 type PendingDrop = { type: 'department' | 'employee' | 'text' | 'group' | 'position'; position: { x: number; y: number } }
 
 function ConfirmDeleteNodeModal({ edgeCount, onConfirm, onClose }: { edgeCount: number; onConfirm: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden animate-scale-in">
@@ -1402,6 +1460,14 @@ function ConfirmDeleteNodeModal({ edgeCount, onConfirm, onClose }: { edgeCount: 
 }
 
 function ConfirmLeaveModal({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden animate-scale-in">
@@ -1429,6 +1495,14 @@ function ConfirmLeaveModal({ onConfirm, onClose }: { onConfirm: () => void; onCl
 }
 
 export function InstructionModal({ title, items, onClose }: { title: string; items: { title: string; text: string }[]; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg mx-4 overflow-hidden animate-scale-in flex flex-col max-h-[85vh]">
@@ -1458,6 +1532,14 @@ export function InstructionModal({ title, items, onClose }: { title: string; ite
 }
 
 function ConfirmDeleteEdgeModal({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden animate-scale-in">
@@ -2254,12 +2336,21 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     if (!fullscreen || !onClose) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (pendingDrop || editingNode || activeDepartment || edgeDraft || parentEdgeId || confirmDeleteEdgeId || confirmDeleteNode || confirmLeave || showInstruction) return
+      if (pendingDrop || editingNode || activeDepartment || edgeDraft || parentEdgeId || confirmDeleteEdgeId || confirmDeleteNode || confirmLeave || showInstruction || pendingSaveNames) return
       requestClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft, parentEdgeId, confirmDeleteEdgeId, confirmDeleteNode, confirmLeave, showInstruction, requestClose])
+  }, [fullscreen, onClose, pendingDrop, editingNode, activeDepartment, edgeDraft, parentEdgeId, confirmDeleteEdgeId, confirmDeleteNode, confirmLeave, showInstruction, pendingSaveNames, requestClose])
+
+  useEffect(() => {
+    if (!pendingSaveNames) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPendingSaveNames(null)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [pendingSaveNames])
 
   const displayNodes = useMemo(
     () => nodes.map(n => (n.type === 'group' ? { ...n, zIndex: 0, className: 'hierarchy-group-node' } : { ...n, zIndex: n.zIndex ?? 1 })) as Node[],

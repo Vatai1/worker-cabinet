@@ -141,6 +141,21 @@ export function HRInstitution() {
     setShowHeadPicker(true)
   }
 
+  useEffect(() => {
+    if (!showHeadPicker && !confirmCandidate) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (confirmCandidate) {
+        if (!savingHead) handleCancelConfirm()
+      } else {
+        setShowHeadPicker(false)
+        setConfirmCandidate(null)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [showHeadPicker, confirmCandidate, savingHead])
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">

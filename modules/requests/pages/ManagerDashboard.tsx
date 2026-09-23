@@ -9,6 +9,7 @@ import { useRequestsStore } from '@/modules/requests/store/requestsStore'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { getRequestTypeLabel, getRequestStatusBadge } from '@/shared/data/requestUtils'
 import { formatDate, formatDateTime, personName } from '@/shared/lib/utils'
+import { PageBanner } from '@/shared/components/PageBanner'
 
 export function ManagerDashboard() {
   const { user } = useAuthStore()
@@ -57,19 +58,12 @@ export function ManagerDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <Users className="h-5 w-5 text-white/70" />
-            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Руководитель</span>
-          </div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Панель руководителя</h1>
-          <p className="mt-2 text-white/50 text-sm">Рассмотрение заявлений от работников подразделения</p>
-        </div>
-      </div>
+      <PageBanner
+        icon={Users}
+        eyebrow="Руководитель"
+        title="Панель руководителя"
+        subtitle="Рассмотрение заявлений от работников подразделения"
+      />
 
       <div className="page-grid">
         <Card className="section-card stagger-1">

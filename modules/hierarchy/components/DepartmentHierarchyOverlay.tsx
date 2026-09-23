@@ -378,6 +378,16 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
     onClose()
   }, [dirty, onClose])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (pendingDrop || editingNode || confirmLeave || confirmDeleteNode) return
+      handleBack()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pendingDrop, editingNode, confirmLeave, confirmDeleteNode, handleBack])
+
   const requestDeleteNode = useCallback((nodeId: string) => {
     setContextMenu(null)
     const edgeCount = edges.filter((e) => e.source === nodeId || e.target === nodeId).length

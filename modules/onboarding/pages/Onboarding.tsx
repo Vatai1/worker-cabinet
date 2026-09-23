@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
 import { OnlyOfficePreviewModal } from '@/shared/components/OnlyOfficePreviewModal'
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 import { CheckCircle2, Circle, FileText, Download, Loader2, BookOpen, Eye, ClipboardCheck, Sparkles } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -70,6 +71,24 @@ export function Onboarding() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchOnboarding() }, [])
 
+  useEffect(() => {
+    const taskId = new URLSearchParams(window.location.search).get('taskId')
+    if (!taskId || !onboarding) return
+    const doc = onboarding.documents.find((d) => d.id === Number(taskId))
+    if (doc) setSelectedDoc(doc)
+  }, [onboarding])
+
+  useEffect(() => {
+    if (!selectedDoc && !confirmDocId) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (confirmDocId) setConfirmDocId(null)
+      else setSelectedDoc(null)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [selectedDoc, confirmDocId])
+
   const handleAcknowledge = async () => {
     if (!confirmDocId) return
     setAcknowledging(true)
@@ -115,26 +134,18 @@ export function Onboarding() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="h-5 w-5 text-white/70" />
-            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Онбординг</span>
-          </div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Онбординг</h1>
-          <p className="mt-2 text-white/50 text-sm">Добро пожаловать, {personName(onboarding.lastName, onboarding.firstName)}! Ознакомьтесь с документами</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 mt-6">
-          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-            <ClipboardCheck className="h-3.5 w-3.5" />{acknowledged} из {total} документов
-          </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-            {percent}% выполнено
-          </div>
-        </div>
-      </div>
+      <PageBanner
+        icon={Sparkles}
+        eyebrow="Онбординг"
+        title="Онбординг"
+        subtitle={`Добро пожаловать, ${personName(onboarding.lastName, onboarding.firstName)}! Ознакомьтесь с документами`}
+        meta={
+          <>
+            <BannerPill icon={ClipboardCheck}>{acknowledged} из {total} документов</BannerPill>
+            <BannerPill tone="success">{percent}% выполнено</BannerPill>
+          </>
+        }
+      />
 
       <Card className="section-card stagger-1">
         <CardHeader>

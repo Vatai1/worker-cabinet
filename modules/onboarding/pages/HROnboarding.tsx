@@ -11,6 +11,7 @@ import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
 import { Badge } from '@/shared/components/ui/Badge'
 import { OnlyOfficePreviewModal } from '@/shared/components/OnlyOfficePreviewModal'
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 import {
   Plus, Trash2, Edit2, CheckCircle2, Circle, FileText, Loader2,
   Users, BookOpen, Building2, X, Download, Eye, ClipboardCheck, Sparkles,
@@ -267,40 +268,34 @@ export function HROnboarding() {
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="h-5 w-5 text-white/70" />
-            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Онбординг</span>
-          </div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Управление онбордингом</h1>
-          <p className="mt-2 text-white/50 text-sm">Управление онбордингом работников</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 mt-6">
-          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-            <ClipboardCheck className="h-3.5 w-3.5" />{records.length} записей
-          </div>
-          <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-            <BookOpen className="h-3.5 w-3.5" />{templates.length} шаблонов
-          </div>
-        </div>
-        <div className="flex gap-3 mt-4">
-          {tab === 'employees' && (
-            <Button onClick={() => setShowAddModal(true)} className="bg-card/10 hover:bg-card/20 border border-white/20 text-white">
-              <Plus className="h-4 w-4 mr-2" />
-              Добавить работника
-            </Button>
-          )}
-          {tab === 'templates' && (
-            <Button onClick={() => { setEditTemplate(null); setShowTemplateModal(true) }} className="bg-card/10 hover:bg-card/20 border border-white/20 text-white">
-              <Plus className="h-4 w-4 mr-2" />
-              Создать шаблон
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageBanner
+        icon={Sparkles}
+        eyebrow="Онбординг"
+        title="Управление онбордингом"
+        subtitle="Управление онбордингом работников"
+        meta={
+          <>
+            <BannerPill icon={ClipboardCheck}>{records.length} записей</BannerPill>
+            <BannerPill icon={BookOpen}>{templates.length} шаблонов</BannerPill>
+          </>
+        }
+        aside={
+          <>
+            {tab === 'employees' && (
+              <Button size="sm" onClick={() => setShowAddModal(true)}>
+                <Plus className="h-4 w-4" />
+                Добавить работника
+              </Button>
+            )}
+            {tab === 'templates' && (
+              <Button size="sm" onClick={() => { setEditTemplate(null); setShowTemplateModal(true) }}>
+                <Plus className="h-4 w-4" />
+                Создать шаблон
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <div className="flex gap-1 border-b border-border/50">
         {([['employees', 'Работники', Users], ['templates', 'Шаблоны', BookOpen]] as const).map(([key, label, Icon]) => (
@@ -524,6 +519,14 @@ function OnboardingDetailModal({ detail, loading, onClose, onCancel, onOpenOnlyO
   onCancel: (r: OnboardingDetail) => void
   onOpenOnlyOffice: (doc: { id: number; title: string; fileUrl: string; mimeType: string }) => void
 }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-scale-in">
@@ -634,6 +637,14 @@ function AddOnboardingModal({ departments, positions, templates, onTemplatesNeed
       .map(t => t.id)
     setSelectedTemplateIds(matched)
   }, [form.department_id, form.position, templates])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const toggleTemplate = (id: number) => {
     setSelectedTemplateIds(prev =>
@@ -769,6 +780,14 @@ function TemplateModal({ template, departments, positions, onClose, onSuccess }:
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   const handleSubmit = async () => {
     setError(null)
     if (!contentText.trim() && !file && !template?.fileKey) {
@@ -878,6 +897,14 @@ function ConfirmModal({ title, message, confirmLabel, confirmVariant = 'default'
   onConfirm: () => void
   onClose: () => void
 }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">

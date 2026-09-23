@@ -9,6 +9,7 @@ import {
   ConnectionMode,
   type Node,
   type Edge,
+  type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Network, X } from 'lucide-react'
@@ -27,6 +28,13 @@ export function MyHierarchy() {
   const [error, setError] = useState<string | null>(null)
 
   const close = useCallback(() => navigate('/dashboard'), [navigate])
+
+  const onNodeClick = useCallback<NodeMouseHandler>((_, node) => {
+    if (node.type !== 'department') return
+    const departmentId = (node.data as { id?: number } | undefined)?.id
+    if (departmentId == null) return
+    navigate(`/departments/${departmentId}`)
+  }, [navigate])
 
   useEffect(() => {
     let cancelled = false
@@ -120,9 +128,11 @@ export function MyHierarchy() {
             connectionMode={ConnectionMode.Loose}
             colorMode={darkMode ? 'dark' : 'light'}
             proOptions={{ hideAttribution: true }}
+            onNodeClick={onNodeClick}
             fitView
             fitViewOptions={{ maxZoom: 1 }}
           >
+            <style>{'.react-flow__node-department { cursor: pointer; }'}</style>
             <Controls showInteractive={false} />
             <MiniMap nodeStrokeWidth={3} zoomable pannable />
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(var(--border))" />

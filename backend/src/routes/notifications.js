@@ -45,7 +45,31 @@ const router = express.Router()
  *             schema:
  *               type: object
  *               properties:
- *                 notifications: { type: array }
+ *                 notifications:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: integer }
+ *                       type:
+ *                         type: string
+ *                         enum: [vacation_created, vacation_status_changed, vacation_substitution, vacation_substitution_removed, bug_report_new, bug_report_update, document_assigned, survey_assigned, onboarding_task, mailing, generic]
+ *                       channel: { type: string }
+ *                       status: { type: string }
+ *                       sent_at: { type: string, nullable: true }
+ *                       created_at: { type: string }
+ *                       read_at: { type: string, nullable: true }
+ *                       data:
+ *                         type: object
+ *                         description: 'Поля зависят от type. Содержит id сущности для клика-перехода: requestId (vacation_*), reportId (bug_report_*), documentId (document_assigned), surveyId (survey_assigned), taskId (onboarding_task).'
+ *                         properties:
+ *                           subject: { type: string }
+ *                           message: { type: string }
+ *                           requestId: { type: integer }
+ *                           reportId: { type: integer }
+ *                           documentId: { type: integer }
+ *                           surveyId: { type: integer }
+ *                           taskId: { type: integer }
  *                 total: { type: integer }
  *                 page: { type: integer }
  *                 limit: { type: integer }

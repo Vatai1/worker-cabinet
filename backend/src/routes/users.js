@@ -5,6 +5,9 @@ import { uploadAvatar } from '../middleware/upload.js'
 import { uploadToS3, getS3FileUrl, deleteFromS3, S3_ENDPOINT, S3_BUCKET, S3_PUBLIC_URL } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
+import { setKcUserEnabled, updateKcUserRole } from '../config/keycloak.js'
+
+const ELEVATED_ROLES = ['admin', 'superadmin', 'director']
 
 const router = express.Router()
 
@@ -126,16 +129,24 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  *     parameters:
  *       - in: query
  *         name: departmentId
- *         schema: { type: integer }
- *         description: Фильтр по отделу
+ *         schema: { type: string }
+ *         description: Фильтр по отделу(ам) — id или список id через запятую
  *       - in: query
  *         name: q
  *         schema: { type: string }
  *         description: Поисковый запрос (ФИО, email, должность, теги)
  *       - in: query
  *         name: tagId
- *         schema: { type: integer }
- *         description: Фильтр по тегу (skills_dictionary.id)
+ *         schema: { type: string }
+ *         description: Фильтр по тегу(ам) (skills_dictionary.id) — id или список id через запятую
+ *       - in: query
+ *         name: position
+ *         schema: { type: string }
+ *         description: Фильтр по должности(ям) — значение или список через запятую
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *         description: Фильтр по статусу(ам) — значение или список через запятую
  *       - in: query
  *         name: orgRole
  *         schema: { type: string, enum: [employee, manager, hr, admin] }
@@ -144,6 +155,10 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  *         name: includeInactive
  *         schema: { type: string, enum: ['true', 'false'], default: 'false' }
  *         description: Включить неактивных членов организации (по умолчанию только активные)
+ *       - in: query
+ *         name: orgIsActive
+ *         schema: { type: string }
+ *         description: 'Фильтр по активности в организации: true, false, или true,false — игнорирует includeInactive'
  *       - in: query
  *         name: year
  *         schema: { type: integer }
@@ -166,9 +181,11 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  */
 router.get('/search', authenticateToken, async (req, res) => {
   try {
-    const { departmentId, q, tagId, orgRole, includeInactive, year } = req.query
+    const { departmentId, q, tagId, orgRole, position, status, orgIsActive, includeInactive, year } = req.query
     const page = req.query.page ? Math.max(1, parseInt(req.query.page) || 1) : null
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20))
+
+    const parseList = (raw) => String(raw || '').split(',').map((s) => s.trim()).filter(Boolean)
 
     const params = []
     const orgJoin = req.org ? 'JOIN user_organizations uo ON u.id = uo.user_id' : ''
@@ -176,7 +193,11 @@ router.get('/search', authenticateToken, async (req, res) => {
     if (req.org) {
       params.push(currentOrgId(req))
       orgWhere = ` AND uo.org_id = $${params.length}`
-      if (includeInactive !== 'true') {
+      const orgIsActiveVals = parseList(orgIsActive).map((v) => v === 'true')
+      if (orgIsActiveVals.length > 0) {
+        params.push(orgIsActiveVals)
+        orgWhere += ` AND uo.is_active = ANY($${params.length}::bool[])`
+      } else if (includeInactive !== 'true') {
         orgWhere += ' AND uo.is_active = true'
       }
     }
@@ -235,19 +256,33 @@ router.get('/search', authenticateToken, async (req, res) => {
       WHERE 1=1${orgWhere} ${excludeTest(req, "u")}
     `
 
-    if (departmentId) {
-      sql += ' AND u.department_id = $' + (params.length + 1)
-      params.push(departmentId)
+    const departmentIds = parseList(departmentId).map((v) => parseInt(v)).filter((n) => !Number.isNaN(n))
+    if (departmentIds.length > 0) {
+      sql += ` AND u.department_id = ANY($${params.length + 1}::int[])`
+      params.push(departmentIds)
     }
 
-    if (tagId) {
-      sql += ` AND EXISTS (SELECT 1 FROM user_skills utf WHERE utf.user_id = u.id AND utf.skill_id = $${params.length + 1})`
-      params.push(parseInt(tagId))
+    const tagIds = parseList(tagId).map((v) => parseInt(v)).filter((n) => !Number.isNaN(n))
+    if (tagIds.length > 0) {
+      sql += ` AND EXISTS (SELECT 1 FROM user_skills utf WHERE utf.user_id = u.id AND utf.skill_id = ANY($${params.length + 1}::int[]))`
+      params.push(tagIds)
     }
 
     if (orgRole && req.org) {
       sql += ` AND uo.org_role = $${params.length + 1}`
       params.push(orgRole)
+    }
+
+    const positions = parseList(position)
+    if (positions.length > 0) {
+      sql += ` AND u.position = ANY($${params.length + 1}::text[])`
+      params.push(positions)
+    }
+
+    const statuses = parseList(status)
+    if (statuses.length > 0) {
+      sql += ` AND u.status::text = ANY($${params.length + 1}::text[])`
+      params.push(statuses)
     }
 
     if (q) {
@@ -365,6 +400,131 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
   }
 })
 
+/**
+ * @swagger
+ * /users/system-roles:
+ *   get:
+ *     tags: [Users]
+ *     summary: Список системных ролей (для HR/admin выбора роли сотрудника)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Список ролей (id, name)
+ */
+router.get('/system-roles', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const result = await query('SELECT id, name FROM roles ORDER BY name')
+    res.json(result.rows)
+  } catch (error) {
+    console.error('Error fetching system roles:', error)
+    res.status(500).json({ error: 'Failed to fetch system roles' })
+  }
+})
+
+/**
+ * @swagger
+ * /users/bulk-status:
+ *   put:
+ *     tags: [Users]
+ *     summary: Массовое изменение статуса пользователей (HR/admin)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userIds, status]
+ *             properties:
+ *               userIds: { type: array, items: { type: integer } }
+ *               status: { type: string, enum: [active, inactive, on_leave] }
+ *     responses:
+ *       200:
+ *         description: Статусы обновлены
+ */
+router.put('/bulk-status', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const { userIds, status } = req.body
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ error: 'Выберите хотя бы одного пользователя' })
+    }
+    if (!['active', 'inactive', 'on_leave'].includes(status)) {
+      return res.status(400).json({ error: 'Недопустимый статус' })
+    }
+
+    const result = await query('UPDATE users SET status = $1 WHERE id = ANY($2)', [status, userIds])
+
+    if (result.rowCount > 0) {
+      const guids = await query('SELECT keycloak_guid FROM users WHERE id = ANY($1) AND keycloak_guid IS NOT NULL', [userIds])
+      for (const row of guids.rows) {
+        await setKcUserEnabled(row.keycloak_guid, status === 'active').catch(() => {})
+      }
+    }
+
+    res.json({ success: true, updated: result.rowCount })
+  } catch (error) {
+    console.error('Error bulk-updating status:', error)
+    res.status(500).json({ error: 'Failed to update status' })
+  }
+})
+
+/**
+ * @swagger
+ * /users/bulk-role:
+ *   put:
+ *     tags: [Users]
+ *     summary: Массовое изменение роли пользователей (HR/admin). HR не может назначить admin/superadmin/director.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userIds, role]
+ *             properties:
+ *               userIds: { type: array, items: { type: integer } }
+ *               role: { type: string }
+ *     responses:
+ *       200:
+ *         description: Роли обновлены
+ */
+router.put('/bulk-role', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const { userIds, role } = req.body
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ error: 'Выберите хотя бы одного пользователя' })
+    }
+    if (!role?.trim()) {
+      return res.status(400).json({ error: 'Роль обязательна' })
+    }
+
+    const isElevatedCaller = req.user.role === 'admin' || req.user.role === 'superadmin' || req.org?.org_role === 'admin'
+    if (!isElevatedCaller && ELEVATED_ROLES.includes(role.trim())) {
+      return res.status(403).json({ error: 'HR не может назначать эту роль' })
+    }
+
+    const roleCheck = await query('SELECT id FROM roles WHERE name = $1', [role.trim()])
+    if (roleCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'Роль не найдена' })
+    }
+
+    const result = await query('UPDATE users SET role = $1 WHERE id = ANY($2)', [role.trim(), userIds])
+
+    if (result.rowCount > 0) {
+      const guids = await query('SELECT keycloak_guid FROM users WHERE id = ANY($1) AND keycloak_guid IS NOT NULL', [userIds])
+      for (const row of guids.rows) {
+        await updateKcUserRole(row.keycloak_guid, role.trim()).catch(() => {})
+      }
+    }
+
+    res.json({ success: true, updated: result.rowCount })
+  } catch (error) {
+    console.error('Error bulk-updating role:', error)
+    res.status(500).json({ error: 'Failed to update role' })
+  }
+})
+
 // Upload current user avatar
 /**
  * @swagger
@@ -416,78 +576,6 @@ router.post('/me/avatar', authenticateToken, uploadAvatar.single('avatar'), asyn
   }
 })
 
-// Upload avatar for a user (HR/admin)
-/**
- * @swagger
- * /users/{id}/avatar:
- *   post:
- *     tags: [Users]
- *     summary: Загрузить аватар работнику (HR/admin)
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: integer }
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               avatar:
- *                 type: string
- *                 format: binary
- *     responses:
- *       200:
- *         description: Аватар загружен
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 avatar: { type: string }
- *       400:
- *         description: Файл не загружен
- *       403:
- *         description: Недостаточно прав
- *       404:
- *         description: Пользователь не найден
- */
-router.post('/:id/avatar', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), uploadAvatar.single('avatar'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'Файл не загружен' })
-    }
-
-    const userId = req.params.id
-    const existing = await query('SELECT avatar FROM users WHERE id = $1', [userId])
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ error: 'Пользователь не найден' })
-    }
-
-    const oldKey = s3KeyFromAvatarUrl(existing.rows[0].avatar)
-    if (oldKey) {
-      await deleteFromS3(oldKey).catch(() => {})
-    }
-
-    const ext = req.file.mimetype.split('/')[1].replace('jpeg', 'jpg')
-    const key = `avatars/${userId}/${Date.now()}.${ext}`
-
-    await uploadToS3(req.file, key)
-    const avatarUrl = getS3FileUrl(key)
-
-    await query('UPDATE users SET avatar = $1 WHERE id = $2', [avatarUrl, userId])
-
-    res.json({ avatar: avatarUrl })
-  } catch (error) {
-    console.error('Error uploading user avatar:', error)
-    res.status(500).json({ error: 'Не удалось загрузить фото' })
-  }
-})
-
 // Reset current user's avatar
 /**
  * @swagger
@@ -521,56 +609,6 @@ router.delete('/me/avatar', authenticateToken, async (req, res) => {
     res.json({ avatar: null })
   } catch (error) {
     console.error('Error resetting avatar:', error)
-    res.status(500).json({ error: 'Не удалось сбросить аватар' })
-  }
-})
-
-// Reset a user's avatar (HR/admin)
-/**
- * @swagger
- * /users/{id}/avatar:
- *   delete:
- *     tags: [Users]
- *     summary: Сбросить аватар работника (HR/admin)
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: integer }
- *     responses:
- *       200:
- *         description: Аватар сброшен
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 avatar: { type: 'null' }
- *       403:
- *         description: Недостаточно прав
- *       404:
- *         description: Пользователь не найден
- */
-router.delete('/:id/avatar', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), async (req, res) => {
-  try {
-    const userId = req.params.id
-    const existing = await query('SELECT avatar FROM users WHERE id = $1', [userId])
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ error: 'Пользователь не найден' })
-    }
-
-    const oldKey = s3KeyFromAvatarUrl(existing.rows[0].avatar)
-    if (oldKey) {
-      await deleteFromS3(oldKey).catch(() => {})
-    }
-
-    await query('UPDATE users SET avatar = NULL WHERE id = $1', [userId])
-
-    res.json({ avatar: null })
-  } catch (error) {
-    console.error('Error resetting user avatar:', error)
     res.status(500).json({ error: 'Не удалось сбросить аватар' })
   }
 })

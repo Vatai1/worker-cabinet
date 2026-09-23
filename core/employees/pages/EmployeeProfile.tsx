@@ -16,10 +16,11 @@ import { hasAnyRole } from '@/shared/lib/permissions'
 
 import {
   Mail, Phone, Building2, Briefcase,
-  User, Target, ChevronLeft, Sparkles,
+  User, Target, ChevronLeft,
   Clock, FolderKanban, Plus, MapPin, UserCheck, Star, CalendarDays, Calendar,
   Camera, Loader2, X, CircleDot, CheckCircle2, Cake,
 } from 'lucide-react'
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 
 import { API_BASE_URL } from '@/shared/lib/api'
 import { apiGet, apiPatch } from '@/shared/lib/apiClient'
@@ -128,7 +129,7 @@ export function EmployeeProfile() {
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const canEditProfile = isOwnProfile || hasAnyRole('hr', 'admin')
   const canManageOrganizations = hasAnyRole('hr', 'admin')
-  const canManageAvatar = hasAnyRole('hr', 'admin')
+  const canManageAvatar = isOwnProfile
 
   useEffect(() => {
     if (!id) return
@@ -278,7 +279,7 @@ export function EmployeeProfile() {
     try {
       const formData = new FormData()
       formData.append('avatar', blob, 'avatar.jpg')
-      const res = await fetch(`${API_BASE_URL}/users/${id}/avatar`, {
+      const res = await fetch(`${API_BASE_URL}/users/me/avatar`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData,
@@ -310,7 +311,7 @@ export function EmployeeProfile() {
     if (!confirmed) return
 
     try {
-      const res = await fetch(`${API_BASE_URL}/users/${id}/avatar`, {
+      const res = await fetch(`${API_BASE_URL}/users/me/avatar`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       })
@@ -328,7 +329,7 @@ export function EmployeeProfile() {
   if (loading) {
     return (
       <div className="space-y-8 animate-fade-in">
-        <div className="h-48 rounded-2xl gradient-primary animate-pulse" />
+        <div className="h-40 rounded-2xl border border-border bg-muted/40 animate-pulse" />
         <div className="grid gap-4 md:grid-cols-2">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-40 rounded-2xl bg-muted/30 animate-pulse" />
@@ -367,41 +368,36 @@ export function EmployeeProfile() {
         </Button>
       </Link>
 
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-6">
-          <div className="flex shrink-0 flex-col items-center gap-1.5">
-            <div className="group relative">
-              <Avatar className="h-24 w-24 ring-4 ring-white/20 text-3xl shadow-2xl">
-                <AvatarImage
-                  src={employee.avatar ? `${employee.avatar}?v=${avatarBust}` : generateAvatarUrl(employee.id, employee.gender)}
-                  alt={initials}
-                />
-                <AvatarFallback className={`bg-gradient-to-br ${avatarColor} text-white text-2xl font-bold`}>
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-[3px] border-white/30 ${status.dot}`} />
-              {canManageAvatar && (
-                <button
-                  type="button"
-                  disabled={avatarUploading}
-                  onClick={() => avatarInputRef.current?.click()}
-                  className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-full bg-black/50 text-white opacity-0 transition-opacity duration-200 cursor-pointer group-hover:opacity-100 disabled:cursor-wait"
-                >
-                  {avatarUploading ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Camera className="h-5 w-5" />
-                      <span className="text-[11px] font-medium">Фото</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
+      <PageBanner
+        eyebrow="Профиль работника"
+        title={fullName}
+        subtitle={employee.position}
+        iconSlot={
+          <div className="group relative">
+            <Avatar className="h-16 w-16 ring-4 ring-primary/15 text-2xl shadow-lg">
+              <AvatarImage
+                src={employee.avatar ? `${employee.avatar}?v=${avatarBust}` : generateAvatarUrl(employee.id, employee.gender)}
+                alt={initials}
+              />
+              <AvatarFallback className={`bg-gradient-to-br ${avatarColor} text-white text-xl font-bold`}>
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <span className={`absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-[3px] border-card ${status.dot}`} />
+            {canManageAvatar && (
+              <button
+                type="button"
+                disabled={avatarUploading}
+                onClick={() => avatarInputRef.current?.click()}
+                className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-full bg-black/50 text-white opacity-0 transition-opacity duration-200 cursor-pointer group-hover:opacity-100 disabled:cursor-wait"
+              >
+                {avatarUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Camera className="h-4 w-4" />
+                )}
+              </button>
+            )}
             {canManageAvatar && (
               <input
                 ref={avatarInputRef}
@@ -411,74 +407,59 @@ export function EmployeeProfile() {
                 onChange={handleAvatarFileSelect}
               />
             )}
+          </div>
+        }
+        meta={
+          <>
+            <BannerPill tone={employee.status === 'active' ? 'success' : employee.status === 'on_leave' ? 'warning' : 'neutral'}>
+              <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
+              {status.label}
+            </BannerPill>
+            <BannerPill>{roleLabels[employee.role] ?? employee.role}</BannerPill>
+            {employee.department && (
+              <Link
+                to={employee.departmentId ? `/departments/${employee.departmentId}` : '/departments'}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-primary/15 bg-primary/8 px-2.5 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15"
+              >
+                <Building2 className="h-3 w-3" />
+                {employee.department}
+              </Link>
+            )}
+            {employee.status === 'on_leave' && substitutes.length > 0 && (
+              <BannerPill icon={UserCheck}>
+                Замещают:{' '}
+                {substitutes.map((s, i) => (
+                  <span key={s.id}>
+                    <Link to={`/employees/${s.id}`} className="underline hover:text-primary">
+                      {personName(s.last_name, s.first_name, s.middle_name)}
+                    </Link>
+                    {i < substitutes.length - 1 ? ', ' : ''}
+                  </span>
+                ))}
+              </BannerPill>
+            )}
             {canManageAvatar && employee.avatar && (
               <button
                 type="button"
                 onClick={handleAvatarReset}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-white/60 transition-colors hover:text-white"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
                 <X className="h-3 w-3" />
-                Сбросить
+                Сбросить фото
               </button>
             )}
+          </>
+        }
+        aside={
+          <div className="hidden flex-wrap justify-end gap-2 lg:flex">
+            <BannerPill icon={FolderKanban}>{activeProjects} активных проектов</BannerPill>
+            <BannerPill icon={Clock}>{calculateWorkExperience(employee.hireDate)}</BannerPill>
+            {(employee.office || employee.cabinet) && (
+              <BannerPill icon={MapPin}>{[employee.office, employee.cabinet].filter(Boolean).join(', ')}</BannerPill>
+            )}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="h-4 w-4 text-white/60" />
-              <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Профиль работника</span>
-            </div>
-            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">{fullName}</h1>
-            <p className="mt-1 text-white/60 text-sm font-medium">{employee.position}</p>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium ${status.bg} bg-card/10`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
-                {status.label}
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-card/10 backdrop-blur-sm border border-white/10 text-white/80">
-                {roleLabels[employee.role] ?? employee.role}
-              </span>
-              {employee.department && (
-                <Link
-                  to={employee.departmentId ? `/departments/${employee.departmentId}` : '/departments'}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-card/10 backdrop-blur-sm border border-white/10 text-white/80 hover:bg-card/20 transition-colors"
-                >
-                  <Building2 className="h-3 w-3" />
-                  {employee.department}
-                </Link>
-              )}
-              {employee.status === 'on_leave' && substitutes.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-card/10 backdrop-blur-sm border border-white/10 text-white/80">
-                  <UserCheck className="h-3 w-3" />
-                  Замещают: {' '}
-                  {substitutes.map((s, i) => (
-                    <span key={s.id}>
-                      <Link to={`/employees/${s.id}`} className="underline hover:text-white">
-                        {personName(s.last_name, s.first_name, s.middle_name)}
-                      </Link>
-                      {i < substitutes.length - 1 ? ', ' : ''}
-                    </span>
-                  ))}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="hidden lg:flex flex-col items-end gap-1 shrink-0">
-            <div className="flex flex-wrap justify-end gap-2">
-              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-                <FolderKanban className="h-3.5 w-3.5" />{activeProjects} активных проектов
-              </div>
-              <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-                <Clock className="h-3.5 w-3.5" />{calculateWorkExperience(employee.hireDate)}
-              </div>
-              {(employee.office || employee.cabinet) && (
-                <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-                  <MapPin className="h-3.5 w-3.5" />{[employee.office, employee.cabinet].filter(Boolean).join(', ')}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="animate-slide-up stagger-1 overflow-hidden p-0">

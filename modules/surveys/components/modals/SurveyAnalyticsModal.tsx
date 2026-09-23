@@ -26,6 +26,15 @@ export function SurveyAnalyticsModal({ open, onClose, surveyId, surveyTitle }: P
       .finally(() => setLoading(false))
   }, [open, surveyId])
 
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
   if (!open) return null
 
   const responseRate = data ? (data.total_targeted > 0 ? Math.round((data.total_responded / data.total_targeted) * 100) : 0) : 0

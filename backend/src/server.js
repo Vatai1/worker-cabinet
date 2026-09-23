@@ -30,6 +30,7 @@ import mailingsRoutes from './routes/mailings.js'
 import organizationsRoutes from './routes/organizations.js'
 import bugReportsRoutes from './routes/bugReports.js'
 import bannerRoutes from './routes/banner.js'
+import pushRoutes from './routes/push.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { runMigrations } from './db/migrate.js'
 import { errorHandler } from './middleware/errors.js'
@@ -156,6 +157,7 @@ app.use('/api/mailings', mailingsRoutes)
 app.use('/api/organizations', organizationsRoutes)
 app.use('/api/bug-reports', bugReportsRoutes)
 app.use('/api/banner', bannerRoutes)
+app.use('/api/push', pushRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
@@ -168,7 +170,8 @@ app.get('/api/modules', async (req, res) => {
     let rows
     if (orgId) {
       const result = await query(
-        `SELECT m.code, m.is_enabled, mo.is_enabled_override
+        `SELECT m.code, m.is_enabled, mo.is_enabled_override,
+                COALESCE(mo.settings->>'dashboardBadge', m.settings->>'dashboardBadge') as dashboard_badge
          FROM modules m
          LEFT JOIN module_overrides mo ON mo.module_code = m.code AND mo.org_id = $1
          WHERE m.organization_id IS NULL
@@ -177,7 +180,10 @@ app.get('/api/modules', async (req, res) => {
       )
       rows = result.rows
     } else {
-      const result = await query('SELECT code, is_enabled FROM modules WHERE organization_id IS NULL ORDER BY sort_order')
+      const result = await query(
+        `SELECT code, is_enabled, settings->>'dashboardBadge' as dashboard_badge
+         FROM modules WHERE organization_id IS NULL ORDER BY sort_order`
+      )
       rows = result.rows
     }
     const enabled = rows

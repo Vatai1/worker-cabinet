@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Button } from '@/shared/components/ui/Button'
 
 interface ConfirmModalProps {
@@ -17,6 +18,15 @@ interface ConfirmModalProps {
 export function ConfirmModal({ open, isOpen, onClose, onCancel, onConfirm, title, message, confirmText = 'Подтвердить', cancelText = 'Отмена', danger, loading }: ConfirmModalProps) {
   const visible = open ?? isOpen ?? false
   const handleCancel = onCancel ?? onClose ?? (() => {})
+
+  useEffect(() => {
+    if (!visible) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') (onCancel ?? onClose ?? (() => {}))()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [visible, onCancel, onClose])
 
   if (!visible) return null
 

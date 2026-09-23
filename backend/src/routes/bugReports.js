@@ -34,7 +34,7 @@ router.post('/', authenticateToken, upload.single('screenshot'), asyncHandler(as
     notify({
       userId: admin.id,
       type: 'bug_report_new',
-      data: { title: title.trim(), author: name, link: '/admin/global' }
+      data: { reportId: report.id, title: title.trim(), author: name, link: '/admin/global' }
     }).catch(() => {})
   }
 
@@ -112,7 +112,7 @@ router.patch('/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), a
     notify({
       userId: report.user_id,
       type: 'bug_report_update',
-      data: { title: report.title, status, link: '/dashboard' }
+      data: { reportId: id, title: report.title, status, link: '/dashboard' }
     }).catch(() => {})
   }
 

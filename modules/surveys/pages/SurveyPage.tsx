@@ -5,6 +5,7 @@ import { CheckCircle2, AlertCircle, ClipboardList, ChevronLeft, Clock, Sparkles,
 import { surveyApi } from '@/modules/surveys/services/surveyApi'
 import { getErrorMessage, formatDate } from '@/shared/lib/utils'
 import type { SurveyWithQuestions } from '@/shared/types'
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 
 export function SurveyPage() {
   const { id } = useParams<{ id: string }>()
@@ -73,7 +74,7 @@ export function SurveyPage() {
   if (loading) {
     return (
       <div className="space-y-8 animate-fade-in max-w-2xl mx-auto">
-        <div className="h-48 rounded-2xl gradient-primary animate-pulse" />
+        <div className="h-40 rounded-2xl border border-border bg-muted/40 animate-pulse" />
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-32 rounded-2xl bg-muted/30 animate-pulse" />
         ))}
@@ -123,44 +124,35 @@ export function SurveyPage() {
         </Button>
       </Link>
 
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-6 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-36 h-36 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-4 w-4 text-white/60" />
-            <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Прохождение опроса</span>
-          </div>
-          <h1 className="text-xl lg:text-2xl font-extrabold tracking-tight">{survey.title}</h1>
-          {survey.description && <p className="mt-1.5 text-white/55 text-sm">{survey.description}</p>}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-card/10 border border-white/10 text-white/80">
-              <ClipboardList className="h-3 w-3 text-white/50" />
-              {totalQuestions} {totalQuestions === 1 ? 'вопрос' : totalQuestions < 5 ? 'вопроса' : 'вопросов'}
-            </span>
-            {survey.deadline && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-card/10 border border-white/10 text-white/80">
-                <Clock className="h-3 w-3 text-white/50" />
-                До {formatDate(survey.deadline)}
-              </span>
-            )}
-          </div>
-          {totalQuestions > 0 && (
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-xs text-white/50 mb-1.5">
+      <PageBanner
+        compact
+        icon={Sparkles}
+        eyebrow="Прохождение опроса"
+        title={survey.title}
+        subtitle={survey.description}
+        meta={
+          <>
+            <BannerPill icon={ClipboardList}>{totalQuestions} {totalQuestions === 1 ? 'вопрос' : totalQuestions < 5 ? 'вопроса' : 'вопросов'}</BannerPill>
+            {survey.deadline && <BannerPill icon={Clock}>До {formatDate(survey.deadline)}</BannerPill>}
+          </>
+        }
+        extra={
+          totalQuestions > 0 && (
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
                 <span>Прогресс</span>
                 <span>{answeredCount} из {totalQuestions}</span>
               </div>
-              <div className="h-1.5 rounded-full bg-card/10 overflow-hidden">
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full rounded-full bg-card/60 transition-all duration-500"
+                  className="h-full rounded-full gradient-primary transition-all duration-500"
                   style={{ width: `${totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0}%` }}
                 />
               </div>
             </div>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
       {(survey.questions || []).map((q, idx) => {
         const qId = Number(q.id)

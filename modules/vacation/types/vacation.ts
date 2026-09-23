@@ -144,20 +144,33 @@ export interface VacationBalance {
 
 export interface VacationRestriction {
   id: string
-  departmentId: string
-  departmentName?: string
+  departmentId: string | null
+  departmentName?: string | null
 
-  type: 'pair' | 'group'
+  type: 'group'
 
   employeeIds: string[]
   tagIds?: string[]
   tags?: Array<{ id: string; name: string }>
+  employeeCount?: number
   maxConcurrent?: number
   
   description?: string
   createdAt: string
   createdBy: string
   createdByName: string
+}
+
+export interface VacationRestrictionViolation {
+  restrictionId: string
+  type: 'group'
+  description?: string | null
+  tagNames: string[]
+  maxConcurrent: number | null
+  startDate: string
+  endDate: string
+  userIds: string[]
+  names: string[]
 }
 
 export interface VacationCalendarItem {

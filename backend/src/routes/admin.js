@@ -1069,6 +1069,66 @@ router.get('/security/locked-accounts', asyncHandler(async (req, res) => {
 
 /**
  * @swagger
+ * /admin/security/session-stats:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Статистика входов (сессии)
+ *     description: 'Онлайн сейчас, входы по дням, входы по отделам — на основе user_sessions'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: days, in: query, schema: { type: integer, default: 30 } }
+ *     responses:
+ *       200:
+ *         description: Статистика входов
+ */
+router.get('/security/session-stats', asyncHandler(async (req, res) => {
+  const days = Math.min(parseInt(req.query.days) || 30, 365)
+
+  const online = await query(`
+    SELECT COUNT(DISTINCT user_id)::int AS count
+    FROM user_sessions
+    WHERE revoked_at IS NULL AND expires_at > NOW() AND last_used_at > NOW() - INTERVAL '15 minutes'
+  `)
+
+  const daily = await query(`
+    SELECT date_trunc('day', created_at)::date AS date,
+      COUNT(*)::int AS logins,
+      COUNT(DISTINCT user_id)::int AS unique_users
+    FROM user_sessions
+    WHERE created_at >= CURRENT_DATE - ($1 || ' days')::interval
+    GROUP BY date
+    ORDER BY date DESC
+  `, [days])
+
+  const byDepartment = await query(`
+    SELECT COALESCE(d.id, 0) AS department_id, COALESCE(d.name, 'Без отдела') AS department_name,
+      COUNT(*)::int AS logins,
+      COUNT(DISTINCT s.user_id)::int AS unique_users
+    FROM user_sessions s
+    JOIN users u ON u.id = s.user_id
+    LEFT JOIN departments d ON d.id = u.department_id
+    WHERE s.created_at >= CURRENT_DATE - ($1 || ' days')::interval
+    GROUP BY d.id, d.name
+    ORDER BY logins DESC
+  `, [days])
+
+  const byMethod = await query(`
+    SELECT login_method, COUNT(*)::int AS logins
+    FROM user_sessions
+    WHERE created_at >= CURRENT_DATE - ($1 || ' days')::interval
+    GROUP BY login_method
+  `, [days])
+
+  res.json({
+    onlineNow: online.rows[0].count,
+    daily: daily.rows,
+    byDepartment: byDepartment.rows,
+    byMethod: byMethod.rows,
+  })
+}))
+
+/**
+ * @swagger
  * /admin/users/{id}/unlock:
  *   post:
  *     tags: [Admin]

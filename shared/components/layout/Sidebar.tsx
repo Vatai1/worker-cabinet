@@ -76,7 +76,6 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
 ]
 
 const getHRSectionItems = (): NavItem[] => [
-  { name: 'Сотрудники', href: '/hr?tab=employees', icon: Users, section: 'HR' },
   { name: 'Опросы', href: '/hr?tab=surveys', icon: ClipboardList, module: 'surveys', section: 'HR' },
   { name: 'Рассылка', href: '/hr?tab=mailing', icon: Send, module: 'mailing', section: 'HR' },
   { name: 'Онбординг', href: '/hr?tab=onboarding', icon: UserPlus, module: 'onboarding', section: 'HR' },
@@ -85,6 +84,7 @@ const getHRSectionItems = (): NavItem[] => [
   { name: 'Иерархия', href: '/hr?tab=hierarchy', icon: Network, module: 'hierarchy', section: 'HR' },
   { name: 'Шаблоны документов', href: '/hr?tab=doc-templates', icon: FileText, module: 'documents', section: 'HR' },
   { name: 'Справочники', icon: Boxes, section: 'HR', children: [
+    { name: 'Сотрудники', href: '/hr?tab=hr_employees' },
     { name: 'Учреждение', href: '/hr?tab=institution', module: 'dictionaries' },
     { name: 'Отделы', href: '/hr?tab=hr_departments', module: 'dictionaries' },
     { name: 'Должности', href: '/hr?tab=hr_positions', module: 'dictionaries' },
@@ -117,7 +117,6 @@ const ORG_HIDDEN_ITEM_NAMES = new Set([
 
 const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg: boolean): NavItem[] => {
   const items: NavItem[] = [
-    { name: 'Пользователи', href: `${basePath}?tab=users`, icon: Users, section },
     { name: 'Роли и доступ', icon: Key, section, children: [
       { name: 'Роли и доступы', href: `${basePath}?tab=roles` },
       { name: 'Роли по должности', href: `${basePath}?tab=role-mappings` },
@@ -138,6 +137,7 @@ const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg:
       { name: 'Тестовые данные', href: `${basePath}?tab=test-data` },
     ]},
     { name: 'Справочники', icon: Briefcase, section, children: [
+      { name: 'Сотрудники', href: `${basePath}?tab=users` },
       { name: 'Должности', href: `${basePath}?tab=dict_positions` },
       { name: 'Типы отпусков', href: `${basePath}?tab=dict_vacation`, module: 'vacation' },
       { name: 'Теги', href: `${basePath}?tab=dict_skills`, module: 'skills' },
@@ -248,9 +248,10 @@ export function Sidebar() {
   useEffect(() => {
     navigation.forEach((item) => {
       if (item.children) {
+        const key = `${item.section || 'Основное'}:${item.name}`
         const hasActiveChild = item.children.some((child) => location.pathname === child.href)
-        if (hasActiveChild && !expandedItems.includes(item.name)) {
-          setExpandedItems((prev) => [...prev, item.name])
+        if (hasActiveChild && !expandedItems.includes(key)) {
+          setExpandedItems((prev) => [...prev, key])
         }
       }
     })
@@ -291,6 +292,15 @@ export function Sidebar() {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  useEffect(() => {
+    if (!sidebarOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && window.innerWidth < 1024) toggleSidebar()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [sidebarOpen, toggleSidebar])
 
   const toggleAccordion = (name: string) => {
     setExpandedItems((prev) =>
@@ -384,14 +394,15 @@ export function Sidebar() {
                 {items.map((item) => {
                   const Icon = item.icon
                   const hasChildren = !!item.children
-                  const isExpanded = expandedItems.includes(item.name)
+                  const accordionKey = `${sectionName}:${item.name}`
+                  const isExpanded = expandedItems.includes(accordionKey)
                   const hasActiveChild = item.children?.some((child) => isHrefActive(child.href))
 
                   if (hasChildren && item.children) {
                     return (
                       <div key={item.name}>
                         <button
-                          onClick={() => toggleAccordion(item.name)}
+                          onClick={() => toggleAccordion(accordionKey)}
                           className={cn(
                             'group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200 ease-out',
                             hasActiveChild

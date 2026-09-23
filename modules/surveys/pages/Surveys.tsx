@@ -5,6 +5,7 @@ import { ClipboardList, CheckCircle2, Clock, Sparkles, ArrowRight, BarChart3, Za
 import { surveyApi } from '@/modules/surveys/services/surveyApi'
 import { getErrorMessage, formatDate } from '@/shared/lib/utils'
 import type { Survey } from '@/shared/types'
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 
 type SurveyWithResponded = Survey & { responded: boolean }
 
@@ -28,6 +29,7 @@ export function Surveys() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
+  const [deepLinkSurveyId] = useState(() => new URLSearchParams(window.location.search).get('surveyId'))
 
   useEffect(() => {
     surveyApi.listMy()
@@ -35,6 +37,11 @@ export function Surveys() {
       .catch((err: unknown) => setError(getErrorMessage(err)))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!deepLinkSurveyId || surveys.length === 0) return
+    document.getElementById(`survey-${deepLinkSurveyId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [deepLinkSurveyId, surveys])
 
   const respondedCount = useMemo(() => surveys.filter((s) => s.responded).length, [surveys])
   const pendingCount = useMemo(() => surveys.filter((s) => !s.responded).length, [surveys])
@@ -59,7 +66,7 @@ export function Surveys() {
   if (loading) {
     return (
       <div className="space-y-8 animate-fade-in">
-        <div className="h-48 rounded-2xl gradient-primary animate-pulse" />
+        <div className="h-40 rounded-2xl border border-border bg-muted/40 animate-pulse" />
         <div className="grid gap-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-32 rounded-2xl bg-muted/30 animate-pulse" />
@@ -72,18 +79,12 @@ export function Surveys() {
   if (surveys.length === 0) {
     return (
       <div className="space-y-8 animate-fade-in">
-        <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-4 w-4 text-white/60" />
-              <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Обратная связь</span>
-            </div>
-            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Опросы</h1>
-            <p className="mt-2 text-white/45 text-sm">Ваше мнение помогает нам становиться лучше</p>
-          </div>
-        </div>
+        <PageBanner
+          icon={Sparkles}
+          eyebrow="Обратная связь"
+          title="Опросы"
+          subtitle="Ваше мнение помогает нам становиться лучше"
+        />
         <div className="text-center py-20">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted/60 mb-4">
             <ClipboardList className="h-7 w-7 text-muted-foreground/40" />
@@ -97,37 +98,19 @@ export function Surveys() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="h-4 w-4 text-white/60" />
-            <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Обратная связь</span>
-          </div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Опросы</h1>
-          <p className="mt-2 text-white/45 text-sm">Ваше мнение помогает нам становиться лучше</p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <div className="flex items-center gap-2 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-              <BarChart3 className="h-3.5 w-3.5 text-white/50" />
-              {surveys.length} {surveys.length === 1 ? 'опрос' : surveys.length < 5 ? 'опроса' : 'опросов'}
-            </div>
-            {respondedCount > 0 && (
-              <div className="flex items-center gap-2 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
-                {respondedCount} пройдено
-              </div>
-            )}
-            {urgentCount > 0 && (
-              <div className="flex items-center gap-2 rounded-lg bg-card/10 backdrop-blur-sm border border-amber-400/20 px-3 py-1.5 text-xs font-medium text-amber-200">
-                <Zap className="h-3.5 w-3.5 text-amber-300" />
-                {urgentCount} скоро дедлайн
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <PageBanner
+        icon={Sparkles}
+        eyebrow="Обратная связь"
+        title="Опросы"
+        subtitle="Ваше мнение помогает нам становиться лучше"
+        meta={
+          <>
+            <BannerPill icon={BarChart3}>{surveys.length} {surveys.length === 1 ? 'опрос' : surveys.length < 5 ? 'опроса' : 'опросов'}</BannerPill>
+            {respondedCount > 0 && <BannerPill icon={CheckCircle2} tone="success">{respondedCount} пройдено</BannerPill>}
+            {urgentCount > 0 && <BannerPill icon={Zap} tone="warning">{urgentCount} скоро дедлайн</BannerPill>}
+          </>
+        }
+      />
 
       {pendingCount > 0 && (
         <div className="flex items-center gap-2">
@@ -144,7 +127,8 @@ export function Surveys() {
           return (
             <div
               key={s.id}
-              className={`group hover-lift rounded-2xl border border-border/60 bg-card overflow-hidden shadow-sm transition-all duration-200 animate-slide-up ${staggerClass}`}
+              id={`survey-${s.id}`}
+              className={`group hover-lift rounded-2xl border overflow-hidden shadow-sm transition-all duration-200 animate-slide-up ${staggerClass} ${deepLinkSurveyId === String(s.id) ? 'border-primary ring-2 ring-primary bg-card' : 'border-border/60 bg-card'}`}
             >
               <div className={`h-1 bg-gradient-to-r ${color.accent}`} />
               <div className="p-5">

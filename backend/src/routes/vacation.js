@@ -122,6 +122,8 @@ const substExistsClause = (n) => `EXISTS (
 async function notifyVacationCreated(request, employeeId, req) {
   const empName = await getEmpName(employeeId)
   const payload = {
+    requestId: request.id,
+    employeeId,
     employeeName: empName,
     startDate: fmtDate(request.start_date),
     endDate: fmtDate(request.end_date),
@@ -1084,6 +1086,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
           userId: subId,
           type: 'vacation_substitution',
           data: {
+            requestId: request.id,
             employeeName: empName,
             startDate: fmtDate(request.start_date),
             endDate: fmtDate(request.end_date),
@@ -1282,6 +1285,7 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
       userId: request.rows[0].user_id,
       type: 'vacation_status_changed',
       data: {
+        requestId: id,
         employeeName: await getEmpName(request.rows[0].user_id),
         status: 'approved',
         startDate: fmtDate(request.rows[0].start_date),
@@ -1352,6 +1356,7 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
       userId: request.rows[0].user_id,
       type: 'vacation_status_changed',
       data: {
+        requestId: id,
         employeeName: await getEmpName(request.rows[0].user_id),
         status: 'rejected',
         startDate: fmtDate(request.rows[0].start_date),
@@ -1687,6 +1692,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
       userId: newRequest.user_id,
       type: 'vacation_status_changed',
       data: {
+        requestId: id,
         employeeName: await getEmpName(newRequest.user_id),
         status: 'approved',
         startDate: fmtDate(newRequest.start_date),
@@ -1831,6 +1837,7 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
       userId: newRequest.user_id,
       type: 'vacation_status_changed',
       data: {
+        requestId: id,
         employeeName: await getEmpName(newRequest.user_id),
         status: 'rejected',
         startDate: fmtDate(newRequest.start_date),
@@ -2485,7 +2492,7 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
  *         description: 'Поиск по описанию (ILIKE)'
  *     responses:
  *       200:
- *         description: 'Список ограничений: employeeIds, tagIds, tags (id+name), departmentName, maxConcurrent (0 — строгий запрет пересечений)'
+ *         description: 'Список ограничений: employeeIds, tagIds, tags (id+name), employeeCount (реальное число людей с учётом тегов), departmentName, maxConcurrent (0 — строгий запрет пересечений)'
  */
 router.get('/restrictions', authenticateToken, async (req, res) => {
   try {
@@ -2523,7 +2530,7 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
     const result = await query(
       `SELECT vr.*, d.name as department_name, u.first_name, u.last_name
        FROM vacation_restrictions vr
-       JOIN departments d ON vr.department_id = d.id
+       LEFT JOIN departments d ON vr.department_id = d.id
        JOIN users u ON vr.created_by = u.id
        ${where}
        ORDER BY vr.created_at DESC`,
@@ -2532,29 +2539,270 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
 
     const allTagIds = [...new Set(result.rows.flatMap(r => r.tag_ids || []))]
     const tagNameMap = new Map()
+    const tagUserMap = new Map()
     if (allTagIds.length > 0) {
-      const tagRows = await query('SELECT id, name FROM skills_dictionary WHERE id = ANY($1)', [allTagIds])
+      const [tagRows, tagUsers] = await Promise.all([
+        query('SELECT id, name FROM skills_dictionary WHERE id = ANY($1)', [allTagIds]),
+        query('SELECT skill_id, user_id FROM user_skills WHERE skill_id = ANY($1)', [allTagIds]),
+      ])
       for (const row of tagRows.rows) tagNameMap.set(row.id, row.name)
+      for (const row of tagUsers.rows) {
+        if (!tagUserMap.has(row.skill_id)) tagUserMap.set(row.skill_id, new Set())
+        tagUserMap.get(row.skill_id).add(row.user_id)
+      }
     }
 
-    const restrictions = result.rows.map(r => ({
-      id: r.id,
-      departmentId: String(r.department_id),
-      departmentName: r.department_name,
-      type: r.restriction_type,
-      employeeIds: r.employee_ids.map(String),
-      tagIds: (r.tag_ids || []).map(String),
-      tags: (r.tag_ids || []).map(id => ({ id: String(id), name: tagNameMap.get(id) || String(id) })),
-      maxConcurrent: r.max_concurrent,
-      description: r.description,
-      createdAt: r.created_at,
-      createdBy: String(r.created_by),
-      createdByName: `${r.last_name} ${r.first_name}`,
-    }))
+    const restrictions = result.rows.map(r => {
+      const memberIds = new Set(r.employee_ids)
+      for (const tagId of (r.tag_ids || [])) {
+        for (const uid of (tagUserMap.get(tagId) || new Set())) memberIds.add(uid)
+      }
+      return {
+        id: r.id,
+        departmentId: r.department_id === null ? null : String(r.department_id),
+        departmentName: r.department_name,
+        type: r.restriction_type,
+        employeeIds: r.employee_ids.map(String),
+        tagIds: (r.tag_ids || []).map(String),
+        tags: (r.tag_ids || []).map(id => ({ id: String(id), name: tagNameMap.get(id) || String(id) })),
+        employeeCount: memberIds.size,
+        maxConcurrent: r.max_concurrent,
+        description: r.description,
+        createdAt: r.created_at,
+        createdBy: String(r.created_by),
+        createdByName: `${r.last_name} ${r.first_name}`,
+      }
+    })
 
     res.json(restrictions)
   } catch (error) {
     res.status(500).json({ error: 'Не удалось получить ограничения' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/restrictions/preview-count:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Предпросмотр числа работников для набора тегов/сотрудников (до создания правила)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: tagIds
+ *         required: false
+ *         schema: { type: string }
+ *         description: 'Список id тегов через запятую'
+ *       - in: query
+ *         name: employeeIds
+ *         required: false
+ *         schema: { type: string }
+ *         description: 'Список id работников через запятую'
+ *     responses:
+ *       200:
+ *         description: 'Реальное число уникальных людей, охваченных выбором (сотрудники ∪ работники с тегами)'
+ */
+router.get('/restrictions/preview-count', authenticateToken, async (req, res) => {
+  try {
+    const parseIdList = (raw) => [...new Set(
+      String(raw || '').split(',').map(id => parseInt(id.trim())).filter(id => !Number.isNaN(id))
+    )]
+    const employeeIds = parseIdList(req.query.employeeIds)
+    const tagIds = parseIdList(req.query.tagIds)
+
+    if (employeeIds.length === 0 && tagIds.length === 0) {
+      return res.json({ count: 0 })
+    }
+
+    const result = await query(
+      `SELECT COUNT(DISTINCT uid)::int as c FROM (
+         SELECT unnest($1::int[]) as uid
+         UNION
+         SELECT user_id FROM user_skills WHERE skill_id = ANY($2)
+       ) t`,
+      [employeeIds, tagIds]
+    )
+    res.json({ count: result.rows[0].c })
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось посчитать работников' })
+  }
+})
+
+const addOneDay = (dateStr) => {
+  const d = new Date(dateStr + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * @swagger
+ * /vacation/restrictions/violations:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: 'Текущие нарушения правил пересечений (кто фактически пересекается) для отдела'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: departmentId
+ *         required: false
+ *         schema: { type: integer }
+ *         description: 'Отдел; менеджер без параметра видит свой отдел. HR/admin могут указать любой отдел организации'
+ *     responses:
+ *       200:
+ *         description: 'Список нарушений: restrictionId, type, description, tagNames, maxConcurrent, startDate, endDate, userIds, names'
+ *       403:
+ *         description: Доступ только к своему отделу (для руководителя)
+ */
+router.get('/restrictions/violations', authenticateToken, async (req, res) => {
+  try {
+    const isElevated = ['hr', 'admin', 'superadmin'].includes(req.user.role) || req.org?.org_role === 'admin'
+    let departmentId = req.query.departmentId ? parseInt(req.query.departmentId) : null
+
+    if (!departmentId) {
+      const { text: mdText, values: mdValues } = orgScopedQuery(
+        'SELECT id FROM departments WHERE manager_id = $1', [req.user.id], req
+      )
+      const byManagerId = await query(mdText, mdValues)
+      if (byManagerId.rows.length > 0) {
+        departmentId = byManagerId.rows[0].id
+      } else {
+        const me = await query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
+        departmentId = me.rows[0]?.department_id ?? null
+      }
+    }
+    if (!departmentId) {
+      return res.json([])
+    }
+    if (!isElevated) {
+      const { text: mcText, values: mcValues } = orgScopedQuery(
+        'SELECT 1 FROM departments WHERE id = $1 AND manager_id = $2', [departmentId, req.user.id], req
+      )
+      const managerCheck = await query(mcText, mcValues)
+      if (managerCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'Доступ только к своему отделу' })
+      }
+    }
+
+    const { text: restText, values: restValues } = orgScopedQuery(
+      'SELECT * FROM vacation_restrictions WHERE (department_id = $1 OR department_id IS NULL)',
+      [departmentId], req
+    )
+    const restrictions = await query(restText, restValues)
+    if (restrictions.rows.length === 0) {
+      return res.json([])
+    }
+
+    const allTagIds = [...new Set(restrictions.rows.flatMap(r => r.tag_ids || []))]
+    const tagUserMap = new Map()
+    if (allTagIds.length > 0) {
+      const tagUsers = await query('SELECT skill_id, user_id FROM user_skills WHERE skill_id = ANY($1)', [allTagIds])
+      for (const row of tagUsers.rows) {
+        if (!tagUserMap.has(row.skill_id)) tagUserMap.set(row.skill_id, new Set())
+        tagUserMap.get(row.skill_id).add(row.user_id)
+      }
+    }
+
+    const restrictionRows = restrictions.rows
+      .map(r => {
+        const manualIds = (r.employee_ids || []).map(Number)
+        const ids = new Set(manualIds)
+        for (const tagId of (r.tag_ids || [])) {
+          for (const uid of (tagUserMap.get(tagId) || new Set())) ids.add(uid)
+        }
+        return { ...r, memberIds: [...ids] }
+      })
+      .filter(r => r.memberIds.length >= 2)
+
+    if (restrictionRows.length === 0) {
+      return res.json([])
+    }
+
+    const allMemberIds = [...new Set(restrictionRows.flatMap(r => r.memberIds))]
+
+    const { text: reqText, values: reqValues } = orgScopedQuery(
+      `SELECT vr.user_id, vr.start_date, vr.end_date FROM vacation_requests vr
+       JOIN request_statuses rs ON vr.status_id = rs.id
+       WHERE vr.user_id = ANY($1) AND rs.code IN ('on_approval', 'approved')`,
+      [allMemberIds], req
+    )
+    const [reqRows, nameRows, tagRows] = await Promise.all([
+      query(reqText, reqValues),
+      query('SELECT id, first_name, last_name, middle_name FROM users WHERE id = ANY($1)', [allMemberIds]),
+      allTagIds.length > 0
+        ? query('SELECT id, name FROM skills_dictionary WHERE id = ANY($1)', [allTagIds])
+        : Promise.resolve({ rows: [] }),
+    ])
+    const nameMap = new Map(nameRows.rows.map(r => [r.id, [r.last_name, r.first_name, r.middle_name].filter(Boolean).join(' ')]))
+    const tagNameMap = new Map(tagRows.rows.map(r => [r.id, r.name]))
+
+    const requestsByUser = new Map()
+    for (const row of reqRows.rows) {
+      if (!requestsByUser.has(row.user_id)) requestsByUser.set(row.user_id, [])
+      requestsByUser.get(row.user_id).push({ start: row.start_date, end: row.end_date })
+    }
+
+    const violations = []
+
+    for (const restriction of restrictionRows) {
+      const limit = restriction.max_concurrent ?? 1
+
+      const intervals = []
+      for (const uid of restriction.memberIds) {
+        for (const iv of (requestsByUser.get(uid) || [])) {
+          intervals.push({ uid, start: iv.start, end: iv.end })
+        }
+      }
+      if (intervals.length < 2) continue
+
+      const minDate = intervals.reduce((m, iv) => (iv.start < m ? iv.start : m), intervals[0].start)
+      const maxDate = intervals.reduce((m, iv) => (iv.end > m ? iv.end : m), intervals[0].end)
+
+      const violatingDays = []
+      for (let d = minDate; d <= maxDate; d = addOneDay(d)) {
+        const activeUids = [...new Set(intervals.filter(iv => iv.start <= d && iv.end >= d).map(iv => iv.uid))]
+        if (activeUids.length > limit) {
+          violatingDays.push({ date: d, uids: activeUids })
+        }
+      }
+      if (violatingDays.length === 0) continue
+
+      let group = null
+      const groups = []
+      for (const vd of violatingDays) {
+        const key = vd.uids.slice().sort((a, b) => a - b).join(',')
+        if (group && group.key === key && addOneDay(group.end) === vd.date) {
+          group.end = vd.date
+        } else {
+          if (group) groups.push(group)
+          group = { key, uids: vd.uids, start: vd.date, end: vd.date }
+        }
+      }
+      if (group) groups.push(group)
+
+      const tagNames = (restriction.tag_ids || []).map(id => tagNameMap.get(id)).filter(Boolean)
+
+      for (const g of groups) {
+        violations.push({
+          restrictionId: restriction.id,
+          type: restriction.restriction_type,
+          description: restriction.description,
+          tagNames,
+          maxConcurrent: restriction.restriction_type === 'group' ? restriction.max_concurrent : null,
+          startDate: g.start,
+          endDate: g.end,
+          userIds: g.uids.map(String),
+          names: g.uids.map(uid => nameMap.get(uid) || String(uid)),
+        })
+      }
+    }
+
+    violations.sort((a, b) => a.startDate.localeCompare(b.startDate))
+    res.json(violations)
+  } catch (error) {
+    console.error('GET /restrictions/violations error:', error)
+    res.status(500).json({ error: 'Не удалось проверить пересечения' })
   }
 })
 
@@ -2572,10 +2820,10 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [departmentId, type]
+ *             required: [type]
  *             properties:
- *               departmentId: { type: integer }
- *               type: { type: string, enum: [pair, group] }
+ *               departmentId: { type: integer, description: 'Необязателен для правил только по тегам — тогда правило действует во всех отделах' }
+ *               type: { type: string, enum: [group] }
  *               employeeIds: { type: array, items: { type: integer } }
  *               tagIds: { type: array, items: { type: integer } }
  *               maxConcurrent: { type: integer, description: '0 — строгий запрет пересечений' }
@@ -2584,100 +2832,179 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
  *       201:
  *         description: Ограничение создано
  */
+async function resolveRestrictionFields({ type, rawEmployeeIds, rawTagIds, maxConcurrent }) {
+  const parsedIds = [...new Set(
+    Array.isArray(rawEmployeeIds)
+      ? rawEmployeeIds.map(id => parseInt(id)).filter(id => !Number.isNaN(id))
+      : []
+  )]
+  const parsedTagIds = [...new Set(
+    Array.isArray(rawTagIds)
+      ? rawTagIds.map(id => parseInt(id)).filter(id => !Number.isNaN(id))
+      : []
+  )]
+
+  if (parsedTagIds.length > 0) {
+    const tagRows = await query('SELECT id FROM skills_dictionary WHERE id = ANY($1)', [parsedTagIds])
+    if (tagRows.rows.length !== parsedTagIds.length) {
+      return { error: 'Некоторые из указанных тегов не найдены' }
+    }
+  }
+
+  if (type === 'group') {
+    const membersResult = await query(
+      `SELECT COUNT(DISTINCT uid)::int as c FROM (
+         SELECT unnest($1::int[]) as uid
+         UNION
+         SELECT user_id FROM user_skills WHERE skill_id = ANY($2)
+       ) t`,
+      [parsedIds, parsedTagIds]
+    )
+    if (membersResult.rows[0].c < 2) {
+      return { error: 'Для группового ограничения нужно минимум два работника (с учётом тегов)' }
+    }
+    let maxConc = 1
+    if (maxConcurrent !== undefined && maxConcurrent !== null) {
+      const parsedMax = parseInt(maxConcurrent)
+      if (Number.isNaN(parsedMax) || parsedMax < 0) {
+        return { error: 'maxConcurrent должен быть целым числом не меньше 0' }
+      }
+      maxConc = parsedMax
+    }
+    return { employeeIds: parsedIds, tagIds: parsedTagIds, maxConc }
+  }
+
+  return { error: 'Некорректный тип ограничения' }
+}
+
+function parseDeptId(departmentId) {
+  if (departmentId === undefined || departmentId === null || departmentId === '') return { deptId: null }
+  const deptId = parseInt(departmentId)
+  if (Number.isNaN(deptId)) return { error: 'Некорректный departmentId' }
+  return { deptId }
+}
+
+function mapRestrictionRow(r, userRow) {
+  return {
+    id: r.id,
+    departmentId: r.department_id === null ? null : String(r.department_id),
+    type: r.restriction_type,
+    employeeIds: r.employee_ids.map(String),
+    tagIds: (r.tag_ids || []).map(String),
+    maxConcurrent: r.max_concurrent,
+    description: r.description,
+    createdAt: r.created_at,
+    createdBy: String(r.created_by),
+    createdByName: `${userRow.last_name} ${userRow.first_name}`,
+  }
+}
+
 router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   try {
     const { departmentId, type, employeeIds: rawEmployeeIds, tagIds: rawTagIds, maxConcurrent, description } = req.body
     const createdBy = req.user.id
 
-    if (!departmentId || !type) {
-      return res.status(400).json({ error: 'Укажите departmentId и type' })
+    if (!type) {
+      return res.status(400).json({ error: 'Укажите type' })
     }
 
-    const deptId = parseInt(departmentId)
-    if (Number.isNaN(deptId)) {
-      return res.status(400).json({ error: 'Некорректный departmentId' })
+    const deptResult = parseDeptId(departmentId)
+    if (deptResult.error) {
+      return res.status(400).json({ error: deptResult.error })
     }
 
-    const parsedIds = [...new Set(
-      Array.isArray(rawEmployeeIds)
-        ? rawEmployeeIds.map(id => parseInt(id)).filter(id => !Number.isNaN(id))
-        : []
-    )]
-    const parsedTagIds = [...new Set(
-      Array.isArray(rawTagIds)
-        ? rawTagIds.map(id => parseInt(id)).filter(id => !Number.isNaN(id))
-        : []
-    )]
-
-    if (parsedTagIds.length > 0) {
-      const tagRows = await query('SELECT id FROM skills_dictionary WHERE id = ANY($1)', [parsedTagIds])
-      if (tagRows.rows.length !== parsedTagIds.length) {
-        return res.status(400).json({ error: 'Некоторые из указанных тегов не найдены' })
-      }
+    const resolved = await resolveRestrictionFields({ type, rawEmployeeIds, rawTagIds, maxConcurrent })
+    if (resolved.error) {
+      return res.status(400).json({ error: resolved.error })
     }
-
-    let employeeIds = []
-    let tagIds = []
-    let maxConc = null
-
-    if (type === 'pair') {
-      if (parsedIds.length + parsedTagIds.length !== 2) {
-        return res.status(400).json({ error: 'Для парного ограничения выберите ровно двух работников и/или тегов' })
-      }
-      employeeIds = [parsedIds[0], parsedIds[1]].filter(id => id !== undefined)
-      tagIds = parsedTagIds
-      maxConc = null
-    } else if (type === 'group') {
-      const membersResult = await query(
-        `SELECT COUNT(DISTINCT uid)::int as c FROM (
-           SELECT unnest($1::int[]) as uid
-           UNION
-           SELECT user_id FROM user_skills WHERE skill_id = ANY($2)
-         ) t`,
-        [parsedIds, parsedTagIds]
-      )
-      if (membersResult.rows[0].c < 2) {
-        return res.status(400).json({ error: 'Для группового ограничения нужно минимум два работника (с учётом тегов)' })
-      }
-      employeeIds = parsedIds
-      tagIds = parsedTagIds
-      if (maxConcurrent !== undefined && maxConcurrent !== null) {
-        const parsedMax = parseInt(maxConcurrent)
-        if (Number.isNaN(parsedMax) || parsedMax < 0) {
-          return res.status(400).json({ error: 'maxConcurrent должен быть целым числом не меньше 0' })
-        }
-        maxConc = parsedMax
-      } else {
-        maxConc = 1
-      }
-    } else {
-      return res.status(400).json({ error: 'Некорректный тип ограничения' })
-    }
+    const { employeeIds, tagIds, maxConc } = resolved
 
     const result = await query(
       `INSERT INTO vacation_restrictions (department_id, restriction_type, employee_ids, tag_ids, max_concurrent, description, created_by, organization_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [deptId, type, employeeIds, tagIds, maxConc, description || null, createdBy, currentOrgId(req)]
+      [deptResult.deptId, type, employeeIds, tagIds, maxConc, description || null, createdBy, currentOrgId(req)]
     )
 
     const r = result.rows[0]
     const user = await query('SELECT first_name, last_name FROM users WHERE id = $1', [createdBy])
 
-    res.status(201).json({
-      id: r.id,
-      departmentId: String(r.department_id),
-      type: r.restriction_type,
-      employeeIds: r.employee_ids.map(String),
-      tagIds: (r.tag_ids || []).map(String),
-      maxConcurrent: r.max_concurrent,
-      description: r.description,
-      createdAt: r.created_at,
-      createdBy: String(r.created_by),
-      createdByName: `${user.rows[0].last_name} ${user.rows[0].first_name}`,
-    })
+    res.status(201).json(mapRestrictionRow(r, user.rows[0]))
   } catch (error) {
     res.status(500).json({ error: 'Не удалось создать ограничение' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/restrictions/{id}:
+ *   put:
+ *     tags: [Vacation]
+ *     summary: Изменить ограничение по отпуску
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [type]
+ *             properties:
+ *               departmentId: { type: integer, description: 'Необязателен для правил только по тегам' }
+ *               type: { type: string, enum: [group] }
+ *               employeeIds: { type: array, items: { type: integer } }
+ *               tagIds: { type: array, items: { type: integer } }
+ *               maxConcurrent: { type: integer, description: '0 — строгий запрет пересечений' }
+ *               description: { type: string }
+ *     responses:
+ *       200:
+ *         description: Ограничение обновлено
+ */
+router.put('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { departmentId, type, employeeIds: rawEmployeeIds, tagIds: rawTagIds, maxConcurrent, description } = req.body
+
+    if (!type) {
+      return res.status(400).json({ error: 'Укажите type' })
+    }
+
+    const deptResult = parseDeptId(departmentId)
+    if (deptResult.error) {
+      return res.status(400).json({ error: deptResult.error })
+    }
+
+    const resolved = await resolveRestrictionFields({ type, rawEmployeeIds, rawTagIds, maxConcurrent })
+    if (resolved.error) {
+      return res.status(400).json({ error: resolved.error })
+    }
+    const { employeeIds, tagIds, maxConc } = resolved
+
+    const { text: updText, values: updValues } = orgScopedQuery(
+      `UPDATE vacation_restrictions
+       SET department_id = $1, restriction_type = $2, employee_ids = $3, tag_ids = $4, max_concurrent = $5, description = $6
+       WHERE id = $7
+       RETURNING *`,
+      [deptResult.deptId, type, employeeIds, tagIds, maxConc, description || null, id],
+      req
+    )
+    const result = await query(updText, updValues)
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ограничение не найдено' })
+    }
+
+    const r = result.rows[0]
+    const user = await query('SELECT first_name, last_name FROM users WHERE id = $1', [r.created_by])
+
+    res.json(mapRestrictionRow(r, user.rows[0]))
+  } catch (error) {
+    res.status(500).json({ error: 'Не удалось обновить ограничение' })
   }
 })
 
@@ -2733,7 +3060,7 @@ router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 
  *               endDate: { type: string, format: date }
  *     responses:
  *       200:
- *         description: 'Список нарушений: message, rule (pair|group), ruleType (manual|tag|combined), tagNames, names (ФИО пересекающихся), dates (интервалы пересечений)'
+ *         description: 'Список нарушений: message, rule (group), ruleType (manual|tag|combined), tagNames, names (ФИО пересекающихся), dates (интервалы пересечений)'
  */
 router.post('/check-restrictions', authenticateToken, async (req, res) => {
   try {
@@ -2750,7 +3077,7 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
     const departmentId = userResult.rows[0].department_id
 
     const { text: chkRestText, values: chkRestValues } = orgScopedQuery(
-      'SELECT * FROM vacation_restrictions WHERE department_id = $1',
+      'SELECT * FROM vacation_restrictions WHERE (department_id = $1 OR department_id IS NULL)',
       [departmentId], req
     )
     const restrictions = await query(chkRestText, chkRestValues)
@@ -2828,22 +3155,7 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
       const tagNames = (restriction.tag_ids || []).map(id => tagNameMap.get(id)).filter(Boolean)
       const tagSuffix = tagNames.length > 0 ? `, правило по тегам: ${tagNames.join(', ')}` : ''
 
-      if (restriction.restriction_type === 'pair') {
-        const others = restriction.employee_ids
-          .filter(id => id !== parseInt(userId) && overlapSet.has(id))
-        if (others.length > 0) {
-          const otherNames = others.map(id => fullNameOf(id))
-          violations.push({
-            field: 'restriction',
-            message: `Невозможно: ${otherNames.join(', ')} уже в отпуске в эти даты (парное ограничение${tagSuffix})`,
-            rule: 'pair',
-            ruleType: restriction.source,
-            tagNames,
-            names: otherNames,
-            dates: others.flatMap(id => overlapDatesMap.get(id) || []),
-          })
-        }
-      } else if (restriction.restriction_type === 'group') {
+      if (restriction.restriction_type === 'group') {
         const concurrentIds = restriction.employee_ids
           .filter(id => id !== parseInt(userId) && overlapSet.has(id))
         const limit = restriction.max_concurrent
@@ -2943,6 +3255,7 @@ router.post('/requests/:id/substitutes', authenticateToken, async (req, res) => 
         userId: subId,
         type: 'vacation_substitution',
         data: {
+          requestId: id,
           employeeName: empName,
           startDate: fmtDate(vacation.start_date),
           endDate: fmtDate(vacation.end_date),
@@ -2992,7 +3305,7 @@ router.delete('/requests/:id/substitutes/:userId', authenticateToken, async (req
     notify({
       userId: subUserId,
       type: 'vacation_substitution_removed',
-      data: { link: '/vacation' }
+      data: { requestId: id, link: '/vacation' }
     }).catch((err) => console.warn(`[NOTIFY] substitute remove ${subUserId}: ${err.message}`))
 
     res.json({ removed: true })

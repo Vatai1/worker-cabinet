@@ -1,29 +1,27 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  Bell, CheckCheck, Mail, MailOpen, Clock, AlertCircle, Sparkles, ChevronLeft, ChevronRight,
-  Plane, ClipboardList, FileText, BarChart3, GraduationCap,
+  Bell, CheckCheck, Mail, Sparkles, ChevronLeft, ChevronRight,
+  Plane, ClipboardList, FileText, BarChart3, GraduationCap, Bug,
 } from 'lucide-react'
 import { Card } from '@/shared/components/ui/Card'
-import { Badge } from '@/shared/components/ui/Badge'
 import { Button } from '@/shared/components/ui/Button'
 import { formatDateTime, getErrorMessage, cn } from '@/shared/lib/utils'
-import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { API_BASE_URL } from '@/shared/lib/api'
-
-interface Notification {
-  id: number
-  type: string
-  channel: string
-  data: Record<string, unknown>
-  status: string
-  sent_at: string | null
-  created_at: string
-  read_at?: string | null
-}
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
+import { useAuthStore } from '@/core/auth/store/authStore'
+import { openNotification } from '@/shared/lib/notificationClick'
+import {
+  type NotificationItem as Notification,
+  fetchMyNotifications, fetchUnreadCount as fetchUnreadCountApi, markAllNotificationsRead,
+} from '@/shared/lib/notificationsApi'
 
 const TYPE_LABELS: Record<string, string> = {
   vacation_created: 'Заявка на отпуск',
   vacation_status_changed: 'Статус отпуска',
+  vacation_substitution: 'Замещение на отпуске',
+  vacation_substitution_removed: 'Замещение отменено',
+  bug_report_new: 'Баг-репорт',
+  bug_report_update: 'Статус баг-репорта',
   document_assigned: 'Документ для ознакомления',
   survey_assigned: 'Новый опрос',
   onboarding_task: 'Задача онбординга',
@@ -34,6 +32,10 @@ const TYPE_LABELS: Record<string, string> = {
 const TYPE_META: Record<string, { icon: typeof Bell; className: string }> = {
   vacation_created: { icon: Plane, className: 'text-blue-600 bg-blue-500/15' },
   vacation_status_changed: { icon: ClipboardList, className: 'text-violet-600 bg-violet-500/15' },
+  vacation_substitution: { icon: Plane, className: 'text-blue-600 bg-blue-500/15' },
+  vacation_substitution_removed: { icon: Plane, className: 'text-muted-foreground bg-muted' },
+  bug_report_new: { icon: Bug, className: 'text-red-600 bg-red-500/15' },
+  bug_report_update: { icon: Bug, className: 'text-orange-600 bg-orange-500/15' },
   document_assigned: { icon: FileText, className: 'text-pink-600 bg-pink-500/15' },
   survey_assigned: { icon: BarChart3, className: 'text-purple-600 bg-purple-500/15' },
   onboarding_task: { icon: GraduationCap, className: 'text-amber-600 bg-amber-500/15' },
@@ -41,13 +43,9 @@ const TYPE_META: Record<string, { icon: typeof Bell; className: string }> = {
   generic: { icon: Bell, className: 'text-muted-foreground bg-muted' },
 }
 
-const STATUS_META: Record<string, { label: string; icon: typeof Mail; variant: 'success' | 'warning' | 'destructive' | 'outline' }> = {
-  sent: { label: 'Отправлено', icon: Mail, variant: 'success' },
-  pending: { label: 'Ожидает', icon: Clock, variant: 'warning' },
-  failed: { label: 'Ошибка', icon: AlertCircle, variant: 'destructive' },
-}
-
 export function Notifications() {
+  const navigate = useNavigate()
+  const currentUserId = useAuthStore((s) => s.user?.id)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -58,12 +56,7 @@ export function Notifications() {
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch(
-        `${API_BASE_URL}/notifications/my?page=${page}&limit=20`,
-        { headers: getAuthHeaders() }
-      )
-      if (!res.ok) throw new Error('Ошибка загрузки')
-      const data = await res.json()
+      const data = await fetchMyNotifications(page, 20)
       setNotifications(data.notifications)
       setTotal(data.total)
     } catch (err: unknown) {
@@ -74,15 +67,7 @@ export function Notifications() {
   }, [page])
 
   const fetchUnreadCount = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/notifications/my/unread-count`, {
-        headers: getAuthHeaders(),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setUnreadCount(data.count)
-      }
-    } catch {}
+    setUnreadCount(await fetchUnreadCountApi())
   }, [])
 
   useEffect(() => {
@@ -90,22 +75,20 @@ export function Notifications() {
     fetchUnreadCount()
   }, [fetchNotifications, fetchUnreadCount])
 
-  const markAsRead = async (id: number) => {
-    await fetch(`${API_BASE_URL}/notifications/my/${id}/read`, {
-      method: 'PATCH',
-      headers: getAuthHeadersWithContentType(),
-    })
+  const markLocalAsRead = (id: number) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n))
     )
     setUnreadCount((prev) => Math.max(0, prev - 1))
   }
 
+  const handleNotificationClick = async (n: Notification) => {
+    const wasMarked = await openNotification(n, navigate, currentUserId)
+    if (wasMarked) markLocalAsRead(n.id)
+  }
+
   const markAllAsRead = async () => {
-    await fetch(`${API_BASE_URL}/notifications/my/read-all`, {
-      method: 'PATCH',
-      headers: getAuthHeadersWithContentType(),
-    })
+    await markAllNotificationsRead()
     setNotifications((prev) =>
       prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
     )
@@ -116,50 +99,25 @@ export function Notifications() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="relative overflow-hidden gradient-primary text-white rounded-xl animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10 p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="h-3.5 w-3.5 text-white/60" />
-                <span className="text-white/40 text-[10px] font-medium uppercase tracking-wider">Центр сообщений</span>
-              </div>
-              <h1 className="text-2xl font-extrabold tracking-tight">Уведомления</h1>
-              <p className="mt-1 text-white/50 text-sm">Все уведомления и почтовые рассылки в одном месте</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex flex-wrap gap-2">
-                {unreadCount > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-amber-400/20 backdrop-blur-sm border border-amber-400/20 px-2.5 py-1 text-[11px] font-medium text-amber-100">
-                    <Mail className="h-3 w-3 text-amber-300/70" />
-                    {unreadCount} непрочитанных
-                  </div>
-                )}
-                {total > 0 && (
-                  <div className="flex items-center gap-1.5 rounded-lg bg-card/10 backdrop-blur-sm border border-white/10 px-2.5 py-1 text-[11px] font-medium text-white/80">
-                    <Bell className="h-3 w-3 text-white/50" />
-                    {total} всего
-                  </div>
-                )}
-              </div>
-              {unreadCount > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-white/20 bg-card/10 text-white hover:bg-card/20 hover:text-white"
-                  onClick={markAllAsRead}
-                >
-                  <CheckCheck className="h-3.5 w-3.5 mr-1.5" />
-                  Прочитать все
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <PageBanner
+        compact
+        icon={Sparkles}
+        eyebrow="Центр сообщений"
+        title="Уведомления"
+        subtitle="Все уведомления и почтовые рассылки в одном месте"
+        aside={
+          <>
+            {unreadCount > 0 && <BannerPill icon={Mail} tone="warning">{unreadCount} непрочитанных</BannerPill>}
+            {total > 0 && <BannerPill icon={Bell}>{total} всего</BannerPill>}
+            {unreadCount > 0 && (
+              <Button variant="outline" size="sm" onClick={markAllAsRead}>
+                <CheckCheck className="h-3.5 w-3.5" />
+                Прочитать все
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {error && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>
@@ -197,12 +155,9 @@ export function Notifications() {
                 const Icon = meta.icon
                 const label = TYPE_LABELS[n.type] || n.type
                 const data = n.data || {}
-                const subject = (data.subject as string) || label
+                const title = (data.subject as string) || (data.title as string) || label
                 const message = (data.message as string) || ''
                 const imageUrls = (data.imageUrls as string[]) || []
-                const title = n.type === 'mailing' ? (data.title as string) : subject
-                const statusMeta = STATUS_META[n.status]
-                const StatusIcon = statusMeta?.icon || MailOpen
 
                 return (
                   <div
@@ -211,7 +166,7 @@ export function Notifications() {
                       'flex items-start gap-3 rounded-xl border p-4 transition-colors cursor-pointer',
                       isUnread ? 'border-primary/30 bg-primary/5 hover:bg-primary/10' : 'border-border hover:bg-muted/30',
                     )}
-                    onClick={() => isUnread && markAsRead(n.id)}
+                    onClick={() => handleNotificationClick(n)}
                   >
                     <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', meta.className)}>
                       <Icon className="h-4 w-4" />
@@ -234,11 +189,7 @@ export function Notifications() {
                           )}
                         </div>
                       )}
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <Badge variant={statusMeta?.variant || 'outline'}>
-                          <StatusIcon className="mr-1 h-3 w-3" />
-                          {statusMeta?.label || n.status}
-                        </Badge>
+                      <div className="mt-2 text-xs text-muted-foreground">
                         <span>{formatDateTime(n.sent_at || n.created_at)}</span>
                       </div>
                     </div>

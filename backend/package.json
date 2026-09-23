@@ -1,6 +1,6 @@
 {
   "name": "worker-cabinet-backend",
-  "version": "2.3.47",
+  "version": "2.4.3",
   "description": "Backend for Worker Cabinet",
   "main": "src/server.js",
   "type": "module",
@@ -30,6 +30,7 @@
     "test:calendar": "node --test src/tests/calendar.test.js",
     "test:admin": "node --test src/tests/admin.test.js",
     "test:banner": "node --test src/tests/banner.test.js",
+    "test:push": "node --test src/tests/push.test.js",
     "test:auth-extended": "node --test src/tests/auth-extended.test.js"
   },
   "dependencies": {
@@ -55,6 +56,7 @@
     "pg": "^8.11.3",
     "pizzip": "^3.2.0",
     "swagger-jsdoc": "^6.2.8",
+    "web-push": "^3.6.7",
     "ws": "^8.21.1"
   },
   "devDependencies": {

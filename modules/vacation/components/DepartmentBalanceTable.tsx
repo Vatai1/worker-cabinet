@@ -46,7 +46,7 @@ export function DepartmentBalanceTable({ departmentId, year, currentUserId }: De
             <th className="px-3 py-2 font-medium">ФИО</th>
             <th className="px-3 py-2 font-medium text-right">Всего дней</th>
             <th className="px-3 py-2 font-medium text-right">Использовано</th>
-            <th className="px-3 py-2 font-medium text-right">Доступно</th>
+            <th className="px-3 py-2 font-medium text-right">Запланировано</th>
           </tr>
         </thead>
         <tbody>

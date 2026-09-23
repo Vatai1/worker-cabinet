@@ -3,6 +3,7 @@ import type {
   VacationRequest,
   VacationBalance,
   VacationRestriction,
+  VacationRestrictionViolation,
   VacationFormData,
   VacationValidationError,
   VacationSubstitution,
@@ -21,6 +22,7 @@ interface VacationStore {
   requests: VacationRequest[]
   balances: Record<string, VacationBalance>
   restrictions: VacationRestriction[]
+  violations: VacationRestrictionViolation[]
 
   currentUserRequests: VacationRequest[]
   departmentRequests: VacationRequest[]
@@ -38,6 +40,7 @@ interface VacationStore {
   fetchDepartmentRequests: (departmentId: string, filters?: { status?: string; year?: number; vacationType?: string }) => Promise<void>
   fetchBalance: (userId: string, year: number) => Promise<VacationBalance>
   fetchRestrictions: (departmentId: string) => Promise<void>
+  fetchViolations: (departmentId?: string) => Promise<void>
 
   createRequest: (userId: string, data: VacationFormData) => Promise<VacationRequest | null>
   cancelRequest: (requestId: string) => Promise<void>
@@ -76,6 +79,7 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
       requests: [],
       balances: {},
       restrictions: [],
+      violations: [],
       mySubstitutions: [],
       
       currentUserRequests: [],
@@ -153,7 +157,16 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
           set({ error: errorMessage(error, 'Ошибка при загрузке ограничений'), loading: false })
         }
       },
-      
+
+      fetchViolations: async (departmentId?: string) => {
+        try {
+          const data = await vacationApi.getRestrictionViolations(departmentId)
+          set({ violations: data })
+        } catch (error) {
+          set({ error: errorMessage(error, 'Ошибка при проверке пересечений') })
+        }
+      },
+
       validateRequest: (userId: string, data: VacationFormData) => {
         const errors: VacationValidationError[] = []
         const { startDate, endDate, vacationType, hasTravel, referenceDocument } = data

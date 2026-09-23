@@ -6,6 +6,10 @@ import { initTheme } from '@/shared/theme/themeStore'
 
 initTheme()
 
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {})
+}
+
 const root = createRoot(document.getElementById('root')!)
 root.render(<App />)
 

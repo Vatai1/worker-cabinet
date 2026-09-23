@@ -327,6 +327,15 @@ export function HRMailing() {
     return () => clearInterval(interval)
   }, [detailCampaign?.id])
 
+  useEffect(() => {
+    if (!detailCampaign) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDetailCampaign(null)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [detailCampaign])
+
   const recipientSummary = [
     selectedUserIds.size > 0 && `${selectedUserIds.size} сотрудн.`,
     selectedPositions.size > 0 && `${selectedPositions.size} должн.`,

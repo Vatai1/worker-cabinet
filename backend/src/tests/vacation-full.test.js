@@ -188,6 +188,8 @@ describe('Модуль отпусков — user stories', () => {
       assert.ok(notification, 'уведомление vacation_created согласующему не получено')
       assert.strictEqual(notification.data.employeeName, 'Иванов Пётр')
       assert.strictEqual(notification.data.link, '/leader')
+      assert.strictEqual(notification.data.requestId, res.data.id)
+      assert.strictEqual(notification.data.employeeId, emp.id)
     })
 
     it('400: дата окончания раньше даты начала', async () => {
@@ -263,8 +265,12 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(res.status, 201, JSON.stringify(res.data))
       const rows = (await query('SELECT substitute_user_id FROM vacation_substitutions WHERE vacation_request_id = $1 ORDER BY substitute_user_id', [res.data.id])).rows.map((r) => r.substitute_user_id)
       assert.deepStrictEqual(rows.sort((a, b) => a - b), [emp2.id, sub.id].sort((a, b) => a - b))
-      assert.ok(await waitNotification(emp2.id, 'vacation_substitution'), 'уведомление первому замещающему не получено')
-      assert.ok(await waitNotification(sub.id, 'vacation_substitution'), 'уведомление второму замещающему не получено')
+      const n1 = await waitNotification(emp2.id, 'vacation_substitution')
+      const n2 = await waitNotification(sub.id, 'vacation_substitution')
+      assert.ok(n1, 'уведомление первому замещающему не получено')
+      assert.ok(n2, 'уведомление второму замещающему не получено')
+      assert.strictEqual(n1.data.requestId, res.data.id)
+      assert.strictEqual(n2.data.requestId, res.data.id)
     })
   })
 
@@ -410,6 +416,7 @@ describe('Модуль отпусков — user stories', () => {
       const notification = await waitNotification(emp.id, 'vacation_status_changed', (n) => n.data.status === 'approved')
       assert.ok(notification, 'уведомление vacation_status_changed не получено')
       assert.strictEqual(notification.data.comment, null)
+      assert.strictEqual(String(notification.data.requestId), String(created.data.id))
     })
 
     it('reject с причиной: rejected, rejection_reason, уведомление с комментарием', async () => {
@@ -424,6 +431,7 @@ describe('Модуль отпусков — user stories', () => {
       const notification = await waitNotification(emp.id, 'vacation_status_changed', (n) => n.data.status === 'rejected')
       assert.ok(notification, 'уведомление об отклонении не получено')
       assert.strictEqual(notification.data.comment, 'Производственная необходимость')
+      assert.strictEqual(String(notification.data.requestId), String(created.data.id))
     })
 
     it('reject без причины → 400', async () => {
@@ -749,12 +757,12 @@ describe('Модуль отпусков — user stories', () => {
       [userId, tagId]
     )
 
-    it('POST /restrictions (manager, pair) → 201; GET списка отдела содержит', async () => {
+    it('POST /restrictions (manager, group maxConcurrent=1) → 201; GET списка отдела содержит', async () => {
       const res = await call('POST', '/vacation/restrictions', await tokenFor(mgr), {
-        departmentId: deptId, type: 'pair', employeeIds: [emp.id, emp2.id], maxConcurrent: 1, description: 'Не одновременно',
+        departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id], maxConcurrent: 1, description: 'Не одновременно',
       })
       assert.strictEqual(res.status, 201, JSON.stringify(res.data))
-      assert.strictEqual(res.data.type, 'pair')
+      assert.strictEqual(res.data.type, 'group')
       assert.deepStrictEqual(res.data.employeeIds, [String(emp.id), String(emp2.id)])
       const list = await call('GET', `/vacation/restrictions?departmentId=${deptId}`, await tokenFor(mgr))
       assert.strictEqual(list.status, 200)
@@ -762,7 +770,7 @@ describe('Модуль отпусков — user stories', () => {
     })
 
     it('GET /restrictions без departmentId → 200 (все правила организации)', async () => {
-      await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'pair', employeeIds: [emp.id, emp2.id] })
+      await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id] })
       const res = await call('GET', '/vacation/restrictions', await tokenFor(mgr))
       assert.strictEqual(res.status, 200)
       assert.ok(Array.isArray(res.data))
@@ -771,18 +779,18 @@ describe('Модуль отпусков — user stories', () => {
     })
 
     it('POST /restrictions от employee → 403', async () => {
-      const res = await call('POST', '/vacation/restrictions', await tokenFor(emp), { departmentId: deptId, type: 'pair', employeeIds: [emp.id, emp2.id] })
+      const res = await call('POST', '/vacation/restrictions', await tokenFor(emp), { departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id] })
       assert.strictEqual(res.status, 403)
     })
 
     it('DELETE /restrictions от employee → 403', async () => {
-      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'pair', employeeIds: [emp.id, emp2.id] })
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id] })
       const res = await call('DELETE', `/vacation/restrictions/${created.data.id}`, await tokenFor(emp))
       assert.strictEqual(res.status, 403)
     })
 
     it('DELETE hr → 200; повторный DELETE → 404', async () => {
-      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'pair', employeeIds: [emp.id, emp2.id] })
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id] })
       const removed = await call('DELETE', `/vacation/restrictions/${created.data.id}`, await tokenFor(hr))
       assert.strictEqual(removed.status, 200)
       assert.strictEqual(removed.data.success, true)
@@ -791,20 +799,21 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(again.data.error, 'Ограничение не найдено')
     })
 
-    it('check-restrictions: нарушение парного ограничения с ФИО', async () => {
-      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'pair', employeeIds: [emp.id, emp2.id] })
+    it('check-restrictions: нарушение группового ограничения (maxConcurrent=1 по умолчанию) с ФИО', async () => {
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id] })
       assert.strictEqual(created.status, 201)
       await mkVacation({ userId: emp2.id, start: shift(10), end: shift(14), duration: 5, status: 'approved' })
       const res = await call('POST', '/vacation/check-restrictions', await tokenFor(emp), { userId: emp.id, startDate: shift(11), endDate: shift(12) })
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data.length, 1)
       assert.strictEqual(res.data[0].field, 'restriction')
-      assert.ok(res.data[0].message.includes('Занятая'), res.data[0].message)
-      assert.ok(res.data[0].message.includes('парное ограничение'), res.data[0].message)
+      assert.strictEqual(res.data[0].rule, 'group')
+      assert.ok(res.data[0].message.includes('Превышен лимит'), res.data[0].message)
+      assert.deepStrictEqual(res.data[0].names, ['Занятая Пётр'])
     })
 
     it('check-restrictions: мимо дат → пусто', async () => {
-      await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'pair', employeeIds: [emp.id, emp2.id] })
+      await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id] })
       await mkVacation({ userId: emp2.id, start: shift(10), end: shift(14), duration: 5, status: 'approved' })
       const res = await call('POST', '/vacation/check-restrictions', await tokenFor(emp), { userId: emp.id, startDate: shift(40), endDate: shift(41) })
       assert.strictEqual(res.status, 200)
@@ -821,7 +830,7 @@ describe('Модуль отпусков — user stories', () => {
     })
 
     it('POST /requests не блокируется нарушением ограничения (по коду)', async () => {
-      await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'pair', employeeIds: [emp.id, emp2.id] })
+      await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id] })
       await mkVacation({ userId: emp2.id, start: shift(10), end: shift(14), duration: 5, status: 'approved' })
       const res = await postVacation(emp, { startDate: shift(11), endDate: shift(12), vacationType: 'annual_paid' })
       assert.strictEqual(res.status, 201, JSON.stringify(res.data))
@@ -906,7 +915,7 @@ describe('Модуль отпусков — user stories', () => {
       await assignTag(emp.id, tagId)
       await assignTag(emp2.id, tagId)
       await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'group', tagIds: [tagId], maxConcurrent: 1, description: 'Теговое правило' })
-      await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'pair', employeeIds: [emp.id, emp2.id] })
+      await call('POST', '/vacation/restrictions', await tokenFor(mgr), { departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id] })
       const filtered = await call('GET', `/vacation/restrictions?tagId=${tagId}`, await tokenFor(mgr))
       assert.strictEqual(filtered.status, 200)
       assert.strictEqual(filtered.data.length, 1)
@@ -917,6 +926,118 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(searched.status, 200)
       assert.ok(searched.data.some((r) => r.description === 'Теговое правило'))
       assert.ok(searched.data.every((r) => r.description === 'Теговое правило'))
+    })
+
+    it('правило только по одному тегу (без employeeIds) → 201, если у тега 2+ носителей', async () => {
+      const tagId = await mkTag()
+      await assignTag(emp.id, tagId)
+      await assignTag(emp2.id, tagId)
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), {
+        departmentId: deptId, type: 'group', tagIds: [tagId], maxConcurrent: 1,
+      })
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      assert.deepStrictEqual(created.data.employeeIds, [])
+      assert.deepStrictEqual(created.data.tagIds, [String(tagId)])
+    })
+
+    it('правило только по одному тегу с единственным носителем → 400', async () => {
+      const tagId = await mkTag()
+      await assignTag(emp.id, tagId)
+      const res = await call('POST', '/vacation/restrictions', await tokenFor(mgr), {
+        departmentId: deptId, type: 'group', tagIds: [tagId], maxConcurrent: 1,
+      })
+      assert.strictEqual(res.status, 400)
+      assert.ok(res.data.error.includes('минимум два работника'), res.data.error)
+    })
+
+    it('GET /restrictions: employeeCount учитывает носителей тега, а не только employeeIds', async () => {
+      const tagId = await mkTag()
+      const emp3 = await mkUser({ email: `us9.ecnt${SUFFIX}`, last: 'Считова', deptId })
+      await assignTag(emp.id, tagId)
+      await assignTag(emp2.id, tagId)
+      await assignTag(emp3.id, tagId)
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), {
+        departmentId: deptId, type: 'group', tagIds: [tagId], maxConcurrent: 1,
+      })
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      const list = await call('GET', `/vacation/restrictions?departmentId=${deptId}`, await tokenFor(mgr))
+      const row = list.data.find((r) => r.id === created.data.id)
+      assert.strictEqual(row.employeeIds.length, 0)
+      assert.strictEqual(row.employeeCount, 3)
+    })
+
+    it('GET /restrictions/preview-count: считает уникальных людей из тегов и сотрудников', async () => {
+      const tagId = await mkTag()
+      await assignTag(emp.id, tagId)
+      await assignTag(emp2.id, tagId)
+
+      const empty = await call('GET', '/vacation/restrictions/preview-count', await tokenFor(mgr))
+      assert.strictEqual(empty.status, 200)
+      assert.strictEqual(empty.data.count, 0)
+
+      const tagOnly = await call('GET', `/vacation/restrictions/preview-count?tagIds=${tagId}`, await tokenFor(mgr))
+      assert.strictEqual(tagOnly.status, 200)
+      assert.strictEqual(tagOnly.data.count, 2)
+
+      const combined = await call('GET', `/vacation/restrictions/preview-count?tagIds=${tagId}&employeeIds=${emp.id},${mgr.id}`, await tokenFor(mgr))
+      assert.strictEqual(combined.status, 200)
+      assert.strictEqual(combined.data.count, 3)
+    })
+
+    it('правило по тегу без departmentId → 201, действует во всех отделах организации', async () => {
+      const tagId = await mkTag()
+      const otherDeptId = await mkDept('US9 Другой отдел vac-full')
+      const otherEmp = await mkUser({ email: `us9.other${SUFFIX}`, last: 'Иногородний', deptId: otherDeptId })
+      await assignTag(emp.id, tagId)
+      await assignTag(otherEmp.id, tagId)
+
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), {
+        type: 'group', tagIds: [tagId], maxConcurrent: 0, description: 'Оргвайд по тегу',
+      })
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      assert.strictEqual(created.data.departmentId, null)
+
+      const list = await call('GET', '/vacation/restrictions', await tokenFor(mgr))
+      const row = list.data.find((r) => r.id === created.data.id)
+      assert.strictEqual(row.departmentName, null)
+
+      await mkVacation({ userId: emp.id, start: shift(10), end: shift(14), duration: 5, status: 'approved' })
+      const hit = await call('POST', '/vacation/check-restrictions', await tokenFor(otherEmp), { userId: otherEmp.id, startDate: shift(11), endDate: shift(12) })
+      assert.strictEqual(hit.status, 200)
+      assert.strictEqual(hit.data.length, 1, JSON.stringify(hit.data))
+
+      await query('UPDATE users SET department_id = NULL WHERE id = $1', [otherEmp.id])
+      await query('DELETE FROM departments WHERE id = $1', [otherDeptId])
+    })
+
+    it('PUT /restrictions/:id обновляет правило (manager); employee → 403; несуществующий id → 404', async () => {
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), {
+        departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id],
+      })
+      assert.strictEqual(created.status, 201)
+
+      const forbidden = await call('PUT', `/vacation/restrictions/${created.data.id}`, await tokenFor(emp), {
+        departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id],
+      })
+      assert.strictEqual(forbidden.status, 403)
+
+      const tagId = await mkTag()
+      await assignTag(emp.id, tagId)
+      await assignTag(emp2.id, tagId)
+      const updated = await call('PUT', `/vacation/restrictions/${created.data.id}`, await tokenFor(hr), {
+        departmentId: deptId, type: 'group', tagIds: [tagId], maxConcurrent: 2, description: 'Обновлено',
+      })
+      assert.strictEqual(updated.status, 200, JSON.stringify(updated.data))
+      assert.strictEqual(updated.data.type, 'group')
+      assert.strictEqual(updated.data.maxConcurrent, 2)
+      assert.strictEqual(updated.data.description, 'Обновлено')
+      assert.deepStrictEqual(updated.data.tagIds, [String(tagId)])
+      assert.deepStrictEqual(updated.data.employeeIds, [])
+
+      const missing = await call('PUT', '/vacation/restrictions/99999999', await tokenFor(hr), {
+        departmentId: deptId, type: 'group', employeeIds: [emp.id, emp2.id],
+      })
+      assert.strictEqual(missing.status, 404)
     })
   })
 

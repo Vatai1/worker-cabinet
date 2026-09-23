@@ -1,6 +1,9 @@
 import { query } from './database.js'
 import * as rabbitmq from './rabbitmq.js'
 import { sendToUser } from './ws.js'
+import { sendToUser as sendPushToUser } from '../services/pushService.js'
+import { getNotificationUrl } from './notificationTarget.js'
+import { getPushCopy } from './notificationCopy.js'
 
 async function isModuleEnabled() {
   const result = await query(
@@ -44,6 +47,12 @@ export async function notify({ userId, type, data, channel = 'email' }) {
   }
 
   sendToUser(userId, 'notification', { unreadCount: await getUnreadCount(userId) }).catch(() => {})
+
+  if (type !== 'mailing' && type !== 'generic') {
+    const { title, body } = getPushCopy(type, data)
+    const url = getNotificationUrl(type, data, userId)
+    sendPushToUser(userId, { title, body, url }).catch((err) => console.warn(`[PUSH] send failed: ${err.message}`))
+  }
 
   return notificationId
 }

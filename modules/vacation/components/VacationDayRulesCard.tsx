@@ -96,6 +96,14 @@ function UserPickerModal({
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   const filtered = users.filter((u) => {
     if (!search.trim()) return true
     const q = search.toLowerCase()
@@ -196,6 +204,16 @@ function UserPickerModal({
 
 function DayRulesInfoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   useModalOpen(open)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
   if (!open) return null
 
   const steps = [

@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Button } from '@/shared/components/ui/Button'
 import { Label } from '@/shared/components/ui/Label'
 import { User, X, Calendar, Shield, Save } from 'lucide-react'
@@ -32,6 +32,15 @@ export function MemberProjectInfoModal({ member, projectId, open, onClose, onUpd
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '—'

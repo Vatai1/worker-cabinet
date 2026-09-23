@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useRequestsStore } from '@/modules/requests/store/requestsStore'
 import { formatDate, personName } from '@/shared/lib/utils'
+import { PageBanner } from '@/shared/components/PageBanner'
 
 export function LeaderDashboard() {
   const { user } = useAuthStore()
@@ -95,19 +96,12 @@ export function LeaderDashboard() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <Shield className="h-5 w-5 text-white/70" />
-            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">Лидер</span>
-          </div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Панель лидера</h1>
-          <p className="mt-2 text-white/50 text-sm">Рассмотреть заявки, календарь отпусков, документы</p>
-        </div>
-      </div>
+      <PageBanner
+        icon={Shield}
+        eyebrow="Лидер"
+        title="Панель лидера"
+        subtitle="Рассмотреть заявки, календарь отпусков, документы"
+      />
 
       <div className="page-grid">
         {stats.map((stat, index) => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import html2canvas from 'html2canvas'
 import { Bug, X, Loader2, Camera, Trash2, Monitor } from 'lucide-react'
@@ -212,6 +212,16 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
     setScreenshotBlob(null)
     setScreenshotUrl(null)
   }
+
+  useEffect(() => {
+    if (phase !== 'open') return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
 
   return (
     <>

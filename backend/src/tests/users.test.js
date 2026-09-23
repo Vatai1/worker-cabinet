@@ -1,7 +1,8 @@
-import { describe, it, before } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert'
+import bcrypt from 'bcryptjs'
 import { query } from '../config/database.js'
-import { BASE, headers as _headers, headersJSON as _headersJSON, getAdminToken, getHrToken, getManagerToken, getManagerUser, getEmployeeToken, getEmployeeUser, getEmployee2User } from './helpers.js'
+import { BASE, PASSWORD, headers as _headers, headersJSON as _headersJSON, getAdminToken, getHrToken, getManagerToken, getManagerUser, getEmployeeToken, getEmployeeUser, getEmployee2User } from './helpers.js'
 
 const ORG = { 'x-organization-id': '1' }
 const headers = (t) => ({ ..._headers(t), ...ORG })
@@ -207,5 +208,129 @@ describe('Users API', () => {
       })
       assert.strictEqual(res.status, 403)
     })
+  })
+})
+
+describe('Users API — system-roles / bulk-status / bulk-role (HR доступ)', () => {
+  const SUFFIX = '@users-bulk.test'
+  let adminToken, hrToken, employeeToken
+  let bulkUser1, bulkUser2
+
+  const mkUser = async (email, role = 'employee') => {
+    const hash = await bcrypt.hash(PASSWORD, 10)
+    const id = (await query(
+      `INSERT INTO users (email, password_hash, first_name, last_name, position, role, hire_date, status)
+       VALUES ($1, $2, 'Тест', 'Массовый', 'Специалист', $3, '2020-01-01', 'active') RETURNING id`,
+      [email, hash, role])).rows[0].id
+    await query('INSERT INTO user_organizations (user_id, org_id, org_role) VALUES ($1, 1, $2)', [id, role])
+    return { id, email }
+  }
+
+  before(async () => {
+    ;[adminToken, hrToken, employeeToken] = await Promise.all([getAdminToken(), getHrToken(), getEmployeeToken()])
+    bulkUser1 = await mkUser(`u1${SUFFIX}`)
+    bulkUser2 = await mkUser(`u2${SUFFIX}`)
+  })
+
+  after(async () => {
+    await query('DELETE FROM users WHERE email LIKE $1', [`%${SUFFIX}`])
+  })
+
+  it('GET /users/system-roles: hr → 200; employee → 403', async () => {
+    const hrRes = await fetch(`${BASE}/users/system-roles`, { headers: headers(hrToken) })
+    assert.strictEqual(hrRes.status, 200)
+    const data = await hrRes.json()
+    assert.ok(Array.isArray(data))
+    assert.ok(data.some((r) => r.name === 'employee'))
+
+    const empRes = await fetch(`${BASE}/users/system-roles`, { headers: headers(employeeToken) })
+    assert.strictEqual(empRes.status, 403)
+  })
+
+  it('PUT /users/bulk-status: hr активирует/деактивирует; employee → 403', async () => {
+    const hrRes = await fetch(`${BASE}/users/bulk-status`, {
+      method: 'PUT',
+      headers: headersJSON(hrToken),
+      body: JSON.stringify({ userIds: [bulkUser1.id, bulkUser2.id], status: 'inactive' }),
+    })
+    assert.strictEqual(hrRes.status, 200, JSON.stringify(await hrRes.clone().json()))
+    const hrData = await hrRes.json()
+    assert.strictEqual(hrData.updated, 2)
+    const check = await query('SELECT status FROM users WHERE id = ANY($1)', [[bulkUser1.id, bulkUser2.id]])
+    assert.ok(check.rows.every((r) => r.status === 'inactive'))
+
+    const empRes = await fetch(`${BASE}/users/bulk-status`, {
+      method: 'PUT',
+      headers: headersJSON(employeeToken),
+      body: JSON.stringify({ userIds: [bulkUser1.id], status: 'active' }),
+    })
+    assert.strictEqual(empRes.status, 403)
+
+    await query('UPDATE users SET status = $1 WHERE id = ANY($2)', ['active', [bulkUser1.id, bulkUser2.id]])
+  })
+
+  it('PUT /users/bulk-role: hr назначает обычную роль → 200; hr пытается назначить admin → 403; admin может', async () => {
+    const hrOk = await fetch(`${BASE}/users/bulk-role`, {
+      method: 'PUT',
+      headers: headersJSON(hrToken),
+      body: JSON.stringify({ userIds: [bulkUser1.id], role: 'manager' }),
+    })
+    assert.strictEqual(hrOk.status, 200, JSON.stringify(await hrOk.clone().json()))
+    const check1 = await query('SELECT role FROM users WHERE id = $1', [bulkUser1.id])
+    assert.strictEqual(check1.rows[0].role, 'manager')
+
+    const hrForbidden = await fetch(`${BASE}/users/bulk-role`, {
+      method: 'PUT',
+      headers: headersJSON(hrToken),
+      body: JSON.stringify({ userIds: [bulkUser1.id], role: 'admin' }),
+    })
+    assert.strictEqual(hrForbidden.status, 403)
+
+    const adminOk = await fetch(`${BASE}/users/bulk-role`, {
+      method: 'PUT',
+      headers: headersJSON(adminToken),
+      body: JSON.stringify({ userIds: [bulkUser1.id], role: 'admin' }),
+    })
+    assert.strictEqual(adminOk.status, 200, JSON.stringify(await adminOk.clone().json()))
+    const check2 = await query('SELECT role FROM users WHERE id = $1', [bulkUser1.id])
+    assert.strictEqual(check2.rows[0].role, 'admin')
+
+    await query('UPDATE users SET role = $1 WHERE id = $2', ['employee', bulkUser1.id])
+  })
+
+  it('GET /users/search поддерживает список departmentId/status через запятую', async () => {
+    const dept = (await query('SELECT id FROM departments LIMIT 2')).rows
+    if (dept.length < 2) return
+    const ids = dept.map((d) => d.id).join(',')
+    const res = await fetch(`${BASE}/users/search?departmentId=${ids}`, { headers: headers(adminToken) })
+    assert.strictEqual(res.status, 200)
+    const data = await res.json()
+    assert.ok(Array.isArray(data))
+
+    const statusRes = await fetch(`${BASE}/users/search?status=active,inactive`, { headers: headers(adminToken) })
+    assert.strictEqual(statusRes.status, 200)
+    assert.ok(Array.isArray(await statusRes.json()))
+
+    const positionRes = await fetch(`${BASE}/users/search?position=${encodeURIComponent('Специалист,Менеджер')}`, { headers: headers(adminToken) })
+    assert.strictEqual(positionRes.status, 200)
+    assert.ok(Array.isArray(await positionRes.json()))
+  })
+
+  it('GET /users/search: orgIsActive=false возвращает отключённых членов организации', async () => {
+    const deactivate = await fetch(`${BASE}/organizations/1/members/${bulkUser2.id}`, {
+      method: 'PUT',
+      headers: headersJSON(adminToken),
+      body: JSON.stringify({ org_role: 'employee', is_active: false }),
+    })
+    assert.strictEqual(deactivate.status, 200, JSON.stringify(await deactivate.clone().json()))
+    const res = await fetch(`${BASE}/users/search?orgIsActive=false`, { headers: headers(adminToken) })
+    assert.strictEqual(res.status, 200)
+    const data = await res.json()
+    assert.ok(data.some((u) => u.id === bulkUser2.id), 'ожидали найти отключённого пользователя')
+    assert.ok(data.every((u) => u.org_is_active === false))
+
+    const activeOnly = await fetch(`${BASE}/users/search`, { headers: headers(adminToken) })
+    const activeData = await activeOnly.json()
+    assert.ok(!activeData.some((u) => u.id === bulkUser2.id), 'по умолчанию отключённые не должны попадать в выдачу')
   })
 })

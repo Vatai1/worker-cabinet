@@ -8,8 +8,9 @@ import { ChangelogModal } from '@/shared/components/ChangelogModal'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { isSuperAdmin, hasOrgRole } from '@/shared/lib/permissions'
 import { useModulesStore } from '@/shared/store/modulesStore'
-import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { useOrgStore } from '@/shared/store/orgStore'
+import { HREmployees } from '@/core/employees/pages/HREmployees'
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
 import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { OrganizationsTab } from '@/core/admin/components/OrganizationsTab'
@@ -27,7 +28,7 @@ import { AdminRoleMappings } from '@/core/admin/pages/AdminRoleMappings'
 import { openModelsModal } from '@/core/admin/components/ModelsModal'
 import type { ModuleId } from '@/core/admin/components/modules/types'
 import {
-  Users, Key, Building2, Settings2, ScrollText, Search,
+  Users, Key, Building2, Settings2, ScrollText,
   Loader2, Plus, Trash2, Edit3, Check, X, AlertTriangle, Activity,
   ChevronLeft, ChevronRight, RefreshCw, UserCog, Lock,
   RotateCcw, Sliders, Clock, Globe, Sparkles,
@@ -40,7 +41,7 @@ import {
   Palette, Tag, LogIn, Network,
   Bug, FlaskConical,
 } from 'lucide-react'
-import type { AdminRole, AdminPermission, AdminUser, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
+import type { AdminRole, AdminPermission, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
 type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports' | 'test-data'
 
@@ -62,7 +63,6 @@ const TAB_GROUPS: TabGroup[] = [
   {
     label: 'Управление',
     tabs: [
-      { id: 'users', name: 'Пользователи', icon: Users, description: 'Работники, роли, статусы', color: 'from-blue-500 to-indigo-600' },
       { id: 'roles', name: 'Роли и доступы', icon: Key, description: 'Динамические роли, пермишены', color: 'from-violet-500 to-purple-600' },
       { id: 'role-mappings', name: 'Роли по должности', icon: ShieldCheck, description: 'Автоназначение org_role при первом входе', color: 'from-rose-500 to-red-600' },
       { id: 'departments', name: 'Отделы', icon: Building2, description: 'Структура организации', color: 'from-emerald-500 to-teal-600' },
@@ -80,6 +80,7 @@ const TAB_GROUPS: TabGroup[] = [
   {
     label: 'Справочники',
     tabs: [
+      { id: 'users', name: 'Сотрудники', icon: Users, description: 'Профили, роли, теги, балансы отпусков', color: 'from-blue-500 to-indigo-600' },
       { id: 'dict_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', color: 'from-pink-500 to-rose-600' },
       { id: 'dict_vacation', name: 'Отпуск', icon: Plane, description: 'Типы отпусков', color: 'from-sky-500 to-cyan-600', module: 'vacation' },
       { id: 'dict_skills', name: 'Теги', icon: Tag, description: 'Справочник тегов', color: 'from-violet-500 to-purple-600', module: 'skills' },
@@ -275,12 +276,6 @@ function AuditDetails({ details }: { details: Record<string, unknown> }) {
   return <div className="flex items-center gap-2 flex-wrap mt-1.5">{elements}</div>
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  active: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-  inactive: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  on_leave: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-}
-
 const STATUS_LABELS: Record<string, string> = {
   active: 'Активен',
   inactive: 'Неактивен',
@@ -333,44 +328,35 @@ export function AdminPanel({ mode = 'global' }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/2 -translate-x-1/4" />
-        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/5 rounded-full" />
-        <div className="relative z-10 flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <Sparkles className="h-6 w-6 text-white/80" />
-              <h1 className="text-2xl font-bold text-white">
-                {isGlobalMode ? 'Глобальная админ-панель' : 'Админ панель учреждения'}
-              </h1>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/15 text-white/80 text-xs">
-                {isGlobalMode ? (
-                  <><Globe className="h-3 w-3" /> Все организации</>
-                ) : (
-                  <><Building2 className="h-3 w-3" /> {currentOrg?.name || 'Учреждение'}</>
-                )}
-              </span>
-            </div>
-            <p className="text-sm text-white/60">
-              {isGlobalMode
-                ? 'Глобальное управление ролями, модулями и настройками'
-                : 'Управление учреждением: пользователи, модули, настройки'}
-            </p>
-          </div>
+      <PageBanner
+        icon={Sparkles}
+        title={
+          <span className="flex flex-wrap items-center gap-2.5">
+            {isGlobalMode ? 'Глобальная админ-панель' : 'Админ панель учреждения'}
+            <BannerPill icon={isGlobalMode ? Globe : Building2} tone="neutral">
+              {isGlobalMode ? 'Все организации' : currentOrg?.name || 'Учреждение'}
+            </BannerPill>
+          </span>
+        }
+        subtitle={
+          isGlobalMode
+            ? 'Глобальное управление ролями, модулями и настройками'
+            : 'Управление учреждением: пользователи, модули, настройки'
+        }
+        aside={
           <button
             type="button"
             onClick={() => setChangelogOpen(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 text-white/70 text-xs whitespace-nowrap hover:bg-white/20 transition-colors"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Tag className="h-3 w-3" />
             Версия: {__APP_VERSION__}{apiVersion ? ` · API ${apiVersion}` : ''}
           </button>
-        </div>
-      </div>
+        }
+      />
 
       <div className="min-w-0">
-        {activeTab === 'users' && <UsersTab mode={mode} />}
+        {activeTab === 'users' && <HREmployees adminMode isGlobalMode={isGlobalMode} />}
         {activeTab === 'roles' && <RolesTab />}
         {activeTab === 'role-mappings' && <AdminRoleMappings />}
         {activeTab === 'departments' && <DepartmentsTab />}
@@ -391,909 +377,6 @@ export function AdminPanel({ mode = 'global' }: Props) {
       </div>
 
       <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
-    </div>
-  )
-}
-
-// ===================== USERS TAB =====================
-
-function UsersTab({ mode }: { mode?: 'global' | 'org' }) {
-  const isGlobalMode = mode === 'global'
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [filterRole, setFilterRole] = useState('')
-  const [filterDepartment, setFilterDepartment] = useState('')
-  const [filterPosition, setFilterPosition] = useState('')
-  const [roles, setRoles] = useState<AdminRole[]>([])
-  const [positions, setPositions] = useState<{ name: string }[]>([])
-  const departments = useDepartmentsStore(s => s.departments) as { id: number; name: string }[]
-  const fetchDepartments = useDepartmentsStore(s => s.fetchDepartments)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const [bulkAction, setBulkAction] = useState('')
-  const [bulkRole, setBulkRole] = useState('')
-  const [detailUser, setDetailUser] = useState<AdminUser | null>(null)
-
-  useEffect(() => {
-    fetchRoles()
-    fetchDepartments().catch(() => {})
-    fetchWithRetry(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() })
-      .then(r => r.json())
-      .then(data => setPositions(Array.isArray(data) ? data : data.positions || []))
-      .catch(() => {})
-  }, [fetchDepartments])
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300)
-    return () => clearTimeout(t)
-  }, [search])
-
-  const fetchRoles = async () => {
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/admin/roles`, { headers: getAuthHeaders() })
-      if (res.ok) setRoles(await res.json())
-    } catch {}
-  }
-
-  const fetchUsers = useCallback(async () => {
-    setLoading(true); setError(null)
-    try {
-      const params = new URLSearchParams({ page: String(page), limit: '25' })
-      if (debouncedSearch) params.set('search', debouncedSearch)
-      if (filterRole) params.set('role', filterRole)
-      if (filterDepartment) params.set('department', filterDepartment)
-      if (filterPosition) params.set('position', filterPosition)
-      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users?${params}`, { headers: getAuthHeaders() })
-      if (res.ok) {
-        const data = await res.json()
-        setUsers(data.users); setTotal(data.total)
-      }
-    } catch (err) { setError(getErrorMessage(err)) }
-    finally { setLoading(false) }
-  }, [page, debouncedSearch, filterRole, filterDepartment, filterPosition])
-
-  useEffect(() => { fetchUsers() }, [fetchUsers])
-
-  const changeRole = async (userId: number, role: string) => {
-    const user = users.find(u => u.id === userId)
-    const confirmed = await confirmDialog({
-      title: 'Изменить роль',
-      message: `Изменить роль ${personName(user?.last_name, user?.first_name, user?.middle_name)} на «${ROLE_LABELS[role] || role}»?`,
-      confirmText: 'Изменить',
-    })
-    if (!confirmed) return
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/${userId}/role`, {
-        method: 'PUT', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ role }),
-      })
-      if (res.ok) {
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u))
-        if (detailUser?.id === userId) setDetailUser(prev => prev ? { ...prev, role } : null)
-      } else {
-        const data = await res.json(); setError(data.error || 'Ошибка')
-      }
-    } catch (err) { setError(getErrorMessage(err)) }
-  }
-
-  const changeStatus = async (userId: number, status: string) => {
-    const user = users.find(u => u.id === userId)
-    const confirmed = await confirmDialog({
-      title: status === 'active' ? 'Активировать' : 'Деактивировать',
-      message: `${status === 'active' ? 'Активировать' : 'Деактивировать'} ${personName(user?.last_name, user?.first_name, user?.middle_name)}?`,
-      confirmText: status === 'active' ? 'Активировать' : 'Деактивировать',
-      variant: status === 'inactive' ? 'danger' : 'default',
-    })
-    if (!confirmed) return
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/${userId}/status`, {
-        method: 'PUT', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ status }),
-      })
-      if (res.ok) {
-        setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: status as AdminUser['status'] } : u))
-        if (detailUser?.id === userId) setDetailUser(prev => prev ? { ...prev, status: status as AdminUser['status'] } : null)
-      }
-    } catch {}
-  }
-
-  const resetPassword = async (userId: number, newPassword: string) => {
-    if (!newPassword || newPassword.length < 6) { setError('Пароль минимум 6 символов'); return }
-    const confirmed = await confirmDialog({ title: 'Сбросить пароль', message: 'Установить новый пароль для этого пользователя?', confirmText: 'Сбросить', variant: 'danger' })
-    if (!confirmed) return
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/${userId}/reset-password`, {
-        method: 'POST', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ newPassword }),
-      })
-      if (res.ok) fetchUsers()
-      else { const data = await res.json(); setError(data.error || 'Ошибка') }
-    } catch (err) { setError(getErrorMessage(err)) }
-  }
-
-  const totalPages = Math.ceil(total / 25)
-
-  const toggleSelect = (id: number) => {
-    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
-  }
-
-  const toggleAll = () => {
-    if (selectedIds.size === users.length) setSelectedIds(new Set())
-    else setSelectedIds(new Set(users.map(u => u.id)))
-  }
-
-  const executeBulkAction = async () => {
-    if (selectedIds.size === 0) return
-    const ids = Array.from(selectedIds)
-    const confirmed = await confirmDialog({
-      title: 'Массовое действие',
-      message: `Применить к ${ids.length} работникам?`,
-      confirmText: 'Применить',
-    })
-    if (!confirmed) return
-    try {
-      if (bulkAction === 'activate') {
-        const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/bulk-status`, {
-          method: 'PUT', headers: getAuthHeadersWithContentType(),
-          body: JSON.stringify({ userIds: ids, status: 'active' }),
-        })
-        if (res.ok) { setSelectedIds(new Set()); fetchUsers() }
-        else { const d = await res.json(); setError(d.error) }
-      } else if (bulkAction === 'deactivate') {
-        const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/bulk-status`, {
-          method: 'PUT', headers: getAuthHeadersWithContentType(),
-          body: JSON.stringify({ userIds: ids, status: 'inactive' }),
-        })
-        if (res.ok) { setSelectedIds(new Set()); fetchUsers() }
-        else { const d = await res.json(); setError(d.error) }
-      } else if (bulkAction === 'setRole' && bulkRole) {
-        const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/bulk-role`, {
-          method: 'PUT', headers: getAuthHeadersWithContentType(),
-          body: JSON.stringify({ userIds: ids, role: bulkRole }),
-        })
-        if (res.ok) { setSelectedIds(new Set()); setBulkAction(''); setBulkRole(''); fetchUsers() }
-        else { const d = await res.json(); setError(d.error) }
-      }
-    } catch (err) { setError(getErrorMessage(err)) }
-  }
-
-  return (
-    <div className="space-y-4">
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
-          <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
-        </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Поиск по имени, email, должности..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="pl-9" />
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <select value={filterRole} onChange={e => { setFilterRole(e.target.value); setPage(1) }} className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
-            <option value="">Все роли</option>
-            {roles.map(r => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
-          </select>
-          <select value={filterDepartment} onChange={e => { setFilterDepartment(e.target.value); setPage(1) }} className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
-            <option value="">Все отделы</option>
-            {departments.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
-          </select>
-          <select value={filterPosition} onChange={e => { setFilterPosition(e.target.value); setPage(1) }} className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
-            <option value="">Все должности</option>
-            {positions.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div className={cn(
-        'flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20 transition-all',
-        selectedIds.size > 0 ? 'opacity-100 h-auto' : 'opacity-0 h-0 p-0 border-0 overflow-hidden',
-      )}>
-        <span className="text-sm font-medium">Выбрано: {selectedIds.size}</span>
-        <select value={bulkAction} onChange={e => setBulkAction(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
-          <option value="">Действие...</option>
-          <option value="activate">Активировать</option>
-          <option value="deactivate">Деактивировать</option>
-          <option value="setRole">Изменить роль</option>
-        </select>
-        {bulkAction === 'setRole' && (
-          <select value={bulkRole} onChange={e => setBulkRole(e.target.value)} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
-            <option value="">Выберите роль...</option>
-            {roles.map(r => <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] || r.name}</option>)}
-          </select>
-        )}
-        <Button size="sm" onClick={executeBulkAction} disabled={!bulkAction || (bulkAction === 'setRole' && !bulkRole)}>Применить</Button>
-        <Button variant="ghost" size="sm" onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkRole('') }}><X className="h-4 w-4" /></Button>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <div
-              role="checkbox"
-              aria-checked={selectedIds.size === users.length && users.length > 0}
-              tabIndex={0}
-              className={cn(
-                'h-[18px] w-[18px] rounded-md flex items-center justify-center shrink-0 border-2 transition-colors',
-                selectedIds.size === users.length && users.length > 0
-                  ? 'bg-primary border-primary'
-                  : 'border-muted-foreground/25 hover:border-muted-foreground/40',
-              )}
-              onClick={toggleAll}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAll() } }}
-            >
-              {selectedIds.size === users.length && users.length > 0 && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
-            </div>
-            <span>Выбрать всех на странице</span>
-            <span className="ml-auto">{total} работников</span>
-          </div>
-          <div className="space-y-1">
-            {users.map(user => {
-              const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
-              const selected = selectedIds.has(user.id)
-              return (
-                <div
-                  key={user.id}
-                  className={cn(
-                    'flex items-center gap-3 p-3 rounded-xl border cursor-pointer group',
-                    selected
-                      ? 'bg-primary/8 border-primary/25'
-                      : 'border-transparent hover:bg-muted/40 hover:border-border/50',
-                  )}
-                  onClick={() => setDetailUser(user)}
-                >
-                  <div
-                    role="checkbox"
-                    aria-checked={selected}
-                    tabIndex={0}
-                    className={cn(
-                      'h-[18px] w-[18px] rounded-md flex items-center justify-center shrink-0 border-2 transition-colors',
-                      selected
-                        ? 'bg-primary border-primary'
-                        : 'border-muted-foreground/25 group-hover:border-muted-foreground/40',
-                    )}
-                    onClick={e => { e.stopPropagation(); toggleSelect(user.id) }}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSelect(user.id) } }}
-                  >
-                    {selected && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
-                  </div>
-                  <div className={cn(
-                    'h-9 w-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-colors',
-                    selected
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-gradient-to-br from-primary/20 to-primary/5 text-primary',
-                  )}>
-                    {user.first_name?.[0]}{user.last_name?.[0]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{fullName}</span>
-                      <Badge className={cn('text-[10px]', STATUS_COLORS[user.status])}>{STATUS_LABELS[user.status]}</Badge>
-                      <Badge className="text-[10px] bg-primary/10 text-primary">{ROLE_LABELS[user.role] || user.role}</Badge>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                      {user.position && (
-                        <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground">
-                          <Briefcase className="h-2.5 w-2.5" /> {user.position}
-                        </span>
-                      )}
-                      {user.department_name && (
-                        <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground">
-                          <Building2 className="h-2.5 w-2.5" /> {user.department_name}
-                        </span>
-                      )}
-                      {user.organizations && (
-                        <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
-                          <Globe className="h-2.5 w-2.5" /> {user.organizations}
-                        </span>
-                      )}
-                      <span className="text-[11px] text-muted-foreground truncate">{user.email}</span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2">
-          <p className="text-sm text-muted-foreground">
-            Показано {(page - 1) * 25 + 1}–{Math.min(page * 25, total)} из {total}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft className="h-4 w-4" /></Button>
-            <span className="text-sm">{page} / {totalPages}</span>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}><ChevronRight className="h-4 w-4" /></Button>
-          </div>
-        </div>
-      )}
-
-      {detailUser && (
-        <UserDetailModal
-          user={detailUser}
-          roles={roles}
-          isGlobal={isGlobalMode}
-          onOrgsChanged={(orgString) => {
-            setUsers(prev => prev.map(u => u.id === detailUser.id ? { ...u, organizations: orgString } : u))
-            setDetailUser(prev => prev ? { ...prev, organizations: orgString } : null)
-          }}
-          onClose={() => setDetailUser(null)}
-          onChangeRole={(role) => { changeRole(detailUser.id, role) }}
-          onChangeStatus={(status) => { changeStatus(detailUser.id, status) }}
-          onResetPassword={(pwd) => { resetPassword(detailUser.id, pwd) }}
-        />
-      )}
-    </div>
-  )
-}
-
-interface UserOrgMembership {
-  id: number
-  name: string
-  org_role: string
-  department_name: string | null
-  is_primary: boolean
-}
-
-const ORG_ROLE_SELECT_COLORS: Record<string, string> = {
-  employee: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  manager: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
-  hr: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-  admin: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-}
-
-function UserDetailModal({ user, roles, isGlobal, onOrgsChanged, onClose, onChangeRole, onChangeStatus, onResetPassword }: {
-  user: AdminUser
-  roles: AdminRole[]
-  isGlobal?: boolean
-  onOrgsChanged?: (orgs: string | null) => void
-  onClose: () => void
-  onChangeRole: (role: string) => void
-  onChangeStatus: (status: string) => void
-  onResetPassword: (password: string) => void
-}) {
-  const [activeSection, setActiveSection] = useState<'info' | 'edit' | 'orgs' | 'role' | 'password'>('info')
-  const [newPassword, setNewPassword] = useState('')
-  const [selectedRole, setSelectedRole] = useState(user.role)
-  const departments = useDepartmentsStore(s => s.departments) as { id: number; name: string }[]
-  const fetchDepartments = useDepartmentsStore(s => s.fetchDepartments)
-  const [editForm, setEditForm] = useState({
-    position: user.position || '',
-    department_id: user.department_id ?? '',
-    phone: user.phone || '',
-    office: user.office || '',
-    cabinet: user.cabinet || '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [showDeptPicker, setShowDeptPicker] = useState(false)
-  const [showPositionPicker, setShowPositionPicker] = useState(false)
-  const [positions, setPositions] = useState<string[]>([])
-  const [memberships, setMemberships] = useState<UserOrgMembership[]>([])
-  const [allOrgs, setAllOrgs] = useState<{ id: number; name: string }[]>([])
-  const [orgsLoading, setOrgsLoading] = useState(false)
-  const [addOrgId, setAddOrgId] = useState('')
-  const [addOrgRole, setAddOrgRole] = useState('employee')
-  const [orgBusy, setOrgBusy] = useState(false)
-  const fullName = `${user.last_name} ${user.first_name}${user.middle_name ? ' ' + user.middle_name : ''}`
-
-  useEffect(() => {
-    fetchDepartments().catch(() => {})
-    fetchWithRetry(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() })
-      .then(r => r.json())
-      .then(data => setPositions((Array.isArray(data) ? data : data.positions || []).map((p: { name: string }) => p.name)))
-      .catch(() => {})
-  }, [fetchDepartments])
-
-  const loadMemberships = useCallback(async (): Promise<UserOrgMembership[]> => {
-    setOrgsLoading(true)
-    try {
-      const [uRes, oRes] = await Promise.all([
-        fetchWithRetry(`${API_BASE_URL}/users/${user.id}`, { headers: getAuthHeaders() }),
-        fetchWithRetry(`${API_BASE_URL}/organizations`, { headers: getAuthHeaders() }),
-      ])
-      let list: UserOrgMembership[] = []
-      if (uRes.ok) {
-        const data = await uRes.json()
-        list = Array.isArray(data.organizations) ? data.organizations : []
-        setMemberships(list)
-      }
-      if (oRes.ok) setAllOrgs(await oRes.json())
-      return list
-    } catch {
-      return []
-    } finally {
-      setOrgsLoading(false)
-    }
-  }, [user.id])
-
-  useEffect(() => {
-    if (isGlobal) loadMemberships()
-  }, [isGlobal, loadMemberships])
-
-  const availableOrgs = allOrgs.filter(o => !memberships.some(m => m.id === o.id))
-
-  const notifyOrgsChanged = (list: UserOrgMembership[]) => {
-    onOrgsChanged?.(list.map(o => o.name).join(', ') || null)
-  }
-
-  const addMembership = async () => {
-    if (!addOrgId) return
-    setOrgBusy(true)
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${addOrgId}/members`, {
-        method: 'POST',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ email: user.email, org_role: addOrgRole }),
-      })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Ошибка')
-      }
-      setAddOrgId('')
-      setAddOrgRole('employee')
-      notifyOrgsChanged(await loadMemberships())
-    } catch (err) {
-      alert(getErrorMessage(err))
-    } finally {
-      setOrgBusy(false)
-    }
-  }
-
-  const removeMembership = async (org: UserOrgMembership) => {
-    const confirmed = await confirmDialog({
-      title: 'Исключить из организации',
-      message: `Исключить ${personName(user.last_name, user.first_name, user.middle_name)} из «${org.name}»?`,
-      confirmText: 'Исключить',
-      variant: 'danger',
-    })
-    if (!confirmed) return
-    setOrgBusy(true)
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${org.id}/members/${user.id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Ошибка')
-      }
-      notifyOrgsChanged(await loadMemberships())
-    } catch (err) {
-      alert(getErrorMessage(err))
-    } finally {
-      setOrgBusy(false)
-    }
-  }
-
-  const makePrimary = async (org: UserOrgMembership) => {
-    setOrgBusy(true)
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/users/${user.id}/primary-org`, {
-        method: 'PATCH',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ orgId: org.id }),
-      })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Ошибка')
-      }
-      await loadMemberships()
-    } catch (err) {
-      alert(getErrorMessage(err))
-    } finally {
-      setOrgBusy(false)
-    }
-  }
-
-  const changeOrgRole = async (org: UserOrgMembership, orgRole: string) => {
-    setOrgBusy(true)
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/organizations/${org.id}/members/${user.id}`, {
-        method: 'PUT',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ org_role: orgRole }),
-      })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Ошибка')
-      }
-      await loadMemberships()
-    } catch (err) {
-      alert(getErrorMessage(err))
-      await loadMemberships()
-    } finally {
-      setOrgBusy(false)
-    }
-  }
-
-  const saveEdit = async () => {
-    const confirmed = await confirmDialog({ title: 'Сохранить изменения', message: `Обновить данные ${personName(user.last_name, user.first_name, user.middle_name)}?`, confirmText: 'Сохранить' })
-    if (!confirmed) return
-    setSaving(true)
-    try {
-      const body: Record<string, unknown> = {
-        position: editForm.position,
-        phone: editForm.phone,
-        office: editForm.office,
-        cabinet: editForm.cabinet,
-      }
-      if (editForm.department_id !== '') body.department_id = Number(editForm.department_id)
-      else body.department_id = null
-      const res = await fetchWithRetry(`${API_BASE_URL}/admin/users/${user.id}`, {
-        method: 'PUT', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify(body),
-      })
-      if (res.ok) {
-        onClose()
-      } else {
-        const d = await res.json()
-        throw new Error(d.error || 'Ошибка')
-      }
-    } catch (err) {
-      alert(getErrorMessage(err))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
-        <div className="p-5 border-b border-border shrink-0">
-          <div className="flex items-start gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-lg font-bold text-primary shrink-0">
-              {user.first_name?.[0]}{user.last_name?.[0]}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-foreground text-lg">{fullName}</h3>
-              <p className="text-sm text-muted-foreground">{user.email}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge className={cn('text-[10px]', STATUS_COLORS[user.status])}>{STATUS_LABELS[user.status]}</Badge>
-                <Badge className="text-[10px] bg-primary/10 text-primary">{ROLE_LABELS[user.role] || user.role}</Badge>
-              </div>
-            </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-5 w-5" /></button>
-          </div>
-        </div>
-
-        <div className="flex border-b border-border shrink-0">
-          {([
-            { id: 'info' as const, name: 'Профиль', icon: Users },
-            { id: 'edit' as const, name: 'Изменить', icon: Pencil },
-            ...(isGlobal ? [{ id: 'orgs' as const, name: 'Организации', icon: Globe }] : []),
-            { id: 'role' as const, name: 'Роль', icon: ShieldCheck },
-            { id: 'password' as const, name: 'Пароль', icon: Lock },
-          ]).map(tab => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveSection(tab.id)}
-                className={cn(
-                  'flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium border-b-2 transition-colors',
-                  activeSection === tab.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.name}
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-5">
-          {activeSection === 'info' && (
-            <div className="space-y-4">
-              <InfoRow label="Должность" value={user.position || '—'} />
-              <InfoRow label="Отдел" value={user.department_name || '—'} />
-              <InfoRow label="Организация" value={user.organizations || '—'} />
-              <InfoRow label="Телефон" value={user.phone || '—'} />
-              <InfoRow label="Дата приёма" value={user.hire_date || '—'} />
-              {user.manager_first_name && (
-                <InfoRow label="Руководитель" value={personName(user.manager_last_name, user.manager_first_name, user.manager_middle_name)} />
-              )}
-              <div className="pt-2 flex gap-2">
-                <Button
-                  size="sm"
-                  variant={user.status === 'active' ? 'outline' : 'default'}
-                  onClick={() => onChangeStatus(user.status === 'active' ? 'inactive' : 'active')}
-                >
-                  {user.status === 'active' ? (
-                    <><Lock className="h-3.5 w-3.5 mr-1.5" />Деактивировать</>
-                  ) : (
-                    <><Unlock className="h-3.5 w-3.5 mr-1.5" />Активировать</>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {activeSection === 'edit' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Должность</label>
-                <button
-                  onClick={() => setShowPositionPicker(true)}
-                  className="w-full flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="h-4 w-4 text-muted-foreground" />
-                    <span className={editForm.position ? 'text-foreground' : 'text-muted-foreground'}>
-                      {editForm.position || 'Выбрать должность...'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {editForm.position && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={e => { e.stopPropagation(); setEditForm(f => ({ ...f, position: '' })) }}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); setEditForm(f => ({ ...f, position: '' })) } }}
-                        className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </span>
-                    )}
-                    <Search className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </button>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Отдел</label>
-                <button
-                  onClick={() => setShowDeptPicker(true)}
-                  className="w-full flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span className={editForm.department_id ? 'text-foreground' : 'text-muted-foreground'}>
-                      {editForm.department_id ? departments.find(d => d.id === Number(editForm.department_id))?.name || 'Отдел' : 'Выбрать отдел...'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {editForm.department_id && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={e => { e.stopPropagation(); setEditForm(f => ({ ...f, department_id: '' })) }}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); setEditForm(f => ({ ...f, department_id: '' })) } }}
-                        className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </span>
-                    )}
-                    <Search className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </button>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Телефон</label>
-                <Input
-                  placeholder="+7 (___) ___-__-__"
-                  value={editForm.phone}
-                  onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Офис</label>
-                  <Input
-                    placeholder="Адрес офиса"
-                    value={editForm.office}
-                    onChange={e => setEditForm(f => ({ ...f, office: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">Кабинет</label>
-                  <Input
-                    placeholder="Номер кабинета"
-                    value={editForm.cabinet}
-                    onChange={e => setEditForm(f => ({ ...f, cabinet: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <Button onClick={saveEdit} disabled={saving} className="w-full">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
-                Сохранить
-              </Button>
-            </div>
-          )}
-
-          {activeSection === 'orgs' && (
-            <div className="space-y-4">
-              {orgsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    {memberships.map(org => (
-                      <div key={org.id} className="flex items-center gap-3 p-3 rounded-xl border border-border">
-                        <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground truncate">{org.name}</span>
-                            {org.is_primary && <Badge className="text-[10px] bg-primary/10 text-primary">Основная</Badge>}
-                          </div>
-                          {org.department_name && (
-                            <p className="text-xs text-muted-foreground mt-0.5">{org.department_name}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <select
-                            value={org.org_role}
-                            onChange={e => changeOrgRole(org, e.target.value)}
-                            disabled={orgBusy}
-                            className={cn(
-                              'text-xs font-medium rounded-md px-2 py-1 border-0 cursor-pointer disabled:opacity-50',
-                              ORG_ROLE_SELECT_COLORS[org.org_role] || ORG_ROLE_SELECT_COLORS.employee
-                            )}
-                          >
-                            <option value="employee">Работник</option>
-                            <option value="manager">Руководитель</option>
-                            <option value="hr">HR</option>
-                            <option value="admin">Администратор</option>
-                          </select>
-                          {!org.is_primary && (
-                            <Button variant="outline" size="sm" disabled={orgBusy} onClick={() => makePrimary(org)}>
-                              Сделать основной
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={orgBusy || memberships.length <= 1}
-                            title={memberships.length <= 1 ? 'Пользователь должен состоять хотя бы в одной организации' : undefined}
-                            onClick={() => removeMembership(org)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                    {memberships.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-4">Пользователь не состоит ни в одной организации</p>
-                    )}
-                  </div>
-                  {availableOrgs.length > 0 && (
-                    <div className="pt-4 border-t border-border space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-sm font-medium mb-1.5">Организация</label>
-                          <select
-                            value={addOrgId}
-                            onChange={e => setAddOrgId(e.target.value)}
-                            className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
-                          >
-                            <option value="">Выбрать...</option>
-                            {availableOrgs.map(o => (
-                              <option key={o.id} value={o.id}>{o.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1.5">Роль в организации</label>
-                          <select
-                            value={addOrgRole}
-                            onChange={e => setAddOrgRole(e.target.value)}
-                            className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm"
-                          >
-                            <option value="employee">Работник</option>
-                            <option value="manager">Руководитель</option>
-                            <option value="hr">HR</option>
-                            <option value="admin">Администратор</option>
-                          </select>
-                        </div>
-                      </div>
-                      <Button className="w-full" disabled={!addOrgId || orgBusy} onClick={addMembership}>
-                        {orgBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Plus className="h-4 w-4 mr-1.5" />}
-                        Добавить в организацию
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {activeSection === 'role' && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">Текущая роль: <span className="font-medium text-foreground">{ROLE_LABELS[user.role] || user.role}</span></p>
-              <div className="space-y-1.5">
-                {roles.map(r => {
-                  const isSelected = selectedRole === r.name
-                  return (
-                    <button
-                      key={r.id}
-                      onClick={() => setSelectedRole(r.name)}
-                      className={cn(
-                        'w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left',
-                        isSelected ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/30 border border-transparent',
-                      )}
-                    >
-                      <div className={cn(
-                        'w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0',
-                        isSelected ? 'border-primary' : 'border-border',
-                      )}>
-                        {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{ROLE_LABELS[r.name] || r.name}</p>
-                        {r.description && <p className="text-xs text-muted-foreground">{r.description}</p>}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-              {selectedRole !== user.role && (
-                <Button onClick={() => onChangeRole(selectedRole)} className="w-full">
-                  <ShieldCheck className="h-4 w-4 mr-1.5" />Изменить на «{ROLE_LABELS[selectedRole] || selectedRole}»
-                </Button>
-              )}
-            </div>
-          )}
-
-          {activeSection === 'password' && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                <div className="flex items-center gap-2 text-amber-600 text-sm font-medium">
-                  <AlertTriangle className="h-4 w-4" />
-                  Внимание
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Пароль будет немедленно изменён. Пользователю потребуется войти заново.</p>
-              </div>
-              <Input
-                type="password"
-                placeholder="Новый пароль (минимум 6 символов)"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-              />
-              <Button onClick={() => { onResetPassword(newPassword); setNewPassword('') }} disabled={newPassword.length < 6} className="w-full" variant="destructive">
-                <RotateCcw className="h-4 w-4 mr-1.5" />Сбросить пароль
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {showDeptPicker && (
-        <DepartmentPickerModal
-          departments={departments}
-          selectedId={editForm.department_id ? Number(editForm.department_id) : null}
-          onSelect={id => { setEditForm(f => ({ ...f, department_id: id ?? '' })); setShowDeptPicker(false) }}
-          onClose={() => setShowDeptPicker(false)}
-        />
-      )}
-      {showPositionPicker && (
-        <PositionPickerModal
-          positions={positions}
-          selected={editForm.position}
-          onSelect={pos => { setEditForm(f => ({ ...f, position: pos })); setShowPositionPicker(false) }}
-          onClose={() => setShowPositionPicker(false)}
-        />
-      )}
-    </div>
-  )
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-border/30">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium">{value}</span>
     </div>
   )
 }
@@ -1532,151 +615,6 @@ function RolesTab() {
         </div>
       </CardContent>
     </Card>
-  )
-}
-
-function DepartmentPickerModal({ departments, selectedId, onSelect, onClose }: {
-  departments: { id: number; name: string }[]
-  selectedId: number | null
-  onSelect: (id: number | null) => void
-  onClose: () => void
-}) {
-  const [search, setSearch] = useState('')
-
-  const filtered = departments.filter(d => {
-    if (!search.trim()) return true
-    return d.name.toLowerCase().includes(search.toLowerCase())
-  })
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-border shrink-0">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-foreground">Выбор отдела</h3>
-            <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              autoFocus
-              placeholder="Поиск отдела..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-2">
-          <button
-            onClick={() => onSelect(null)}
-            className={cn(
-              'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
-              selectedId === null ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/40',
-            )}
-          >
-            <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground shrink-0">
-              <X className="h-4 w-4" />
-            </div>
-            <span className="text-sm text-muted-foreground">Без отдела</span>
-          </button>
-          {filtered.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">{search ? 'Ничего не найдено' : 'Нет отделов'}</div>
-          ) : (
-            <div className="space-y-0.5 mt-1">
-              {filtered.map(d => (
-                <button
-                  key={d.id}
-                  onClick={() => onSelect(d.id)}
-                  className={cn(
-                    'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
-                    selectedId === d.id ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/40',
-                  )}
-                >
-                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-500/5 flex items-center justify-center text-blue-600 shrink-0">
-                    <Building2 className="h-4 w-4" />
-                  </div>
-                  <span className="text-sm font-medium">{d.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {search && (
-          <div className="p-3 border-t border-border text-xs text-muted-foreground text-center">
-            Найдено: {filtered.length} из {departments.length}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function PositionPickerModal({ positions, selected, onSelect, onClose }: {
-  positions: string[]
-  selected: string
-  onSelect: (position: string) => void
-  onClose: () => void
-}) {
-  const [search, setSearch] = useState('')
-
-  const filtered = positions.filter(p => {
-    if (!search.trim()) return true
-    return p.toLowerCase().includes(search.toLowerCase())
-  })
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-border shrink-0">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-foreground">Выбор должности</h3>
-            <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              autoFocus
-              placeholder="Поиск должности..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-2">
-          {filtered.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              {search ? 'Ничего не найдено' : 'Нет должностей'}
-            </div>
-          ) : (
-            <div className="space-y-0.5">
-              {filtered.map(pos => (
-                <button
-                  key={pos}
-                  onClick={() => onSelect(pos)}
-                  className={cn(
-                    'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
-                    selected === pos ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/40',
-                  )}
-                >
-                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500/20 to-violet-500/5 flex items-center justify-center text-violet-600 shrink-0">
-                    <Briefcase className="h-4 w-4" />
-                  </div>
-                  <span className="text-sm font-medium">{pos}</span>
-                  {selected === pos && <Check className="h-4 w-4 text-primary ml-auto" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {search && (
-          <div className="p-3 border-t border-border text-xs text-muted-foreground text-center">
-            Найдено: {filtered.length} из {positions.length}
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 
@@ -2660,21 +1598,31 @@ function ErrorsTab() {
 
 // ===================== SECURITY TAB =====================
 
+interface SessionStats {
+  onlineNow: number
+  daily: { date: string; logins: number; unique_users: number }[]
+  byDepartment: { department_id: number; department_name: string; logins: number; unique_users: number }[]
+  byMethod: { login_method: string; logins: number }[]
+}
+
 function SecurityTab() {
   const [failedLogins, setFailedLogins] = useState<{ attempts: { id: number; email: string; ip_address: string; created_at: string }[]; byIp: { ip_address: string; count: string; last_attempt: string }[]; byEmail: { email: string; count: string; last_attempt: string }[] } | null>(null)
   const [lockedAccounts, setLockedAccounts] = useState<{ id: number; email: string; first_name: string; last_name: string; middle_name: string | null; locked_until: string; failed_login_count: number; department: string | null }[]>([])
+  const [sessionStats, setSessionStats] = useState<SessionStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(30)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [flRes, lockedRes] = await Promise.all([
+      const [flRes, lockedRes, statsRes] = await Promise.all([
         fetchWithRetry(`${API_BASE_URL}/admin/security/failed-logins?days=${days}`, { headers: getAuthHeaders() }),
         fetchWithRetry(`${API_BASE_URL}/admin/security/locked-accounts`, { headers: getAuthHeaders() }),
+        fetchWithRetry(`${API_BASE_URL}/admin/security/session-stats?days=${days}`, { headers: getAuthHeaders() }),
       ])
       if (flRes.ok) setFailedLogins(await flRes.json())
       if (lockedRes.ok) setLockedAccounts(await lockedRes.json())
+      if (statsRes.ok) setSessionStats(await statsRes.json())
     } catch {} finally { setLoading(false) }
   }, [days])
 
@@ -2693,6 +1641,57 @@ function SecurityTab() {
 
   return (
     <div className="space-y-4">
+      {sessionStats && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5" /> Активность входов</CardTitle>
+                <CardDescription>За последние {days} дней</CardDescription>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-1.5 dark:bg-emerald-900/20">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Онлайн сейчас: {sessionStats.onlineNow}</span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-sm font-medium mb-2">По дням</h4>
+                <div className="max-h-64 overflow-y-auto space-y-1">
+                  {sessionStats.daily.map((d) => (
+                    <div key={d.date} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 text-sm">
+                      <span>{new Date(d.date).toLocaleDateString('ru-RU')}</span>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{d.unique_users} польз.</span>
+                        <Badge className="text-[10px]">{d.logins} вх.</Badge>
+                      </div>
+                    </div>
+                  ))}
+                  {sessionStats.daily.length === 0 && <p className="text-sm text-muted-foreground py-2">Нет данных</p>}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium mb-2">По отделам</h4>
+                <div className="max-h-64 overflow-y-auto space-y-1">
+                  {sessionStats.byDepartment.map((d) => (
+                    <div key={d.department_id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 text-sm">
+                      <span className="truncate">{d.department_name}</span>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+                        <span>{d.unique_users} польз.</span>
+                        <Badge className="text-[10px]">{d.logins} вх.</Badge>
+                      </div>
+                    </div>
+                  ))}
+                  {sessionStats.byDepartment.length === 0 && <p className="text-sm text-muted-foreground py-2">Нет данных</p>}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {lockedAccounts.length > 0 && (
         <Card className="border-red-200 dark:border-red-900/50">
           <CardHeader>
@@ -2791,10 +1790,15 @@ interface ModuleItem {
   global_is_enabled?: boolean
   org_name?: string | null
   org_settings?: Record<string, unknown> | null
+  settings?: Record<string, unknown> | null
   is_overridden?: boolean
   is_enabled_override?: boolean | null
   effective_enabled?: boolean
 }
+
+const DASHBOARD_BADGE_MODULES = new Set([
+  'vacation', 'projects', 'documents', 'surveys', 'timesheet', 'hierarchy', 'onboarding', 'mailing',
+])
 
 type ModuleCategoryKey = 'core' | 'hr' | 'work' | 'docs' | 'admin'
 
@@ -2806,6 +1810,14 @@ interface ModuleCategory {
 }
 
 function CustomSettingsModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
@@ -2974,6 +1986,9 @@ function ModulesTab({ mode = 'global' }: { mode?: 'global' | 'org' }) {
   const [editingOverride, setEditingOverride] = useState<number | null>(null)
   const [overrideValue, setOverrideValue] = useState('')
   const [savingOverrideId, setSavingOverrideId] = useState<number | null>(null)
+  const [editingBadge, setEditingBadge] = useState<number | null>(null)
+  const [badgeValue, setBadgeValue] = useState('')
+  const [savingBadgeId, setSavingBadgeId] = useState<number | null>(null)
   const isGlobalMode = mode === 'global'
 
   useEffect(() => { fetchModules() }, [])
@@ -3076,6 +2091,35 @@ function ModulesTab({ mode = 'global' }: { mode?: 'global' | 'org' }) {
       }
     } catch (err) { setError(getErrorMessage(err)) }
     finally { setSavingOverrideId(null) }
+  }
+
+  const getBadge = (mod: ModuleItem) => {
+    const src = isGlobalMode ? mod.settings : (mod.org_settings ?? mod.settings)
+    return (src?.dashboardBadge as string) || ''
+  }
+
+  const saveBadge = async (mod: ModuleItem, value: string) => {
+    setSavingBadgeId(mod.id)
+    setError(null)
+    try {
+      const baseSettings = (isGlobalMode ? mod.settings : mod.org_settings) || {}
+      const nextSettings = { ...baseSettings, dashboardBadge: value.trim() || null }
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/modules/${mod.code}/settings`, {
+        method: 'PATCH', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify(nextSettings),
+      })
+      if (res.ok) {
+        setModules((prev) => prev.map((m) => m.id === mod.id
+          ? { ...m, ...(isGlobalMode ? { settings: nextSettings } : { org_settings: nextSettings }) }
+          : m))
+        setEditingBadge(null)
+        useModulesStore.getState().fetchModules()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Ошибка')
+      }
+    } catch (err) { setError(getErrorMessage(err)) }
+    finally { setSavingBadgeId(null) }
   }
 
   const enabledCount = modules.filter(m => isGlobalMode ? m.is_enabled : (m.effective_enabled ?? m.is_enabled)).length
@@ -3329,6 +2373,66 @@ function ModulesTab({ mode = 'global' }: { mode?: 'global' | 'org' }) {
                                       >
                                         <RotateCcw className="h-3.5 w-3.5 mr-1" />
                                         Сбросить
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {DASHBOARD_BADGE_MODULES.has(mod.code) && (
+                              <div className="mt-3 pt-3 border-t border-border/40">
+                                {editingBadge === mod.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={badgeValue}
+                                      onChange={(e) => setBadgeValue(e.target.value)}
+                                      placeholder="Например: в разработке"
+                                      className="h-8 text-sm"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') saveBadge(mod, badgeValue)
+                                        if (e.key === 'Escape') setEditingBadge(null)
+                                      }}
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => saveBadge(mod, badgeValue)}
+                                      disabled={savingBadgeId === mod.id}
+                                    >
+                                      {savingBadgeId === mod.id
+                                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        : <Check className="h-3.5 w-3.5" />}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setEditingBadge(null)}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setEditingBadge(mod.id)
+                                        setBadgeValue(getBadge(mod))
+                                      }}
+                                    >
+                                      <Tag className="h-3.5 w-3.5 mr-1" />
+                                      {getBadge(mod) ? `Статус: ${getBadge(mod)}` : 'Статус на дашборде'}
+                                    </Button>
+                                    {getBadge(mod) && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => saveBadge(mod, '')}
+                                        disabled={savingBadgeId === mod.id}
+                                      >
+                                        <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                                        Убрать
                                       </Button>
                                     )}
                                   </div>

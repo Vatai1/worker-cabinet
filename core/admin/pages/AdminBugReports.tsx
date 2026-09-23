@@ -101,6 +101,14 @@ export function AdminBugReports() {
     if (report.screenshot_s3_key) loadScreenshot(report.id)
   }
 
+  useEffect(() => {
+    const reportId = new URLSearchParams(window.location.search).get('reportId')
+    if (!reportId || reports.length === 0) return
+    const report = reports.find((r) => r.id === Number(reportId))
+    if (report && expandedId !== report.id) handleExpand(report)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reports])
+
   const handleSave = async (id: number) => {
     setSaving(true)
     try {

@@ -141,6 +141,14 @@ function TaskModal({ rows, cols, mode, task, defaultRowId, defaultStartCol, onSa
   // For milestone, start = end
   useEffect(() => { if(isMilestone) setEndM(startM) }, [isMilestone, startM])
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
   const submit=(e:React.FormEvent)=>{
     e.preventDefault()
     if(!title.trim()||!rowId||!startM||!endM) return

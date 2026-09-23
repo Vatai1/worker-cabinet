@@ -10,6 +10,8 @@ import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { getCookie, setCookie } from '@/shared/lib/cookies'
 import { HRPanelIntroModal } from '@/shared/components/HRPanelIntroModal'
+import { PageBanner } from '@/shared/components/PageBanner'
+import { Button } from '@/shared/components/ui/Button'
 
 const HR_PANEL_INTRO_COOKIE = 'hr_panel_intro_seen'
 import { HREmployees } from '@/core/employees/pages/HREmployees'
@@ -27,7 +29,7 @@ const HRPositionsTab = () => <DictionariesTab variant="hr" initialTab="positions
 const HRVacationTypesTab = () => <DictionariesTab variant="hr" initialTab="vacationTypes" />
 const HRSkillsTab = () => <DictionariesTab variant="hr" initialTab="skills" />
 
-type TabId = 'employees' | 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
+type TabId = 'hr_employees' | 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
 
 interface TabItem {
   id: TabId
@@ -45,7 +47,6 @@ interface TabGroup {
 
 const TAB_GROUPS: TabGroup[] = [
   { label: 'Управление персоналом', tabs: [
-    { id: 'employees', name: 'Сотрудники', icon: Users, description: 'Профили, роли, теги, балансы', module: null, color: 'from-slate-500 to-slate-700' },
     { id: 'surveys', name: 'Опросы', icon: ClipboardList, description: 'Создание и управление опросами', module: 'surveys', color: 'from-violet-500 to-purple-600' },
     { id: 'mailing', name: 'Рассылка', icon: Send, description: 'Массовая рассылка информации', module: 'mailing', color: 'from-fuchsia-500 to-pink-600' },
     { id: 'onboarding', name: 'Онбординг', icon: UserPlus, description: 'Шаблоны и адаптация', module: 'onboarding', color: 'from-emerald-500 to-teal-600' },
@@ -59,6 +60,7 @@ const TAB_GROUPS: TabGroup[] = [
     { id: 'doc-templates', name: 'Шаблоны документов', icon: FileText, description: 'Шаблоны документов организации', module: 'documents', color: 'from-pink-500 to-rose-600' },
   ]},
   { label: 'Справочники', tabs: [
+    { id: 'hr_employees', name: 'Сотрудники', icon: Users, description: 'Справочник сотрудников', module: null, color: 'from-blue-500 to-indigo-600' },
     { id: 'institution', name: 'Учреждение', icon: Building2, description: 'Информация и руководитель', module: 'dictionaries', color: 'from-indigo-500 to-blue-600' },
     { id: 'hr_departments', name: 'Отделы', icon: Building2, description: 'Структура организации', module: 'dictionaries', color: 'from-blue-500 to-indigo-600' },
     { id: 'hr_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', module: 'dictionaries', color: 'from-violet-500 to-purple-600' },
@@ -113,28 +115,17 @@ export function HRPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/2 -translate-x-1/4" />
-        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-card/5 rounded-full" />
-        <div className="relative z-10 flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <Sparkles className="h-6 w-6 text-white/80" />
-              <h1 className="text-2xl font-bold text-white">HR-панель</h1>
-            </div>
-            <p className="text-sm text-white/60">Управление персоналом и процессами</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowIntroModal(true)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-white/20"
-          >
+      <PageBanner
+        icon={Sparkles}
+        title="HR-панель"
+        subtitle="Управление персоналом и процессами"
+        aside={
+          <Button variant="outline" size="sm" onClick={() => setShowIntroModal(true)}>
             <HelpCircle className="h-3.5 w-3.5" />
             Как это работает
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
       <HRPanelIntroModal open={showIntroModal} onClose={() => setShowIntroModal(false)} groups={filteredGroups} activeTabId={safeActiveTab} />
 
@@ -166,7 +157,7 @@ export function HRPanel() {
       ) : (
         <div className="relative min-w-0 animate-fade-in">
           {([
-            ['employees', HREmployees],
+            ['hr_employees', HREmployees],
             ['surveys', HRSurveys],
             ['mailing', HRMailing],
             ['institution', HRInstitution],

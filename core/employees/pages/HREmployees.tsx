@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import {
-  Users, Search, RotateCcw, X, Loader2, ChevronUp, ChevronDown, ArrowUpDown,
-  User as UserIcon, Building2, Tag, Wallet,
+  Users, Search, RotateCcw, X, Loader2, ChevronUp, ChevronDown, ArrowUpDown, Filter,
+  User as UserIcon, Building2, Tag, Wallet, Lock, ShieldCheck, Globe, Unlock, Star, Trash2,
 } from 'lucide-react'
 import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
@@ -11,14 +11,16 @@ import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Switch } from '@/shared/components/ui/Switch'
 import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
+import { SearchableCheckList, type CheckListItem } from '@/shared/components/ui/SearchableCheckList'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { useOrgStore } from '@/shared/store/orgStore'
-import { apiGet, apiPut, apiPost, apiPatch } from '@/shared/lib/apiClient'
+import { apiGet, apiPut, apiPost, apiPatch, apiDelete } from '@/shared/lib/apiClient'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { getErrorMessage, personName } from '@/shared/lib/utils'
+import { cn, getErrorMessage, personName } from '@/shared/lib/utils'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 
 interface EmployeeTag {
   id: number
@@ -72,14 +74,34 @@ const ORG_ROLES: { value: EmployeeRow['org_role'] & string; label: string }[] = 
   { value: 'admin', label: 'Администратор' },
 ]
 
-const ORG_ROLE_LABEL: Record<string, string> = Object.fromEntries(ORG_ROLES.map((r) => [r.value, r.label]))
-
-const ORG_ROLE_BADGE: Record<string, 'default' | 'secondary' | 'warning' | 'success'> = {
-  employee: 'secondary',
-  manager: 'default',
-  hr: 'warning',
-  admin: 'success',
+const SYSTEM_ROLE_LABELS: Record<string, string> = {
+  employee: 'Работник',
+  manager: 'Руководитель',
+  hr: 'HR-менеджер',
+  admin: 'Администратор',
+  superadmin: 'Суперадминистратор',
+  director: 'Директор',
+  onboarding: 'Онбординг',
 }
+
+interface SystemRole {
+  id: number
+  name: string
+}
+
+interface OrgMembership {
+  id: number
+  name: string
+  org_role: string
+  department_name: string | null
+  is_primary: boolean
+  is_active: boolean
+}
+
+const STATUS_FILTER_OPTIONS: CheckListItem[] = [
+  { id: 'active', label: 'Активен' },
+  { id: 'inactive', label: 'Отключён' },
+]
 
 type SortKey = 'name' | 'position' | 'department'
 
@@ -106,6 +128,9 @@ function EmployeeSettingsModal({
   allTags,
   year,
   currentOrgId,
+  adminMode,
+  isGlobalMode,
+  systemRoles,
   onClose,
   onUpdated,
 }: {
@@ -115,10 +140,21 @@ function EmployeeSettingsModal({
   allTags: EmployeeTag[]
   year: number
   currentOrgId: number | null
+  adminMode?: boolean
+  isGlobalMode?: boolean
+  systemRoles: SystemRole[]
   onClose: () => void
   onUpdated: (id: number, patch: Partial<EmployeeRow>) => void
 }) {
   useModalOpen(true)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   // Profile section
   const [firstName, setFirstName] = useState(employee.first_name)
@@ -130,14 +166,15 @@ function EmployeeSettingsModal({
   const [cabinet, setCabinet] = useState(employee.cabinet || '')
   const [hireDate, setHireDate] = useState(employee.hire_date ? employee.hire_date.slice(0, 10) : '')
   const [managerId, setManagerId] = useState(employee.manager_id ? String(employee.manager_id) : '')
-  const [savingProfile, setSavingProfile] = useState(false)
   const [managerCandidates, setManagerCandidates] = useState<EmployeeRow[]>([])
 
   // Organization section
   const [orgRole, setOrgRole] = useState<string>(employee.org_role || 'employee')
   const [departmentId, setDepartmentId] = useState(employee.department_id ? String(employee.department_id) : '')
   const [isActive, setIsActive] = useState(employee.org_is_active !== false)
-  const [savingOrg, setSavingOrg] = useState(false)
+
+  // Common save (profile + organization + balance)
+  const [savingAll, setSavingAll] = useState(false)
 
   // Tags section
   const [checkedTagIds, setCheckedTagIds] = useState<Set<number>>(new Set(employee.tags.map((t) => t.id)))
@@ -149,8 +186,23 @@ function EmployeeSettingsModal({
   const [usedDays, setUsedDays] = useState(employee.used_days ?? null)
   const [reservedDays, setReservedDays] = useState(employee.reserved_days ?? null)
   const [availableDays, setAvailableDays] = useState(employee.available_days ?? null)
-  const [savingBalance, setSavingBalance] = useState(false)
   const [balanceLoading, setBalanceLoading] = useState(false)
+
+  // Account section (admin only): global status + system role + password reset
+  const [status, setStatus] = useState(employee.status)
+  const [savingStatus, setSavingStatus] = useState(false)
+  const [systemRole, setSystemRole] = useState(employee.role)
+  const [savingRole, setSavingRole] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [resettingPassword, setResettingPassword] = useState(false)
+
+  // Organizations section (admin + global only): cross-org membership management
+  const [memberships, setMemberships] = useState<OrgMembership[]>([])
+  const [allOrgs, setAllOrgs] = useState<{ id: number; name: string }[]>([])
+  const [orgsLoading, setOrgsLoading] = useState(false)
+  const [addOrgId, setAddOrgId] = useState('')
+  const [addOrgRole, setAddOrgRole] = useState('employee')
+  const [orgBusy, setOrgBusy] = useState(false)
 
   useEffect(() => {
     apiGet<EmployeeRow[]>('/users/search')
@@ -184,21 +236,61 @@ function EmployeeSettingsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [balanceYear])
 
-  const saveProfile = async () => {
-    setSavingProfile(true)
+  const loadMemberships = async () => {
+    setOrgsLoading(true)
     try {
-      await apiPut(`/users/${employee.id}`, {
-        first_name: firstName,
-        last_name: lastName,
-        middle_name: middleName,
-        position,
-        phone,
-        office,
-        cabinet,
-        hire_date: hireDate || null,
-        manager_id: managerId ? Number(managerId) : null,
-      })
+      const [user, orgs] = await Promise.all([
+        apiGet<{ organizations: OrgMembership[] }>(`/users/${employee.id}`),
+        apiGet<{ id: number; name: string }[]>('/organizations'),
+      ])
+      setMemberships(user.organizations || [])
+      setAllOrgs(orgs)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setOrgsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (adminMode && isGlobalMode) loadMemberships()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminMode, isGlobalMode])
+
+  const saveAll = async () => {
+    const days = Number(totalDays)
+    if (Number.isNaN(days) || days < 0) {
+      toast.error('Некорректное число дней в балансе отпуска')
+      return
+    }
+    setSavingAll(true)
+    try {
+      const tasks: Promise<unknown>[] = [
+        apiPut(`/users/${employee.id}`, {
+          first_name: firstName,
+          last_name: lastName,
+          middle_name: middleName,
+          position,
+          phone,
+          office,
+          cabinet,
+          hire_date: hireDate || null,
+          manager_id: managerId ? Number(managerId) : null,
+          department_id: departmentId ? Number(departmentId) : null,
+        }),
+        apiPatch(`/vacation/balances/${employee.id}`, { year: balanceYear, total_days: days }),
+      ]
+      if (currentOrgId) {
+        tasks.push(apiPut(`/organizations/${currentOrgId}/members/${employee.id}`, {
+          org_role: orgRole,
+          department_id: departmentId ? Number(departmentId) : null,
+          is_active: isActive,
+        }))
+      }
+      await Promise.all(tasks)
+
       const manager = managerCandidates.find((m) => String(m.id) === managerId)
+      const dept = departments.find((d) => String(d.id) === departmentId)
       onUpdated(employee.id, {
         first_name: firstName,
         last_name: lastName,
@@ -210,36 +302,17 @@ function EmployeeSettingsModal({
         hire_date: hireDate || null,
         manager_id: managerId ? Number(managerId) : null,
         manager_name: manager ? personName(manager.last_name, manager.first_name, manager.middle_name) : null,
-      })
-      toast.success('Профиль обновлён')
-    } catch (err) {
-      toast.error(getErrorMessage(err))
-    } finally {
-      setSavingProfile(false)
-    }
-  }
-
-  const saveOrganization = async () => {
-    if (!currentOrgId) return
-    setSavingOrg(true)
-    try {
-      await apiPut(`/organizations/${currentOrgId}/members/${employee.id}`, {
-        org_role: orgRole,
-        department_id: departmentId ? Number(departmentId) : null,
-        is_active: isActive,
-      })
-      const dept = departments.find((d) => String(d.id) === departmentId)
-      onUpdated(employee.id, {
         org_role: orgRole as EmployeeRow['org_role'],
         department_id: departmentId ? Number(departmentId) : null,
         department_name: dept?.name ?? null,
         org_is_active: isActive,
+        ...(balanceYear === year ? { total_days: days, available_days: days - (usedDays ?? 0) - (reservedDays ?? 0) } : {}),
       })
-      toast.success('Организационные данные обновлены')
+      toast.success('Сохранено')
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
-      setSavingOrg(false)
+      setSavingAll(false)
     }
   }
 
@@ -270,25 +343,128 @@ function EmployeeSettingsModal({
     }
   }
 
-  const saveBalance = async () => {
-    const days = Number(totalDays)
-    if (Number.isNaN(days) || days < 0) {
-      toast.error('Некорректное число дней')
-      return
-    }
-    setSavingBalance(true)
+  const toggleStatus = async () => {
+    const nextStatus = status === 'active' ? 'inactive' : 'active'
+    const confirmed = await confirmDialog({
+      title: nextStatus === 'active' ? 'Активировать' : 'Деактивировать',
+      message: `${nextStatus === 'active' ? 'Активировать' : 'Деактивировать'} ${personName(lastName, firstName, middleName)}?`,
+      confirmText: nextStatus === 'active' ? 'Активировать' : 'Деактивировать',
+      variant: nextStatus === 'inactive' ? 'danger' : 'default',
+    })
+    if (!confirmed) return
+    setSavingStatus(true)
     try {
-      await apiPatch(`/vacation/balances/${employee.id}`, { year: balanceYear, total_days: days })
-      if (balanceYear === year) {
-        onUpdated(employee.id, { total_days: days, available_days: days - (usedDays ?? 0) - (reservedDays ?? 0) })
-      }
-      toast.success('Баланс отпуска обновлён')
+      await apiPut(`/admin/users/${employee.id}/status`, { status: nextStatus })
+      setStatus(nextStatus)
+      onUpdated(employee.id, { status: nextStatus })
+      toast.success('Статус обновлён')
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
-      setSavingBalance(false)
+      setSavingStatus(false)
     }
   }
+
+  const saveSystemRole = async () => {
+    setSavingRole(true)
+    try {
+      await apiPut(`/admin/users/${employee.id}/role`, { role: systemRole })
+      onUpdated(employee.id, { role: systemRole })
+      toast.success('Роль обновлена')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSavingRole(false)
+    }
+  }
+
+  const resetPassword = async () => {
+    if (newPassword.length < 6) {
+      toast.error('Пароль должен быть не менее 6 символов')
+      return
+    }
+    const confirmed = await confirmDialog({
+      title: 'Сбросить пароль',
+      message: `Установить новый пароль для ${personName(lastName, firstName, middleName)}?`,
+      confirmText: 'Сбросить',
+      variant: 'danger',
+    })
+    if (!confirmed) return
+    setResettingPassword(true)
+    try {
+      await apiPost(`/admin/users/${employee.id}/reset-password`, { newPassword })
+      setNewPassword('')
+      toast.success('Пароль сброшен')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setResettingPassword(false)
+    }
+  }
+
+  const addMembership = async () => {
+    if (!addOrgId) return
+    setOrgBusy(true)
+    try {
+      await apiPost(`/organizations/${addOrgId}/members`, { email: employee.email, org_role: addOrgRole })
+      setAddOrgId('')
+      setAddOrgRole('employee')
+      await loadMemberships()
+      toast.success('Добавлен в организацию')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setOrgBusy(false)
+    }
+  }
+
+  const removeMembership = async (org: OrgMembership) => {
+    const confirmed = await confirmDialog({
+      title: 'Исключить из организации',
+      message: `Исключить ${personName(lastName, firstName, middleName)} из «${org.name}»?`,
+      confirmText: 'Исключить',
+      variant: 'danger',
+    })
+    if (!confirmed) return
+    setOrgBusy(true)
+    try {
+      await apiDelete(`/organizations/${org.id}/members/${employee.id}`)
+      await loadMemberships()
+      toast.success('Исключён из организации')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setOrgBusy(false)
+    }
+  }
+
+  const makePrimary = async (org: OrgMembership) => {
+    setOrgBusy(true)
+    try {
+      await apiPatch(`/users/${employee.id}/primary-org`, { orgId: org.id })
+      await loadMemberships()
+      toast.success('Основная организация изменена')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setOrgBusy(false)
+    }
+  }
+
+  const changeMembershipRole = async (org: OrgMembership, newOrgRole: string) => {
+    setOrgBusy(true)
+    try {
+      await apiPut(`/organizations/${org.id}/members/${employee.id}`, { org_role: newOrgRole })
+      await loadMemberships()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+      await loadMemberships()
+    } finally {
+      setOrgBusy(false)
+    }
+  }
+
+  const availableOrgsToAdd = allOrgs.filter((o) => !memberships.some((m) => m.id === o.id))
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
@@ -345,14 +521,10 @@ function EmployeeSettingsModal({
               <Input placeholder="Офис" value={office} onChange={(e) => setOffice(e.target.value)} className="h-9 text-sm" />
               <Input placeholder="Кабинет" value={cabinet} onChange={(e) => setCabinet(e.target.value)} className="h-9 text-sm" />
             </div>
-            <div className="mb-3">
+            <div>
               <label className="mb-1 block text-xs text-muted-foreground">Дата найма</label>
               <Input type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} className="h-9 w-48 text-sm" />
             </div>
-            <Button size="sm" onClick={saveProfile} disabled={savingProfile}>
-              {savingProfile && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Сохранить профиль
-            </Button>
           </section>
 
           {/* Organization */}
@@ -375,14 +547,10 @@ function EmployeeSettingsModal({
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2.5 mb-3">
+            <div className="flex items-center gap-2.5">
               <Switch checked={isActive} onCheckedChange={setIsActive} />
               <span className="text-sm">{isActive ? 'Активен в организации' : 'Отключён'}</span>
             </div>
-            <Button size="sm" onClick={saveOrganization} disabled={savingOrg || !currentOrgId}>
-              {savingOrg && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Сохранить организацию
-            </Button>
           </section>
 
           {/* Tags */}
@@ -441,16 +609,139 @@ function EmployeeSettingsModal({
                 />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mb-3">
+            <p className="text-xs text-muted-foreground">
               {balanceLoading
                 ? 'Загрузка…'
                 : `Использовано: ${usedDays ?? '—'} · Зарезервировано: ${reservedDays ?? '—'} · Доступно: ${availableDays ?? '—'}`}
             </p>
-            <Button size="sm" onClick={saveBalance} disabled={savingBalance || balanceLoading}>
-              {savingBalance && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Сохранить баланс
-            </Button>
           </section>
+
+          {/* Account (admin only) */}
+          {adminMode && (
+            <section className="pt-5 border-t border-border">
+              <p className="flex items-center gap-2 text-sm font-semibold mb-3">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Аккаунт
+              </p>
+
+              <div className="flex items-center gap-2 mb-3">
+                <Button
+                  size="sm"
+                  variant={status === 'active' ? 'outline' : 'default'}
+                  onClick={toggleStatus}
+                  disabled={savingStatus}
+                >
+                  {savingStatus ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : status === 'active' ? (
+                    <Lock className="h-3.5 w-3.5 mr-1.5" />
+                  ) : (
+                    <Unlock className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {status === 'active' ? 'Деактивировать' : 'Активировать'}
+                </Button>
+                <span className="text-xs text-muted-foreground">Текущий статус: {status}</span>
+              </div>
+
+              <div className="mb-2">
+                <label className="mb-1 block text-xs text-muted-foreground">Системная роль</label>
+                <div className="flex items-center gap-2">
+                  <SelectDropdown
+                    options={systemRoles.map((r) => ({ value: r.name, label: SYSTEM_ROLE_LABELS[r.name] || r.name }))}
+                    value={systemRole}
+                    onChange={setSystemRole}
+                    className="min-w-[200px]"
+                  />
+                  <Button size="sm" onClick={saveSystemRole} disabled={savingRole || systemRole === employee.role}>
+                    {savingRole && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                    Сохранить роль
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <label className="mb-1 block text-xs text-muted-foreground">Новый пароль</label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="password"
+                    placeholder="Минимум 6 символов"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="h-9 text-sm max-w-xs"
+                  />
+                  <Button size="sm" variant="outline" onClick={resetPassword} disabled={resettingPassword || newPassword.length < 6}>
+                    {resettingPassword && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                    <Lock className="h-3.5 w-3.5 mr-1.5" />
+                    Сбросить пароль
+                  </Button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Organizations (admin + global only) */}
+          {adminMode && isGlobalMode && (
+            <section className="pt-5 border-t border-border">
+              <p className="flex items-center gap-2 text-sm font-semibold mb-3">
+                <Globe className="h-4 w-4 text-muted-foreground" /> Организации
+              </p>
+              {orgsLoading ? (
+                <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+              ) : (
+                <div className="space-y-2 mb-3">
+                  {memberships.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium flex items-center gap-1.5">
+                          {m.name}
+                          {m.is_primary && <Star className="h-3 w-3 text-amber-500 fill-amber-500" />}
+                        </p>
+                        {m.department_name && <p className="text-xs text-muted-foreground truncate">{m.department_name}</p>}
+                      </div>
+                      <SelectDropdown
+                        options={ORG_ROLES}
+                        value={m.org_role}
+                        onChange={(v) => changeMembershipRole(m, v)}
+                        className="min-w-[130px]"
+                      />
+                      {!m.is_primary && (
+                        <Button size="sm" variant="ghost" onClick={() => makePrimary(m)} disabled={orgBusy} title="Сделать основной">
+                          <Star className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" onClick={() => removeMembership(m)} disabled={orgBusy}>
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                  {memberships.length === 0 && <p className="text-xs text-muted-foreground">Не состоит ни в одной организации</p>}
+                </div>
+              )}
+              {availableOrgsToAdd.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <SelectDropdown
+                    options={[{ value: '', label: 'Выберите организацию' }, ...availableOrgsToAdd.map((o) => ({ value: String(o.id), label: o.name }))]}
+                    value={addOrgId}
+                    onChange={setAddOrgId}
+                    className="min-w-[200px] flex-1"
+                  />
+                  <SelectDropdown options={ORG_ROLES} value={addOrgRole} onChange={setAddOrgRole} className="min-w-[130px]" />
+                  <Button size="sm" onClick={addMembership} disabled={!addOrgId || orgBusy}>
+                    {orgBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Добавить'}
+                  </Button>
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
+          <Button variant="outline" onClick={onClose} disabled={savingAll}>
+            Отмена
+          </Button>
+          <Button onClick={saveAll} disabled={savingAll} className="gap-2">
+            {savingAll && <Loader2 className="h-4 w-4 animate-spin" />}
+            Сохранить
+          </Button>
         </div>
       </Card>
     </div>,
@@ -458,14 +749,97 @@ function EmployeeSettingsModal({
   )
 }
 
-export function HREmployees() {
+function FilterableHeader({
+  label,
+  sortActive,
+  sortDir,
+  onSort,
+  filterOptions,
+  selected,
+  onFilterChange,
+  searchPlaceholder,
+}: {
+  label: string
+  sortActive?: boolean
+  sortDir?: 'asc' | 'desc'
+  onSort?: () => void
+  filterOptions: CheckListItem[]
+  selected: string[]
+  onFilterChange: (values: string[]) => void
+  searchPlaceholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const activeCount = selected.length
+
+  return (
+    <div ref={ref} className="relative inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          'inline-flex items-center gap-1 hover:text-foreground',
+          activeCount > 0 && 'text-primary font-semibold'
+        )}
+      >
+        {label}
+        <Filter className={cn('h-3 w-3', activeCount > 0 ? 'text-primary' : 'opacity-30')} />
+        {activeCount > 0 && (
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+            {activeCount}
+          </span>
+        )}
+      </button>
+      {onSort && (
+        <button type="button" onClick={onSort} className="text-muted-foreground hover:text-foreground">
+          {sortActive ? (sortDir === 'asc' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />}
+        </button>
+      )}
+      {open && (
+        <div
+          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-border bg-card p-2.5 shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SearchableCheckList
+            items={filterOptions}
+            selected={selected}
+            onChange={onFilterChange}
+            searchPlaceholder={searchPlaceholder}
+          />
+          {activeCount > 0 && (
+            <button
+              type="button"
+              onClick={() => onFilterChange([])}
+              className="mt-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              Сбросить фильтр
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function HREmployees({ adminMode = false, isGlobalMode = false }: { adminMode?: boolean; isGlobalMode?: boolean } = {}) {
   const currentOrgId = useOrgStore((s) => s.currentOrgId)
 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [departmentId, setDepartmentId] = useState('')
-  const [orgRole, setOrgRole] = useState('')
-  const [tagId, setTagId] = useState('')
+  const [filterDepartmentIds, setFilterDepartmentIds] = useState<string[]>([])
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([])
+  const [filterPositions, setFilterPositions] = useState<string[]>([])
+  const [filterStatuses, setFilterStatuses] = useState<string[]>([])
   const [year, setYear] = useState(CURRENT_YEAR)
   const [page, setPage] = useState(1)
   const [limit] = useState(20)
@@ -483,6 +857,12 @@ export function HREmployees() {
 
   const [selected, setSelected] = useState<EmployeeRow | null>(null)
 
+  const [systemRoles, setSystemRoles] = useState<SystemRole[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkAction, setBulkAction] = useState('')
+  const [bulkRole, setBulkRole] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search.trim()); setPage(1) }, 300)
     return () => clearTimeout(t)
@@ -494,13 +874,20 @@ export function HREmployees() {
     apiGet<{ name: string }[]>('/dictionaries/positions').then((rows) => setPositions(rows.map((r) => r.name))).catch(() => setPositions([]))
   }, [currentOrgId])
 
+  useEffect(() => {
+    apiGet<SystemRole[]>('/users/system-roles').then(setSystemRoles).catch(() => setSystemRoles([]))
+  }, [])
+
   const fetchEmployees = () => {
     setLoading(true)
     const params = new URLSearchParams()
     if (debouncedSearch) params.set('q', debouncedSearch)
-    if (departmentId) params.set('departmentId', departmentId)
-    if (orgRole) params.set('orgRole', orgRole)
-    if (tagId) params.set('tagId', tagId)
+    if (filterDepartmentIds.length > 0) params.set('departmentId', filterDepartmentIds.join(','))
+    if (filterTagIds.length > 0) params.set('tagId', filterTagIds.join(','))
+    if (filterPositions.length > 0) params.set('position', filterPositions.join(','))
+    if (filterStatuses.length > 0) {
+      params.set('orgIsActive', filterStatuses.map((s) => (s === 'active' ? 'true' : 'false')).join(','))
+    }
     params.set('year', String(year))
     params.set('page', String(page))
     params.set('limit', String(limit))
@@ -513,14 +900,15 @@ export function HREmployees() {
   useEffect(() => {
     fetchEmployees()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, departmentId, orgRole, tagId, year, page, currentOrgId])
+  }, [debouncedSearch, filterDepartmentIds, filterTagIds, filterPositions, filterStatuses, year, page, currentOrgId])
 
   const resetFilters = () => {
     setSearch('')
     setDebouncedSearch('')
-    setDepartmentId('')
-    setOrgRole('')
-    setTagId('')
+    setFilterDepartmentIds([])
+    setFilterTagIds([])
+    setFilterPositions([])
+    setFilterStatuses([])
     setYear(CURRENT_YEAR)
     setPage(1)
   }
@@ -550,7 +938,53 @@ export function HREmployees() {
     setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev))
   }
 
+  const toggleRowSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => (prev.size === sortedRows.length ? new Set() : new Set(sortedRows.map((r) => r.id))))
+  }
+
+  const executeBulkAction = async () => {
+    if (selectedIds.size === 0 || !bulkAction) return
+    const ids = Array.from(selectedIds)
+    const confirmed = await confirmDialog({
+      title: 'Массовое действие',
+      message: `Применить к ${ids.length} сотрудникам?`,
+      confirmText: 'Применить',
+    })
+    if (!confirmed) return
+    setBulkBusy(true)
+    try {
+      if (bulkAction === 'activate' || bulkAction === 'deactivate') {
+        await apiPut('/users/bulk-status', { userIds: ids, status: bulkAction === 'activate' ? 'active' : 'inactive' })
+      } else if (bulkAction === 'setRole' && bulkRole) {
+        await apiPut('/users/bulk-role', { userIds: ids, role: bulkRole })
+      }
+      setSelectedIds(new Set())
+      setBulkAction('')
+      setBulkRole('')
+      fetchEmployees()
+      toast.success('Изменения применены')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / limit))
+
+  const departmentFilterOptions = useMemo(() => departments.map((d) => ({ id: String(d.id), label: d.name })), [departments])
+  const tagFilterOptions = useMemo(() => allTags.map((t) => ({ id: String(t.id), label: t.name })), [allTags])
+  const positionFilterOptions = useMemo(() => positions.map((p) => ({ id: p, label: p })), [positions])
+  const hasColumnFilters = filterDepartmentIds.length + filterTagIds.length + filterPositions.length + filterStatuses.length > 0
 
   const SortIcon = ({ active }: { active: boolean }) =>
     active ? (sortDir === 'asc' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />
@@ -578,35 +1012,52 @@ export function HREmployees() {
               className="h-9 w-full rounded-[10px] border border-border bg-card pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
             />
           </div>
-          <SelectDropdown
-            options={[{ value: '', label: 'Все отделы' }, ...departments.map((d) => ({ value: String(d.id), label: d.name }))]}
-            value={departmentId}
-            onChange={(v) => { setDepartmentId(v); setPage(1) }}
-          />
-          <SelectDropdown
-            options={[{ value: '', label: 'Все роли' }, ...ORG_ROLES]}
-            value={orgRole}
-            onChange={(v) => { setOrgRole(v); setPage(1) }}
-          />
-          <SelectDropdown
-            options={[{ value: '', label: 'Все теги' }, ...allTags.map((t) => ({ value: String(t.id), label: t.name }))]}
-            value={tagId}
-            onChange={(v) => { setTagId(v); setPage(1) }}
-          />
-          <SelectDropdown
-            options={YEARS.map((y) => ({ value: String(y), label: String(y) }))}
-            value={String(year)}
-            onChange={(v) => { setYear(Number(v)); setPage(1) }}
-          />
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-card px-[15px] py-[9px] text-[13px] font-semibold text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
-          >
-            <RotateCcw className="h-[14px] w-[14px]" />
-            Сбросить
-          </button>
+          {(search.trim() !== '' || hasColumnFilters) && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-card px-[15px] py-[9px] text-[13px] font-semibold text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
+            >
+              <RotateCcw className="h-[14px] w-[14px]" />
+              Сбросить
+            </button>
+          )}
         </div>
+        <p className="text-xs text-muted-foreground">Фильтры по должности, отделу, тегам и статусу — в заголовках столбцов таблицы</p>
+
+        {selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-primary/20 bg-primary/5 p-3">
+            <span className="text-sm font-medium">Выбрано: {selectedIds.size}</span>
+            <SelectDropdown
+              options={[
+                { value: '', label: 'Действие…' },
+                { value: 'activate', label: 'Активировать' },
+                { value: 'deactivate', label: 'Деактивировать' },
+                { value: 'setRole', label: 'Сменить роль' },
+              ]}
+              value={bulkAction}
+              onChange={setBulkAction}
+            />
+            {bulkAction === 'setRole' && (
+              <SelectDropdown
+                options={[{ value: '', label: 'Роль…' }, ...systemRoles.map((r) => ({ value: r.name, label: SYSTEM_ROLE_LABELS[r.name] || r.name }))]}
+                value={bulkRole}
+                onChange={setBulkRole}
+              />
+            )}
+            <Button size="sm" onClick={executeBulkAction} disabled={bulkBusy || !bulkAction || (bulkAction === 'setRole' && !bulkRole)}>
+              {bulkBusy && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Применить
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkRole('') }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
 
         {loading ? (
           <div className="space-y-1.5">
@@ -624,25 +1075,60 @@ export function HREmployees() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
+                  <th className="w-10 px-4 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size > 0 && selectedIds.size === sortedRows.length}
+                      onChange={toggleSelectAll}
+                      className="h-3.5 w-3.5 rounded border-border accent-primary"
+                    />
+                  </th>
                   <th className="px-4 py-2.5 font-medium">
                     <button type="button" onClick={() => toggleSort('name')} className="inline-flex items-center gap-1 hover:text-foreground">
                       Сотрудник <SortIcon active={sortKey === 'name'} />
                     </button>
                   </th>
                   <th className="px-4 py-2.5 font-medium">
-                    <button type="button" onClick={() => toggleSort('position')} className="inline-flex items-center gap-1 hover:text-foreground">
-                      Должность <SortIcon active={sortKey === 'position'} />
-                    </button>
+                    <FilterableHeader
+                      label="Должность"
+                      sortActive={sortKey === 'position'}
+                      sortDir={sortDir}
+                      onSort={() => toggleSort('position')}
+                      filterOptions={positionFilterOptions}
+                      selected={filterPositions}
+                      onFilterChange={(v) => { setFilterPositions(v); setPage(1) }}
+                      searchPlaceholder="Поиск должности…"
+                    />
                   </th>
                   <th className="px-4 py-2.5 font-medium">
-                    <button type="button" onClick={() => toggleSort('department')} className="inline-flex items-center gap-1 hover:text-foreground">
-                      Отдел <SortIcon active={sortKey === 'department'} />
-                    </button>
+                    <FilterableHeader
+                      label="Отдел"
+                      sortActive={sortKey === 'department'}
+                      sortDir={sortDir}
+                      onSort={() => toggleSort('department')}
+                      filterOptions={departmentFilterOptions}
+                      selected={filterDepartmentIds}
+                      onFilterChange={(v) => { setFilterDepartmentIds(v); setPage(1) }}
+                      searchPlaceholder="Поиск отдела…"
+                    />
                   </th>
-                  <th className="px-4 py-2.5 font-medium">Роль</th>
-                  <th className="px-4 py-2.5 font-medium">Теги</th>
-                  <th className="px-4 py-2.5 font-medium">Баланс</th>
-                  <th className="px-4 py-2.5 font-medium">Статус</th>
+                  <th className="px-4 py-2.5 font-medium">
+                    <FilterableHeader
+                      label="Теги"
+                      filterOptions={tagFilterOptions}
+                      selected={filterTagIds}
+                      onFilterChange={(v) => { setFilterTagIds(v); setPage(1) }}
+                      searchPlaceholder="Поиск тега…"
+                    />
+                  </th>
+                  <th className="px-4 py-2.5 font-medium">
+                    <FilterableHeader
+                      label="Статус"
+                      filterOptions={STATUS_FILTER_OPTIONS}
+                      selected={filterStatuses}
+                      onFilterChange={(v) => { setFilterStatuses(v); setPage(1) }}
+                    />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -652,6 +1138,14 @@ export function HREmployees() {
                     onClick={() => setSelected(r)}
                     className="cursor-pointer border-b border-border/50 last:border-0 transition-colors hover:bg-muted/30"
                   >
+                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                          type="checkbox"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleRowSelect(r.id)}
+                          className="h-3.5 w-3.5 rounded border-border accent-primary"
+                        />
+                      </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2.5">
                         <Avatar className="h-8 w-8">
@@ -667,11 +1161,6 @@ export function HREmployees() {
                     <td className="px-4 py-2.5 text-[13px]">{r.position || '—'}</td>
                     <td className="px-4 py-2.5 text-[13px]">{r.department_name || '—'}</td>
                     <td className="px-4 py-2.5">
-                      {r.org_role ? (
-                        <Badge variant={ORG_ROLE_BADGE[r.org_role]}>{ORG_ROLE_LABEL[r.org_role]}</Badge>
-                      ) : '—'}
-                    </td>
-                    <td className="px-4 py-2.5">
                       <div className="flex flex-wrap items-center gap-1">
                         {r.tags.slice(0, 3).map((t) => (
                           <Badge key={t.id} variant="outline" className="text-[10px]">{t.name}</Badge>
@@ -679,9 +1168,6 @@ export function HREmployees() {
                         {r.tags.length > 3 && <Badge variant="outline" className="text-[10px]">+{r.tags.length - 3}</Badge>}
                         {r.tags.length === 0 && <span className="text-xs text-muted-foreground/60">—</span>}
                       </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-[13px] tabular-nums">
-                      {r.available_days ?? '—'} / {r.total_days ?? '—'}
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge variant={r.org_is_active === false ? 'destructive' : 'success'}>
@@ -712,6 +1198,9 @@ export function HREmployees() {
           allTags={allTags}
           year={year}
           currentOrgId={currentOrgId}
+          adminMode={adminMode}
+          isGlobalMode={isGlobalMode}
+          systemRoles={systemRoles}
           onClose={() => setSelected(null)}
           onUpdated={handleUpdated}
         />

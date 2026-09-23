@@ -7,9 +7,10 @@ import { Input } from '@/shared/components/ui/Input'
 import {
   FolderKanban, Plus, Search,
   Calendar, Users, CircleDot, CheckCircle2, Clock,
-  ArrowRight, Sparkles, Crown,
+  ArrowRight, Crown,
 } from 'lucide-react'
 import { CreateProjectModal } from '@/modules/projects/components/modals/CreateProjectModal'
+import { PageBanner } from '@/shared/components/PageBanner'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -128,7 +129,7 @@ export function Projects() {
   if (loading) {
     return (
       <div className="space-y-8 animate-fade-in">
-        <div className="h-48 rounded-2xl gradient-primary animate-pulse" />
+        <div className="h-40 rounded-2xl border border-border bg-muted/40 animate-pulse" />
         <div className="grid gap-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-32 rounded-2xl bg-muted/30 animate-pulse" />
@@ -141,18 +142,12 @@ export function Projects() {
   if (projects.length === 0) {
     return (
       <div className="space-y-8 animate-fade-in">
-        <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-4 w-4 text-white/60" />
-              <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Управление</span>
-            </div>
-            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Проекты</h1>
-            <p className="mt-2 text-white/45 text-sm">Создавайте проекты и управляйте командной работой</p>
-          </div>
-        </div>
+        <PageBanner
+          icon={FolderKanban}
+          eyebrow="Управление"
+          title="Проекты"
+          subtitle="Создавайте проекты и управляйте командной работой"
+        />
         <div className="text-center py-20">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted/60 mb-4">
             <FolderKanban className="h-7 w-7 text-muted-foreground/40" />
@@ -170,21 +165,12 @@ export function Projects() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="h-4 w-4 text-white/60" />
-            <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Управление</span>
-          </div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Проекты</h1>
-          <p className="mt-2 text-white/45 text-sm">
-            {projects.length} {pluralize(projects.length, 'проект', 'проекта', 'проектов')} · {totalMembers} участников
-          </p>
-        </div>
-      </div>
+      <PageBanner
+        icon={FolderKanban}
+        eyebrow="Управление"
+        title="Проекты"
+        subtitle={`${projects.length} ${pluralize(projects.length, 'проект', 'проекта', 'проектов')} · ${totalMembers} участников`}
+      />
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">

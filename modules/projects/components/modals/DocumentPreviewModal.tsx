@@ -100,6 +100,15 @@ export function DocumentPreviewModal({ open, onClose, document: doc }: DocumentP
 
   const docType = getDocumentType(doc.mimeType, doc.name)
 
+  useEffect(() => {
+    if (!open || docType === 'docx') return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose, docType])
+
   if (!open) return null
 
   // Для DOCX используем OnlyOffice

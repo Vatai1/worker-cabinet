@@ -35,8 +35,9 @@ import { getCookie, setCookie } from '@/shared/lib/cookies'
 import {
   ChevronLeft, ChevronRight, ChevronDown, FileText, Clock, CheckCircle2, CheckCircle,
   UserCheck, Search, RotateCcw, XCircle, PieChart,
-  Calendar as CalendarIcon, Lightbulb, HelpCircle, AlertTriangle,
+  Calendar as CalendarIcon, Lightbulb, HelpCircle, AlertTriangle, Plane,
 } from 'lucide-react'
+import { PageBanner } from '@/shared/components/PageBanner'
 
 const VACATION_INTRO_COOKIE = 'vacation_intro_seen'
 
@@ -105,7 +106,19 @@ export function Vacation() {
     setShowIntroModal(true)
     setCookie(VACATION_INTRO_COOKIE, '1')
   }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tab = params.get('tab')
+    const requestId = params.get('requestId')
+    if (tab === 'mine' || tab === 'approvals' || tab === 'restrictions' || tab === 'requests' || tab === 'history') {
+      setActiveTab(tab)
+    }
+    if (requestId) setDeepLinkRequestId(requestId)
+  }, [])
   const [activeTab, setActiveTab] = useState<VacationTab>('mine')
+  const [deepLinkRequestId, setDeepLinkRequestId] = useState<string | null>(null)
+  const deepLinkHandledRef = useRef(false)
   const [calendarScope, setCalendarScope] = useState<CalendarScope>('mine')
   const [leavingApprovalIds, setLeavingApprovalIds] = useState<Set<string>>(new Set())
   const [rejectingApprovalId, setRejectingApprovalId] = useState<string | null>(null)
@@ -246,7 +259,6 @@ export function Vacation() {
     deptTouched.current = false
     setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentIds: user?.departmentId ? [user.departmentId] : [] })
     setSearch('')
-    setYear(new Date().getFullYear())
     toast.success('Фильтры сброшены')
   }
 
@@ -490,7 +502,18 @@ export function Vacation() {
 
   const handleCloseModal = () => {
     setShowCreateFromCalendar(false)
+    setSelectedStartDate(null)
+    setSelectedEndDate(null)
   }
+
+  useEffect(() => {
+    if (!dateErrorMessage) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDateErrorMessage(null)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [dateErrorMessage])
 
   const handleCloseDetailModal = () => {
     setShowDetailModal(false)
@@ -633,6 +656,19 @@ export function Vacation() {
     setApprovalFilters({ departmentIds: [], vacationTypes: [] })
     setApprovalSearch('')
   }
+
+  useEffect(() => {
+    if (!deepLinkRequestId || deepLinkHandledRef.current) return
+    const historySource = isManager ? departmentRequests : currentUserRequests
+    const request =
+      pendingApprovals.find((r) => r.id === deepLinkRequestId) ||
+      historySource.find((r) => r.id === deepLinkRequestId)
+    if (!request) return
+    deepLinkHandledRef.current = true
+    setDeepLinkRequestId(null)
+    handleOpenDetailModal(request)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkRequestId, pendingApprovals, departmentRequests, currentUserRequests, isManager])
 
   const myRequests = useMemo(() =>
     [...currentUserRequests]
@@ -823,29 +859,27 @@ export function Vacation() {
 
       <div className="mx-[2px] mb-[14px] flex items-center gap-2">
         <Lightbulb className="h-[14px] w-[14px] shrink-0 text-amber-500 dark:text-amber-400" />
-        <p className="text-[12.5px] text-muted-foreground">Наведите курсор на день, чтобы увидеть, кто отдыхает. Полосатые дни — заявления на согласовании</p>
+        <p className="text-[12.5px] text-muted-foreground">Наведите курсор на день, чтобы увидеть, кто отдыхает. Серая штриховка — на согласовании, сплошной цвет — согласовано</p>
       </div>
 
-      {(selectedStartDate || selectedEndDate) && (
-        <div className="mb-3 flex items-center gap-3 text-xs">
-          {selectedStartDate && !selectedEndDate && (
-            <span className="text-primary">Выбрана дата: {new Date(selectedStartDate).toLocaleDateString('ru-RU')}</span>
-          )}
-          {selectedStartDate && selectedEndDate && (
-            <span className="text-emerald-600 dark:text-emerald-400">
-              Период: {new Date(selectedStartDate).toLocaleDateString('ru-RU')} — {new Date(selectedEndDate).toLocaleDateString('ru-RU')}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => handleDateRangeSelect(null, null)}
-            className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-card px-[15px] py-[9px] text-[13px] font-semibold text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
-          >
-            <RotateCcw className="h-[14px] w-[14px]" />
-            Очистить выбор
-          </button>
-        </div>
-      )}
+      <div className={cn('mb-3 flex items-center gap-3 text-xs', !(selectedStartDate || selectedEndDate) && 'invisible')}>
+        {selectedStartDate && !selectedEndDate && (
+          <span className="text-primary">Выбрана дата: {new Date(selectedStartDate).toLocaleDateString('ru-RU')}</span>
+        )}
+        {selectedStartDate && selectedEndDate && (
+          <span className="text-emerald-600 dark:text-emerald-400">
+            Период: {new Date(selectedStartDate).toLocaleDateString('ru-RU')} — {new Date(selectedEndDate).toLocaleDateString('ru-RU')}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => handleDateRangeSelect(null, null)}
+          className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-card px-[15px] py-[9px] text-[13px] font-semibold text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
+        >
+          <RotateCcw className="h-[14px] w-[14px]" />
+          Очистить выбор
+        </button>
+      </div>
 
       <YearCalendar
         year={year}
@@ -900,25 +934,18 @@ export function Vacation() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="relative overflow-hidden gradient-primary text-white rounded-lg animate-slide-up">
-        <div className="relative z-10 flex items-start justify-between gap-4 px-6 py-8">
-          <div>
-            <span className="text-[11px] font-medium uppercase tracking-widest text-white/60">Управление · Отпуска</span>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">Отпуск</h1>
-            <p className="mt-2 text-sm text-white/70">
-              {isManager ? 'Управление отпусками работников' : 'Управление вашими отпусками'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowIntroModal(true)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-white/20"
-          >
+      <PageBanner
+        icon={Plane}
+        eyebrow="Управление · Отпуска"
+        title="Отпуск"
+        subtitle={isManager ? 'Управление отпусками работников' : 'Управление вашими отпусками'}
+        aside={
+          <Button variant="outline" size="sm" onClick={() => setShowIntroModal(true)}>
             <HelpCircle className="h-3.5 w-3.5" />
             Как это работает
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
       <VacationIntroModal open={showIntroModal} onClose={() => setShowIntroModal(false)} isManager={isManager} isAdminOrSuperAdmin={isAdminOrSuperAdmin} />
 

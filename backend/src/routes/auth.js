@@ -1,16 +1,15 @@
 import express from 'express'
-import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
 import { query } from '../config/database.js'
 import { authLimiter } from '../middleware/rateLimiter.js'
 import { validateLogin, validateRegister, sanitizeInput } from '../middleware/validation.js'
 import { asyncHandler, ValidationError, UnauthorizedError } from '../middleware/errors.js'
-import { authenticateToken, logScopes } from '../middleware/auth.js'
+import { authenticateToken, logScopes, verifyKeycloakToken, findOrCreateUser } from '../middleware/auth.js'
 import { isRealSuperadmin, signValue, testCookieOptions, TEST_PREVIEW_ROLES, getTestDataState } from '../utils/testScope.js'
 import { personName } from '../utils/personName.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
 import { getAuthSettings } from '../config/authSettings.js'
+import { signAccessToken, createSession, findActiveSessionByToken, rotateSession, revokeSessionByToken } from '../lib/sessionTokens.js'
 
 const router = express.Router()
 
@@ -59,41 +58,36 @@ router.post('/callback', asyncHandler(async (req, res) => {
   }
 
   const tokenData = await tokenRes.json()
-  if (tokenData.access_token) {
-    const accParts = tokenData.access_token.split('.')
-    if (accParts.length === 3) {
-      const accPayload = JSON.parse(Buffer.from(accParts[1], 'base64url').toString())
-    }
-  }
-  if (tokenData.id_token) {
-    const idParts = tokenData.id_token.split('.')
-    const idPayload = JSON.parse(Buffer.from(idParts[1], 'base64url').toString())
-  }
-  const accessToken = tokenData.access_token
-  const idToken = tokenData.id_token
-  const { refreshMs } = await getAuthSettings()
 
-  res.cookie('auth_token', accessToken, {
-    ...cookieOptions(req),
-    maxAge: refreshMs,
+  // KC is used here only to establish identity (this one exchange). From this point on,
+  // the session is entirely our own: our JWT access token + our own DB-backed refresh token.
+  const kcPayload = await verifyKeycloakToken(tokenData.access_token)
+  const user = await findOrCreateUser(kcPayload)
+
+  const { sessionLifetime, sessionMs, refreshLifetime, refreshMs } = await getAuthSettings()
+  const accessToken = signAccessToken(user, sessionLifetime)
+  const { rawToken: refreshToken } = await createSession({
+    userId: user.id,
+    loginMethod: 'keycloak',
+    ip: getClientIp(req),
+    userAgent: req.headers['user-agent'],
+    refreshLifetimeDays: refreshLifetime,
   })
 
-  if (idToken) {
-    res.cookie('kc_id_token', idToken, {
-      ...cookieOptions(req),
-      maxAge: refreshMs,
-    })
+  await query(
+    `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, ip_address) VALUES ($1, $2, 'login', 'user', $3, $4)`,
+    [user.id, personName(user), String(user.id), getClientIp(req)]
+  ).catch(() => {})
+
+  res.cookie('auth_token', accessToken, { ...cookieOptions(req), maxAge: sessionMs })
+  res.cookie('auth_refresh_token', refreshToken, { ...cookieOptions(req), maxAge: refreshMs })
+
+  // kept only so /auth/logout can redirect through Keycloak's end-session endpoint (SSO logout)
+  if (tokenData.id_token) {
+    res.cookie('kc_id_token', tokenData.id_token, { ...cookieOptions(req), maxAge: refreshMs })
   }
 
-  const refreshToken = tokenData.refresh_token
-  if (refreshToken) {
-    res.cookie('kc_refresh_token', refreshToken, {
-      ...cookieOptions(req),
-      maxAge: refreshMs,
-    })
-  }
-
-  res.json({ success: true, accessToken })
+  res.json({ success: true })
 }))
 
 /**
@@ -101,57 +95,38 @@ router.post('/callback', asyncHandler(async (req, res) => {
  * /auth/refresh:
  *   post:
  *     tags: [Auth]
- *     summary: Обновить access token через refresh token (Keycloak)
- *     description: 'Использует kc_refresh_token из httpOnly cookie. Возвращает новый access_token, id_token и refresh_token.'
+ *     summary: Обновить access token по собственному refresh-токену
+ *     description: 'Использует auth_refresh_token из httpOnly cookie (наша БД-сессия, не зависит от Keycloak). Ротирует refresh-токен и выдаёт новый access-токен.'
  *     responses:
  *       200:
  *         description: Токен обновлён
  *       401:
- *         description: 'Refresh token истёк или отсутствует'
+ *         description: 'Refresh token истёк, отозван или отсутствует'
  */
 router.post('/refresh', asyncHandler(async (req, res) => {
-  if (!keycloakConfig.enabled) {
-    return res.status(400).json({ error: 'Refresh available only in Keycloak mode' })
-  }
-
-  const refreshToken = req.cookies?.kc_refresh_token
+  const refreshToken = req.cookies?.auth_refresh_token
   if (!refreshToken) {
     return res.status(401).json({ error: 'No refresh token' })
   }
 
-  const tokenRes = await fetch(getTokenEndpoint(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: keycloakConfig.clientId,
-      client_secret: keycloakConfig.clientSecret,
-    }),
-  })
-
-  if (!tokenRes.ok) {
-    const errBody = await tokenRes.json().catch(() => ({}))
-    console.error('[KC] refresh failed:', tokenRes.status)
+  const session = await findActiveSessionByToken(refreshToken)
+  if (!session || session.status !== 'active') {
     res.clearCookie('auth_token', cookieOptions(req))
-    res.clearCookie('kc_id_token', cookieOptions(req))
-    res.clearCookie('kc_refresh_token', cookieOptions(req))
+    res.clearCookie('auth_refresh_token', cookieOptions(req))
     return res.status(401).json({ error: 'Refresh token expired' })
   }
 
-  const tokenData = await tokenRes.json()
-  const { refreshMs } = await getAuthSettings()
-  const opts = cookieOptions(req)
-  const maxAge = refreshMs
+  const { sessionLifetime, sessionMs, refreshLifetime, refreshMs } = await getAuthSettings()
 
-  res.cookie('auth_token', tokenData.access_token, { ...opts, maxAge })
+  const accessToken = signAccessToken({ id: session.user_id, email: session.email, role: session.role }, sessionLifetime)
+  const newRefreshToken = await rotateSession(session.id, {
+    ip: getClientIp(req),
+    userAgent: req.headers['user-agent'],
+    refreshLifetimeDays: refreshLifetime,
+  })
 
-  if (tokenData.id_token) {
-    res.cookie('kc_id_token', tokenData.id_token, { ...opts, maxAge })
-  }
-  if (tokenData.refresh_token) {
-    res.cookie('kc_refresh_token', tokenData.refresh_token, { ...opts, maxAge })
-  }
+  res.cookie('auth_token', accessToken, { ...cookieOptions(req), maxAge: sessionMs })
+  res.cookie('auth_refresh_token', newRefreshToken, { ...cookieOptions(req), maxAge: refreshMs })
 
   res.json({ success: true })
 }))
@@ -165,8 +140,14 @@ function cookieOptions(req) {
   }
 }
 
+function getClientIp(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
+}
+
 router.post('/logout', asyncHandler(async (req, res) => {
   const opts = cookieOptions(req)
+  await revokeSessionByToken(req.cookies?.auth_refresh_token)
+
   if (keycloakConfig.enabled) {
     const idToken = req.cookies?.kc_id_token
     let logoutUrl = getPublicLogoutUrl(process.env.FRONTEND_URL || '/')
@@ -174,13 +155,14 @@ router.post('/logout', asyncHandler(async (req, res) => {
       logoutUrl += `&id_token_hint=${encodeURIComponent(idToken)}`
     }
     res.clearCookie('auth_token', opts)
+    res.clearCookie('auth_refresh_token', opts)
     res.clearCookie('kc_id_token', opts)
-    res.clearCookie('kc_refresh_token', opts)
     res.clearCookie('imp_user', opts)
     res.clearCookie('preview_role', opts)
     res.json({ logoutUrl })
   } else {
     res.clearCookie('auth_token', opts)
+    res.clearCookie('auth_refresh_token', opts)
     res.clearCookie('imp_user', opts)
     res.clearCookie('preview_role', opts)
     res.json({ success: true })
@@ -211,20 +193,19 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
      FROM users WHERE users.id = vacation_balances.user_id AND travel_next_available_date IS NULL`
   ).catch(() => {})
 
-  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not configured')
-
-  const { sessionLifetime, sessionMs } = await getAuthSettings()
-  const token = jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: `${sessionLifetime}m` }
-  )
+  const { sessionLifetime, sessionMs, refreshLifetime, refreshMs } = await getAuthSettings()
+  const token = signAccessToken(user, sessionLifetime)
+  const { rawToken: refreshToken } = await createSession({
+    userId: user.id,
+    loginMethod: 'password',
+    ip: getClientIp(req),
+    userAgent: req.headers['user-agent'],
+    refreshLifetimeDays: refreshLifetime,
+  })
 
   res.status(201)
-    .cookie('auth_token', token, {
-      ...cookieOptions(req),
-      maxAge: sessionMs,
-    })
+    .cookie('auth_token', token, { ...cookieOptions(req), maxAge: sessionMs })
+    .cookie('auth_refresh_token', refreshToken, { ...cookieOptions(req), maxAge: refreshMs })
     .json({
       token,
       user: {
@@ -279,14 +260,15 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
     await query(`UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = $1`, [user.id])
   }
 
-  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not configured')
-
-  const { sessionLifetime, sessionMs } = await getAuthSettings()
-  const token = jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: `${sessionLifetime}m` }
-  )
+  const { sessionLifetime, sessionMs, refreshLifetime, refreshMs } = await getAuthSettings()
+  const token = signAccessToken(user, sessionLifetime)
+  const { rawToken: refreshToken } = await createSession({
+    userId: user.id,
+    loginMethod: 'password',
+    ip,
+    userAgent: req.headers['user-agent'],
+    refreshLifetimeDays: refreshLifetime,
+  })
 
   await query(
     `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, ip_address) VALUES ($1, $2, 'login', 'user', $3, $4)`,
@@ -300,10 +282,8 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
   }
 
   res
-    .cookie('auth_token', token, {
-      ...cookieOptions(req),
-      maxAge: sessionMs,
-    })
+    .cookie('auth_token', token, { ...cookieOptions(req), maxAge: sessionMs })
+    .cookie('auth_refresh_token', refreshToken, { ...cookieOptions(req), maxAge: refreshMs })
     .json({
       token,
       user: {

@@ -83,6 +83,20 @@ export function CreateVacationModal({
 
   useEffect(() => {
     if (!isOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (showSubstituteModal) {
+        setShowSubstituteModal(false)
+      } else {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isOpen, onClose, showSubstituteModal])
+
+  useEffect(() => {
+    if (!isOpen) return
     if (userId && startDate && endDate && onCheckRestrictions) {
       if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
         return

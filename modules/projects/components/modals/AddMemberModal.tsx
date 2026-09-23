@@ -48,6 +48,15 @@ export function AddMemberModal({ projectId, existingMemberIds, open, onClose, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
   const filtered = users.filter((u) => {
     if (existingMemberIds.includes(String(u.id))) return false
     const q = search.toLowerCase()

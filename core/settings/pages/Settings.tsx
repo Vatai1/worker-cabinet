@@ -1,14 +1,50 @@
-﻿import { useState } from 'react'
+﻿import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Label } from '@/shared/components/ui/Label'
 import { Switch } from '@/shared/components/ui/Switch'
 import { Bell, Moon, Sun } from 'lucide-react'
 import { useUIStore } from '@/shared/store/uiStore'
+import { fetchPushConfig, fetchPushStatus, subscribePush, unsubscribePush } from '@/shared/lib/push'
 
 export function Settings() {
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [pushNotifications, setPushNotifications] = useState(false)
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushPublicKey, setPushPublicKey] = useState('')
+  const [pushLoading, setPushLoading] = useState(false)
   const { darkMode, toggleTheme } = useUIStore()
+
+  useEffect(() => {
+    fetchPushConfig().then(({ enabled, publicKey }) => {
+      setPushEnabled(enabled)
+      setPushPublicKey(publicKey)
+      if (enabled) fetchPushStatus().then(setPushNotifications)
+    })
+  }, [])
+
+  const handlePushToggle = async (checked: boolean) => {
+    setPushLoading(true)
+    try {
+      if (checked) {
+        const permission = await Notification.requestPermission()
+        if (permission !== 'granted') {
+          toast.error('Разрешение на уведомления не выдано')
+          setPushNotifications(false)
+          return
+        }
+        await subscribePush(pushPublicKey)
+        setPushNotifications(true)
+      } else {
+        await unsubscribePush()
+        setPushNotifications(false)
+      }
+    } catch {
+      toast.error('Не удалось изменить подписку на push-уведомления')
+    } finally {
+      setPushLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -47,12 +83,15 @@ export function Settings() {
               <div className="space-y-0.5">
                 <Label>Push-уведомления</Label>
                 <p className="text-xs text-muted-foreground">
-                  Получать уведомления в браузере
+                  {pushEnabled
+                    ? 'Приходят даже при закрытой вкладке'
+                    : 'Не настроено на сервере'}
                 </p>
               </div>
               <Switch
                 checked={pushNotifications}
-                onCheckedChange={setPushNotifications}
+                onCheckedChange={handlePushToggle}
+                disabled={!pushEnabled || pushLoading}
               />
             </div>
           </CardContent>

@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Input } from '@/shared/components/ui/Input'
-import { Building2, Loader2, Search, Users, ArrowRight, Crown, Sparkles } from 'lucide-react'
+import { Building2, Loader2, Search, Users, ArrowRight, Crown } from 'lucide-react'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { getErrorMessage } from '@/shared/lib/utils'
+import { PageBanner } from '@/shared/components/PageBanner'
 
 interface Department {
   id: number
@@ -73,21 +74,12 @@ export function Departments() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="h-4 w-4 text-white/60" />
-            <span className="text-white/40 text-xs font-medium uppercase tracking-wider">Структура компании</span>
-          </div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">Отделы</h1>
-          <p className="mt-2 text-white/45 text-sm">
-            {departments.length} {departments.length === 1 ? 'отдел' : 'отделов'} · {totalEmployees} работников в компании
-          </p>
-        </div>
-      </div>
+      <PageBanner
+        icon={Building2}
+        eyebrow="Структура компании"
+        title="Отделы"
+        subtitle={`${departments.length} ${departments.length === 1 ? 'отдел' : 'отделов'} · ${totalEmployees} работников в компании`}
+      />
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-6">

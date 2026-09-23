@@ -1886,6 +1886,9 @@ async function runMigrations() {
     await db.query(`ALTER TABLE hr_hierarchy ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1`).catch(() => {})
     console.log('  ✓ hr_hierarchy.version (optimistic locking)')
 
+    await migrateUserSessions(db)
+    await migratePushSubscriptions(db)
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
 
@@ -1895,6 +1898,51 @@ async function runMigrations() {
   } finally {
     db.release()
     await pool.end()
+  }
+}
+
+async function migrateUserSessions(db) {
+  console.log('Checking user_sessions table (app-native refresh sessions)...')
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        refresh_token_hash VARCHAR(64) NOT NULL UNIQUE,
+        login_method VARCHAR(20) NOT NULL DEFAULT 'password',
+        ip_address VARCHAR(64),
+        user_agent TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        last_used_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMP NOT NULL,
+        revoked_at TIMESTAMP
+      )
+    `)
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)`)
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_user_sessions_refresh_hash ON user_sessions(refresh_token_hash)`)
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_user_sessions_created_at ON user_sessions(created_at)`)
+    console.log('  ✓ user_sessions ready')
+  } catch (e) {
+    console.log('  - user_sessions:', e.message)
+  }
+}
+
+async function migratePushSubscriptions(db) {
+  console.log('Checking push_subscriptions table (Web Push)...')
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL UNIQUE,
+        keys JSONB NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `)
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)`)
+    console.log('  ✓ push_subscriptions ready')
+  } catch (e) {
+    console.log('  - push_subscriptions:', e.message)
   }
 }
 
@@ -1981,6 +2029,22 @@ async function migrateRestrictionTags(db) {
     console.log('  ✓ vacation_restrictions.tag_ids ready')
   } catch (e) {
     console.log('  - vacation_restrictions tag_ids:', e.message)
+  }
+  console.log('Checking vacation_restrictions department_id nullability...')
+  try {
+    await db.query('ALTER TABLE vacation_restrictions ALTER COLUMN department_id DROP NOT NULL')
+    console.log('  ✓ vacation_restrictions.department_id nullable (org-wide tag rules)')
+  } catch (e) {
+    console.log('  - vacation_restrictions department_id:', e.message)
+  }
+  console.log('Converting legacy pair-type restrictions to group (max_concurrent=1)...')
+  try {
+    const result = await db.query(
+      "UPDATE vacation_restrictions SET restriction_type = 'group', max_concurrent = COALESCE(max_concurrent, 1) WHERE restriction_type = 'pair'",
+    )
+    console.log(`  ✓ converted ${result.rowCount} pair restriction(s) to group`)
+  } catch (e) {
+    console.log('  - vacation_restrictions pair→group:', e.message)
   }
 }
 

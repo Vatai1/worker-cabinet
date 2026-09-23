@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Cropper, { type Area } from 'react-easy-crop'
 import { Crop, X, ZoomIn, ZoomOut, Check, Loader2 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
@@ -43,6 +43,15 @@ export function AvatarCropModal({ isOpen, imageSrc, uploading, onCancel, onConfi
   const [zoom, setZoom] = useState(1)
   const [croppedArea, setCroppedArea] = useState<Area | null>(null)
   const [processing, setProcessing] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isOpen, onCancel])
 
   if (!isOpen || !imageSrc) return null
 

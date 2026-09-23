@@ -567,6 +567,15 @@ export function GlobalHierarchy({ fullscreen = false, onClose, editScopeOrgId, i
     setPendingNest(null)
   }, [pendingNest, setNodes])
 
+  useEffect(() => {
+    if (!pendingNest) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cancelNest()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [pendingNest, cancelNest])
+
   const confirmNest = useCallback(() => {
     if (!pendingNest) return
     const { orgId, targetId, prevPosition } = pendingNest

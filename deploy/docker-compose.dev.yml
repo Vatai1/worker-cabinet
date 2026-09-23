@@ -229,6 +229,9 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
       NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
     ports:
       - "${BACKEND_PORT:-5000}:5000"
     depends_on:

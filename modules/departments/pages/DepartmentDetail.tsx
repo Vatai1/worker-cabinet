@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avat
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Input } from '@/shared/components/ui/Input'
 import { Loader2, Search, Users, ArrowLeft, Crown, Mail, Phone, UserCircle, ChevronRight } from 'lucide-react'
+import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
@@ -106,27 +107,17 @@ export function DepartmentDetail() {
         </Link>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-card/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-card/5 rounded-full translate-y-1/3 -translate-x-1/3" />
-        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-card/3 rounded-full blur-2xl" />
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-5">
-          <div className="w-14 h-14 bg-card/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/15 shrink-0">
-            <Users className="h-7 w-7 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight">{department.name}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-white/50">
-              <span className="flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" />
-                {department.employees.length} работников
-              </span>
-              {activeCount > 0 && <span>{activeCount} активно</span>}
-              {onLeaveCount > 0 && <span>{onLeaveCount} в отпуске</span>}
-            </div>
-          </div>
-        </div>
-      </div>
+      <PageBanner
+        icon={Users}
+        title={department.name}
+        meta={
+          <>
+            <BannerPill icon={Users}>{department.employees.length} работников</BannerPill>
+            {activeCount > 0 && <BannerPill tone="success">{activeCount} активно</BannerPill>}
+            {onLeaveCount > 0 && <BannerPill tone="warning">{onLeaveCount} в отпуске</BannerPill>}
+          </>
+        }
+      />
 
       {manager && (
         <Card className="hover-lift animate-slide-up stagger-1 border-primary/10">

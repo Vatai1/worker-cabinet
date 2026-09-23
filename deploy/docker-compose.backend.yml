@@ -208,6 +208,9 @@ services:
       NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
       ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://localhost:8080}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-changeme}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
       PUBLIC_API_URL: ${PUBLIC_API_URL:-http://backend:5000/api}
       MINI_AGENT_URL: http://mini-agent:8642/v1/chat
       ASSISTANT_API_BASE_URL: http://backend:5000/api
