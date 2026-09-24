@@ -20,20 +20,6 @@ export const s3Client = new S3Client({
   responseChecksumValidation: 'WHEN_REQUIRED',
 })
 
-export const s3PublicClient = S3_PUBLIC_URL
-  ? new S3Client({
-      region: 'us-east-1',
-      endpoint: S3_PUBLIC_URL,
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || process.env.S3_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.S3_SECRET_KEY || '',
-      },
-      forcePathStyle: true,
-      requestChecksumCalculation: 'WHEN_REQUIRED',
-      responseChecksumValidation: 'WHEN_REQUIRED',
-    })
-  : null
-
 let bucketEnsured = false
 let policyEnsured = false
 
@@ -124,8 +110,7 @@ export const getPresignedUrl = async (key, expiresIn = 3600) => {
     Key: key,
   }
 
-  const client = s3PublicClient || s3Client
-  const stack = client.middlewareStack.clone()
+  const stack = s3Client.middlewareStack.clone()
   stack.add(
     (next) => async (args) => {
       delete args.request.query['x-id']
@@ -134,9 +119,9 @@ export const getPresignedUrl = async (key, expiresIn = 3600) => {
     { step: 'build', name: 'stripXId', priority: 'low' }
   )
   const url = await getSignedUrl(
-    { config: client.config, middlewareStack: stack },
+    { config: s3Client.config, middlewareStack: stack },
     new GetObjectCommand(params),
     { expiresIn }
   )
-  return url
+  return S3_PUBLIC_URL ? url.replace(S3_ENDPOINT, S3_PUBLIC_URL) : url
 }
