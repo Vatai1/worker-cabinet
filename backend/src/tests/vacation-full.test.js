@@ -5,6 +5,7 @@ import PizZip from 'pizzip'
 import { pool, query } from '../config/database.js'
 import { BASE, PASSWORD, login } from './helpers.js'
 import { deleteFromS3 } from '../config/s3.js'
+import { computeVacationDates } from '../routes/vacation.js'
 
 const SUFFIX = '@vac-full.test'
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -1406,6 +1407,70 @@ describe('Модуль отпусков — user stories', () => {
     it('employee → 403', async () => {
       const res = await call('PATCH', `/vacation/balances/${emp.id}`, await tokenFor(emp), { year, total_days: 30 })
       assert.strictEqual(res.status, 403)
+    })
+  })
+
+  describe('US-15. Производственный календарь: продление на праздники', () => {
+    let deptId, mgr, emp
+
+    beforeEach(async () => {
+      mgr = await mkUser({ email: `us15.mgr${SUFFIX}`, role: 'manager', last: 'Праздников' })
+      deptId = await mkDept('US15 Отдел vac-full', 1, mgr.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptId, mgr.id])
+      emp = await mkUser({ email: `us15.emp${SUFFIX}`, last: 'Иванов', deptId })
+      await mkBalance(emp.id, 2026, 1, 28)
+      await mkBalance(emp.id, 2027, 1, 28)
+      await mkBalance(emp.id, 2028, 1, 28)
+    })
+
+    afterEach(async () => {
+      await cleanupFixtures({ deptIds: [deptId] })
+    })
+
+    it('2027-01-05…01-20 (4 праздника: 5,6,7,8 января) → end 01-24, duration 12, returnDate 01-25', async () => {
+      const res = await postVacation(emp, { startDate: '2027-01-05', endDate: '2027-01-20', vacationType: 'annual_paid' })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      assert.strictEqual(res.data.end_date, '2027-01-24')
+      assert.strictEqual(res.data.duration, 12)
+      assert.strictEqual(res.data.returnDate, '2027-01-25')
+      assert.strictEqual(res.data.holidaysCount, 4)
+    })
+
+    it('диапазон с 6+ праздниками → 400 «слишком много праздничных»', async () => {
+      const res = await postVacation(emp, { startDate: '2027-01-01', endDate: '2027-01-08', vacationType: 'annual_paid' })
+      assert.strictEqual(res.status, 400)
+      assert.match(res.data.error, /празднич/i)
+    })
+
+    it('идемпотентность: перенос с одинаковыми новыми датами дважды → end не сдвигается повторно', async () => {
+      const created = await postVacation(emp, { startDate: '2026-11-10', endDate: '2026-11-14', vacationType: 'annual_paid' })
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      const approveRes = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
+      assert.strictEqual(approveRes.status, 200, JSON.stringify(approveRes.data))
+
+      const t1 = await call('POST', `/vacation/requests/${created.data.id}/transfer`, await tokenFor(emp), { newStartDate: '2027-06-10', newEndDate: '2027-06-16', reason: 'Перенос 1' })
+      assert.strictEqual(t1.status, 201, JSON.stringify(t1.data))
+      const t2 = await call('POST', `/vacation/requests/${created.data.id}/transfer`, await tokenFor(emp), { newStartDate: '2027-06-10', newEndDate: '2027-06-16', reason: 'Перенос 2' })
+      assert.strictEqual(t2.status, 201, JSON.stringify(t2.data))
+
+      assert.strictEqual(t1.data.end_date, '2027-06-18')
+      assert.strictEqual(t1.data.end_date, t2.data.end_date)
+      assert.strictEqual(t1.data.duration, t2.data.duration)
+      assert.strictEqual(t1.data.holidaysCount, 2)
+    })
+
+    it('2028 год (данных нет) → даты без изменений', async () => {
+      const res = await postVacation(emp, { startDate: '2028-01-05', endDate: '2028-01-20', vacationType: 'annual_paid' })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      assert.strictEqual(res.data.end_date, '2028-01-20')
+      assert.strictEqual(res.data.holidaysCount, 0)
+    })
+
+    it('start_date в прошлом → без пересчёта (даже если диапазон содержит праздники 2027)', async () => {
+      const result = await computeVacationDates('2020-01-01', '2020-01-10')
+      assert.strictEqual(result.endDate, '2020-01-10')
+      assert.strictEqual(result.holidaysCount, 0)
+      assert.strictEqual(result.countedDays, 10)
     })
   })
 })

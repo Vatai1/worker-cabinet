@@ -14,6 +14,55 @@ import { resolveVacationDays, applyRuleToExistingBalances } from '../lib/vacatio
 const router = express.Router()
 
 const VALID_VACATION_TYPES = ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran']
+const MAX_HOLIDAYS_PER_VACATION = 5
+
+class VacationValidationError extends Error {}
+
+function parseISODate(s) {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d))
+}
+
+function formatISODate(d) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+}
+
+function addDaysISO(dateStr, days) {
+  const d = parseISODate(dateStr)
+  d.setUTCDate(d.getUTCDate() + days)
+  return formatISODate(d)
+}
+
+function daysBetweenInclusive(startStr, endStr) {
+  return Math.round((parseISODate(endStr) - parseISODate(startStr)) / 86400000) + 1
+}
+
+function todayISO() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+async function computeVacationDates(startDate, endDate) {
+  if (startDate < todayISO()) {
+    return { startDate, endDate, countedDays: daysBetweenInclusive(startDate, endDate), holidaysCount: 0 }
+  }
+
+  const holidaysResult = await query('SELECT day FROM calendar_holidays WHERE day BETWEEN $1 AND $2', [startDate, endDate])
+  const holidaysCount = holidaysResult.rows.length
+
+  if (holidaysCount === 0) {
+    return { startDate, endDate, countedDays: daysBetweenInclusive(startDate, endDate), holidaysCount: 0 }
+  }
+
+  if (holidaysCount > MAX_HOLIDAYS_PER_VACATION) {
+    throw new VacationValidationError(`Отпуск содержит слишком много праздничных дней (${holidaysCount}). Максимум — ${MAX_HOLIDAYS_PER_VACATION}`)
+  }
+
+  const shiftedEnd = addDaysISO(endDate, holidaysCount)
+  const countedDays = daysBetweenInclusive(startDate, endDate) - holidaysCount
+
+  return { startDate, endDate: shiftedEnd, countedDays, holidaysCount }
+}
 
 function fmtDate(d) {
   if (!d) return ''
@@ -175,8 +224,12 @@ async function fillVacationTimesheetEntries(client, userId, startDate, endDate, 
   const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
   const deptId = deptResult.rows[0]?.department_id
   if (!deptId) return
+  const holidaysResult = await client.query('SELECT day FROM calendar_holidays WHERE day BETWEEN $1 AND $2', [startDate, endDate])
+  const holidaySet = new Set(holidaysResult.rows.map((r) => r.day))
   const byMonth = await vacationDatesByMonth(startDate, endDate)
-  for (const { year, month, dates } of Object.values(byMonth)) {
+  for (const { year, month, dates: allDates } of Object.values(byMonth)) {
+    const dates = allDates.filter((d) => !holidaySet.has(d))
+    if (dates.length === 0) continue
     const tsOrgClause = req.org ? ' AND organization_id = $4' : ''
     const tsResult = await client.query(
       `SELECT id FROM timesheets WHERE department_id = $1 AND year = $2 AND month = $3 AND status != 'approved'${tsOrgClause}`,
@@ -863,6 +916,7 @@ router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin
  *   post:
  *     tags: [Vacation]
  *     summary: Создать заявку на отпуск
+ *     description: Если в диапазоне дат есть праздники из производственного календаря (calendar_holidays), end_date автоматически продлевается на их количество, а праздничные дни не списываются с баланса. Диапазон с более чем 5 праздниками отклоняется с 400.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -882,12 +936,12 @@ router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin
  *               referenceDocument: { type: string }
  *     responses:
  *       201:
- *         description: Заявка создана
+ *         description: Заявка создана (end_date уже продлён на праздники, если применимо)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/VacationRequest' }
  *       400:
- *         description: Ошибка валидации
+ *         description: Ошибка валидации, в т.ч. слишком много праздничных дней в диапазоне (максимум 5)
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
@@ -948,8 +1002,18 @@ router.post('/requests', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Для учебного отпуска необходимо приложить справку' })
     }
 
-    const duration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
-    const finalDuration = duration
+    let computedDates
+    try {
+      computedDates = await computeVacationDates(formatDate(start), formatDate(end))
+    } catch (err) {
+      await client.query('ROLLBACK')
+      if (err instanceof VacationValidationError) {
+        return res.status(400).json({ error: err.message })
+      }
+      throw err
+    }
+    const finalDuration = computedDates.countedDays
+    const shiftedEndDate = computedDates.endDate
     const requestYear = start.getFullYear()
 
     const { text: balText, values: balValues } = orgScopedQuery(
@@ -1009,7 +1073,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
           OR (vr.start_date <= $3 AND vr.end_date >= $3)
           OR (vr.start_date >= $2 AND vr.end_date <= $3)
         )`,
-      [userId, formatDate(start), formatDate(end)], req
+      [userId, formatDate(start), shiftedEndDate], req
     )
     const overlapResult = await client.query(ovText, ovValues)
 
@@ -1032,7 +1096,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
       [
         userId,
         formatDate(start),
-        formatDate(end),
+        shiftedEndDate,
         finalDuration,
         vacationType,
         comment,
@@ -1096,7 +1160,11 @@ router.post('/requests', authenticateToken, async (req, res) => {
       }
     }
 
-    res.status(201).json(request)
+    res.status(201).json({
+      ...request,
+      returnDate: addDaysISO(request.end_date, 1),
+      holidaysCount: computedDates.holidaysCount,
+    })
     notifyVacationChanged(req, request.id, 'created')
   } catch (error) {
     await client.query('ROLLBACK')
@@ -1488,6 +1556,16 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       }
     }
 
+    let computedTransferDates
+    try {
+      computedTransferDates = await computeVacationDates(newStartDate, newEndDate)
+    } catch (err) {
+      if (err instanceof VacationValidationError) {
+        return res.status(400).json({ error: err.message })
+      }
+      throw err
+    }
+
     await client.query('BEGIN')
 
     const { text: trOrigText, values: trOrigValues } = orgScopedQuery(
@@ -1511,9 +1589,8 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Можно переносить только согласованные заявки' })
     }
 
-    const newDuration = Math.ceil(
-      (new Date(newEndDate) - new Date(newStartDate)) / (1000 * 60 * 60 * 24)
-    ) + 1
+    const newDuration = computedTransferDates.countedDays
+    const shiftedNewEndDate = computedTransferDates.endDate
 
     const travelChildrenParsed = (hasTravel && Array.isArray(travelChildren)) ? travelChildren : []
     const travelChildrenJson = JSON.stringify(travelChildrenParsed)
@@ -1528,7 +1605,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
        VALUES ($1, $2, $3::date, $4::date, $5, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $6, $7, CURRENT_TIMESTAMP,
          $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [original.user_id, original.vacation_type_id, newStartDate, newEndDate, newDuration, reason, id,
+      [original.user_id, original.vacation_type_id, newStartDate, shiftedNewEndDate, newDuration, reason, id,
        hasTravel || false, hasTravel ? (travelDestination || null) : null, travelChildrenJson, travelChildrenCount, currentOrgId(req), approverId]
     )
 
@@ -1564,7 +1641,11 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     const newReq = fullResult.rows[0]
     await notifyVacationCreated(newReq, userId, req)
 
-    res.status(201).json(newReq)
+    res.status(201).json({
+      ...newReq,
+      returnDate: addDaysISO(newReq.end_date, 1),
+      holidaysCount: computedTransferDates.holidaysCount,
+    })
     notifyVacationChanged(req, newReq.id, 'transferred')
   } catch (error) {
     await client.query('ROLLBACK')
@@ -3064,10 +3145,20 @@ router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 
  */
 router.post('/check-restrictions', authenticateToken, async (req, res) => {
   try {
-    const { userId, startDate, endDate } = req.body
+    const { userId, startDate, endDate: rawEndDate } = req.body
 
-    if (!userId || !startDate || !endDate) {
+    if (!userId || !startDate || !rawEndDate) {
       return res.status(400).json({ error: 'Укажите userId, startDate и endDate' })
+    }
+
+    let endDate
+    try {
+      endDate = (await computeVacationDates(startDate, rawEndDate)).endDate
+    } catch (err) {
+      if (err instanceof VacationValidationError) {
+        return res.status(400).json({ error: err.message })
+      }
+      throw err
     }
 
     const userResult = await query('SELECT department_id FROM users WHERE id = $1', [userId])
@@ -3589,4 +3680,5 @@ router.delete('/day-rules/:id', authenticateToken, authorizeRoles('hr', 'admin')
   }
 })
 
+export { computeVacationDates, VacationValidationError }
 export default router

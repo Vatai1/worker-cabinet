@@ -56,7 +56,7 @@ export function DepartmentBalanceTable({ departmentId, year, currentUserId }: De
               <tr key={row.userId} className={cn('border-t border-border', isMe && 'bg-primary/5 font-medium')}>
                 <td className="px-3 py-2">
                   <span className="inline-flex items-center gap-2">
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: colorMap.get(row.userId) ?? undefined }} />
+                    <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ backgroundColor: colorMap.get(row.userId) ?? undefined }} />
                     <span className="truncate">{row.lastName} {row.firstName}</span>
                   </span>
                 </td>

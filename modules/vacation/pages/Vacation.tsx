@@ -755,25 +755,7 @@ export function Vacation() {
           </div>
           <h2 className="text-[16.5px] font-bold text-foreground">Календарь отпусков</h2>
         </div>
-        <div className="flex items-center gap-[2px] rounded-[10px] border border-border bg-card p-[3px]">
-          <button
-            type="button"
-            onClick={handlePrevYear}
-            disabled={year <= minCalendarYear}
-            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span className="min-w-[46px] text-center text-[14px] font-bold text-foreground">{year}</span>
-          <button
-            type="button"
-            onClick={handleNextYear}
-            disabled={year >= maxCalendarYear}
-            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
+        <span className="text-[12.5px] font-semibold text-muted-foreground">{year} год</span>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-[10px] rounded-xl border border-border bg-muted/40 p-[13px]">
@@ -936,9 +918,7 @@ export function Vacation() {
     <div className="space-y-6 animate-fade-in">
       <PageBanner
         icon={Plane}
-        eyebrow="Управление · Отпуска"
-        title="Отпуск"
-        subtitle={isManager ? 'Управление отпусками работников' : 'Управление вашими отпусками'}
+        title="Отпуска"
         aside={
           <Button variant="outline" size="sm" onClick={() => setShowIntroModal(true)}>
             <HelpCircle className="h-3.5 w-3.5" />
@@ -990,6 +970,32 @@ export function Vacation() {
 
       {activeTab === 'mine' && (
         <div className="space-y-6">
+          <div className="flex flex-col items-center gap-2 rounded-2xl bg-primary px-5 py-5 text-center shadow-lg shadow-primary/20 sm:flex-row sm:justify-center sm:gap-6">
+            <div className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-wide text-primary-foreground/80">
+              <CalendarIcon className="h-4 w-4" />
+              Вы просматриваете отпуска за год
+            </div>
+            <div className="flex items-center gap-5">
+              <button
+                type="button"
+                onClick={handlePrevYear}
+                disabled={year <= minCalendarYear}
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground/80 transition-colors hover:bg-primary-foreground/15 hover:text-primary-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <span className="min-w-[110px] text-center text-4xl font-extrabold tabular-nums text-primary-foreground">{year}</span>
+              <button
+                type="button"
+                onClick={handleNextYear}
+                disabled={year >= maxCalendarYear}
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground/80 transition-colors hover:bg-primary-foreground/15 hover:text-primary-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </div>
+          </div>
+
           {balance && (
             <div className="rounded-2xl border border-border bg-card p-[22px] shadow-sm">
               <div className="mb-4 flex items-center justify-between">
@@ -999,7 +1005,6 @@ export function Vacation() {
                   </div>
                   <h2 className="text-[16.5px] font-bold text-foreground">Баланс отпускных дней</h2>
                 </div>
-                <span className="text-[12.5px] font-semibold text-muted-foreground">{year} год</span>
               </div>
 
               <div className="grid grid-cols-3">

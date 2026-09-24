@@ -90,6 +90,8 @@ const options = {
             approver_id: { type: 'integer', nullable: true, description: 'Зафиксированный согласующий (первый руководитель выше заявителя)' },
             created_at: { type: 'string', format: 'date-time' },
             updated_at: { type: 'string', format: 'date-time' },
+            returnDate: { type: 'string', format: 'date', nullable: true, description: 'Дата выхода на работу (end_date + 1 день); только в ответе создания/переноса' },
+            holidaysCount: { type: 'integer', nullable: true, description: 'Количество праздничных дней производственного календаря, на которые продлён отпуск; только в ответе создания/переноса' },
           },
         },
         VacationBalance: {

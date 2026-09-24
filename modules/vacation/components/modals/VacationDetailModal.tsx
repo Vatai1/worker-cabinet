@@ -8,6 +8,7 @@ import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { X, UserCheck } from 'lucide-react'
 import { formatDate, personName } from '@/shared/lib/utils'
+import { getVacationExtension } from '@/modules/vacation/lib/holidayExtension'
 
 interface VacationDetailModalProps {
   isOpen: boolean
@@ -40,6 +41,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
 
   const vacationTypeInfo = VACATION_TYPES[request.vacationType]
   const canManage = !!onApprove && !!onReject
+  const { holidaysCount, returnDate } = getVacationExtension(request.startDate, request.endDate, request.duration)
 
   const handleApprove = async () => {
     if (onApprove) {
@@ -87,6 +89,10 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
               {format(new Date(request.endDate), 'dd MMMM yyyy', { locale: ru })}
             </div>
             <div className="text-sm text-muted-foreground">{request.duration} дней</div>
+            <div className="text-sm text-muted-foreground">
+              Выход на работу: {formatDate(returnDate)}
+              {holidaysCount > 0 && <span> (праздников учтено: {holidaysCount})</span>}
+            </div>
           </div>
 
           <div>
