@@ -1491,8 +1491,80 @@ describe('Модуль отпусков — user stories', () => {
     })
 
     afterEach(async () => {
-      await query('DELETE FROM vacation_balances WHERE user_id = $1 AND year = $2', [emp.id, year])
+      await query('DELETE FROM vacation_day_rules WHERE user_id = $1', [emp.id])
+      await query('DELETE FROM vacation_balances WHERE user_id = $1', [emp.id])
       await cleanupFixtures()
+    })
+
+    it('изменение за текущий год действует и на будущие: следующий год создаётся, более поздние обновляются, прошлые — нет', async () => {
+      const current = new Date().getFullYear()
+      await mkBalance(emp.id, current - 1, 1, 28)
+      await mkBalance(emp.id, current + 3, 1, 28)
+      const res = await call('PATCH', `/vacation/balances/${emp.id}`, await tokenFor(hr), { year: current, total_days: 33 })
+      assert.strictEqual(res.status, 200, JSON.stringify(res.data))
+      assert.strictEqual(res.data.year, current)
+      const rows = (await query('SELECT year, total_days FROM vacation_balances WHERE user_id = $1 AND organization_id = 1 ORDER BY year', [emp.id])).rows
+      assert.deepStrictEqual(rows, [
+        { year: current - 1, total_days: 28 },
+        { year: current, total_days: 33 },
+        { year: current + 1, total_days: 33 },
+        { year: current + 3, total_days: 33 },
+      ])
+    })
+
+    it('правило дней отпуска для работника меняет балансы текущего и будущих лет, прошлые — нет', async () => {
+      const current = new Date().getFullYear()
+      await mkBalance(emp.id, current - 1, 1, 28)
+      await mkBalance(emp.id, current, 1, 28)
+      await mkBalance(emp.id, current + 1, 1, 28)
+      const res = await call('PUT', '/vacation/day-rules', await tokenFor(hr), { userId: emp.id, days: 31 })
+      assert.strictEqual(res.status, 200, JSON.stringify(res.data))
+      const rows = (await query('SELECT year, total_days FROM vacation_balances WHERE user_id = $1 AND organization_id = 1 ORDER BY year', [emp.id])).rows
+      assert.deepStrictEqual(rows, [
+        { year: current - 1, total_days: 28 },
+        { year: current, total_days: 31 },
+        { year: current + 1, total_days: 31 },
+      ])
+    })
+
+    it('PUT /day-rules/members: состав правила по должностям меняется, группа сохраняется', async () => {
+      const suffix = Date.now()
+      const [pA, pB, pC] = [`us14-должность-A-${suffix}`, `us14-должность-B-${suffix}`, `us14-должность-C-${suffix}`]
+      try {
+        const created = await call('PUT', '/vacation/day-rules', await tokenFor(hr), { positions: [pA, pB], days: 30 })
+        assert.strictEqual(created.status, 200, JSON.stringify(created.data))
+        const groupId = created.data.groupId
+        const res = await call('PUT', '/vacation/day-rules/members', await tokenFor(hr), { groupId, kind: 'position', positions: [pB, pC], days: 32 })
+        assert.strictEqual(res.status, 200, JSON.stringify(res.data))
+        assert.strictEqual(res.data.groupId, groupId)
+        const rows = (await query('SELECT position, days, group_id FROM vacation_day_rules WHERE position = ANY($1) ORDER BY position', [[pA, pB, pC]])).rows
+        assert.deepStrictEqual(rows.map((r) => [r.position, r.days, r.group_id]), [[pB, 32, groupId], [pC, 32, groupId]])
+        const empty = await call('PUT', '/vacation/day-rules/members', await tokenFor(hr), { groupId, kind: 'position', positions: [], days: 32 })
+        assert.strictEqual(empty.status, 400)
+      } finally {
+        await query('DELETE FROM vacation_day_rules WHERE position = ANY($1)', [[pA, pB, pC]])
+      }
+    })
+
+    it('PUT /day-rules/members: работника можно добавить в правило и убрать; баланс нового пересчитывается', async () => {
+      const current = new Date().getFullYear()
+      const emp2 = await mkUser({ email: `us14.emp2${SUFFIX}`, last: 'Второй' })
+      await query('INSERT INTO user_organizations (user_id, org_id) VALUES ($1, 1) ON CONFLICT DO NOTHING', [emp2.id]).catch(() => {})
+      await mkBalance(emp2.id, current + 1, 1, 28)
+      try {
+        const created = await call('PUT', '/vacation/day-rules', await tokenFor(hr), { userIds: [emp.id], days: 30 })
+        assert.strictEqual(created.status, 200, JSON.stringify(created.data))
+        const groupId = created.data.groupId
+        const res = await call('PUT', '/vacation/day-rules/members', await tokenFor(hr), { groupId, kind: 'user', userIds: [emp2.id], days: 35 })
+        assert.strictEqual(res.status, 200, JSON.stringify(res.data))
+        const rules = (await query('SELECT user_id, days FROM vacation_day_rules WHERE user_id = ANY($1) ORDER BY user_id', [[emp.id, emp2.id]])).rows
+        assert.deepStrictEqual(rules, [{ user_id: emp2.id, days: 35 }])
+        const bal = (await query('SELECT total_days FROM vacation_balances WHERE user_id = $1 AND year = $2 AND organization_id = 1', [emp2.id, current + 1])).rows[0]
+        assert.strictEqual(bal.total_days, 35)
+      } finally {
+        await query('DELETE FROM vacation_day_rules WHERE user_id = ANY($1)', [[emp.id, emp2.id]])
+        await query('DELETE FROM vacation_balances WHERE user_id = $1', [emp2.id])
+      }
     })
 
     it('upsert: создаёт баланс, если строки ещё нет', async () => {

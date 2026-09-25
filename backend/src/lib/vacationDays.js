@@ -63,14 +63,14 @@ export async function applyRuleToExistingBalances(organizationId, target, days) 
   if (target.userId) {
     await query(
       `UPDATE vacation_balances SET total_days = $1, updated_at = NOW()
-       WHERE organization_id = $2 AND year = $3 AND user_id = $4`,
+       WHERE organization_id = $2 AND year >= $3 AND user_id = $4`,
       [days, organizationId, year, target.userId]
     )
   } else if (target.position) {
     await query(
       `UPDATE vacation_balances vb SET total_days = $1, updated_at = NOW()
        FROM users u
-       WHERE vb.user_id = u.id AND vb.organization_id = $2 AND vb.year = $3
+       WHERE vb.user_id = u.id AND vb.organization_id = $2 AND vb.year >= $3
          AND u.position = $4
          AND NOT EXISTS (SELECT 1 FROM vacation_day_rules r WHERE r.organization_id = $2 AND r.user_id = u.id)`,
       [days, organizationId, year, target.position]
@@ -79,7 +79,7 @@ export async function applyRuleToExistingBalances(organizationId, target, days) 
     await query(
       `UPDATE vacation_balances vb SET total_days = $1, updated_at = NOW()
        FROM users u
-       WHERE vb.user_id = u.id AND vb.organization_id = $2 AND vb.year = $3
+       WHERE vb.user_id = u.id AND vb.organization_id = $2 AND vb.year >= $3
          AND NOT EXISTS (SELECT 1 FROM vacation_day_rules r WHERE r.organization_id = $2 AND r.user_id = u.id)
          AND NOT EXISTS (SELECT 1 FROM vacation_day_rules r WHERE r.organization_id = $2 AND r.position = u.position)`,
       [days, organizationId, year]

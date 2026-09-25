@@ -129,7 +129,7 @@ function UserPickerModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden border border-border" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border shrink-0">
           <div className="flex items-center justify-between mb-3">
@@ -202,6 +202,179 @@ function UserPickerModal({
   )
 }
 
+type EditingRule =
+  | { kind: 'position'; group: PositionRuleGroup }
+  | { kind: 'user'; group: UserRuleGroup }
+
+function RuleEditModal({
+  rule,
+  positionOptions,
+  onClose,
+  onSaved,
+}: {
+  rule: EditingRule
+  positionOptions: string[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  useModalOpen(true)
+  const [days, setDays] = useState(String(rule.group.days))
+  const [positions, setPositions] = useState<string[]>(rule.kind === 'position' ? rule.group.positions : [])
+  const [users, setUsers] = useState<{ id: number; name: string }[]>(
+    rule.kind === 'user' ? rule.group.users.map((u) => ({ id: Number(u.userId), name: u.userName })) : [],
+  )
+  const [showPicker, setShowPicker] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (showPicker) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose, showPicker])
+
+  const memberCount = rule.kind === 'position' ? positions.length : users.length
+  const parsedDays = Number(days)
+  const canSave = memberCount > 0 && days !== '' && !Number.isNaN(parsedDays) && parsedDays >= 0
+
+  const handleSave = async () => {
+    if (!canSave) return
+    setSaving(true)
+    try {
+      await apiPut('/vacation/day-rules/members', {
+        groupId: rule.group.groupId ?? undefined,
+        ruleId: rule.group.groupId ? undefined : rule.group.id,
+        kind: rule.kind,
+        positions: rule.kind === 'position' ? positions : undefined,
+        userIds: rule.kind === 'user' ? users.map((u) => u.id) : undefined,
+        days: parsedDays,
+      })
+      toast.success('Правило сохранено')
+      onSaved()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
+      <div className="fixed inset-0" onClick={onClose} />
+      <Card className="relative flex w-full max-w-lg min-h-[min(680px,90vh)] max-h-[90vh] flex-col overflow-hidden p-0 shadow-2xl animate-scale-in">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              {rule.kind === 'position' ? <Briefcase className="h-4 w-4" /> : <User className="h-4 w-4" />}
+            </div>
+            <div>
+              <h2 className="text-base font-semibold leading-tight">Изменить правило</h2>
+              <p className="text-xs text-muted-foreground">{rule.kind === 'position' ? 'Дни отпуска по должностям' : 'Дни отпуска по работникам'}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 min-h-0 space-y-5 overflow-y-auto scrollbar-thin overscroll-contain p-5">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Дней отпуска</label>
+            <Input type="number" min={0} value={days} onChange={(e) => setDays(e.target.value)} className="h-10 w-32" />
+          </div>
+
+          {rule.kind === 'position' ? (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">Должности</label>
+              <MultiSelectDropdown
+                options={positionOptions.map((p) => ({ value: p, label: p }))}
+                selected={positions}
+                onChange={setPositions}
+                placeholder="Выберите должности"
+                countLabel="Выбрано"
+                searchable
+                searchPlaceholder="Поиск по должности…"
+                className="w-full max-w-none"
+              />
+              {positions.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Выберите хотя бы одну должность</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {positions.map((p) => (
+                    <span key={p} className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-0.5 pl-2.5 pr-1 text-xs font-medium text-primary">
+                      {p}
+                      <button
+                        type="button"
+                        onClick={() => setPositions((prev) => prev.filter((x) => x !== p))}
+                        className="rounded-full p-0.5 hover:bg-primary/20"
+                        title="Убрать"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="block text-sm font-medium">Работники ({users.length})</label>
+                <Button size="sm" variant="outline" onClick={() => setShowPicker(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Добавить работников
+                </Button>
+              </div>
+              {users.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Добавьте хотя бы одного работника</p>
+              ) : (
+                <div className="max-h-60 overflow-y-auto rounded-xl border border-border">
+                  {users.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between gap-2 border-b border-border/60 px-3.5 py-2 last:border-0">
+                      <span className="truncate text-sm">{u.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setUsers((prev) => prev.filter((x) => x.id !== u.id))}
+                        className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        title="Убрать"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Новое число дней применится к балансам текущего и будущих лет. Убранным из правила участникам уже начисленные дни не пересчитываются.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 border-t border-border p-4 shrink-0">
+          <Button variant="outline" className="flex-1" onClick={onClose} disabled={saving}>Отмена</Button>
+          <Button className="flex-1" onClick={handleSave} disabled={!canSave || saving}>
+            {saving && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+            Сохранить
+          </Button>
+        </div>
+      </Card>
+
+      {showPicker && (
+        <UserPickerModal
+          initialSelected={users}
+          onConfirm={(picked) => { setUsers(picked); setShowPicker(false) }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+    </div>,
+    document.body,
+  )
+}
+
 function DayRulesInfoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   useModalOpen(open)
 
@@ -218,7 +391,7 @@ function DayRulesInfoModal({ open, onClose }: { open: boolean; onClose: () => vo
 
   const steps = [
     { title: 'Приоритет: сотрудник → должность → по умолчанию', text: 'если у работника есть личная настройка, используется она; иначе — настройка его должности; иначе — значение «по умолчанию»' },
-    { title: 'Действует на текущий год сразу', text: 'при сохранении настройки баланс уже созданных на этот год работников пересчитывается автоматически, но не затрагивает тех, у кого есть более специфичная настройка' },
+    { title: 'Действует на текущий и будущие годы сразу', text: 'при сохранении настройки уже созданные балансы работников на текущий и следующие годы пересчитываются автоматически, но не затрагивают тех, у кого есть более специфичная настройка' },
     { title: 'Новым работникам — сразу правильное число', text: 'при создании работника (онбординг, первый вход в раздел «Отпуск») баланс считается по этим же правилам' },
     { title: 'Удаление настройки не откатывает уже применённые дни', text: 'у тех, кому баланс уже пересчитан по этому правилу, дни останутся прежними — удаление влияет только на будущие пересчёты' },
   ]
@@ -269,7 +442,7 @@ export function VacationDayRulesCard() {
   const [positions, setPositions] = useState<string[]>([])
 
   const [editingDefault, setEditingDefault] = useState(false)
-  const [editingGroupKey, setEditingGroupKey] = useState<string | null>(null)
+  const [editingRule, setEditingRule] = useState<EditingRule | null>(null)
 
   const [newPositions, setNewPositions] = useState<string[]>([])
   const [newPositionDays, setNewPositionDays] = useState('28')
@@ -447,26 +620,15 @@ export function VacationDayRulesCard() {
             {positionGroups.map((g) => (
               <div key={g.key} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3.5 py-2.5">
                 <span className="text-sm font-medium truncate" title={g.positions.join(', ')}>{g.positions.join(', ')}</span>
-                {editingGroupKey === g.key ? (
-                  <DaysEditor
-                    value={g.days}
-                    onSave={async (days) => {
-                      const payload: RulePayload = g.groupId ? { groupId: g.groupId, days } : { position: g.positions[0], days }
-                      if (await saveRule(payload)) setEditingGroupKey(null)
-                    }}
-                    onCancel={() => setEditingGroupKey(null)}
-                  />
-                ) : (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-sm font-semibold text-primary">{g.days} дн.</span>
-                    <button onClick={() => setEditingGroupKey(g.key)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button onClick={() => deleteRuleGroup(g)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-sm font-semibold text-primary">{g.days} дн.</span>
+                  <button onClick={() => setEditingRule({ kind: 'position', group: g })} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Изменить">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => deleteRuleGroup(g)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Удалить">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border px-3.5 py-2.5">
@@ -504,26 +666,15 @@ export function VacationDayRulesCard() {
                     <p className="text-sm font-medium truncate" title={names}>{names}</p>
                     {positionsLabel && <p className="text-xs text-muted-foreground truncate">{positionsLabel}</p>}
                   </div>
-                  {editingGroupKey === g.key ? (
-                    <DaysEditor
-                      value={g.days}
-                      onSave={async (days) => {
-                        const payload: RulePayload = g.groupId ? { groupId: g.groupId, days } : { userId: Number(g.users[0].userId), days }
-                        if (await saveRule(payload)) setEditingGroupKey(null)
-                      }}
-                      onCancel={() => setEditingGroupKey(null)}
-                    />
-                  ) : (
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-sm font-semibold text-primary">{g.days} дн.</span>
-                      <button onClick={() => setEditingGroupKey(g.key)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => deleteRuleGroup(g)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-sm font-semibold text-primary">{g.days} дн.</span>
+                    <button onClick={() => setEditingRule({ kind: 'user', group: g })} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Изменить">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => deleteRuleGroup(g)} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Удалить">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -557,6 +708,19 @@ export function VacationDayRulesCard() {
           initialSelected={pickedUsers}
           onConfirm={(users) => { setPickedUsers(users); setShowUserPicker(false) }}
           onClose={() => setShowUserPicker(false)}
+        />
+      )}
+
+      {editingRule && (
+        <RuleEditModal
+          rule={editingRule}
+          positionOptions={
+            editingRule.kind === 'position'
+              ? Array.from(new Set([...editingRule.group.positions, ...availablePositions])).sort((a, b) => a.localeCompare(b, 'ru'))
+              : []
+          }
+          onClose={() => setEditingRule(null)}
+          onSaved={() => { setEditingRule(null); fetchData() }}
         />
       )}
 

@@ -849,8 +849,8 @@ router.get('/balances', authenticateToken, async (req, res) => {
  * /vacation/balances/{userId}:
  *   patch:
  *     tags: [Vacation]
- *     summary: Изменить количество дней отпуска работника за год (hr/admin)
- *     description: 'Upsert по (user_id, organization_id, year); used_days/reserved_days не трогаются, available_days пересчитывается триггером БД'
+ *     summary: Изменить количество дней отпуска работника с указанного года (hr/admin)
+ *     description: 'Действует на указанный год и все следующие: upsert по (user_id, organization_id, year) с указанного года по следующий календарный, уже созданные более поздние года тоже обновляются; used_days/reserved_days не трогаются, available_days пересчитывается триггером БД'
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -906,15 +906,21 @@ router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin
       return res.status(404).json({ error: 'Работник не найден в организации' })
     }
 
+    const lastYear = Math.max(parsedYear, new Date().getFullYear() + 1)
     const result = await query(
       `INSERT INTO vacation_balances (user_id, organization_id, year, total_days)
-       VALUES ($1, $2, $3, $4)
+       SELECT $1, $2, y, $4 FROM generate_series($3::int, $5::int) AS y
        ON CONFLICT (user_id, organization_id, year)
        DO UPDATE SET total_days = EXCLUDED.total_days, updated_at = NOW()
        RETURNING *`,
-      [userId, orgId, parsedYear, parsedDays]
+      [userId, orgId, parsedYear, parsedDays, lastYear]
     )
-    res.json(result.rows[0])
+    await query(
+      `UPDATE vacation_balances SET total_days = $1, updated_at = NOW()
+       WHERE user_id = $2 AND organization_id = $3 AND year > $4`,
+      [parsedDays, userId, orgId, lastYear]
+    )
+    res.json(result.rows.find((r) => r.year === parsedYear) ?? result.rows[0])
   } catch (error) {
     res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось обновить баланс отпуска' })
@@ -3788,6 +3794,102 @@ router.put('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
   } catch (error) {
     res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось сохранить настройку' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/day-rules/members:
+ *   put:
+ *     tags: [Vacation]
+ *     summary: Изменить состав и число дней правила по должностям или работникам
+ *     description: 'Заменяет список должностей (kind=position) или работников (kind=user) правила, заданного groupId или ruleId. Убранные из правила участники удаляются, новые добавляются (если у участника было другое правило — он переносится в это). Балансы участников за текущий и будущие годы пересчитываются'
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [kind, days]
+ *             properties:
+ *               groupId: { type: string }
+ *               ruleId: { type: integer }
+ *               kind: { type: string, enum: [position, user] }
+ *               positions: { type: array, items: { type: string } }
+ *               userIds: { type: array, items: { type: integer } }
+ *               days: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Правило обновлено
+ */
+router.put('/day-rules/members', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  try {
+    const { groupId, ruleId, kind, positions, userIds, days } = req.body
+    const parsedDays = parseInt(days)
+    if (Number.isNaN(parsedDays) || parsedDays < 0) {
+      return res.status(400).json({ error: 'Некорректное число дней' })
+    }
+    if (kind !== 'position' && kind !== 'user') {
+      return res.status(400).json({ error: 'Некорректный тип правила' })
+    }
+    const orgId = currentOrgId(req)
+    if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
+
+    const desired = kind === 'position'
+      ? [...new Set((Array.isArray(positions) ? positions : []).map((p) => String(p).trim()).filter(Boolean))]
+      : [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => parseInt(id)).filter((id) => !Number.isNaN(id)))]
+    if (desired.length === 0) {
+      return res.status(400).json({ error: kind === 'position' ? 'Выберите хотя бы одну должность' : 'Выберите хотя бы одного работника' })
+    }
+
+    const column = kind === 'position' ? 'position' : 'user_id'
+    const current = groupId
+      ? await query(`SELECT id, ${column} AS member FROM vacation_day_rules WHERE organization_id = $1 AND group_id = $2 AND ${column} IS NOT NULL`, [orgId, groupId])
+      : await query(`SELECT id, ${column} AS member FROM vacation_day_rules WHERE organization_id = $1 AND id = $2 AND ${column} IS NOT NULL`, [orgId, parseInt(ruleId)])
+    if (current.rows.length === 0) return res.status(404).json({ error: 'Правило не найдено' })
+
+    const targetGroupId = groupId || randomUUID()
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+      const removedIds = current.rows.filter((r) => !desired.includes(r.member)).map((r) => r.id)
+      if (removedIds.length > 0) {
+        await client.query('DELETE FROM vacation_day_rules WHERE organization_id = $1 AND id = ANY($2::int[])', [orgId, removedIds])
+      }
+      for (const member of desired) {
+        const existing = await client.query(
+          `SELECT id FROM vacation_day_rules WHERE organization_id = $1 AND ${column} = $2`,
+          [orgId, member]
+        )
+        if (existing.rows.length > 0) {
+          await client.query(
+            'UPDATE vacation_day_rules SET days = $1, group_id = $2, updated_at = NOW() WHERE id = $3',
+            [parsedDays, targetGroupId, existing.rows[0].id]
+          )
+        } else {
+          await client.query(
+            `INSERT INTO vacation_day_rules (organization_id, ${column}, days, group_id) VALUES ($1, $2, $3, $4)`,
+            [orgId, member, parsedDays, targetGroupId]
+          )
+        }
+      }
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+
+    for (const member of desired) {
+      await applyRuleToExistingBalances(orgId, kind === 'position' ? { position: member } : { userId: member }, parsedDays)
+    }
+    res.json({ success: true, groupId: targetGroupId })
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось сохранить правило' })
   }
 })
 
