@@ -113,9 +113,9 @@ export function Login() {
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null)
   const [loadingConfig, setLoadingConfig] = useState(true)
   const [kcHandled, setKcHandled] = useState(false)
-  const [kcLoading, setKcLoading] = useState(false)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const [kcLoading, setKcLoading] = useState(() => !!searchParams.get('code'))
   const login = useAuthStore((state) => state.login)
   const { settings, loaded, fetchPublicSettings } = useSiteSettingsStore()
 
@@ -146,9 +146,15 @@ export function Login() {
   }, [kcError])
 
   useEffect(() => {
-    if (!code || !authConfig?.tokenUrl || kcHandled) return
+    if (!code || kcHandled) return
+    if (!authConfig) return
+    if (!authConfig.tokenUrl) {
+      setKcLoading(false)
+      return
+    }
     const verifier = sessionStorage.getItem('pkce_verifier')
     if (!verifier) {
+      setKcLoading(false)
       setError('Ошибка PKCE — повторите попытку')
       return
     }

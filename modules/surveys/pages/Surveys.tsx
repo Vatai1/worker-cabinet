@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/shared/components/ui/Button'
 import { ClipboardList, CheckCircle2, Clock, Sparkles, ArrowRight, BarChart3, Zap } from 'lucide-react'
 import { surveyApi } from '@/modules/surveys/services/surveyApi'
@@ -29,7 +29,8 @@ export function Surveys() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
-  const [deepLinkSurveyId] = useState(() => new URLSearchParams(window.location.search).get('surveyId'))
+  const location = useLocation()
+  const deepLinkSurveyId = new URLSearchParams(location.search).get('surveyId')
 
   useEffect(() => {
     surveyApi.listMy()

@@ -52,6 +52,8 @@ type VacationTab = 'mine' | 'approvals' | 'restrictions' | 'requests' | 'history
 type CalendarScope = 'mine' | 'team'
 
 export function Vacation() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const {
     currentUserRequests,
@@ -108,14 +110,17 @@ export function Vacation() {
   }, [])
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
+    const params = new URLSearchParams(location.search)
     const tab = params.get('tab')
     const requestId = params.get('requestId')
     if (tab === 'mine' || tab === 'approvals' || tab === 'restrictions' || tab === 'requests' || tab === 'history') {
       setActiveTab(tab)
     }
-    if (requestId) setDeepLinkRequestId(requestId)
-  }, [])
+    if (requestId) {
+      deepLinkHandledRef.current = false
+      setDeepLinkRequestId(requestId)
+    }
+  }, [location.search])
   const [activeTab, setActiveTab] = useState<VacationTab>('mine')
   const [deepLinkRequestId, setDeepLinkRequestId] = useState<string | null>(null)
   const deepLinkHandledRef = useRef(false)
@@ -619,8 +624,6 @@ export function Vacation() {
   const handlePrevYear = () => setYear((y) => Math.max(minCalendarYear, y - 1))
   const handleNextYear = () => setYear((y) => Math.min(maxCalendarYear, y + 1))
 
-  const location = useLocation()
-  const navigate = useNavigate()
   const isMySubstitutions = location.pathname.includes('my-substitutions')
 
   useEffect(() => {
@@ -759,13 +762,19 @@ export function Vacation() {
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-[10px] rounded-xl border border-border bg-muted/40 p-[13px]">
-        <div className="inline-flex items-center gap-0 rounded-[10px] border border-border bg-card p-[3px]">
+        <div className="relative grid grid-cols-2 items-center rounded-[10px] border border-border bg-card p-[3px]">
+          <div
+            className={cn(
+              'absolute inset-y-[3px] left-[3px] w-[calc(50%-3px)] rounded-[8px] bg-primary transition-transform duration-200 ease-out',
+              calendarScope === 'team' && 'translate-x-full'
+            )}
+          />
           <button
             type="button"
             onClick={() => setCalendarScope('mine')}
             className={cn(
-              'rounded-[8px] px-[14px] py-[7px] text-[13px] font-semibold transition-colors',
-              calendarScope === 'mine' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              'relative z-10 rounded-[8px] px-[14px] py-[7px] text-center text-[13px] font-semibold transition-colors',
+              calendarScope === 'mine' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             Мои отпуска
@@ -774,8 +783,8 @@ export function Vacation() {
             type="button"
             onClick={() => setCalendarScope('team')}
             className={cn(
-              'rounded-[8px] px-[14px] py-[7px] text-[13px] font-semibold transition-colors',
-              calendarScope === 'team' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              'relative z-10 rounded-[8px] px-[14px] py-[7px] text-center text-[13px] font-semibold transition-colors',
+              calendarScope === 'team' ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
             )}
           >
             Вся команда

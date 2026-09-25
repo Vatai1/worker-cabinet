@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { ChevronDown, ChevronUp, Trash2, Loader2, Search } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
@@ -39,6 +40,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; className: string }> = {
 }
 
 export function AdminBugReports() {
+  const location = useLocation()
   const [reports, setReports] = useState<BugReport[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -102,12 +104,12 @@ export function AdminBugReports() {
   }
 
   useEffect(() => {
-    const reportId = new URLSearchParams(window.location.search).get('reportId')
+    const reportId = new URLSearchParams(location.search).get('reportId')
     if (!reportId || reports.length === 0) return
     const report = reports.find((r) => r.id === Number(reportId))
     if (report && expandedId !== report.id) handleExpand(report)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reports])
+  }, [reports, location.search])
 
   const handleSave = async (id: number) => {
     setSaving(true)

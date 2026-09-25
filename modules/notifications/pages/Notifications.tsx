@@ -10,6 +10,7 @@ import { formatDateTime, getErrorMessage, cn } from '@/shared/lib/utils'
 import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { openNotification } from '@/shared/lib/notificationClick'
+import { getNotificationBody } from '@/shared/lib/notificationCopy'
 import {
   type NotificationItem as Notification,
   fetchMyNotifications, fetchUnreadCount as fetchUnreadCountApi, markAllNotificationsRead,
@@ -156,7 +157,7 @@ export function Notifications() {
                 const label = TYPE_LABELS[n.type] || n.type
                 const data = n.data || {}
                 const title = (data.subject as string) || (data.title as string) || label
-                const message = (data.message as string) || ''
+                const message = getNotificationBody(n.type, data)
                 const imageUrls = (data.imageUrls as string[]) || []
 
                 return (

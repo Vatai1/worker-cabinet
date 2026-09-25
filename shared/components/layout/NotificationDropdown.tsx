@@ -4,6 +4,7 @@ import { Bell, CheckCheck } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { formatDateTime } from '@/shared/lib/utils'
 import { openNotification } from '@/shared/lib/notificationClick'
+import { getNotificationBody } from '@/shared/lib/notificationCopy'
 import {
   type NotificationItem,
   fetchMyNotifications, markAllNotificationsRead,
@@ -127,7 +128,7 @@ export function NotificationDropdown({ unreadCount, onUnreadCountChange }: Notif
                 const data = n.data || {}
                 const label = TYPE_LABELS[n.type] || n.type
                 const title = (data.subject as string) || (data.title as string) || label
-                const message = (data.message as string) || ''
+                const message = getNotificationBody(n.type, data)
                 return (
                   <button
                     key={n.id}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
@@ -27,6 +28,7 @@ interface UserDocument {
 type DocumentType = 'all' | 'contract' | 'certificate' | 'policy' | 'other'
 
 export function Documents() {
+  const location = useLocation()
   const [filterType, setFilterType] = useState<DocumentType>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [documents, setDocuments] = useState<UserDocument[]>([])
@@ -37,7 +39,7 @@ export function Documents() {
   const [uploadCategory, setUploadCategory] = useState<string>('other')
   const [uploadDescription, setUploadDescription] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [deepLinkDocId] = useState(() => new URLSearchParams(window.location.search).get('documentId'))
+  const deepLinkDocId = new URLSearchParams(location.search).get('documentId')
 
   useEffect(() => {
     if (!uploadModalOpen) return

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Badge } from '@/shared/components/ui/Badge'
@@ -35,6 +35,7 @@ interface OnboardingData {
 
 export function Onboarding() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { checkAuth } = useAuthStore()
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -72,11 +73,11 @@ export function Onboarding() {
   useEffect(() => { fetchOnboarding() }, [])
 
   useEffect(() => {
-    const taskId = new URLSearchParams(window.location.search).get('taskId')
+    const taskId = new URLSearchParams(location.search).get('taskId')
     if (!taskId || !onboarding) return
     const doc = onboarding.documents.find((d) => d.id === Number(taskId))
     if (doc) setSelectedDoc(doc)
-  }, [onboarding])
+  }, [onboarding, location.search])
 
   useEffect(() => {
     if (!selectedDoc && !confirmDocId) return
