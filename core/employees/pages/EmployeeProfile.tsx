@@ -145,6 +145,7 @@ export function EmployeeProfile() {
           lastName:   data.lastName   || data.last_name   || '',
           middleName: data.middleName || data.middle_name,
           department: data.department || data.department_name || '',
+          departmentId: data.departmentId ?? (data.department_id != null ? String(data.department_id) : undefined),
           organizationName: data.organization_name || data.organizationName,
           birthDate:  data.birthDate  || data.birth_date,
           hireDate:   data.hireDate   || data.hire_date   || '',
@@ -500,7 +501,12 @@ export function EmployeeProfile() {
           <div className="space-y-1 p-5">
             <InfoRow icon={<Building2 className="h-4 w-4" />} label="Организация" value={employee.organizationName} />
             <InfoRow icon={<Briefcase className="h-4 w-4" />} label="Должность" value={employee.position} />
-            <InfoRow icon={<Building2 className="h-4 w-4" />} label="Отдел" value={employee.department} />
+            <InfoRow
+              icon={<Building2 className="h-4 w-4" />}
+              label="Отдел"
+              value={employee.department}
+              to={employee.departmentId ? `/departments/${employee.departmentId}` : undefined}
+            />
             <InfoRow icon={<Calendar className="h-4 w-4" />} label="Дата найма" value={employee.hireDate ? formatDate(employee.hireDate) : undefined} />
             <InfoRow icon={<Clock className="h-4 w-4" />} label="Стаж" value={calculateWorkExperience(employee.hireDate)} />
             <InfoRow icon={<MapPin className="h-4 w-4" />} label="Офис" value={employee.office} />
@@ -732,7 +738,7 @@ function PlannedVacationsBlock({ userId }: { userId: string }) {
   )
 }
 
-function InfoRow({ icon, label, value, href }: { icon: React.ReactNode; label: string; value?: string | null; href?: string }) {
+function InfoRow({ icon, label, value, href, to }: { icon: React.ReactNode; label: string; value?: string | null; href?: string; to?: string }) {
   const content = (
     <div className="flex items-center gap-3 py-2">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
@@ -744,6 +750,13 @@ function InfoRow({ icon, label, value, href }: { icon: React.ReactNode; label: s
       </div>
     </div>
   )
+  if (to && value) {
+    return (
+      <Link to={to} className="-mx-2 block rounded-lg px-2 transition-colors hover:bg-muted/40">
+        {content}
+      </Link>
+    )
+  }
   if (href && value) {
     return (
       <a href={href} className="-mx-2 block rounded-lg px-2 transition-colors hover:bg-muted/40">

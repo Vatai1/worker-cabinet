@@ -51,6 +51,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Работа' },
   { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
+  { name: 'Отделы', href: '/departments', icon: Building2, section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
   { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'vacation', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },

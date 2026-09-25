@@ -1,34 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Search, Check } from 'lucide-react'
-import { toast } from 'sonner'
 import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
-import { apiGet } from '@/shared/lib/apiClient'
-import { cn, getErrorMessage } from '@/shared/lib/utils'
+import { cn } from '@/shared/lib/utils'
 import type { RestrictionScopeEmployee } from '@/shared/types'
-
-interface UserSearchRow {
-  id: number
-  first_name: string
-  last_name: string
-  middle_name: string | null
-  position: string | null
-  department_id: number | null
-  department_name: string | null
-  tags: Array<{ id: number; name: string }>
-}
-
-function toScopeEmployee(row: UserSearchRow): RestrictionScopeEmployee {
-  return {
-    id: String(row.id),
-    firstName: row.first_name,
-    lastName: row.last_name,
-    middleName: row.middle_name,
-    position: row.position || '',
-    departmentId: row.department_id === null ? null : String(row.department_id),
-    departmentName: row.department_name,
-    tags: (row.tags || []).map((t) => ({ id: String(t.id), name: t.name })),
-  }
-}
 
 function EmployeeRow({
   employee,
@@ -80,28 +54,8 @@ interface RestrictionMemberPickerProps {
 
 export function RestrictionMemberPicker({ employees, employeesLoading, selected, onChange, skillsEnabled }: RestrictionMemberPickerProps) {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
-  const [tagMembers, setTagMembers] = useState<RestrictionScopeEmployee[]>([])
-  const [tagMembersLoading, setTagMembersLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [positionFilter, setPositionFilter] = useState<string[]>([])
-
-  useEffect(() => {
-    if (selectedTagIds.length === 0) {
-      setTagMembers([])
-      return
-    }
-    let cancelled = false
-    setTagMembersLoading(true)
-    apiGet<UserSearchRow[]>(`/users/search?tagId=${selectedTagIds.join(',')}`)
-      .then((rows) => { if (!cancelled) setTagMembers(rows.map(toScopeEmployee)) })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        setTagMembers([])
-        toast.error(getErrorMessage(err))
-      })
-      .finally(() => { if (!cancelled) setTagMembersLoading(false) })
-    return () => { cancelled = true }
-  }, [selectedTagIds])
 
   const tagOptions = useMemo(() => {
     const map = new Map<string, string>()
@@ -124,13 +78,14 @@ export function RestrictionMemberPicker({ employees, employeesLoading, selected,
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase()
     return employees.filter((u) => {
+      if (selectedTagIds.length > 0 && !u.tags.some((t) => selectedTagIds.includes(t.id))) return false
       if (positionFilter.length > 0 && !positionFilter.includes(u.position)) return false
       if (!q) return true
       return `${u.lastName} ${u.firstName}`.toLowerCase().includes(q) || u.position.toLowerCase().includes(q)
     })
-  }, [employees, search, positionFilter])
+  }, [employees, search, positionFilter, selectedTagIds])
 
-  const hasFilters = search !== '' || positionFilter.length > 0
+  const hasFilters = search !== '' || positionFilter.length > 0 || selectedTagIds.length > 0
   const allFilteredSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selected.includes(u.id))
 
   const toggleEmployee = (employeeId: string) => {
@@ -151,34 +106,10 @@ export function RestrictionMemberPicker({ employees, employeesLoading, selected,
             options={tagOptions}
             selected={selectedTagIds}
             onChange={setSelectedTagIds}
-            placeholder="Теги не выбраны"
+            placeholder="Все теги"
             countLabel="Теги"
           />
-          <p className="text-xs text-muted-foreground">Показаны теги, которые есть у ваших сотрудников</p>
-          {selectedTagIds.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">
-                Работники с выбранными тегами{tagMembers.length > 0 && ` (${tagMembers.length})`}
-              </p>
-              <div className="max-h-60 overflow-y-auto rounded-xl border border-border">
-                {tagMembersLoading ? (
-                  <div className="px-4 py-6 text-center text-sm text-muted-foreground">Загрузка…</div>
-                ) : tagMembers.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-sm text-muted-foreground">Никто не найден</div>
-                ) : (
-                  tagMembers.map((employee) => (
-                    <EmployeeRow
-                      key={employee.id}
-                      employee={employee}
-                      checked={selected.includes(employee.id)}
-                      showDepartment
-                      onToggle={toggleEmployee}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground">Выбранные теги фильтруют список работников ниже</p>
         </div>
       )}
 
@@ -210,6 +141,7 @@ export function RestrictionMemberPicker({ employees, employeesLoading, selected,
               onClick={() => {
                 setSearch('')
                 setPositionFilter([])
+                setSelectedTagIds([])
               }}
               className="text-sm text-muted-foreground underline hover:text-foreground"
             >

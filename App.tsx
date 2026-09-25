@@ -4,7 +4,7 @@ import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { useSessionActivity } from '@/core/auth/hooks/useSessionActivity'
-import { hasAnyRole, hasAnyRoleSync, isSuperAdmin } from '@/shared/lib/permissions'
+import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
 import { Login } from '@/core/auth/pages/Login'
 import { Layout } from '@/shared/components/layout/Layout'
 import { Dashboard } from '@/shared/pages/Dashboard'
@@ -141,7 +141,6 @@ function ModuleGuard({ module, children }: { module: string; children: React.Rea
 }
 
 function App() {
-  const user = useAuthStore((state) => state.user)
   const checkAuth = useAuthStore((state) => state.checkAuth)
 
   useSessionActivity()
@@ -168,16 +167,7 @@ function App() {
                 <Route
                   index
                   element={
-                    <Navigate
-                      to={
-                        user?.role === 'onboarding' ? '/onboarding' :
-                        user?.role === 'manager' ? '/leader' :
-                        user?.role === 'superadmin' ? '/admin/global' :
-                        hasAnyRoleSync('hr', 'admin') ? '/hr' :
-                        '/dashboard'
-                      }
-                      replace
-                    />
+                    <Navigate to="/dashboard" replace />
                   }
                 />
                 <Route path="dashboard" element={<BlockOnboardingRoute><Dashboard /></BlockOnboardingRoute>} />
