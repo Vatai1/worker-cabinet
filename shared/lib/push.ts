@@ -23,13 +23,6 @@ export async function fetchPushConfig(): Promise<PushConfig> {
   return res.json()
 }
 
-export async function fetchPushStatus(): Promise<boolean> {
-  const res = await fetch(`${API_BASE_URL}/push/status`, { headers: getAuthHeaders() })
-  if (!res.ok) return false
-  const data = await res.json()
-  return Boolean(data.subscribed)
-}
-
 export async function isSubscribed(): Promise<boolean> {
   if (!('serviceWorker' in navigator)) return false
   const reg = await navigator.serviceWorker.ready

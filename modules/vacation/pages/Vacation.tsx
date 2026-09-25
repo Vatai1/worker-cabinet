@@ -51,10 +51,38 @@ const EMPTY_REQUEST_FILTERS: { departmentIds: string[]; statuses: string[]; vaca
 type VacationTab = 'mine' | 'approvals' | 'restrictions' | 'requests' | 'history'
 type CalendarScope = 'mine' | 'team'
 
+const parseUrlList = (value: string | null) => (value ? value.split(',').filter(Boolean) : [])
+
+function readUrlState(search: string, orgId: number | null) {
+  const params = new URLSearchParams(search)
+  const urlOrg = params.get('org')
+  const valid = urlOrg === null || orgId === null || urlOrg === String(orgId)
+  const get = (key: string) => (valid ? params.get(key) : null)
+  const currentYear = new Date().getFullYear()
+  const urlYear = Number(get('year'))
+  return {
+    year: Number.isInteger(urlYear) && urlYear >= currentYear - 1 && urlYear <= currentYear + 1 ? urlYear : currentYear,
+    scope: (get('scope') === 'team' ? 'team' : 'mine') as CalendarScope,
+    hasDept: valid && params.has('dept'),
+    reqFilters: {
+      departmentIds: parseUrlList(get('dept')),
+      statuses: parseUrlList(get('status')),
+      vacationTypes: parseUrlList(get('type')),
+      tagId: get('tag') ?? '',
+    },
+    search: get('q') ?? '',
+    approvalFilters: { departmentIds: parseUrlList(get('aDept')), vacationTypes: parseUrlList(get('aType')) },
+    approvalSearch: get('aq') ?? '',
+  }
+}
+
 export function Vacation() {
   const location = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
+  const [initialUrlState] = useState(() => readUrlState(location.search, useOrgStore.getState().currentOrgId))
+  const locationSearchRef = useRef(location.search)
+  locationSearchRef.current = location.search
   const {
     currentUserRequests,
     departmentRequests,
@@ -94,12 +122,12 @@ export function Vacation() {
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
   const [vacationBlocked, setVacationBlocked] = useState(false)
   const [dateErrorMessage, setDateErrorMessage] = useState<string | null>(null)
-  const [year, setYear] = useState(new Date().getFullYear())
+  const [year, setYear] = useState(initialUrlState.year)
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
   const [pickerEmployees, setPickerEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; middle_name?: string | null; position: string }>>([])
-  const [reqFilters, setReqFilters] = useState(EMPTY_REQUEST_FILTERS)
-  const [approvalFilters, setApprovalFilters] = useState<{ departmentIds: string[]; vacationTypes: string[] }>({ departmentIds: [], vacationTypes: [] })
-  const [approvalSearch, setApprovalSearch] = useState('')
+  const [reqFilters, setReqFilters] = useState(initialUrlState.reqFilters)
+  const [approvalFilters, setApprovalFilters] = useState<{ departmentIds: string[]; vacationTypes: string[] }>(initialUrlState.approvalFilters)
+  const [approvalSearch, setApprovalSearch] = useState(initialUrlState.approvalSearch)
   const [showIntroModal, setShowIntroModal] = useState(false)
   const [deptTableExpanded, setDeptTableExpanded] = useState(false)
 
@@ -124,12 +152,12 @@ export function Vacation() {
   const [activeTab, setActiveTab] = useState<VacationTab>('mine')
   const [deepLinkRequestId, setDeepLinkRequestId] = useState<string | null>(null)
   const deepLinkHandledRef = useRef(false)
-  const [calendarScope, setCalendarScope] = useState<CalendarScope>('mine')
+  const [calendarScope, setCalendarScope] = useState<CalendarScope>(initialUrlState.scope)
   const [leavingApprovalIds, setLeavingApprovalIds] = useState<Set<string>>(new Set())
   const [rejectingApprovalId, setRejectingApprovalId] = useState<string | null>(null)
   const [approvalRejectReason, setApprovalRejectReason] = useState('')
-  const deptTouched = useRef(false)
-  const [search, setSearch] = useState('')
+  const deptTouched = useRef(initialUrlState.hasDept)
+  const [search, setSearch] = useState(initialUrlState.search)
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [departments, setDepartments] = useState<Array<{ id: number; name: string }>>([])
   const [calendarDeptRequests, setCalendarDeptRequests] = useState<VacationRequest[] | null>(null)
@@ -189,7 +217,11 @@ export function Vacation() {
     apiGet<Array<{ id: number; name: string }>>('/users/skills/all').then(setTags).catch(() => setTags([]))
   }, [skillsEnabled, currentOrgId])
 
+  const prevOrgIdRef = useRef(currentOrgId)
   useEffect(() => {
+    const prevOrgId = prevOrgIdRef.current
+    prevOrgIdRef.current = currentOrgId
+    if (prevOrgId === currentOrgId || prevOrgId === null) return
     deptTouched.current = false
     setReqFilters({ ...EMPTY_REQUEST_FILTERS, departmentIds: user?.departmentId ? [user.departmentId] : [] })
     setSearch('')
@@ -197,6 +229,31 @@ export function Vacation() {
     setActiveTab('mine')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrgId])
+
+  useEffect(() => {
+    const params = new URLSearchParams(locationSearchRef.current)
+    const put = (key: string, value: string, isDefault: boolean) => {
+      if (isDefault) params.delete(key)
+      else params.set(key, value)
+    }
+    put('year', String(year), year === new Date().getFullYear())
+    put('tab', activeTab, activeTab === 'mine')
+    put('scope', calendarScope, calendarScope === 'mine')
+    put('dept', reqFilters.departmentIds.join(','), !deptTouched.current)
+    put('status', reqFilters.statuses.join(','), reqFilters.statuses.length === 0)
+    put('type', reqFilters.vacationTypes.join(','), reqFilters.vacationTypes.length === 0)
+    put('tag', reqFilters.tagId, !reqFilters.tagId)
+    put('q', search, !search)
+    put('aDept', approvalFilters.departmentIds.join(','), approvalFilters.departmentIds.length === 0)
+    put('aType', approvalFilters.vacationTypes.join(','), approvalFilters.vacationTypes.length === 0)
+    put('aq', approvalSearch, !approvalSearch)
+    const hasState = ['year', 'tab', 'scope', 'dept', 'status', 'type', 'tag', 'q', 'aDept', 'aType', 'aq'].some((k) => params.has(k))
+    put('org', String(currentOrgId), !hasState || currentOrgId === null)
+    const next = params.toString()
+    if (next !== locationSearchRef.current.replace(/^\?/, '')) {
+      navigate({ search: next ? `?${next}` : '' }, { replace: true })
+    }
+  }, [year, activeTab, calendarScope, reqFilters, search, approvalFilters, approvalSearch, currentOrgId, navigate])
 
   useEffect(() => {
     if (user?.departmentId && !deptTouched.current) {
@@ -670,6 +727,10 @@ export function Vacation() {
     deepLinkHandledRef.current = true
     setDeepLinkRequestId(null)
     handleOpenDetailModal(request)
+    const params = new URLSearchParams(locationSearchRef.current)
+    params.delete('requestId')
+    const next = params.toString()
+    navigate({ search: next ? `?${next}` : '' }, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkRequestId, pendingApprovals, departmentRequests, currentUserRequests, isManager])
 

@@ -5,21 +5,37 @@ import { Label } from '@/shared/components/ui/Label'
 import { Switch } from '@/shared/components/ui/Switch'
 import { Bell, Moon, Sun } from 'lucide-react'
 import { useUIStore } from '@/shared/store/uiStore'
-import { fetchPushConfig, fetchPushStatus, subscribePush, unsubscribePush } from '@/shared/lib/push'
+import { fetchPushConfig, isSubscribed, subscribePush, unsubscribePush } from '@/shared/lib/push'
+import { readLocalPref, writeLocalPref } from '@/shared/lib/localPrefs'
+
+const PUSH_PREF_KEY = 'pushNotifications'
 
 export function Settings() {
   const [emailNotifications, setEmailNotifications] = useState(true)
-  const [pushNotifications, setPushNotifications] = useState(false)
+  const [pushNotifications, setPushNotificationsState] = useState(() => readLocalPref(PUSH_PREF_KEY) === 'true')
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushPublicKey, setPushPublicKey] = useState('')
   const [pushLoading, setPushLoading] = useState(false)
   const { darkMode, toggleTheme } = useUIStore()
 
+  const setPushNotifications = (value: boolean) => {
+    writeLocalPref(PUSH_PREF_KEY, String(value))
+    setPushNotificationsState(value)
+  }
+
   useEffect(() => {
     fetchPushConfig().then(({ enabled, publicKey }) => {
       setPushEnabled(enabled)
       setPushPublicKey(publicKey)
-      if (enabled) fetchPushStatus().then(setPushNotifications)
+      if (!enabled) return
+      if (readLocalPref(PUSH_PREF_KEY) !== 'true') return
+      isSubscribed()
+        .then((subscribed) => {
+          if (subscribed) return
+          writeLocalPref(PUSH_PREF_KEY, 'false')
+          setPushNotificationsState(false)
+        })
+        .catch(() => {})
     })
   }, [])
 

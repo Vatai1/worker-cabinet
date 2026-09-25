@@ -216,7 +216,7 @@ Backend fetches events from MS Exchange via EWS/NTLM (`services/ewsService.js`).
 - **Database changes**: Add SQL to `backend/src/db/migrate.js` (monolithic migration, idempotent)
 - **UI language**: Russian for all user-facing text and error messages
 - **No code comments** unless explicitly requested
-- **No localStorage**: all user data stored server-side (PostgreSQL, cookies for auth)
+- **localStorage only for per-device preferences**: user data is stored server-side (PostgreSQL, cookies for auth); `localStorage` is allowed only for device-local UI settings (dark mode `darkMode`, push toggle `pushNotifications`) via `readLocalPref`/`writeLocalPref` from `@/shared/lib/localPrefs`
 - **API responses**: Return data directly on success; `{ error: 'message' }` on failure
 - **Environment**: Copy `deploy/.env.example` to `backend/.env` and configure DB, JWT_SECRET, S3 credentials
 - **Test users** (after seed): `admin@example.com` / `ivanov@example.com` / `petrov@example.com` with `password123`

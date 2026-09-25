@@ -15,24 +15,17 @@ async function authenticateUser(req) {
     const token = cookies.auth_token
     if (!token) return null
 
-    let decoded
+    let userId = null
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET)
-    } catch {}
-
-    if (decoded?.scope === 'assistant') {
-      const result = await query('SELECT id FROM users WHERE id = $1', [decoded.id])
-      return result.rows[0] || null
-    }
-
-    if (keycloakConfig.enabled) {
+      userId = jwt.verify(token, process.env.JWT_SECRET).id
+    } catch {
+      if (!keycloakConfig.enabled) return null
       const kcPayload = await verifyKeycloakToken(token)
-      const result = await query('SELECT id FROM users WHERE keycloak_guid = $1', [kcPayload.sub])
-      return result.rows[0] || null
+      const kcUser = await query('SELECT id FROM users WHERE keycloak_guid = $1', [kcPayload.sub])
+      return kcUser.rows[0] || null
     }
 
-    decoded = jwt.verify(token, process.env.JWT_SECRET)
-    const result = await query('SELECT id FROM users WHERE id = $1', [decoded.id])
+    const result = await query('SELECT id FROM users WHERE id = $1', [userId])
     return result.rows[0] || null
   } catch {
     return null

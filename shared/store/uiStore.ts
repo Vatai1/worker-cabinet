@@ -1,5 +1,20 @@
 ﻿import { create } from 'zustand'
-import { getCookie, setCookie } from '@/shared/lib/cookies'
+import { deleteCookie, getCookie } from '@/shared/lib/cookies'
+import { readLocalPref, writeLocalPref } from '@/shared/lib/localPrefs'
+
+const DARK_MODE_KEY = 'darkMode'
+
+function readDarkMode(): boolean {
+  const saved = readLocalPref(DARK_MODE_KEY)
+  if (saved !== null) return saved === 'true'
+  const legacy = getCookie(DARK_MODE_KEY)
+  if (legacy !== null) {
+    writeLocalPref(DARK_MODE_KEY, legacy)
+    deleteCookie(DARK_MODE_KEY)
+    return legacy === 'true'
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
 
 interface UIStore {
   sidebarOpen: boolean
@@ -15,15 +30,11 @@ interface UIStore {
 export const useUIStore = create<UIStore>()((set) => ({
   sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
   openModals: 0,
-  darkMode: (() => {
-    const saved = getCookie('darkMode')
-    if (saved !== null) return saved === 'true'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })(),
+  darkMode: readDarkMode(),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   toggleTheme: () => set((state) => {
     const newMode = !state.darkMode
-    setCookie('darkMode', String(newMode))
+    writeLocalPref(DARK_MODE_KEY, String(newMode))
     if (newMode) {
       document.documentElement.classList.add('dark')
     } else {
@@ -32,7 +43,7 @@ export const useUIStore = create<UIStore>()((set) => ({
     return { darkMode: newMode }
   }),
   setTheme: (dark: boolean) => set(() => {
-    setCookie('darkMode', String(dark))
+    writeLocalPref(DARK_MODE_KEY, String(dark))
     if (dark) {
       document.documentElement.classList.add('dark')
     } else {
