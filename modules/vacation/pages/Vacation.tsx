@@ -1082,7 +1082,7 @@ export function Vacation() {
                 >
                   <div className="min-h-0 overflow-hidden">
                     <div className="pt-3">
-                      <DepartmentBalanceTable departmentId={user?.departmentId || ''} year={year} currentUserId={user?.id} />
+                      <DepartmentBalanceTable departmentId={user?.departmentId || ''} year={year} currentUserId={user?.id} tagId={reqFilters.tagId || undefined} />
                     </div>
                   </div>
                 </div>

@@ -61,6 +61,7 @@ router.get('/templates', authenticateToken, authorizeRoles('hr', 'admin'), async
     const result = await query(sql, params)
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка загрузки шаблонов' })
   }
 })
@@ -133,6 +134,7 @@ router.post('/templates', authenticateToken, authorizeRoles('hr', 'admin'), uplo
     const result = await query(selSql, selParams)
     res.status(201).json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка создания шаблона' })
   }
 })
@@ -209,6 +211,7 @@ router.put('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), u
     const result = await query(selSql, selParams)
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка обновления шаблона' })
   }
 })
@@ -253,6 +256,7 @@ router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin')
     await query(delQuery.text, delQuery.values)
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     if (error.code === '23503') {
       return res.status(400).json({ error: 'Шаблон используется в онбординге' })
     }
@@ -339,6 +343,7 @@ router.get('/me', authenticateToken, authorizeRoles('onboarding'), async (req, r
       documents: documentsWithUrls,
     })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка загрузки онбординга' })
   }
 })
@@ -401,6 +406,7 @@ router.post('/documents/:id/access-token', authenticateToken, async (req, res) =
 
     res.json({ accessToken, expiresAt })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка создания токена' })
   }
 })
@@ -492,6 +498,7 @@ router.get('/documents/:id/file', async (req, res) => {
       res.send(Buffer.from(bytes))
     })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка скачивания файла' })
   }
 })
@@ -570,6 +577,7 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('
       client.release()
     }
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка подтверждения документа' })
   }
 })
@@ -618,6 +626,7 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
     const result = await query(listSql, listParams)
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка загрузки онбордингов' })
   }
 })
@@ -716,6 +725,7 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
       client.release()
     }
   } catch (error) {
+    res.locals.errorCause = error
     if (error.message?.includes('Email уже зарегистрирован') || error.code === '23505') {
       return res.status(400).json({ error: 'Email уже зарегистрирован' })
     }
@@ -812,6 +822,7 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
       documents: documentsWithUrls,
     })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка загрузки онбординга' })
   }
 })
@@ -858,6 +869,7 @@ router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (r
       client.release()
     }
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка отмены онбординга' })
   }
 })

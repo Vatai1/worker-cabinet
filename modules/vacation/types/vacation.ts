@@ -159,6 +159,20 @@ export interface VacationRestriction {
   createdAt: string
   createdBy: string
   createdByName: string
+  employees?: Array<{ id: string; name: string }>
+  employeeDepartments?: string[]
+  canManage?: boolean
+}
+
+export interface RestrictionScopeEmployee {
+  id: string
+  firstName: string
+  lastName: string
+  middleName: string | null
+  position: string
+  departmentId: string | null
+  departmentName: string | null
+  tags: Array<{ id: string; name: string }>
 }
 
 export interface VacationRestrictionViolation {

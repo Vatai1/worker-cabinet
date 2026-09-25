@@ -33,7 +33,7 @@ import bannerRoutes from './routes/banner.js'
 import pushRoutes from './routes/push.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { runMigrations } from './db/migrate.js'
-import { errorHandler } from './middleware/errors.js'
+import { errorHandler, errorResponseLogger } from './middleware/errors.js'
 import * as rabbitmq from './config/rabbitmq.js'
 import { initWsServer } from './config/ws.js'
 import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
@@ -113,6 +113,7 @@ app.use(cookieParser())
 app.use(generateCsrfToken)
 
 // CSRF protection for mutating API requests (safe methods exempt)
+app.use('/api', errorResponseLogger)
 app.use('/api', csrfMiddleware)
 app.use('/api', apiLimiter)
 app.use('/api', attachOrgContext)
@@ -214,6 +215,7 @@ app.get('/api/settings/public', async (req, res) => {
 app.use(errorHandler)
 
 app.use((req, res) => {
+  res.locals.skipErrorLog = true
   res.status(404).json({ error: 'Not Found' })
 })
 

@@ -551,6 +551,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const row = result.rows[0]
     res.json({ ...row, data: await enrichHierarchyData(row.data, targetOrgId) })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('GET /hierarchy error:', error)
     res.status(500).json({ error: 'Не удалось загрузить иерархию' })
   }
@@ -612,6 +613,7 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
   try {
     parentChanges = await buildDepartmentParentChanges(nodes, edges, req)
   } catch (error) {
+    res.locals.errorCause = error
     if (error.statusCode === 400) {
       return res.status(400).json({ error: error.message })
     }
@@ -672,6 +674,7 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
     await client.query('COMMIT')
     res.json({ updated_at: result.rows[0].updated_at, version: result.rows[0].version })
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK').catch(() => {})
     console.error('PUT /hierarchy error:', error)
     res.status(500).json({ error: 'Не удалось сохранить иерархию' })
@@ -718,6 +721,7 @@ router.get('/global', authenticateToken, async (req, res) => {
     const row = result.rows[0]
     res.json({ ...row, data: await enrichHierarchyData(row.data, currentOrgId(req)) })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('GET /hierarchy/global error:', error)
     res.status(500).json({ error: 'Не удалось загрузить глобальную иерархию' })
   }
@@ -766,6 +770,7 @@ router.put('/global', authenticateToken, authorizeRoles('superadmin'), async (re
     )
     res.json({ updated_at: result.rows[0].updated_at })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('PUT /hierarchy/global error:', error)
     res.status(500).json({ error: 'Не удалось сохранить глобальную иерархию' })
   }
@@ -803,6 +808,7 @@ router.get('/department/:id', authenticateToken, async (req, res) => {
     const row = result.rows[0]
     res.json({ ...row, data: await enrichHierarchyData(row.data, currentOrgId(req)) })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('GET /hierarchy/department/:id error:', error)
     res.status(500).json({ error: 'Не удалось загрузить иерархию отдела' })
   }
@@ -873,6 +879,7 @@ router.put('/department/:id', authenticateToken, authorizeRoles('hr', 'admin'), 
     )
     res.json({ updated_at: result.rows[0].updated_at })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('PUT /hierarchy/department/:id error:', error)
     res.status(500).json({ error: 'Не удалось сохранить иерархию отдела' })
   }

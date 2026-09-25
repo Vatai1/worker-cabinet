@@ -144,6 +144,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const result = await query(sql, params)
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching projects:', error)
     res.status(500).json({ error: 'Failed to fetch projects' })
   }
@@ -181,6 +182,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     if (!project) return res.status(404).json({ error: 'Project not found' })
     res.json(project)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching project:', error)
     res.status(500).json({ error: 'Failed to fetch project' })
   }
@@ -267,6 +269,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const full = await getProjectWithMembers(project.id, req)
     res.status(201).json(full)
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     console.error('Error creating project:', error)
     res.status(500).json({ error: 'Failed to create project' })
@@ -360,6 +363,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const full = await getProjectWithMembers(id, req)
     res.json(full)
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     console.error('Error updating project:', error)
     res.status(500).json({ error: 'Failed to update project' })
@@ -422,6 +426,7 @@ router.post('/:id/members', authenticateToken, async (req, res) => {
     const full = await getProjectWithMembers(id, req)
     res.json(full)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error adding member:', error)
     res.status(500).json({ error: 'Failed to add member' })
   }
@@ -482,6 +487,7 @@ router.put('/:id/members/:userId', authenticateToken, async (req, res) => {
     const full = await getProjectWithMembers(id, req)
     res.json(full)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error updating member:', error)
     res.status(500).json({ error: 'Failed to update member' })
   }
@@ -532,6 +538,7 @@ router.delete('/:id/members/:userId', authenticateToken, async (req, res) => {
     const full = await getProjectWithMembers(id, req)
     res.json(full)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error removing member:', error)
     res.status(500).json({ error: 'Failed to remove member' })
   }
@@ -598,6 +605,7 @@ router.get('/:id/documents', authenticateToken, async (req, res) => {
     )
     res.json(documents)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching documents:', error)
     res.status(500).json({ error: 'Failed to fetch documents' })
   }
@@ -640,6 +648,7 @@ router.get('/:id/folders', authenticateToken, async (req, res) => {
     )
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching folders:', error)
     res.status(500).json({ error: 'Failed to fetch folders' })
   }
@@ -702,6 +711,7 @@ router.post('/:id/folders', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) return res.status(409).json({ error: 'Папка уже существует' })
     res.status(201).json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error creating folder:', error)
     res.status(500).json({ error: 'Failed to create folder' })
   }
@@ -779,6 +789,7 @@ router.put('/:id/folders/:folderId', authenticateToken, async (req, res) => {
 
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error renaming folder:', error)
     res.status(500).json({ error: 'Failed to rename folder' })
   }
@@ -852,6 +863,7 @@ router.delete('/:id/folders', authenticateToken, async (req, res) => {
     }
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error deleting folder:', error)
     res.status(500).json({ error: 'Failed to delete folder' })
   }
@@ -936,6 +948,7 @@ router.post('/:id/documents', authenticateToken, upload.single('file'), uploadWi
     
     res.status(201).json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error uploading document:', error)
     res.status(500).json({ error: 'Failed to upload document' })
   }
@@ -992,6 +1005,7 @@ router.get('/:id/documents/:documentId/download', authenticateToken, async (req,
 
     Body.pipe(res)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error downloading document:', error)
     res.status(500).json({ error: 'Failed to download document' })
   }
@@ -1070,6 +1084,7 @@ router.get('/:id/documents/:documentId/preview', authenticateToken, async (req, 
     
     Body.pipe(res)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error previewing document:', error)
     res.status(500).json({ error: 'Failed to preview document' })
   }
@@ -1169,6 +1184,7 @@ router.put('/:id/documents/:documentId', authenticateToken, async (req, res) => 
 
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error updating document:', error)
     res.status(500).json({ error: 'Failed to update document' })
   }
@@ -1249,6 +1265,7 @@ router.put('/:id/documents/:documentId/move', authenticateToken, async (req, res
 
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error moving document:', error)
     res.status(500).json({ error: 'Failed to move document' })
   }
@@ -1355,6 +1372,7 @@ router.put('/:id/folders/:folderId/move', authenticateToken, async (req, res) =>
 
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error moving folder:', error)
     res.status(500).json({ error: 'Failed to move folder' })
   }
@@ -1443,6 +1461,7 @@ router.delete('/:id/documents/:documentId', authenticateToken, async (req, res) 
     await query(...orgScopedQuery('DELETE FROM project_documents WHERE id = $1', [documentId], req))
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error deleting document:', error)
     res.status(500).json({ error: 'Failed to delete document' })
   }
@@ -1486,6 +1505,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     await query(...orgScopedQuery('DELETE FROM company_projects WHERE id = $1', [id], req))
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error deleting project:', error)
     res.status(500).json({ error: 'Failed to delete project' })
   }
@@ -1567,6 +1587,7 @@ router.get('/:id/documents/:documentId/preview-token', authenticateToken, async 
     const publicUrl = `${getPublicApiUrl()}/projects/${id}/documents/${documentId}/public/${token}`
     res.json({ token, publicUrl })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error generating preview token:', error)
     res.status(500).json({ error: 'Failed to generate preview token' })
   }
@@ -1633,6 +1654,7 @@ router.get('/:id/documents/:documentId/public/:token', async (req, res) => {
 
     Body.pipe(res)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error serving public document:', error)
     res.status(500).json({ error: 'Failed to load document' })
   }
@@ -1671,6 +1693,7 @@ router.get('/:id/roadmap', authenticateToken, async (req, res) => {
 
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching roadmap:', error)
     res.status(500).json({ error: 'Failed to fetch roadmap' })
   }
@@ -1741,6 +1764,7 @@ router.post('/:id/roadmap', authenticateToken, async (req, res) => {
 
     res.status(201).json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error creating roadmap item:', error)
     res.status(500).json({ error: 'Failed to create roadmap item' })
   }
@@ -1836,6 +1860,7 @@ router.put('/:id/roadmap/:itemId', authenticateToken, async (req, res) => {
 
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error updating roadmap item:', error)
     res.status(500).json({ error: 'Failed to update roadmap item' })
   }
@@ -1900,6 +1925,7 @@ router.put('/:id/roadmap/reorder', authenticateToken, async (req, res) => {
 
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error reordering roadmap:', error)
     res.status(500).json({ error: 'Failed to reorder roadmap' })
   }
@@ -1946,6 +1972,7 @@ router.delete('/:id/roadmap/:itemId', authenticateToken, async (req, res) => {
 
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error deleting roadmap item:', error)
     res.status(500).json({ error: 'Failed to delete roadmap item' })
   }
@@ -1991,6 +2018,7 @@ router.get('/:id/roadmap/rows', authenticateToken, async (req, res) => {
     )
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching roadmap rows:', error)
     res.status(500).json({ error: 'Failed to fetch roadmap rows' })
   }
@@ -2050,6 +2078,7 @@ router.post('/:id/roadmap/rows', authenticateToken, async (req, res) => {
     )
     res.status(201).json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error creating roadmap row:', error)
     res.status(500).json({ error: 'Failed to create roadmap row' })
   }
@@ -2113,6 +2142,7 @@ router.put('/:id/roadmap/rows/:rowId', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Row not found' })
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error updating roadmap row:', error)
     res.status(500).json({ error: 'Failed to update roadmap row' })
   }
@@ -2152,6 +2182,7 @@ router.delete('/:id/roadmap/rows/:rowId', authenticateToken, async (req, res) =>
     await query(`DELETE FROM roadmap_rows WHERE id = $1 AND project_id = $2`, [rowId, id])
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error deleting roadmap row:', error)
     res.status(500).json({ error: 'Failed to delete roadmap row' })
   }
@@ -2188,6 +2219,7 @@ router.get('/:id/roadmap/tasks', authenticateToken, async (req, res) => {
     )
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching roadmap tasks:', error)
     res.status(500).json({ error: 'Failed to fetch roadmap tasks' })
   }
@@ -2248,6 +2280,7 @@ router.post('/:id/roadmap/tasks', authenticateToken, async (req, res) => {
     )
     res.status(201).json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error creating roadmap task:', error)
     res.status(500).json({ error: 'Failed to create roadmap task' })
   }
@@ -2323,6 +2356,7 @@ router.put('/:id/roadmap/tasks/:taskId', authenticateToken, async (req, res) => 
     if (result.rows.length === 0) return res.status(404).json({ error: 'Task not found' })
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error updating roadmap task:', error)
     res.status(500).json({ error: 'Failed to update roadmap task' })
   }
@@ -2362,6 +2396,7 @@ router.delete('/:id/roadmap/tasks/:taskId', authenticateToken, async (req, res) 
     await query(`DELETE FROM roadmap_tasks WHERE id = $1 AND project_id = $2`, [taskId, id])
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error deleting roadmap task:', error)
     res.status(500).json({ error: 'Failed to delete roadmap task' })
   }

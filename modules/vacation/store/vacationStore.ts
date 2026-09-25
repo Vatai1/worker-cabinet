@@ -39,8 +39,8 @@ interface VacationStore {
   fetchUserRequests: (userId: string) => Promise<void>
   fetchDepartmentRequests: (departmentId: string, filters?: { status?: string; year?: number; vacationType?: string }) => Promise<void>
   fetchBalance: (userId: string, year: number) => Promise<VacationBalance>
-  fetchRestrictions: (departmentId: string) => Promise<void>
-  fetchViolations: (departmentId?: string) => Promise<void>
+  fetchRestrictions: (departmentId: string, scope?: 'mine') => Promise<void>
+  fetchViolations: (departmentId?: string, scope?: 'mine') => Promise<void>
 
   createRequest: (userId: string, data: VacationFormData) => Promise<VacationRequest | null>
   cancelRequest: (requestId: string) => Promise<void>
@@ -148,19 +148,19 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         }
       },
       
-      fetchRestrictions: async (departmentId: string) => {
+      fetchRestrictions: async (departmentId: string, scope?: 'mine') => {
         set({ loading: true, error: null })
         try {
-          const data = await vacationApi.getRestrictions(departmentId ? { departmentId } : undefined)
+          const data = await vacationApi.getRestrictions({ departmentId: departmentId || undefined, scope })
           set({ restrictions: data, loading: false })
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при загрузке ограничений'), loading: false })
         }
       },
 
-      fetchViolations: async (departmentId?: string) => {
+      fetchViolations: async (departmentId?: string, scope?: 'mine') => {
         try {
-          const data = await vacationApi.getRestrictionViolations(departmentId)
+          const data = await vacationApi.getRestrictionViolations(departmentId, scope)
           set({ violations: data })
         } catch (error) {
           set({ error: errorMessage(error, 'Ошибка при проверке пересечений') })

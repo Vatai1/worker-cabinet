@@ -68,6 +68,7 @@ router.post('/auto-create', authorizeRoles('admin', 'hr'), async (req, res) => {
       message: `Создано ${created} табел${created === 1 ? 'ь' : created < 5 ? 'я' : 'ей'} за ${String(m).padStart(2, '0')}.${y}`
     })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error auto-creating timesheets:', error)
     res.status(500).json({ error: 'Ошибка при создании табелей' })
   }
@@ -158,6 +159,7 @@ router.get('/', async (req, res) => {
     }
     res.json(rows)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching timesheets:', error)
     res.status(500).json({ error: 'Ошибка при получении табелей' })
   }
@@ -230,6 +232,7 @@ router.post('/', async (req, res) => {
     await client.query('COMMIT')
     res.status(201).json(timesheet)
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     if (error.code === '23505') {
       return res.status(409).json({ error: 'Табель за этот месяц уже существует' })
@@ -376,6 +379,7 @@ router.get('/:id', async (req, res) => {
 
     res.json({ ...tsResult.rows[0], entries: entriesResult.rows, employees: empResult.rows })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching timesheet:', error)
     res.status(500).json({ error: 'Ошибка при получении табеля' })
   }
@@ -492,6 +496,7 @@ router.put('/:id/entries', async (req, res) => {
       client.release()
     }
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error updating entries:', error)
     res.status(500).json({ error: 'Ошибка при обновлении записей' })
   }
@@ -579,6 +584,7 @@ router.put('/:id/status', async (req, res) => {
 
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error updating timesheet status:', error)
     res.status(500).json({ error: 'Ошибка при изменении статуса' })
   }
@@ -618,6 +624,7 @@ router.post('/:id/submit-today', async (req, res) => {
     )
     res.json({ success: true, updated: result.rowCount })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error submitting today:', error)
     res.status(500).json({ error: 'Ошибка при отправке' })
   }
@@ -676,6 +683,7 @@ router.get('/:id/export/excel', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="timesheet-${timesheet.year}-${timesheet.month}.xlsx"`)
     await workbook.xlsx.write(res)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error exporting Excel:', error)
     res.status(500).json({ error: 'Ошибка при экспорте Excel' })
   }
@@ -751,6 +759,7 @@ router.get('/:id/export/pdf', async (req, res) => {
 
     doc.end()
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error exporting PDF:', error)
     res.status(500).json({ error: 'Ошибка при экспорте PDF' })
   }

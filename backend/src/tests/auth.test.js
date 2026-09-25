@@ -236,7 +236,7 @@ describe('Authentication System', () => {
         status: (code) => {
           assert.strictEqual(code, 403, 'Should return 403')
           return { json: (data) => {
-            assert.strictEqual(data.error, 'Forbidden: Insufficient permissions', 'Error message should match')
+            assert.strictEqual(data.error, 'Недостаточно прав для этого действия', 'Error message should match')
             done()
           }}
         }

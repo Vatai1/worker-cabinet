@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Building2, Pencil, Plus, Search, ShieldAlert, Tag, Trash2, Users, X, Loader2, Info } from 'lucide-react'
+import { Pencil, Plus, Search, ShieldAlert, Tag, Trash2, Users, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { Card } from '@/shared/components/ui/Card'
-import { Input } from '@/shared/components/ui/Input'
 import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
-import { SearchableCheckList } from '@/shared/components/ui/SearchableCheckList'
 import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { apiGet } from '@/shared/lib/apiClient'
-import { cn, formatDate, getErrorMessage, personName } from '@/shared/lib/utils'
+import { cn, formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
-import type { VacationRestriction } from '@/shared/types'
+import { RestrictionMemberPicker } from '@/modules/vacation/components/RestrictionMemberPicker'
+import type { RestrictionScopeEmployee, VacationRestriction } from '@/shared/types'
 
 interface Department {
   id: number
@@ -24,30 +23,13 @@ interface TagOption {
   name: string
 }
 
-interface EmployeeRow {
-  id: number
-  first_name: string
-  last_name: string
-  middle_name?: string | null
-  position?: string | null
-  department_id?: number | null
-}
-
-type RestrictionScope = 'tags' | 'employees'
-
 interface CreateFormState {
-  departmentId: string
-  scope: RestrictionScope
-  tagIds: string[]
   employeeIds: string[]
   maxConcurrent: number
   description: string
 }
 
 const EMPTY_FORM: CreateFormState = {
-  departmentId: '',
-  scope: 'tags',
-  tagIds: [],
   employeeIds: [],
   maxConcurrent: 1,
   description: '',
@@ -67,85 +49,6 @@ const ruleKind = (rule: VacationRestriction): { label: string; className: string
   return { label: 'По сотрудникам', className: 'bg-sky-500/15 text-sky-700 dark:text-sky-400' }
 }
 
-function RestrictionSummary({
-  selectedCount,
-  tagCount,
-  employeeCount,
-  previewCount,
-  previewLoading,
-}: {
-  selectedCount: number
-  tagCount: number
-  employeeCount: number
-  previewCount: number | null
-  previewLoading: boolean
-}) {
-  const isTagOnly = tagCount >= 1 && employeeCount === 0
-
-  let icon = Users
-  let title = 'Выберите участников'
-  let detail = 'Минимум двое — или один тег, если под ним есть двое и более сотрудников'
-  let tone: 'neutral' | 'primary' | 'sky' | 'destructive' = 'neutral'
-
-  if (selectedCount === 1 && !isTagOnly) {
-    title = 'Нужен ещё один участник'
-    detail = 'Одного сотрудника недостаточно — добавьте ещё одного или переключитесь на теги'
-    tone = 'destructive'
-  } else if (isTagOnly) {
-    icon = Tag
-    if (previewLoading) {
-      tone = 'primary'
-      title = 'Считаем сотрудников…'
-      detail = 'Ищем всех, у кого есть выбранный тег'
-    } else if (previewCount === null) {
-      tone = 'primary'
-      title = 'Правило по тегу'
-      detail = 'Все сотрудники с этим тегом не смогут пересекаться в отпуске'
-    } else if (previewCount < 2) {
-      tone = 'destructive'
-      title = `Только ${pluralWorkers(previewCount)}`
-      detail = 'Для правила нужно минимум двое — выберите ещё один тег или дождитесь новых сотрудников'
-    } else {
-      tone = 'primary'
-      title = pluralWorkers(previewCount)
-      detail = 'Не смогут пересекаться в отпуске одновременно'
-    }
-  } else if (selectedCount >= 2) {
-    icon = Users
-    tone = 'sky'
-    title = `Групповое правило · ${selectedCount} участников`
-    detail = 'Настройте, сколько из них могут отдыхать одновременно, ниже'
-  }
-
-  const toneClasses = {
-    neutral: 'border-border bg-muted/30 text-muted-foreground',
-    primary: 'border-primary/20 bg-primary/5 text-foreground',
-    sky: 'border-sky-500/20 bg-sky-500/5 text-foreground',
-    destructive: 'border-destructive/20 bg-destructive/5 text-foreground',
-  }[tone]
-
-  const iconToneClasses = {
-    neutral: 'bg-muted text-muted-foreground',
-    primary: 'bg-primary/15 text-primary',
-    sky: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
-    destructive: 'bg-destructive/15 text-destructive',
-  }[tone]
-
-  const Icon = icon
-
-  return (
-    <div className={cn('flex items-start gap-3 rounded-xl border px-4 py-3.5 transition-colors duration-200', toneClasses)}>
-      <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', iconToneClasses)}>
-        {previewLoading && isTagOnly ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
-      </div>
-      <div className="min-w-0 text-sm">
-        <p className="font-medium leading-tight">{title}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
-      </div>
-    </div>
-  )
-}
-
 export function HRVacationRestrictions() {
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
   const skillsEnabled = isModuleEnabled('skills')
@@ -154,7 +57,9 @@ export function HRVacationRestrictions() {
   const [loading, setLoading] = useState(true)
   const [departments, setDepartments] = useState<Department[]>([])
   const [tags, setTags] = useState<TagOption[]>([])
-  const [employees, setEmployees] = useState<EmployeeRow[]>([])
+  const [employees, setEmployees] = useState<RestrictionScopeEmployee[]>([])
+  const [employeesLoading, setEmployeesLoading] = useState(false)
+  const [employeesLoaded, setEmployeesLoaded] = useState(false)
 
   const [departmentId, setDepartmentId] = useState('')
   const [tagId, setTagId] = useState('')
@@ -165,8 +70,6 @@ export function HRVacationRestrictions() {
   const [editingRestriction, setEditingRestriction] = useState<VacationRestriction | null>(null)
   const [form, setForm] = useState<CreateFormState>(EMPTY_FORM)
   const [creating, setCreating] = useState(false)
-  const [previewCount, setPreviewCount] = useState<number | null>(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
   const [deleting, setDeleting] = useState<VacationRestriction | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
@@ -183,9 +86,19 @@ export function HRVacationRestrictions() {
   }, [skillsEnabled])
 
   useEffect(() => {
-    if (!showCreateModal || employees.length > 0) return
-    apiGet<EmployeeRow[]>('/users').then(setEmployees).catch(() => setEmployees([]))
-  }, [showCreateModal, employees.length])
+    if (!showCreateModal || employeesLoaded) return
+    setEmployeesLoading(true)
+    vacationApi.getRestrictionScopeEmployees()
+      .then((data) => {
+        setEmployees(data)
+        setEmployeesLoaded(true)
+      })
+      .catch((err: unknown) => {
+        setEmployees([])
+        toast.error(getErrorMessage(err))
+      })
+      .finally(() => setEmployeesLoading(false))
+  }, [showCreateModal, employeesLoaded])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
@@ -229,41 +142,7 @@ export function HRVacationRestrictions() {
     [tags],
   )
 
-  const formDepartmentId = form.departmentId
-  const deptEmployees = useMemo(() => {
-    if (!formDepartmentId) return []
-    return employees
-      .filter((e) => e.department_id === Number(formDepartmentId))
-      .sort((a, b) => personName(a.last_name, a.first_name, a.middle_name).localeCompare(personName(b.last_name, b.first_name, b.middle_name), 'ru'))
-  }, [employees, formDepartmentId])
-
-  const employeeOptions = useMemo(
-    () => deptEmployees.map((e) => ({
-      id: String(e.id),
-      label: personName(e.last_name, e.first_name, e.middle_name),
-    })),
-    [deptEmployees],
-  )
-
-  const selectedCount = form.employeeIds.length + form.tagIds.length
-  const isTagOnlyRule = form.tagIds.length >= 1 && form.employeeIds.length === 0
-
-  useEffect(() => {
-    if (form.tagIds.length === 0) {
-      setPreviewCount(null)
-      setPreviewLoading(false)
-      return
-    }
-    let cancelled = false
-    setPreviewLoading(true)
-    const t = setTimeout(() => {
-      vacationApi.previewRestrictionCount({ employeeIds: form.employeeIds, tagIds: form.tagIds })
-        .then((count) => { if (!cancelled) setPreviewCount(count) })
-        .catch(() => { if (!cancelled) setPreviewCount(null) })
-        .finally(() => { if (!cancelled) setPreviewLoading(false) })
-    }, 300)
-    return () => { cancelled = true; clearTimeout(t) }
-  }, [form.tagIds, form.employeeIds])
+  const preservedTags = editingRestriction?.tags ?? []
 
   const resetFilters = () => {
     setDepartmentId('')
@@ -280,9 +159,6 @@ export function HRVacationRestrictions() {
   const openEditModal = (rule: VacationRestriction) => {
     setEditingRestriction(rule)
     setForm({
-      departmentId: rule.departmentId ?? '',
-      scope: rule.employeeIds.length > 0 ? 'employees' : 'tags',
-      tagIds: rule.tagIds ?? [],
       employeeIds: rule.employeeIds,
       maxConcurrent: rule.maxConcurrent ?? 1,
       description: rule.description ?? '',
@@ -305,20 +181,8 @@ export function HRVacationRestrictions() {
   }, [showCreateModal])
 
   const handleSubmit = async () => {
-    if (form.scope === 'employees' && !form.departmentId) {
-      toast.error('Выберите отдел')
-      return
-    }
-    if (selectedCount === 0) {
-      toast.error('Выберите хотя бы одного работника или тег')
-      return
-    }
-    if (selectedCount === 1 && form.tagIds.length === 0) {
-      toast.error('Нужен ещё один участник: работник или тег')
-      return
-    }
-    if (isTagOnlyRule && previewCount !== null && previewCount < 2) {
-      toast.error(`У выбранных тегов ${pluralWorkers(previewCount)} — для правила нужно минимум двое`)
+    if (form.employeeIds.length === 0 && preservedTags.length === 0) {
+      toast.error('Выберите хотя бы одного работника')
       return
     }
     if (!Number.isInteger(form.maxConcurrent) || form.maxConcurrent < 0) {
@@ -330,15 +194,15 @@ export function HRVacationRestrictions() {
       const payload = {
         type: 'group' as const,
         employeeIds: form.employeeIds,
-        tagIds: form.tagIds,
+        tagIds: editingRestriction?.tagIds ?? [],
         maxConcurrent: form.maxConcurrent,
         description: form.description.trim() || undefined,
       }
       if (editingRestriction) {
-        await vacationApi.updateRestriction(editingRestriction.id, form.departmentId, payload)
+        await vacationApi.updateRestriction(editingRestriction.id, editingRestriction.departmentId ?? '', payload)
         toast.success('Правило обновлено')
       } else {
-        await vacationApi.createRestriction(form.departmentId, payload)
+        await vacationApi.createRestriction('', payload)
         toast.success('Правило создано')
       }
       closeModal()
@@ -495,7 +359,11 @@ export function HRVacationRestrictions() {
                           ? 'Строго не пересекаться'
                           : `≤ ${rule.maxConcurrent} одновременно`}
                       </td>
-                      <td className="px-3 py-3">{rule.departmentName ?? 'Все отделы'}</td>
+                      <td className="px-3 py-3">
+                        {(rule.tagIds?.length ?? 0) > 0
+                          ? 'Все отделы'
+                          : rule.employeeDepartments?.join(', ') || rule.departmentName || '—'}
+                      </td>
                       <td className="px-3 py-3 whitespace-nowrap">{rule.createdByName}</td>
                       <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">{formatDate(rule.createdAt)}</td>
                       <td className="px-3 py-3 text-right whitespace-nowrap">
@@ -551,136 +419,49 @@ export function HRVacationRestrictions() {
             </div>
 
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto scrollbar-thin overscroll-contain p-5">
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium">Название (необязательно)</label>
-                <Input
+                <input
                   type="text"
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Напр. «Frontend-разработчики» или «Бухгалтерия: закрытие месяца»"
-                  className="h-10"
+                  placeholder="Напр. для обеспечения непрерывной работы…"
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/20"
                 />
-                <p className="text-xs text-muted-foreground">Если оставить пустым, в списке правило подпишется по типу</p>
               </div>
 
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Кого затрагивает правило</p>
-
-                <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-muted/50 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, scope: 'tags', employeeIds: [] }))}
-                    className={cn(
-                      'flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all duration-200',
-                      form.scope === 'tags'
-                        ? 'bg-card text-primary shadow-sm ring-1 ring-primary/15'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    <Tag className="h-4 w-4" />
-                    Теги
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, scope: 'employees', tagIds: [] }))}
-                    className={cn(
-                      'flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all duration-200',
-                      form.scope === 'employees'
-                        ? 'bg-card text-sky-600 shadow-sm ring-1 ring-sky-500/15 dark:text-sky-400'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    <Users className="h-4 w-4" />
-                    Сотрудники
-                  </button>
-                </div>
-
-                {form.scope === 'tags' ? (
-                  <div
-                    className={cn(
-                      'space-y-2.5 rounded-xl border p-4',
-                      form.tagIds.length > 0 ? 'border-primary/25 bg-primary/[0.04]' : 'border-border/60'
-                    )}
-                  >
-                    {skillsEnabled && tags.length > 0 ? (
-                      <>
-                        <SearchableCheckList
-                          items={tags.map((t) => ({ id: String(t.id), label: t.name }))}
-                          selected={form.tagIds}
-                          onChange={(values) => setForm((prev) => ({ ...prev, tagIds: values }))}
-                          searchPlaceholder="Поиск тега…"
-                          countLabel="Выбрано тегов"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Список работников подтягивается автоматически и обновляется сам, когда меняются теги людей. Достаточно одного тега, если под ним есть двое и более. Действует во всех отделах.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Справочник тегов пуст или модуль тегов отключён</p>
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    className={cn(
-                      'space-y-3 rounded-xl border p-4',
-                      form.employeeIds.length > 0 ? 'border-sky-500/25 bg-sky-500/[0.04]' : 'border-border/60'
-                    )}
-                  >
-                    <div className="space-y-1.5">
-                      <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                        <Building2 className="h-3.5 w-3.5" />
-                        Отдел <span className="text-destructive">*</span>
-                      </label>
-                      <SelectDropdown
-                        options={departments.length > 0
-                          ? departments.map((d) => ({ value: String(d.id), label: d.name }))
-                          : [{ value: '', label: 'Отделы загружаются…' }]}
-                        value={form.departmentId}
-                        onChange={(v) => setForm((prev) => ({ ...prev, departmentId: v, employeeIds: [] }))}
-                        className="w-full"
-                      />
-                    </div>
-                    {form.departmentId ? (
-                      <>
-                        <SearchableCheckList
-                          items={employeeOptions}
-                          selected={form.employeeIds}
-                          onChange={(values) => setForm((prev) => ({ ...prev, employeeIds: values }))}
-                          searchPlaceholder="Поиск по ФИО…"
-                          countLabel="Выбрано сотрудников"
-                        />
-                        {employeeOptions.length === 0 && (
-                          <p className="text-xs text-muted-foreground">В выбранном отделе нет работников</p>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Сначала выберите отдел</p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <RestrictionSummary
-                selectedCount={selectedCount}
-                tagCount={form.tagIds.length}
-                employeeCount={form.employeeIds.length}
-                previewCount={previewCount}
-                previewLoading={previewLoading}
+              <RestrictionMemberPicker
+                employees={employees}
+                employeesLoading={employeesLoading}
+                selected={form.employeeIds}
+                onChange={(ids) => setForm((prev) => ({ ...prev, employeeIds: ids }))}
+                skillsEnabled={skillsEnabled}
               />
 
-              <div className="space-y-1.5">
+              {preservedTags.length > 0 && (
+                <div className="rounded-xl border border-border/60 bg-muted/20 px-3.5 py-2.5">
+                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">Правило также действует по тегам (сохранятся без изменений)</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {preservedTags.map((t) => (
+                      <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                        <Tag className="h-3 w-3" />
+                        {t.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
                 <label className="block text-sm font-medium">Максимум одновременно в отпуске</label>
-                <Input
+                <input
                   type="number"
-                  min={0}
+                  min="1"
+                  max={Math.max(1, form.employeeIds.length)}
                   value={form.maxConcurrent}
-                  onChange={(e) => setForm((prev) => ({ ...prev, maxConcurrent: parseInt(e.target.value) || 0 }))}
-                  className="h-10"
+                  onChange={(e) => setForm((prev) => ({ ...prev, maxConcurrent: parseInt(e.target.value) || 1 }))}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/20"
                 />
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Info className="h-3 w-3 shrink-0" />
-                  0 — строгий запрет пересечений
-                </p>
               </div>
             </div>
 

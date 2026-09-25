@@ -13,7 +13,23 @@ export class ApiError extends Error {
   }
 }
 
+export function httpErrorFallback(status: number): string {
+  if (status === 400) return 'Некорректные данные запроса'
+  if (status === 403) return 'Недостаточно прав для этого действия'
+  if (status === 404) return 'Данные не найдены'
+  if (status === 409) return 'Конфликт данных: запись уже существует или была изменена'
+  if (status === 413) return 'Файл слишком большой'
+  if (status === 429) return 'Слишком много запросов, попробуйте позже'
+  if (status >= 500) return 'Ошибка сервера. Она записана в журнал, попробуйте позже'
+  return 'Не удалось выполнить запрос'
+}
+
 let refreshing: Promise<boolean> | null = null
+let sessionExpiredHandler: (() => void) | null = null
+
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  sessionExpiredHandler = handler
+}
 
 export async function tryRefresh(): Promise<boolean> {
   if (refreshing) return refreshing
@@ -24,6 +40,7 @@ export async function tryRefresh(): Promise<boolean> {
         credentials: 'include',
         headers: getAuthHeadersWithContentType(),
       })
+      if (res.status === 401) sessionExpiredHandler?.()
       return res.ok
     } catch {
       return false
@@ -50,11 +67,17 @@ export async function fetchWithRetry(
   return response
 }
 
+async function throwApiError(response: Response): Promise<never> {
+  const data = await response.json().catch(() => null)
+  throw new ApiError(
+    response.status,
+    data?.code || 'API_ERROR',
+    data?.error || data?.message || httpErrorFallback(response.status),
+  )
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ error: 'Ошибка', code: 'API_ERROR' }))
-    throw new ApiError(response.status, data.code || 'API_ERROR', data.error || 'Ошибка')
-  }
+  if (!response.ok) await throwApiError(response)
   return response.json() as Promise<T>
 }
 
@@ -97,8 +120,5 @@ export async function apiDelete(path: string): Promise<void> {
     method: 'DELETE',
     headers: getAuthHeaders(),
   })
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ error: 'Ошибка', code: 'API_ERROR' }))
-    throw new ApiError(response.status, data.code || 'API_ERROR', data.error || 'Ошибка')
-  }
+  if (!response.ok) await throwApiError(response)
 }

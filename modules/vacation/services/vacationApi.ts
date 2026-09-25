@@ -3,6 +3,7 @@
   VacationBalance,
   VacationRestriction,
   VacationRestrictionViolation,
+  RestrictionScopeEmployee,
   VacationFormData,
   VacationValidationError,
   VacationSubstitution,
@@ -10,7 +11,7 @@
 } from '@/shared/types'
 import { VacationType, VacationRequestStatus } from '@/shared/types'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { fetchWithRetry, ApiError } from '@/shared/lib/apiClient'
+import { fetchWithRetry, ApiError, httpErrorFallback } from '@/shared/lib/apiClient'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 
 export { ApiError as VacationApiError }
@@ -73,11 +74,11 @@ interface DbDepartmentBalance {
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Unknown error' }))
+    const error = await response.json().catch(() => null)
     throw new ApiError(
       response.status,
-      error.code || 'API_ERROR',
-      error.message || 'An error occurred'
+      error?.code || 'API_ERROR',
+      error?.error || error?.message || httpErrorFallback(response.status)
     )
   }
   return response.json()
@@ -200,9 +201,10 @@ export const vacationApi = {
     }
   },
 
-  async getRestrictions(filters?: { departmentId?: string; tagId?: string; search?: string }): Promise<VacationRestriction[]> {
+  async getRestrictions(filters?: { departmentId?: string; tagId?: string; search?: string; scope?: 'mine' }): Promise<VacationRestriction[]> {
     const params = new URLSearchParams()
     if (filters?.departmentId) params.set('departmentId', filters.departmentId)
+    if (filters?.scope) params.set('scope', filters.scope)
     if (filters?.tagId) params.set('tagId', filters.tagId)
     if (filters?.search) params.set('search', filters.search)
     const qs = params.toString()
@@ -212,8 +214,11 @@ export const vacationApi = {
     return handleResponse(response)
   },
 
-  async getRestrictionViolations(departmentId?: string): Promise<VacationRestrictionViolation[]> {
-    const qs = departmentId ? `?departmentId=${departmentId}` : ''
+  async getRestrictionViolations(departmentId?: string, scope?: 'mine'): Promise<VacationRestrictionViolation[]> {
+    const params = new URLSearchParams()
+    if (departmentId) params.set('departmentId', departmentId)
+    if (scope) params.set('scope', scope)
+    const qs = params.toString() ? `?${params.toString()}` : ''
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions/violations${qs}`, {
       headers: getAuthHeadersWithContentType(),
     })
@@ -314,6 +319,13 @@ export const vacationApi = {
     return mapDbRequestToApi(dbRequest)
   },
 
+  async getRestrictionScopeEmployees(): Promise<RestrictionScopeEmployee[]> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/restrictions/scope-employees`, {
+      headers: getAuthHeadersWithContentType(),
+    })
+    return handleResponse(response)
+  },
+
   async createRestriction(
     departmentId: string,
     data: Omit<VacationRestriction, 'id' | 'departmentId' | 'createdAt' | 'createdBy' | 'createdByName'>
@@ -403,8 +415,10 @@ export const vacationApi = {
     return handleResponse(response)
   },
 
-  async getDepartmentBalances(departmentId: string, year: number): Promise<DepartmentBalanceEntry[]> {
-    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/balances?departmentId=${departmentId}&year=${year}`, {
+  async getDepartmentBalances(departmentId: string, year: number, tagId?: string): Promise<DepartmentBalanceEntry[]> {
+    const params = new URLSearchParams({ departmentId, year: String(year) })
+    if (tagId) params.set('tagId', tagId)
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/balances?${params.toString()}`, {
       headers: getAuthHeadersWithContentType(),
     })
     const data: DbDepartmentBalance[] = await handleResponse(response)

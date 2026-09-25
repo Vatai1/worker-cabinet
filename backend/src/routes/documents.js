@@ -81,6 +81,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json(documents)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching documents:', error)
     res.status(500).json({ error: 'Failed to fetch documents' })
   }

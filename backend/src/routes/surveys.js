@@ -60,6 +60,7 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
     const result = await query(listQuery.text, listQuery.values)
     res.json({ data: result.rows, total, page, limit })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('GET /surveys error:', error)
     res.status(500).json({ error: 'Ошибка загрузки опросов' })
   }
@@ -103,6 +104,7 @@ router.get('/my', authenticateToken, async (req, res) => {
     }
     res.json(accessible)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('GET /surveys/my error:', error)
     res.status(500).json({ error: 'Ошибка загрузки опросов' })
   }
@@ -135,6 +137,7 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
     const questions = await query(questionsQuery.text, questionsQuery.values)
     res.json({ ...survey.rows[0], questions: questions.rows })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('GET /surveys/:id error:', error)
     res.status(500).json({ error: 'Ошибка загрузки опроса' })
   }
@@ -215,6 +218,7 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
     await client.query('COMMIT')
     res.status(201).json(survey)
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     console.error('POST /surveys error:', error)
     res.status(500).json({ error: 'Ошибка создания опроса' })
@@ -298,6 +302,7 @@ router.put('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
     await client.query('COMMIT')
     res.json(surveyRes.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     console.error('PUT /surveys/:id error:', error)
     res.status(500).json({ error: 'Ошибка обновления опроса' })
@@ -330,6 +335,7 @@ router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (r
     await query(delQuery.text, delQuery.values)
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('DELETE /surveys/:id error:', error)
     res.status(500).json({ error: 'Ошибка удаления' })
   }
@@ -358,6 +364,7 @@ router.post('/:id/publish', authenticateToken, authorizeRoles('hr', 'admin'), as
     const survey = await publishSurvey(req.params.id, req.user.id)
     res.json(survey)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('POST /surveys/:id/publish error:', error)
     res.status(500).json({ error: 'Ошибка публикации' })
   }
@@ -388,6 +395,7 @@ router.post('/:id/close', authenticateToken, authorizeRoles('hr', 'admin'), asyn
     if (!result.rows.length) return res.status(404).json({ error: 'Опрос не найден' })
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     console.error('POST /surveys/:id/close error:', error)
     res.status(500).json({ error: 'Ошибка закрытия опроса' })
   }
@@ -447,6 +455,7 @@ router.get('/:id/view', authenticateToken, async (req, res) => {
     const questions = await query(questionsQuery.text, questionsQuery.values)
     res.json({ ...survey, questions: questions.rows })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('GET /surveys/:id/view error:', error)
     res.status(500).json({ error: 'Ошибка загрузки опроса' })
   }
@@ -531,6 +540,7 @@ router.post('/:id/respond', authenticateToken, async (req, res) => {
     await client.query('COMMIT')
     res.status(201).json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     if (error.code === '23505') return res.status(409).json({ error: 'Вы уже прошли этот опрос' })
     console.error('POST /surveys/:id/respond error:', error)
@@ -563,6 +573,7 @@ router.get('/:id/analytics', authenticateToken, authorizeRoles('hr', 'admin'), a
     const analytics = await getSurveyAnalytics(req.params.id)
     res.json(analytics)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('GET /surveys/:id/analytics error:', error)
     res.status(500).json({ error: 'Ошибка аналитики' })
   }

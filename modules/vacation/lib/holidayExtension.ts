@@ -9,7 +9,7 @@ function formatISODate(d: Date): string {
 
 export function getVacationExtension(startDate: string, endDate: string, duration: number): { holidaysCount: number; returnDate: string } {
   const spanDays = Math.round((parseISODate(endDate).getTime() - parseISODate(startDate).getTime()) / 86400000) + 1
-  const holidaysCount = Math.max(0, Math.round((spanDays - duration) / 2))
+  const holidaysCount = Math.max(0, spanDays - duration)
 
   const returnDateObj = parseISODate(endDate)
   returnDateObj.setDate(returnDateObj.getDate() + 1)

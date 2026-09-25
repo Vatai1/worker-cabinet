@@ -776,7 +776,7 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(res.status, 200)
       assert.ok(Array.isArray(res.data))
       assert.ok(res.data.some((r) => r.departmentId === String(deptId)))
-      assert.ok(res.data.every((r) => typeof r.departmentName === 'string'))
+      assert.ok(res.data.every((r) => r.departmentName === null || typeof r.departmentName === 'string'))
     })
 
     it('POST /restrictions от employee → 403', async () => {
@@ -941,14 +941,125 @@ describe('Модуль отпусков — user stories', () => {
       assert.deepStrictEqual(created.data.tagIds, [String(tagId)])
     })
 
-    it('правило только по одному тегу с единственным носителем → 400', async () => {
+    it('правило по одному тегу с единственным носителем → 201 (достаточно одного работника)', async () => {
       const tagId = await mkTag()
       await assignTag(emp.id, tagId)
       const res = await call('POST', '/vacation/restrictions', await tokenFor(mgr), {
         departmentId: deptId, type: 'group', tagIds: [tagId], maxConcurrent: 1,
       })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+    })
+
+    it('GET /restrictions: employeeDepartments — отделы участников', async () => {
+      const otherMgr = await mkUser({ email: `us9.omgr${SUFFIX}`, role: 'manager', last: 'Другой' })
+      const otherDept = await mkDept('US9 Другой отдел vac-full', 1, otherMgr.id)
+      const outsider = await mkUser({ email: `us9.odep${SUFFIX}`, last: 'Чужой', deptId: otherDept })
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(hr), { type: 'group', employeeIds: [emp.id, emp2.id, outsider.id] })
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      const list = await call('GET', '/vacation/restrictions', await tokenFor(hr))
+      const row = list.data.find((r) => r.id === created.data.id)
+      assert.deepStrictEqual(row.employeeDepartments, ['US9 Другой отдел vac-full', 'US9 Отдел vac-full'])
+      await query('DELETE FROM vacation_restrictions WHERE id = $1', [created.data.id])
+      await cleanupFixtures({ deptIds: [otherDept] })
+    })
+
+    it('ограничение без работников → 400 «хотя бы одного»', async () => {
+      const res = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { type: 'group', employeeIds: [] })
       assert.strictEqual(res.status, 400)
-      assert.ok(res.data.error.includes('минимум два работника'), res.data.error)
+      assert.match(res.data.error, /хотя бы одного/)
+    })
+
+    it('ограничение из одного работника без отдела → 201', async () => {
+      const res = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { type: 'group', employeeIds: [emp.id] })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      assert.strictEqual(res.data.departmentId, null)
+    })
+
+    it('scope-employees: manager видит только свой отдел, hr — и чужих', async () => {
+      const outsider = await mkUser({ email: `us9.out${SUFFIX}`, last: 'Чужой' })
+      const mine = await call('GET', '/vacation/restrictions/scope-employees', await tokenFor(mgr))
+      assert.strictEqual(mine.status, 200, JSON.stringify(mine.data))
+      const mineIds = mine.data.map((e) => e.id)
+      assert.ok(mineIds.includes(String(emp.id)))
+      assert.ok(!mineIds.includes(String(outsider.id)))
+      const all = await call('GET', '/vacation/restrictions/scope-employees', await tokenFor(hr))
+      assert.ok(all.data.map((e) => e.id).includes(String(outsider.id)))
+      const denied = await call('GET', '/vacation/restrictions/scope-employees', await tokenFor(emp))
+      assert.strictEqual(denied.status, 403)
+    })
+
+    it('manager может добавить работника другого отдела; своё ограничение видно в scope=mine', async () => {
+      const outsider = await mkUser({ email: `us9.out2${SUFFIX}`, last: 'Чужой' })
+      const res = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { type: 'group', employeeIds: [outsider.id] })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      const list = await call('GET', '/vacation/restrictions?scope=mine', await tokenFor(mgr))
+      const row = list.data.find((r) => r.id === res.data.id)
+      assert.ok(row)
+      assert.strictEqual(row.canManage, true)
+    })
+
+    it('GET scope=mine: manager видит ограничение HR со своим работником, с владельцем и без права удаления', async () => {
+      const outsider = await mkUser({ email: `us9.out3${SUFFIX}`, last: 'Чужой' })
+      const withMine = await call('POST', '/vacation/restrictions', await tokenFor(hr), { type: 'group', employeeIds: [emp.id, outsider.id] })
+      assert.strictEqual(withMine.status, 201, JSON.stringify(withMine.data))
+      const foreign = await call('POST', '/vacation/restrictions', await tokenFor(hr), { type: 'group', employeeIds: [outsider.id] })
+      assert.strictEqual(foreign.status, 201, JSON.stringify(foreign.data))
+
+      const list = await call('GET', '/vacation/restrictions?scope=mine', await tokenFor(mgr))
+      assert.strictEqual(list.status, 200)
+      const ids = list.data.map((r) => r.id)
+      assert.ok(ids.includes(withMine.data.id))
+      assert.ok(!ids.includes(foreign.data.id))
+      const row = list.data.find((r) => r.id === withMine.data.id)
+      assert.match(row.createdByName, /Смирнова/)
+      assert.strictEqual(row.canManage, false)
+      assert.ok(row.employees.some((e) => e.id === String(outsider.id) && /Чужой/.test(e.name)))
+
+      const del = await call('DELETE', `/vacation/restrictions/${withMine.data.id}`, await tokenFor(mgr))
+      assert.strictEqual(del.status, 403)
+      await query('DELETE FROM vacation_restrictions WHERE id = ANY($1)', [[withMine.data.id, foreign.data.id]])
+    })
+
+    it('violations scope=mine: прошедшие пересечения не показываются, чужие работники не учитываются', async () => {
+      const outsider = await mkUser({ email: `us9.out4${SUFFIX}`, last: 'Чужой' })
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(hr), { type: 'group', employeeIds: [emp.id, emp2.id, outsider.id], maxConcurrent: 1 })
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      const statusId = (await query("SELECT id FROM request_statuses WHERE code = 'approved'")).rows[0].id
+      const insert = (uid, start, end) => query(
+        `INSERT INTO vacation_requests (user_id, start_date, end_date, duration, status_id, organization_id)
+         VALUES ($1, $2, $3, 3, $4, 1)`,
+        [uid, start, end, statusId]
+      )
+      await insert(emp.id, shift(-30), shift(-28))
+      await insert(emp2.id, shift(-29), shift(-27))
+      await insert(emp.id, shift(20), shift(22))
+      await insert(outsider.id, shift(21), shift(23))
+
+      const res = await call('GET', '/vacation/restrictions/violations?scope=mine', await tokenFor(mgr))
+      assert.strictEqual(res.status, 200)
+      const mine = res.data.filter((v) => v.restrictionId === created.data.id)
+      assert.strictEqual(mine.length, 0, JSON.stringify(mine))
+
+      const all = await call('GET', '/vacation/restrictions/violations?scope=mine', await tokenFor(hr))
+      const hrRows = all.data.filter((v) => v.restrictionId === created.data.id)
+      assert.strictEqual(hrRows.length, 1, JSON.stringify(hrRows))
+      assert.ok(hrRows[0].startDate >= shift(0))
+      await query('DELETE FROM vacation_requests WHERE user_id = ANY($1)', [[emp.id, emp2.id, outsider.id]])
+      await query('DELETE FROM vacation_restrictions WHERE id = $1', [created.data.id])
+    })
+
+    it('violations scope=mine: пересечение по ограничению без отдела видно руководителю', async () => {
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { type: 'group', employeeIds: [emp.id, emp2.id], maxConcurrent: 1 })
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      await mkBalance(emp2.id, yearOf(shift(10)))
+      const r1 = await postVacation(emp, { startDate: shift(10), endDate: shift(12), vacationType: 'annual_paid' })
+      assert.strictEqual(r1.status, 201, JSON.stringify(r1.data))
+      await call('POST', `/vacation/requests/${r1.data.id}/approve`, await tokenFor(mgr), {})
+      const r2 = await postVacation(emp2, { startDate: shift(11), endDate: shift(13), vacationType: 'annual_paid' })
+      assert.strictEqual(r2.status, 201, JSON.stringify(r2.data))
+      const res = await call('GET', '/vacation/restrictions/violations?scope=mine', await tokenFor(mgr))
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.data.some((v) => v.restrictionId === created.data.id), JSON.stringify(res.data))
     })
 
     it('GET /restrictions: employeeCount учитывает носителей тега, а не только employeeIds', async () => {
@@ -1410,7 +1521,7 @@ describe('Модуль отпусков — user stories', () => {
     })
   })
 
-  describe('US-15. Производственный календарь: продление на праздники', () => {
+  describe('US-15. Производственный календарь: праздники не входят в число дней отпуска', () => {
     let deptId, mgr, emp
 
     beforeEach(async () => {
@@ -1427,12 +1538,12 @@ describe('Модуль отпусков — user stories', () => {
       await cleanupFixtures({ deptIds: [deptId] })
     })
 
-    it('2027-01-05…01-20 (4 праздника: 5,6,7,8 января) → end 01-24, duration 12, returnDate 01-25', async () => {
+    it('2027-01-05…01-20 (4 праздника: 5,6,7,8 января) → end 01-20, duration 12, returnDate 01-21', async () => {
       const res = await postVacation(emp, { startDate: '2027-01-05', endDate: '2027-01-20', vacationType: 'annual_paid' })
       assert.strictEqual(res.status, 201, JSON.stringify(res.data))
-      assert.strictEqual(res.data.end_date, '2027-01-24')
+      assert.strictEqual(res.data.end_date, '2027-01-20')
       assert.strictEqual(res.data.duration, 12)
-      assert.strictEqual(res.data.returnDate, '2027-01-25')
+      assert.strictEqual(res.data.returnDate, '2027-01-21')
       assert.strictEqual(res.data.holidaysCount, 4)
     })
 
@@ -1442,7 +1553,7 @@ describe('Модуль отпусков — user stories', () => {
       assert.match(res.data.error, /празднич/i)
     })
 
-    it('идемпотентность: перенос с одинаковыми новыми датами дважды → end не сдвигается повторно', async () => {
+    it('идемпотентность: перенос с одинаковыми новыми датами дважды → даты и длительность совпадают', async () => {
       const created = await postVacation(emp, { startDate: '2026-11-10', endDate: '2026-11-14', vacationType: 'annual_paid' })
       assert.strictEqual(created.status, 201, JSON.stringify(created.data))
       const approveRes = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
@@ -1453,7 +1564,8 @@ describe('Модуль отпусков — user stories', () => {
       const t2 = await call('POST', `/vacation/requests/${created.data.id}/transfer`, await tokenFor(emp), { newStartDate: '2027-06-10', newEndDate: '2027-06-16', reason: 'Перенос 2' })
       assert.strictEqual(t2.status, 201, JSON.stringify(t2.data))
 
-      assert.strictEqual(t1.data.end_date, '2027-06-18')
+      assert.strictEqual(t1.data.end_date, '2027-06-16')
+      assert.strictEqual(t1.data.duration, 5)
       assert.strictEqual(t1.data.end_date, t2.data.end_date)
       assert.strictEqual(t1.data.duration, t2.data.duration)
       assert.strictEqual(t1.data.holidaysCount, 2)

@@ -40,39 +40,56 @@ export class ConflictError extends AppError {
   }
 }
 
+const SKIP_LOG_STATUSES = new Set([401, 429])
+
+function writeErrorLog(req, statusCode, message, cause) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
+  const path = (req.originalUrl || req.url || '').split('?')[0]
+  const segments = path.split('/').filter(Boolean)
+  const errorModule = segments[0] === 'api' && segments[1] ? segments[1].substring(0, 50) : 'general'
+  const causeMessage = cause?.message && cause.message !== message ? cause.message : null
+  const fullMessage = causeMessage ? `${message} — причина: ${causeMessage}` : message
+
+  console.error(`[${new Date().toISOString()}] ${req.method} ${path} ${statusCode}: ${fullMessage}`, {
+    userId: req.user?.id ?? null,
+    stack: cause?.stack,
+  })
+
+  query(
+    `INSERT INTO error_log (message, stack, path, method, status_code, user_id, user_email, ip, module) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      String(fullMessage).substring(0, 2000),
+      cause?.stack?.substring(0, 5000) || null,
+      path.substring(0, 500),
+      req.method,
+      statusCode,
+      req.user?.id || null,
+      req.user?.email || null,
+      ip,
+      errorModule,
+    ]
+  ).catch(() => {})
+}
+
+export const errorResponseLogger = (req, res, next) => {
+  const originalJson = res.json.bind(res)
+  res.json = (body) => {
+    const status = res.statusCode
+    if (status >= 400 && !SKIP_LOG_STATUSES.has(status) && !res.locals.skipErrorLog) {
+      const message = (body && (body.error || body.message)) || `HTTP ${status}`
+      writeErrorLog(req, status, message, res.locals.errorCause)
+    }
+    return originalJson(body)
+  }
+  next()
+}
+
 export const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next)
 }
 
 export const errorHandler = (err, req, res, next) => {
-  console.error(`[${new Date().toISOString()}] Error:`, {
-    message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    path: req.path,
-    method: req.method,
-    body: process.env.NODE_ENV === 'development' ? req.body : undefined,
-  })
-
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
-
-  if (!err.isOperational && err.statusCode !== 401 && err.statusCode !== 403) {
-    const segments = req.path?.split('/').filter(Boolean) || []
-    const errorModule = segments[0] === 'api' && segments[1] ? segments[1].substring(0, 50) : 'general'
-    query(
-      `INSERT INTO error_log (message, stack, path, method, status_code, user_id, user_email, ip, module) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        err.message?.substring(0, 2000),
-        process.env.NODE_ENV === 'development' ? err.stack?.substring(0, 5000) : null,
-        req.path?.substring(0, 500),
-        req.method,
-        err.statusCode || 500,
-        req.user?.id || null,
-        req.user?.email || null,
-        ip,
-        errorModule,
-      ]
-    ).catch(() => {})
-  }
+  res.locals.errorCause = err
 
   if (err.isOperational) {
     return res.status(err.statusCode).json({

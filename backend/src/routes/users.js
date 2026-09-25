@@ -74,6 +74,7 @@ router.get('/skills/all', authenticateToken, async (req, res) => {
     const result = await query(skillsQuery.text, skillsQuery.values)
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching all skills:', error)
     res.status(500).json({ error: 'Failed to fetch skills' })
   }
@@ -112,6 +113,7 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
     const result = await query(sql, params)
     res.json(result.rows.map(r => r.position))
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching all positions:', error)
     res.status(500).json({ error: 'Failed to fetch positions' })
   }
@@ -309,6 +311,7 @@ router.get('/search', authenticateToken, async (req, res) => {
     const result = await query(sql, params)
     res.json({ data: result.rows, total, page, limit })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error searching users:', error)
     res.status(500).json({ error: 'Failed to search users' })
   }
@@ -395,6 +398,7 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
     const result = await query(sql, params)
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching users:', error)
     res.status(500).json({ error: 'Failed to fetch users' })
   }
@@ -416,6 +420,7 @@ router.get('/system-roles', authenticateToken, authorizeRoles('hr', 'admin'), as
     const result = await query('SELECT id, name FROM roles ORDER BY name')
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching system roles:', error)
     res.status(500).json({ error: 'Failed to fetch system roles' })
   }
@@ -463,6 +468,7 @@ router.put('/bulk-status', authenticateToken, authorizeRoles('hr', 'admin'), asy
 
     res.json({ success: true, updated: result.rowCount })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error bulk-updating status:', error)
     res.status(500).json({ error: 'Failed to update status' })
   }
@@ -520,6 +526,7 @@ router.put('/bulk-role', authenticateToken, authorizeRoles('hr', 'admin'), async
 
     res.json({ success: true, updated: result.rowCount })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error bulk-updating role:', error)
     res.status(500).json({ error: 'Failed to update role' })
   }
@@ -571,6 +578,7 @@ router.post('/me/avatar', authenticateToken, uploadAvatar.single('avatar'), asyn
 
     res.json({ avatar: avatarUrl })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error uploading avatar:', error)
     res.status(500).json({ error: 'Не удалось загрузить фото' })
   }
@@ -608,6 +616,7 @@ router.delete('/me/avatar', authenticateToken, async (req, res) => {
 
     res.json({ avatar: null })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error resetting avatar:', error)
     res.status(500).json({ error: 'Не удалось сбросить аватар' })
   }
@@ -786,6 +795,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       projects,
     })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching user:', error)
     res.status(500).json({ error: 'Failed to fetch user' })
   }
@@ -862,6 +872,7 @@ router.patch('/:id/primary-org', authenticateToken, authorizeRoles('admin', 'hr'
 
     res.json({ ok: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error setting primary organization:', error)
     res.status(500).json({ error: 'Не удалось изменить основную организацию' })
   }
@@ -945,6 +956,7 @@ router.post('/:id/skills', authenticateToken, async (req, res) => {
 
     res.json({ skills })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error adding skill:', error)
     res.status(500).json({ error: 'Failed to add skill' })
   }
@@ -1011,6 +1023,7 @@ router.delete('/:id/skills', authenticateToken, async (req, res) => {
 
     res.json({ skills })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error removing skill:', error)
     res.status(500).json({ error: 'Failed to remove skill' })
   }
@@ -1096,6 +1109,7 @@ router.post('/:id/projects', authenticateToken, async (req, res) => {
       description: project.description,
     })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error adding project:', error)
     res.status(500).json({ error: 'Failed to add project' })
   }
@@ -1142,6 +1156,7 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
 
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error deleting project:', error)
     res.status(500).json({ error: 'Failed to delete project' })
   }
@@ -1301,6 +1316,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error updating user:', error)
     res.status(500).json({ error: 'Failed to update user' })
   }

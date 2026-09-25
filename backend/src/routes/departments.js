@@ -71,6 +71,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json(departmentsWithEmployees)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching departments:', error)
     res.status(500).json({ error: 'Failed to fetch departments' })
   }
@@ -144,6 +145,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       employees: employeesResult.rows
     })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching department:', error)
     res.status(500).json({ error: 'Failed to fetch department' })
   }
@@ -188,6 +190,7 @@ router.patch('/vacation-block-all', authenticateToken, authorizeRoles('hr', 'adm
 
     res.json({ success: true, blocked })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error toggling vacation block all:', error)
     res.status(500).json({ error: 'Failed to toggle vacation block' })
   }
@@ -246,6 +249,7 @@ router.patch('/:id/vacation-block', authenticateToken, authorizeRoles('hr', 'adm
       vacation_requests_blocked: result.rows[0].vacation_requests_blocked,
     })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error toggling vacation block:', error)
     res.status(500).json({ error: 'Failed to toggle vacation block' })
   }

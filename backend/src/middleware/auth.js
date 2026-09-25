@@ -368,7 +368,7 @@ export const authenticateToken = async (req, res, next) => {
         [decoded.id]
       )
       if (result.rows.length === 0) {
-        return res.status(403).json({ error: 'User not found' })
+        return res.status(403).json({ error: 'Пользователь не найден' })
       }
       req.user = result.rows[0]
       return attachOrgContext(req, res, next)
@@ -382,7 +382,7 @@ export const authenticateToken = async (req, res, next) => {
       [decoded.id]
     )
     if (result.rows.length === 0) {
-      return res.status(403).json({ error: 'User not found' })
+      return res.status(403).json({ error: 'Пользователь не найден' })
     }
 
     req.user = result.rows[0]
@@ -404,7 +404,7 @@ export const authorizeRoles = (...roles) => {
     if (roles.includes(req.user.role)) return next()
     if (req.org?.org_role && roles.includes(req.org.org_role)) return next()
 
-    return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
+    return res.status(403).json({ error: 'Недостаточно прав для этого действия' })
   }
 }
 
@@ -417,7 +417,7 @@ export const authorizeGlobalRoles = (...roles) => {
     if (req.user.role === 'superadmin') return next()
     if (roles.includes(req.user.role)) return next()
 
-    return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
+    return res.status(403).json({ error: 'Недостаточно прав для этого действия' })
   }
 }
 
@@ -430,7 +430,7 @@ export const authorizeOrgRoles = (...roles) => {
     if (req.user.role === 'superadmin') return next()
     if (req.org?.org_role && roles.includes(req.org.org_role)) return next()
 
-    return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
+    return res.status(403).json({ error: 'Недостаточно прав для этого действия' })
   }
 }
 
@@ -454,7 +454,7 @@ export const requirePermission = (permissionCode) => {
       )
 
       if (result.rows.length === 0) {
-        return res.status(403).json({ error: 'Forbidden: Insufficient permissions' })
+        return res.status(403).json({ error: 'Недостаточно прав для этого действия' })
       }
 
       next()

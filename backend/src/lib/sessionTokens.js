@@ -45,12 +45,25 @@ export async function findActiveSessionByToken(rawToken) {
   return result.rows[0] || null
 }
 
+export async function isRecentlyRotatedToken(rawToken, graceSeconds = 30) {
+  if (!rawToken) return false
+  const result = await query(
+    `SELECT 1 FROM user_sessions
+     WHERE previous_refresh_token_hash = $1
+       AND rotated_at > NOW() - ($2 || ' seconds')::interval
+       AND revoked_at IS NULL AND expires_at > NOW()`,
+    [hashToken(rawToken), graceSeconds]
+  )
+  return result.rows.length > 0
+}
+
 export async function rotateSession(sessionId, { ip, userAgent, refreshLifetimeDays }) {
   const rawToken = generateRawRefreshToken()
   const tokenHash = hashToken(rawToken)
   await query(
     `UPDATE user_sessions
-     SET refresh_token_hash = $1, last_used_at = NOW(), expires_at = NOW() + ($2 || ' days')::interval,
+     SET previous_refresh_token_hash = refresh_token_hash, rotated_at = NOW(),
+         refresh_token_hash = $1, last_used_at = NOW(), expires_at = NOW() + ($2 || ' days')::interval,
          ip_address = COALESCE($3, ip_address), user_agent = COALESCE($4, user_agent)
      WHERE id = $5`,
     [tokenHash, refreshLifetimeDays, ip || null, userAgent || null, sessionId]

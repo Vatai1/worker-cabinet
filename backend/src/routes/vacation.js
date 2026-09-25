@@ -58,10 +58,9 @@ async function computeVacationDates(startDate, endDate) {
     throw new VacationValidationError(`Отпуск содержит слишком много праздничных дней (${holidaysCount}). Максимум — ${MAX_HOLIDAYS_PER_VACATION}`)
   }
 
-  const shiftedEnd = addDaysISO(endDate, holidaysCount)
   const countedDays = daysBetweenInclusive(startDate, endDate) - holidaysCount
 
-  return { startDate, endDate: shiftedEnd, countedDays, holidaysCount }
+  return { startDate, endDate, countedDays, holidaysCount }
 }
 
 function fmtDate(d) {
@@ -351,14 +350,14 @@ router.get('/requests', authenticateToken, async (req, res) => {
     } else if (userId) {
       if (parseInt(userId) !== user.id) {
         if (user.role === 'employee') {
-          return res.status(403).json({ error: 'Forbidden' })
+          return res.status(403).json({ error: 'Доступ запрещён' })
         }
         const hasAccess = await query(
           'SELECT 1 FROM users WHERE id = $1 AND manager_id = $2',
           [userId, user.id]
         )
         if (hasAccess.rows.length === 0) {
-          return res.status(403).json({ error: 'Forbidden' })
+          return res.status(403).json({ error: 'Доступ запрещён' })
         }
       }
       whereClause += ' AND vr.user_id = $' + (params.length + 1)
@@ -508,7 +507,8 @@ router.get('/requests', authenticateToken, async (req, res) => {
 
     res.json(requests)
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch vacation requests' })
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить заявки на отпуск' })
   }
 })
 
@@ -615,6 +615,7 @@ router.get('/upcoming/:userId', authenticateToken, async (req, res) => {
 
     res.json(result.rows.map((r) => ({ ...r, substitutes: subsByRequest[r.id] || [] })))
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось загрузить запланированные отпуска' })
   }
 })
@@ -682,7 +683,8 @@ router.get('/department-head-requests', authenticateToken, async (req, res) => {
 
     res.json(result.rows)
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch department head requests' })
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить заявки руководителей отделов' })
   }
 })
 
@@ -717,7 +719,7 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
     const targetYear = year ? parseInt(year) : new Date().getFullYear()
 
     if (currentUser.role === 'employee' && currentUser.id !== parseInt(userId)) {
-      return res.status(403).json({ error: 'Forbidden' })
+      return res.status(403).json({ error: 'Доступ запрещён' })
     }
 
     const result = await query(
@@ -794,13 +796,14 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
     }
     res.json(balance)
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch vacation balance' })
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить баланс отпуска' })
   }
 })
 
 router.get('/balances', authenticateToken, async (req, res) => {
   try {
-    const { departmentId, year } = req.query
+    const { departmentId, year, tagId } = req.query
     const targetYear = year ? parseInt(year) : new Date().getFullYear()
     let deptId = departmentId ? parseInt(departmentId) : req.user.department_id
 
@@ -816,6 +819,12 @@ router.get('/balances', authenticateToken, async (req, res) => {
       orgClause = ' AND vb.organization_id = $3'
       params.push(req.org.org_id)
     }
+    let tagClause = ''
+    const tagIds = String(tagId || '').split(',').map(v => parseInt(v)).filter(n => !Number.isNaN(n))
+    if (tagIds.length > 0) {
+      params.push(tagIds)
+      tagClause = ` AND EXISTS (SELECT 1 FROM user_skills us WHERE us.user_id = u.id AND us.skill_id = ANY($${params.length}::int[]))`
+    }
 
     const result = await query(
       `SELECT u.id as user_id, u.first_name, u.last_name, u.avatar, u.gender,
@@ -824,13 +833,14 @@ router.get('/balances', authenticateToken, async (req, res) => {
               COALESCE(vb.available_days, 47) as available_days
        FROM users u
        LEFT JOIN vacation_balances vb ON vb.user_id = u.id AND vb.year = $2${orgClause}
-       WHERE u.department_id = $1 AND u.status = 'active'
+       WHERE u.department_id = $1 AND u.status = 'active'${tagClause}
        ORDER BY u.last_name, u.first_name`,
       params
     )
     res.json(result.rows)
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch vacation balances' })
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить балансы отпусков' })
   }
 })
 
@@ -906,6 +916,7 @@ router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin
     )
     res.json(result.rows[0])
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось обновить баланс отпуска' })
   }
 })
@@ -916,7 +927,7 @@ router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin
  *   post:
  *     tags: [Vacation]
  *     summary: Создать заявку на отпуск
- *     description: Если в диапазоне дат есть праздники из производственного календаря (calendar_holidays), end_date автоматически продлевается на их количество, а праздничные дни не списываются с баланса. Диапазон с более чем 5 праздниками отклоняется с 400.
+ *     description: Если в диапазоне дат есть праздники из производственного календаря (calendar_holidays), даты не меняются, а праздничные дни не входят в длительность и не списываются с баланса. Диапазон с более чем 5 праздниками отклоняется с 400.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -1006,6 +1017,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     try {
       computedDates = await computeVacationDates(formatDate(start), formatDate(end))
     } catch (err) {
+      res.locals.errorCause = err
       await client.query('ROLLBACK')
       if (err instanceof VacationValidationError) {
         return res.status(400).json({ error: err.message })
@@ -1013,7 +1025,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
       throw err
     }
     const finalDuration = computedDates.countedDays
-    const shiftedEndDate = computedDates.endDate
+    const computedEndDate = computedDates.endDate
     const requestYear = start.getFullYear()
 
     const { text: balText, values: balValues } = orgScopedQuery(
@@ -1073,7 +1085,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
           OR (vr.start_date <= $3 AND vr.end_date >= $3)
           OR (vr.start_date >= $2 AND vr.end_date <= $3)
         )`,
-      [userId, formatDate(start), shiftedEndDate], req
+      [userId, formatDate(start), computedEndDate], req
     )
     const overlapResult = await client.query(ovText, ovValues)
 
@@ -1096,7 +1108,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
       [
         userId,
         formatDate(start),
-        shiftedEndDate,
+        computedEndDate,
         finalDuration,
         vacationType,
         comment,
@@ -1167,8 +1179,9 @@ router.post('/requests', authenticateToken, async (req, res) => {
     })
     notifyVacationChanged(req, request.id, 'created')
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
-    res.status(500).json({ error: 'Failed to create vacation request' })
+    res.status(500).json({ error: 'Не удалось создать заявку на отпуск' })
   } finally {
     client.release()
   }
@@ -1233,14 +1246,14 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
 
     if (requestResult.rows.length === 0) {
       await client.query('ROLLBACK')
-      return res.status(404).json({ error: 'Request not found' })
+      return res.status(404).json({ error: 'Заявка не найдена' })
     }
 
     const request = requestResult.rows[0]
 
     if (request.user_id !== userId && req.user.role === 'employee') {
       await client.query('ROLLBACK')
-      return res.status(403).json({ error: 'Forbidden' })
+      return res.status(403).json({ error: 'Доступ запрещён' })
     }
 
     if (request.status !== 'on_approval') {
@@ -1299,8 +1312,9 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     res.json(fullResult.rows[0])
     notifyVacationChanged(req, id, 'updated')
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
-    res.status(500).json({ error: 'Failed to update vacation request' })
+    res.status(500).json({ error: 'Не удалось обновить заявку на отпуск' })
   } finally {
     client.release()
   }
@@ -1366,6 +1380,7 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
     res.json({ ...result.rows[0], status: 'approved' })
     notifyVacationChanged(req, id, 'approved')
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Ошибка согласования' })
   } finally {
@@ -1437,6 +1452,7 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
     res.json({ ...result.rows[0], status: 'rejected' })
     notifyVacationChanged(req, id, 'rejected')
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Ошибка отклонения' })
   } finally {
@@ -1452,7 +1468,7 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     const { text: reqText, values: reqValues } = orgScopedQuery(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id], req)
     const request = await client.query(reqText, reqValues)
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
-    if (request.rows[0].user_id !== req.user.id && req.user.role === 'employee') { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Forbidden' }) }
+    if (request.rows[0].user_id !== req.user.id && req.user.role === 'employee') { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Доступ запрещён' }) }
     if (!['on_approval', 'approved'].includes(request.rows[0].status)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Нельзя отменить эту заявку' }) }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
@@ -1493,6 +1509,7 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     res.json({ ...result.rows[0], status: 'cancelled_by_employee' })
     notifyVacationChanged(req, id, 'cancelled')
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Ошибка отмены' })
   } finally {
@@ -1560,6 +1577,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     try {
       computedTransferDates = await computeVacationDates(newStartDate, newEndDate)
     } catch (err) {
+      res.locals.errorCause = err
       if (err instanceof VacationValidationError) {
         return res.status(400).json({ error: err.message })
       }
@@ -1590,7 +1608,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     }
 
     const newDuration = computedTransferDates.countedDays
-    const shiftedNewEndDate = computedTransferDates.endDate
+    const computedNewEndDate = computedTransferDates.endDate
 
     const travelChildrenParsed = (hasTravel && Array.isArray(travelChildren)) ? travelChildren : []
     const travelChildrenJson = JSON.stringify(travelChildrenParsed)
@@ -1605,7 +1623,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
        VALUES ($1, $2, $3::date, $4::date, $5, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $6, $7, CURRENT_TIMESTAMP,
          $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [original.user_id, original.vacation_type_id, newStartDate, shiftedNewEndDate, newDuration, reason, id,
+      [original.user_id, original.vacation_type_id, newStartDate, computedNewEndDate, newDuration, reason, id,
        hasTravel || false, hasTravel ? (travelDestination || null) : null, travelChildrenJson, travelChildrenCount, currentOrgId(req), approverId]
     )
 
@@ -1648,6 +1666,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     })
     notifyVacationChanged(req, newReq.id, 'transferred')
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
     res.status(500).json({ error: 'Ошибка создания заявки на перенос' })
   } finally {
@@ -1795,8 +1814,9 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
     res.json(fullResult.rows[0])
     notifyVacationChanged(req, id, 'approved')
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
-    res.status(500).json({ error: 'Failed to approve vacation transfer' })
+    res.status(500).json({ error: 'Не удалось согласовать перенос отпуска' })
   } finally {
     client.release()
   }
@@ -1940,8 +1960,9 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
     res.json(fullResult.rows[0])
     notifyVacationChanged(req, id, 'rejected')
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
-    res.status(500).json({ error: 'Failed to reject vacation transfer' })
+    res.status(500).json({ error: 'Не удалось отклонить перенос отпуска' })
   } finally {
     client.release()
   }
@@ -1991,7 +2012,7 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
 
     if (newRequest.user_id !== userId) {
       await client.query('ROLLBACK')
-      return res.status(403).json({ error: 'Forbidden' })
+      return res.status(403).json({ error: 'Доступ запрещён' })
     }
 
     if (newRequest.status !== 'on_approval') {
@@ -2055,8 +2076,9 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
     res.json(fullResult.rows[0])
     notifyVacationChanged(req, id, 'cancelled')
   } catch (error) {
+    res.locals.errorCause = error
     await client.query('ROLLBACK')
-    res.status(500).json({ error: 'Failed to cancel vacation transfer' })
+    res.status(500).json({ error: 'Не удалось отменить перенос отпуска' })
   } finally {
     client.release()
   }
@@ -2109,6 +2131,7 @@ router.get('/my-transferable', authenticateToken, async (req, res) => {
     )
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка загрузки данных' })
   }
 })
@@ -2156,6 +2179,7 @@ router.get('/my-transfer-requests', authenticateToken, async (req, res) => {
     )
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка загрузки данных' })
   }
 })
@@ -2326,6 +2350,7 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`)
     res.send(output)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка генерации документа' })
   }
 })
@@ -2543,7 +2568,93 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`)
     res.send(output)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка генерации документа' })
+  }
+})
+
+function isRestrictionAdmin(req) {
+  return ['hr', 'admin', 'superadmin'].includes(req.user.role) || ['hr', 'admin'].includes(req.org?.org_role)
+}
+
+async function getRestrictionScopeUserIds(req) {
+  if (isRestrictionAdmin(req)) return null
+  const { text, values } = orgScopedQuery('SELECT id FROM departments WHERE manager_id = $1', [req.user.id], req)
+  const managed = await query(text, values)
+  let deptIds = managed.rows.map(r => r.id)
+  if (deptIds.length === 0) {
+    const me = await query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
+    if (me.rows[0]?.department_id) deptIds = [me.rows[0].department_id]
+  }
+  if (deptIds.length === 0) return []
+  const users = await query('SELECT id FROM users WHERE department_id = ANY($1::int[])', [deptIds])
+  return users.rows.map(r => r.id)
+}
+
+function touchesScope(memberIds, scopeIds) {
+  if (scopeIds === null) return true
+  const scope = new Set(scopeIds)
+  return memberIds.some(id => scope.has(Number(id)))
+}
+
+/**
+ * @swagger
+ * /vacation/restrictions/scope-employees:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: 'Работники, доступные для ограничений пересечений (manager — отделы, которыми руководит; hr/admin — вся организация)'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: 'Список работников с тегами: id, firstName, lastName, middleName, position, departmentId, departmentName, tags'
+ */
+router.get('/restrictions/scope-employees', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  try {
+    const scopeIds = await getRestrictionScopeUserIds(req)
+    if (scopeIds !== null && scopeIds.length === 0) return res.json([])
+
+    const params = []
+    let orgJoin = ''
+    if (req.org) {
+      params.push(currentOrgId(req))
+      orgJoin = `JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $${params.length} AND uo.is_active = true`
+    }
+    let scopeClause = ''
+    if (scopeIds !== null) {
+      params.push(scopeIds)
+      scopeClause = `AND u.id = ANY($${params.length}::int[])`
+    }
+
+    const result = await query(
+      `SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name AS department_name,
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', sd.id, 'name', sd.name) ORDER BY sd.name)
+                 FROM user_skills us JOIN skills_dictionary sd ON us.skill_id = sd.id
+                 WHERE us.user_id = u.id),
+                '[]'
+              ) AS tags
+       FROM users u
+       ${orgJoin}
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE 1=1 ${excludeTest(req, 'u')} ${scopeClause}
+       ORDER BY u.last_name, u.first_name`,
+      params
+    )
+
+    res.json(result.rows.map(r => ({
+      id: String(r.id),
+      firstName: r.first_name,
+      lastName: r.last_name,
+      middleName: r.middle_name,
+      position: r.position || '',
+      departmentId: r.department_id === null ? null : String(r.department_id),
+      departmentName: r.department_name,
+      tags: (r.tags || []).map(t => ({ id: String(t.id), name: t.name })),
+    })))
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить работников' })
   }
 })
 
@@ -2577,7 +2688,7 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
  */
 router.get('/restrictions', authenticateToken, async (req, res) => {
   try {
-    const { departmentId, tagId, search } = req.query
+    const { departmentId, tagId, search, scope } = req.query
     const conditions = []
     const values = []
 
@@ -2633,12 +2744,31 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
       }
     }
 
-    const restrictions = result.rows.map(r => {
+    const scopeIds = scope === 'mine' ? await getRestrictionScopeUserIds(req) : null
+    const isAdmin = isRestrictionAdmin(req)
+    const allEmployeeIds = [...new Set(result.rows.flatMap(r => r.employee_ids || []))]
+    const employeeNameMap = new Map()
+    const employeeDeptMap = new Map()
+    if (allEmployeeIds.length > 0) {
+      const nameRows = await query(
+        `SELECT u.id, u.first_name, u.last_name, d.name AS department_name
+         FROM users u LEFT JOIN departments d ON d.id = u.department_id
+         WHERE u.id = ANY($1::int[])`,
+        [allEmployeeIds]
+      )
+      for (const row of nameRows.rows) {
+        employeeNameMap.set(row.id, `${row.last_name} ${row.first_name}`)
+        if (row.department_name) employeeDeptMap.set(row.id, row.department_name)
+      }
+    }
+
+    const restrictions = result.rows.flatMap(r => {
       const memberIds = new Set(r.employee_ids)
       for (const tagId of (r.tag_ids || [])) {
         for (const uid of (tagUserMap.get(tagId) || new Set())) memberIds.add(uid)
       }
-      return {
+      if (scope === 'mine' && r.created_by !== req.user.id && !touchesScope([...memberIds], scopeIds)) return []
+      return [{
         id: r.id,
         departmentId: r.department_id === null ? null : String(r.department_id),
         departmentName: r.department_name,
@@ -2652,11 +2782,16 @@ router.get('/restrictions', authenticateToken, async (req, res) => {
         createdAt: r.created_at,
         createdBy: String(r.created_by),
         createdByName: `${r.last_name} ${r.first_name}`,
-      }
+        employees: (r.employee_ids || []).map(id => ({ id: String(id), name: employeeNameMap.get(id) || String(id) })),
+        employeeDepartments: [...new Set((r.employee_ids || []).map(id => employeeDeptMap.get(id)).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b, 'ru')),
+        canManage: isAdmin || r.created_by === req.user.id,
+      }]
     })
 
     res.json(restrictions)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось получить ограничения' })
   }
 })
@@ -2706,6 +2841,7 @@ router.get('/restrictions/preview-count', authenticateToken, async (req, res) =>
     )
     res.json({ count: result.rows[0].c })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось посчитать работников' })
   }
 })
@@ -2738,10 +2874,11 @@ const addOneDay = (dateStr) => {
  */
 router.get('/restrictions/violations', authenticateToken, async (req, res) => {
   try {
-    const isElevated = ['hr', 'admin', 'superadmin'].includes(req.user.role) || req.org?.org_role === 'admin'
+    const isElevated = isRestrictionAdmin(req)
+    const scopeMine = req.query.scope === 'mine'
     let departmentId = req.query.departmentId ? parseInt(req.query.departmentId) : null
 
-    if (!departmentId) {
+    if (!departmentId && !scopeMine) {
       const { text: mdText, values: mdValues } = orgScopedQuery(
         'SELECT id FROM departments WHERE manager_id = $1', [req.user.id], req
       )
@@ -2753,10 +2890,10 @@ router.get('/restrictions/violations', authenticateToken, async (req, res) => {
         departmentId = me.rows[0]?.department_id ?? null
       }
     }
-    if (!departmentId) {
+    if (!departmentId && !scopeMine) {
       return res.json([])
     }
-    if (!isElevated) {
+    if (!isElevated && !scopeMine) {
       const { text: mcText, values: mcValues } = orgScopedQuery(
         'SELECT 1 FROM departments WHERE id = $1 AND manager_id = $2', [departmentId, req.user.id], req
       )
@@ -2766,14 +2903,17 @@ router.get('/restrictions/violations', authenticateToken, async (req, res) => {
       }
     }
 
-    const { text: restText, values: restValues } = orgScopedQuery(
-      'SELECT * FROM vacation_restrictions WHERE (department_id = $1 OR department_id IS NULL)',
-      [departmentId], req
-    )
+    const { text: restText, values: restValues } = scopeMine
+      ? orgScopedQuery('SELECT * FROM vacation_restrictions', [], req)
+      : orgScopedQuery(
+        'SELECT * FROM vacation_restrictions WHERE (department_id = $1 OR department_id IS NULL)',
+        [departmentId], req
+      )
     const restrictions = await query(restText, restValues)
     if (restrictions.rows.length === 0) {
       return res.json([])
     }
+    const violationScopeIds = scopeMine ? await getRestrictionScopeUserIds(req) : null
 
     const allTagIds = [...new Set(restrictions.rows.flatMap(r => r.tag_ids || []))]
     const tagUserMap = new Map()
@@ -2792,7 +2932,10 @@ router.get('/restrictions/violations', authenticateToken, async (req, res) => {
         for (const tagId of (r.tag_ids || [])) {
           for (const uid of (tagUserMap.get(tagId) || new Set())) ids.add(uid)
         }
-        return { ...r, memberIds: [...ids] }
+        const memberIds = violationScopeIds === null
+          ? [...ids]
+          : [...ids].filter(id => violationScopeIds.includes(id))
+        return { ...r, memberIds }
       })
       .filter(r => r.memberIds.length >= 2)
 
@@ -2805,8 +2948,8 @@ router.get('/restrictions/violations', authenticateToken, async (req, res) => {
     const { text: reqText, values: reqValues } = orgScopedQuery(
       `SELECT vr.user_id, vr.start_date, vr.end_date FROM vacation_requests vr
        JOIN request_statuses rs ON vr.status_id = rs.id
-       WHERE vr.user_id = ANY($1) AND rs.code IN ('on_approval', 'approved')`,
-      [allMemberIds], req
+       WHERE vr.user_id = ANY($1) AND rs.code IN ('on_approval', 'approved') AND vr.end_date >= $2`,
+      [allMemberIds, todayISO()], req
     )
     const [reqRows, nameRows, tagRows] = await Promise.all([
       query(reqText, reqValues),
@@ -2837,7 +2980,9 @@ router.get('/restrictions/violations', authenticateToken, async (req, res) => {
       }
       if (intervals.length < 2) continue
 
-      const minDate = intervals.reduce((m, iv) => (iv.start < m ? iv.start : m), intervals[0].start)
+      const today = todayISO()
+      const earliest = intervals.reduce((m, iv) => (iv.start < m ? iv.start : m), intervals[0].start)
+      const minDate = earliest < today ? today : earliest
       const maxDate = intervals.reduce((m, iv) => (iv.end > m ? iv.end : m), intervals[0].end)
 
       const violatingDays = []
@@ -2882,6 +3027,7 @@ router.get('/restrictions/violations', authenticateToken, async (req, res) => {
     violations.sort((a, b) => a.startDate.localeCompare(b.startDate))
     res.json(violations)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('GET /restrictions/violations error:', error)
     res.status(500).json({ error: 'Не удалось проверить пересечения' })
   }
@@ -2941,14 +3087,14 @@ async function resolveRestrictionFields({ type, rawEmployeeIds, rawTagIds, maxCo
        ) t`,
       [parsedIds, parsedTagIds]
     )
-    if (membersResult.rows[0].c < 2) {
-      return { error: 'Для группового ограничения нужно минимум два работника (с учётом тегов)' }
+    if (membersResult.rows[0].c < 1) {
+      return { error: 'Выберите хотя бы одного работника' }
     }
     let maxConc = 1
     if (maxConcurrent !== undefined && maxConcurrent !== null) {
       const parsedMax = parseInt(maxConcurrent)
       if (Number.isNaN(parsedMax) || parsedMax < 0) {
-        return { error: 'maxConcurrent должен быть целым числом не меньше 0' }
+        return { error: 'Максимум одновременно в отпуске должен быть целым числом не меньше 0' }
       }
       maxConc = parsedMax
     }
@@ -3012,6 +3158,7 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
 
     res.status(201).json(mapRestrictionRow(r, user.rows[0]))
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось создать ограничение' })
   }
 })
@@ -3067,6 +3214,15 @@ router.put('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr
     }
     const { employeeIds, tagIds, maxConc } = resolved
 
+    if (!isRestrictionAdmin(req)) {
+      const { text: ownText, values: ownValues } = orgScopedQuery('SELECT created_by FROM vacation_restrictions WHERE id = $1', [id], req)
+      const own = await query(ownText, ownValues)
+      if (own.rows.length === 0) return res.status(404).json({ error: 'Ограничение не найдено' })
+      if (own.rows[0].created_by !== req.user.id) {
+        return res.status(403).json({ error: 'Изменять ограничение может только его владелец или HR' })
+      }
+    }
+
     const { text: updText, values: updValues } = orgScopedQuery(
       `UPDATE vacation_restrictions
        SET department_id = $1, restriction_type = $2, employee_ids = $3, tag_ids = $4, max_concurrent = $5, description = $6
@@ -3085,6 +3241,7 @@ router.put('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr
 
     res.json(mapRestrictionRow(r, user.rows[0]))
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось обновить ограничение' })
   }
 })
@@ -3109,6 +3266,14 @@ router.put('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr
 router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
   try {
     const { id } = req.params
+    if (!isRestrictionAdmin(req)) {
+      const { text: ownText, values: ownValues } = orgScopedQuery('SELECT created_by FROM vacation_restrictions WHERE id = $1', [id], req)
+      const own = await query(ownText, ownValues)
+      if (own.rows.length === 0) return res.status(404).json({ error: 'Ограничение не найдено' })
+      if (own.rows[0].created_by !== req.user.id) {
+        return res.status(403).json({ error: 'Удалить ограничение может только его владелец или HR' })
+      }
+    }
     const { text: delText, values: delValues } = orgScopedQuery('DELETE FROM vacation_restrictions WHERE id = $1 RETURNING *', [id], req)
     const result = await query(delText, delValues)
     if (result.rows.length === 0) {
@@ -3116,6 +3281,7 @@ router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 
     }
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось удалить ограничение' })
   }
 })
@@ -3155,6 +3321,7 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
     try {
       endDate = (await computeVacationDates(startDate, rawEndDate)).endDate
     } catch (err) {
+      res.locals.errorCause = err
       if (err instanceof VacationValidationError) {
         return res.status(400).json({ error: err.message })
       }
@@ -3270,6 +3437,7 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
 
     res.json(violations)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось проверить ограничения' })
   }
 })
@@ -3292,6 +3460,7 @@ router.get('/my-substitutions', authenticateToken, async (req, res) => {
     )
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось получить замещения' })
   }
 })
@@ -3358,6 +3527,7 @@ router.post('/requests/:id/substitutes', authenticateToken, async (req, res) => 
     res.status(201).json({ added: validIds.length })
     notifyVacationChanged(req, id, 'substitutes_changed')
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось добавить замещающих' })
   }
 })
@@ -3402,6 +3572,7 @@ router.delete('/requests/:id/substitutes/:userId', authenticateToken, async (req
     res.json({ removed: true })
     notifyVacationChanged(req, id, 'substitutes_changed')
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось удалить замещающего' })
   }
 })
@@ -3445,6 +3616,7 @@ router.get('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
       }))
     res.json({ defaultDays: defaultRule ? defaultRule.days : 28, positionRules, userRules })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось получить настройки дней отпуска' })
   }
 })
@@ -3614,6 +3786,7 @@ router.put('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
 
     res.json({ success: true, id: row.id })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось сохранить настройку' })
   }
 })
@@ -3645,6 +3818,7 @@ router.delete('/day-rules/group/:groupId', authenticateToken, authorizeRoles('hr
     if (result.rows.length === 0) return res.status(404).json({ error: 'Правило не найдено' })
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось удалить настройку' })
   }
 })
@@ -3676,6 +3850,7 @@ router.delete('/day-rules/:id', authenticateToken, authorizeRoles('hr', 'admin')
     if (result.rows.length === 0) return res.status(404).json({ error: 'Настройка не найдена' })
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось удалить настройку' })
   }
 })

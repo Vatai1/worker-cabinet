@@ -8,9 +8,10 @@ interface DepartmentBalanceTableProps {
   departmentId: string
   year: number
   currentUserId?: string
+  tagId?: string
 }
 
-export function DepartmentBalanceTable({ departmentId, year, currentUserId }: DepartmentBalanceTableProps) {
+export function DepartmentBalanceTable({ departmentId, year, currentUserId, tagId }: DepartmentBalanceTableProps) {
   const [rows, setRows] = useState<DepartmentBalanceEntry[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -21,19 +22,23 @@ export function DepartmentBalanceTable({ departmentId, year, currentUserId }: De
     }
     let cancelled = false
     setLoading(true)
-    vacationApi.getDepartmentBalances(departmentId, year)
+    vacationApi.getDepartmentBalances(departmentId, year, tagId)
       .then((data) => { if (!cancelled) setRows(data) })
       .catch(() => { if (!cancelled) setRows([]) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [departmentId, year])
+  }, [departmentId, year, tagId])
 
   if (loading) {
     return <div className="py-6 text-center text-sm text-muted-foreground">Загрузка…</div>
   }
 
   if (rows.length === 0) {
-    return <div className="py-6 text-center text-sm text-muted-foreground">Нет данных по отделу</div>
+    return (
+      <div className="py-6 text-center text-sm text-muted-foreground">
+        {tagId ? 'Нет работников отдела с выбранным тегом' : 'Нет данных по отделу'}
+      </div>
+    )
   }
 
   const colorMap = buildUserColorMap(rows.map(r => r.userId))

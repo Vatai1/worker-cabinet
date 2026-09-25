@@ -60,6 +60,7 @@ router.get('/sessions', authenticateToken, async (req, res) => {
     )
     res.json(result.rows)
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка загрузки сессий' })
   }
 })
@@ -98,6 +99,7 @@ router.get('/sessions/:id', authenticateToken, async (req, res) => {
     )
     res.json({ ...session.rows[0], messages: messages.rows })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка загрузки чата' })
   }
 })
@@ -131,6 +133,7 @@ router.delete('/sessions/:id', authenticateToken, async (req, res) => {
     }
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка удаления сессии' })
   }
 })
@@ -351,6 +354,7 @@ router.post('/chat', authenticateToken, async (req, res) => {
       )
     }
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Assistant error:', error.message)
     res.status(500).json({ error: 'Внутренняя ошибка сервера' })
   }
@@ -377,6 +381,7 @@ router.get('/history', authenticateToken, async (req, res) => {
     )
     res.json(result.rows.reverse())
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка загрузки истории' })
   }
 })
@@ -398,6 +403,7 @@ router.delete('/history', authenticateToken, async (req, res) => {
     await query('DELETE FROM assistant_messages WHERE user_id = $1 AND session_id IS NULL', [req.user.id])
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     res.status(500).json({ error: 'Ошибка очистки истории' })
   }
 })

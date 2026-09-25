@@ -9,7 +9,7 @@ import { isRealSuperadmin, signValue, testCookieOptions, TEST_PREVIEW_ROLES, get
 import { personName } from '../utils/personName.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
 import { getAuthSettings } from '../config/authSettings.js'
-import { signAccessToken, createSession, findActiveSessionByToken, rotateSession, revokeSessionByToken } from '../lib/sessionTokens.js'
+import { signAccessToken, createSession, findActiveSessionByToken, isRecentlyRotatedToken, rotateSession, revokeSessionByToken } from '../lib/sessionTokens.js'
 
 const router = express.Router()
 
@@ -110,6 +110,9 @@ router.post('/refresh', asyncHandler(async (req, res) => {
   }
 
   const session = await findActiveSessionByToken(refreshToken)
+  if (!session && await isRecentlyRotatedToken(refreshToken)) {
+    return res.json({ success: true })
+  }
   if (!session || session.status !== 'active') {
     res.clearCookie('auth_token', cookieOptions(req))
     res.clearCookie('auth_refresh_token', cookieOptions(req))

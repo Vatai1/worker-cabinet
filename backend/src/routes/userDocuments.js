@@ -66,6 +66,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json(documents)
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error fetching user documents:', error)
     res.status(500).json({ error: 'Failed to fetch user documents' })
   }
@@ -127,6 +128,7 @@ router.post('/', authenticateToken, upload.single('file'), uploadWithMagicBytes(
       description: doc.description,
     })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error uploading user document:', error)
     res.status(500).json({ error: 'Failed to upload document' })
   }
@@ -182,6 +184,7 @@ router.get('/:id/download', authenticateToken, async (req, res) => {
       res.send(Buffer.from(bytes))
     })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error downloading user document:', error)
     res.status(500).json({ error: 'Failed to download document' })
   }
@@ -236,6 +239,7 @@ router.get('/:id/preview', authenticateToken, async (req, res) => {
       res.send(Buffer.from(bytes))
     })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error previewing user document:', error)
     res.status(500).json({ error: 'Failed to preview document' })
   }
@@ -282,6 +286,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 
     res.json({ success: true })
   } catch (error) {
+    res.locals.errorCause = error
     console.error('Error deleting user document:', error)
     res.status(500).json({ error: 'Failed to delete document' })
   }

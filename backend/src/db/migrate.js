@@ -1922,6 +1922,9 @@ async function migrateUserSessions(db) {
     await db.query(`CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)`)
     await db.query(`CREATE INDEX IF NOT EXISTS idx_user_sessions_refresh_hash ON user_sessions(refresh_token_hash)`)
     await db.query(`CREATE INDEX IF NOT EXISTS idx_user_sessions_created_at ON user_sessions(created_at)`)
+    await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS previous_refresh_token_hash VARCHAR(64)`)
+    await db.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS rotated_at TIMESTAMP`)
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_user_sessions_previous_refresh_hash ON user_sessions(previous_refresh_token_hash)`)
     console.log('  ✓ user_sessions ready')
   } catch (e) {
     console.log('  - user_sessions:', e.message)
