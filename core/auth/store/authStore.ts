@@ -22,6 +22,8 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   isTestUser: false,
   realUserId: null,
   previewRole: null,
+  viewOnly: false,
+  realUserName: null,
   loading: true,
   checkAuth: async () => {
     try {
@@ -32,7 +34,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
       if (!response.ok) {
         deleteCookie('auth_token')
-        set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null })
+        set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null, viewOnly: false, realUserName: null })
         return
       }
 
@@ -62,13 +64,15 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         isTestUser: !!data.isTestUser,
         realUserId: data.realUserId ?? null,
         previewRole: data.previewRole ?? null,
+        viewOnly: !!data.viewOnly,
+        realUserName: data.realUserName ?? null,
         loading: false,
       })
       useModulesStore.getState().fetchModules()
       useOrgStore.getState().fetchOrgs()
     } catch (error) {
       deleteCookie('auth_token')
-      set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null })
+      set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null, viewOnly: false, realUserName: null })
     }
   },
   login: async (email: string, password: string) => {
@@ -120,6 +124,8 @@ export const useAuthStore = create<AuthStore>()((set) => ({
       isTestUser: false,
       realUserId: null,
       previewRole: null,
+      viewOnly: false,
+      realUserName: null,
     })
     deleteCookie('auth_token')
     try {
@@ -158,7 +164,7 @@ setSessionExpiredHandler(async () => {
     })
     if (res.status !== 401) return
     deleteCookie('auth_token')
-    useAuthStore.setState({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null })
+    useAuthStore.setState({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null, viewOnly: false, realUserName: null })
   } catch {
     return
   } finally {

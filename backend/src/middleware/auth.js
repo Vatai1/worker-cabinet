@@ -348,6 +348,17 @@ export async function findOrCreateUser(kcPayload) {
   return user
 }
 
+const VIEW_ONLY_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+const VIEW_ONLY_ALLOWED_PATHS = new Set(['/api/auth/impersonate/stop', '/api/auth/logout', '/api/auth/view-as'])
+
+function rejectViewOnlyWrite(req, res) {
+  if (!req.impersonatedRealUser || VIEW_ONLY_SAFE_METHODS.has(req.method)) return false
+  const path = (req.originalUrl || '').split('?')[0]
+  if (VIEW_ONLY_ALLOWED_PATHS.has(path)) return false
+  res.status(403).json({ error: 'Режим просмотра: изменения от имени другого пользователя недоступны', code: 'VIEW_ONLY' })
+  return true
+}
+
 export const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1] || req.cookies?.auth_token
@@ -387,6 +398,7 @@ export const authenticateToken = async (req, res, next) => {
 
     req.user = result.rows[0]
     await applyTestContext(req)
+    if (rejectViewOnlyWrite(req, res)) return
     return attachOrgContext(req, res, next)
   } catch (err) {
     console.error('authenticateToken failed:', err.message)

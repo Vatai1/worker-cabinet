@@ -29,8 +29,9 @@ export async function getTestDataState(req) {
     users,
     active: {
       previewRole: req?.previewRole || null,
-      isImpersonated: !!req?.impersonatedTestUser,
-      impersonatedUserId: req?.impersonatedTestUser ? req.user.id : null,
+      isImpersonated: !!(req?.impersonatedTestUser || req?.impersonatedRealUser),
+      impersonatedUserId: req?.impersonatedTestUser || req?.impersonatedRealUser ? req.user.id : null,
+      viewOnly: !!req?.impersonatedRealUser,
     },
   }
 }
@@ -95,7 +96,8 @@ export async function applyTestContext(req) {
          FROM users WHERE id = $1`,
         [targetId]
       )
-      if (r.rows.length > 0 && r.rows[0].is_test === true && r.rows[0].status === 'active') {
+      const target = r.rows[0]
+      if (target && target.status === 'active' && target.role !== 'superadmin' && target.id !== realUser.id) {
         req.realUser = {
           id: realUser.id,
           role: 'superadmin',
@@ -103,8 +105,9 @@ export async function applyTestContext(req) {
           first_name: realUser.first_name,
           last_name: realUser.last_name,
         }
-        req.user = r.rows[0]
-        req.impersonatedTestUser = true
+        req.user = target
+        if (target.is_test === true) req.impersonatedTestUser = true
+        else req.impersonatedRealUser = true
         return
       }
     }

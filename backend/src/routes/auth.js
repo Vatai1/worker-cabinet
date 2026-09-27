@@ -304,10 +304,110 @@ function requireRealSuper(req, res, next) {
   throw new UnauthorizedError('Недоступно')
 }
 
+async function logImpersonation(req, action, target, mode) {
+  const actor = req.realUser || req.user
+  await query(
+    `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, details, ip_address) VALUES ($1, $2, $3, 'user', $4, $5, $6)`,
+    [actor.id, personName(actor), action, String(target.id), JSON.stringify({ targetName: personName(target), mode }), getClientIp(req)]
+  ).catch((err) => console.error('[AUDIT LOG ERROR]', err.message))
+}
+
+function impersonationMode(req) {
+  if (req.impersonatedRealUser) return 'view'
+  if (req.impersonatedTestUser) return 'test'
+  return null
+}
+
+/**
+ * @swagger
+ * /auth/view-as/search:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Поиск пользователя для просмотра кабинета от его лица (суперадмин)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: q, in: query, required: true, schema: { type: string }, description: 'ФИО, email или должность, от 2 символов' }
+ *     responses:
+ *       200:
+ *         description: 'До 20 активных пользователей: id, firstName, lastName, middleName, email, position, department, role, isTest'
+ */
+router.get('/view-as/search', authenticateToken, requireRealSuper, asyncHandler(async (req, res) => {
+  const q = String(req.query.q || '').trim()
+  if (q.length < 2) return res.json([])
+  const like = `%${q}%`
+  const result = await query(
+    `SELECT u.id, u.first_name, u.last_name, u.middle_name, u.email, u.position, u.role, u.is_test, d.name AS department_name
+     FROM users u
+     LEFT JOIN departments d ON d.id = u.department_id
+     WHERE u.status = 'active' AND u.role <> 'superadmin' AND u.id <> $2
+       AND (u.last_name || ' ' || u.first_name || ' ' || COALESCE(u.middle_name, '') ILIKE $1
+            OR u.first_name || ' ' || u.last_name ILIKE $1 OR u.email ILIKE $1 OR u.position ILIKE $1)
+     ORDER BY u.is_test, u.last_name, u.first_name
+     LIMIT 20`,
+    [like, (req.realUser || req.user).id]
+  )
+  res.json(result.rows.map((u) => ({
+    id: u.id,
+    firstName: u.first_name,
+    lastName: u.last_name,
+    middleName: u.middle_name,
+    email: u.email,
+    position: u.position,
+    department: u.department_name,
+    role: u.role,
+    isTest: u.is_test === true,
+  })))
+}))
+
+/**
+ * @swagger
+ * /auth/view-as:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Посмотреть кабинет от лица пользователя (суперадмин)
+ *     description: 'Для реального пользователя включается режим «только просмотр» — любые изменяющие запросы отклоняются с 403 VIEW_ONLY. За тестовых пользователей доступен полный вход. Вход и выход пишутся в журнал аудита'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId]
+ *             properties:
+ *               userId: { type: integer }
+ *     responses:
+ *       200:
+ *         description: '{ success, userId, viewOnly }'
+ *       400:
+ *         description: Пользователь неактивен, суперадмин или это вы сами
+ */
+router.post('/view-as', authenticateToken, requireRealSuper, asyncHandler(async (req, res) => {
+  const userId = parseInt(req.body?.userId, 10)
+  if (!Number.isInteger(userId)) throw new ValidationError('userId обязателен')
+  const actorId = (req.realUser || req.user).id
+  const target = (await query(
+    `SELECT id, first_name, last_name, middle_name, status, role, is_test FROM users WHERE id = $1`,
+    [userId]
+  )).rows[0]
+  if (!target) throw new ValidationError('Пользователь не найден')
+  if (target.id === actorId) throw new ValidationError('Нельзя войти от своего имени')
+  if (target.role === 'superadmin') throw new ValidationError('Нельзя смотреть кабинет от лица суперадмина')
+  if (target.status !== 'active') throw new ValidationError('Пользователь деактивирован')
+
+  if (impersonationMode(req)) await logImpersonation(req, 'impersonation_stop', req.user, impersonationMode(req))
+  res.cookie('imp_user', signValue(String(userId)), testCookieOptions(req))
+  res.clearCookie('preview_role', { path: '/' })
+  const viewOnly = target.is_test !== true
+  await logImpersonation(req, 'impersonation_start', target, viewOnly ? 'view' : 'test')
+  res.json({ success: true, userId, viewOnly })
+}))
+
 router.post('/impersonate/stop', authenticateToken, asyncHandler(async (req, res) => {
   if (!isRealSuperadmin(req) && !req.impersonatedTestUser) {
     throw new UnauthorizedError('Недоступно')
   }
+  if (impersonationMode(req)) await logImpersonation(req, 'impersonation_stop', req.user, impersonationMode(req))
   const opts = cookieOptions(req)
   res.clearCookie('imp_user', opts)
   res.clearCookie('preview_role', opts)
@@ -332,8 +432,11 @@ router.post('/test/impersonate', authenticateToken, requireRealSuper, asyncHandl
   const target = (await query(`SELECT id, is_test, status FROM users WHERE id = $1`, [userId])).rows[0]
   if (!target || target.is_test !== true) throw new ValidationError('Пользователь не является тестовым')
   if (target.status !== 'active') throw new ValidationError('Тестовый пользователь деактивирован')
+  if (impersonationMode(req)) await logImpersonation(req, 'impersonation_stop', req.user, impersonationMode(req))
   res.cookie('imp_user', signValue(String(userId)), testCookieOptions(req))
   res.clearCookie('preview_role', { path: '/' })
+  const testTarget = (await query('SELECT id, first_name, last_name, middle_name FROM users WHERE id = $1', [userId])).rows[0]
+  await logImpersonation(req, 'impersonation_start', testTarget, 'test')
   res.json({ success: true, userId })
 }))
 
@@ -360,10 +463,12 @@ router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
     hireDate: user.hire_date, status: user.status,
     role: req.previewRole || user.role,
     managerId: user.manager_id, avatar: user.avatar,
-    isImpersonated: !!req.impersonatedTestUser,
+    isImpersonated: !!(req.impersonatedTestUser || req.impersonatedRealUser),
     isTestUser: user.is_test === true || !!req.impersonatedTestUser,
+    viewOnly: !!req.impersonatedRealUser,
     previewRole: req.previewRole || null,
     realUserId: req.realUser?.id ?? null,
+    realUserName: req.realUser ? personName(req.realUser) : null,
   })
 }))
 

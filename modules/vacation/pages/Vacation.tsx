@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/core/auth/store/authStore'
@@ -541,7 +542,7 @@ export function Vacation() {
     if (!user || !selectedStartDate || !selectedEndDate) return
 
     try {
-      await useVacationStore.getState().createRequest(user.id, {
+      const created = await useVacationStore.getState().createRequest(user.id, {
         startDate: selectedStartDate,
         endDate: selectedEndDate,
         vacationType: data.vacationType,
@@ -551,6 +552,10 @@ export function Vacation() {
         travelChildren: data.travelChildren,
         substitute_ids: data.substitute_ids,
       })
+      if (!created) {
+        setDateErrorMessage(useVacationStore.getState().error || 'Не удалось создать заявку')
+        return
+      }
       setSelectedStartDate(null)
       setSelectedEndDate(null)
       setShowCreateFromCalendar(false)
@@ -962,8 +967,8 @@ export function Vacation() {
         />
       )}
 
-      {dateErrorMessage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      {dateErrorMessage && createPortal(
+        <div className="fixed inset-0 z-[10002] flex items-center justify-center">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setDateErrorMessage(null)} />
           <div className="relative z-10 w-full max-w-md rounded-xl border border-border/60 bg-card p-6 shadow-xl animate-scale-in">
             <div className="flex items-start gap-3">
@@ -971,7 +976,7 @@ export function Vacation() {
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1 pt-1">
-                <h3 className="text-base font-semibold">Не удалось выбрать даты отпуска</h3>
+                <h3 className="text-base font-semibold">Не удалось оформить заявку</h3>
                 <p className="mt-1.5 text-sm text-muted-foreground">{dateErrorMessage}</p>
               </div>
             </div>
@@ -979,7 +984,8 @@ export function Vacation() {
               <Button onClick={() => setDateErrorMessage(null)}>Понятно</Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

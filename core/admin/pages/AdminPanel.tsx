@@ -129,6 +129,8 @@ const ACTION_LABELS: Record<string, string> = {
   bulk_role_change: 'Массовая смена роли',
   account_unlock: 'Разблокировка аккаунта',
   login: 'Вход в систему',
+  impersonation_start: 'Вход от лица пользователя',
+  impersonation_stop: 'Выход из режима «от лица пользователя»',
   module_toggle: 'Переключение модуля',
   module_org_toggle: 'Локальное переключение модуля',
   module_create: 'Создание модуля',

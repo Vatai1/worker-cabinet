@@ -51,6 +51,8 @@ export interface AuthState {
   isImpersonated?: boolean
   isTestUser?: boolean
   realUserId?: number | null
+  realUserName?: string | null
+  viewOnly?: boolean
   previewRole?: UserRole | null
 }
 

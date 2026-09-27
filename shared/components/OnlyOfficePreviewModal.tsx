@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
+import { useAuthStore } from '@/core/auth/store/authStore'
 import { createPortal } from 'react-dom'
 import { X, Edit, Loader2, CheckCircle2, Copy, Check as CheckIcon, ChevronDown, ChevronUp, Save, AlertCircle } from 'lucide-react'
 import { formatFileSize } from '@/shared/lib/documentUtils'
@@ -58,7 +59,9 @@ async function resolveOnlyOfficeUrl() {
 
 let editorCounter = 0
 
-export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable, onSave, onAcknowledge, acknowledged, placeholders }: OnlyOfficePreviewModalProps) {
+export function OnlyOfficePreviewModal({ open, onClose, document: doc, editable: editableProp, onSave, onAcknowledge, acknowledged, placeholders }: OnlyOfficePreviewModalProps) {
+  const viewOnly = useAuthStore((s) => s.viewOnly)
+  const editable = editableProp && !viewOnly
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showPlaceholders, setShowPlaceholders] = useState(true)
