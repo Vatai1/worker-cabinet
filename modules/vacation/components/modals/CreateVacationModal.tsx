@@ -1,10 +1,11 @@
 ﻿import { useState, useEffect } from 'react'
+import { RestrictionWarnings } from '@/modules/vacation/components/RestrictionWarnings'
 import { createPortal } from 'react-dom'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
-import type { VacationEmployee, VacationValidationErrorDetails } from '@/shared/types'
+import type { VacationEmployee, VacationValidationErrorDetails, RestrictionConflict } from '@/shared/types'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
-import { Upload, FileText, X, AlertTriangle, Plus, Trash2, UserCheck, Search } from 'lucide-react'
+import { Upload, FileText, X, Plus, Trash2, UserCheck, Search } from 'lucide-react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
@@ -47,6 +48,7 @@ interface CreateVacationModalProps {
   restrictionWarnings?: Array<{
     message: string
     details?: VacationValidationErrorDetails
+    conflicts?: RestrictionConflict[]
   }>
   onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
   showSubstitutes?: boolean
@@ -503,26 +505,7 @@ export function CreateVacationModal({
             </div>
           )}
 
-          {restrictionWarnings.length > 0 && (
-            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-              <div className="text-sm">
-                <div className="font-medium mb-2 flex items-center gap-2 text-amber-800">
-                  <AlertTriangle className="h-4 w-4" />
-                  ⚠️ Внимание
-                </div>
-                {restrictionWarnings.map((warning, index) => (
-                  <div key={index} className="text-amber-700 mb-2 last:mb-0">
-                    <div>{warning.message}</div>
-                    {warning.details?.conflictingEmployee && (
-                      <div className="text-xs text-amber-600 mt-1">
-                        Даты: {warning.details.conflictingEmployee.dates}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <RestrictionWarnings warnings={restrictionWarnings} />
 
           </div>
           <div className="px-6 py-4 border-t shrink-0">

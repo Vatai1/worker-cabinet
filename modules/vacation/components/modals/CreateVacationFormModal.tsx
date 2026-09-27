@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import { RestrictionWarnings } from '@/modules/vacation/components/RestrictionWarnings'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
-import type { VacationEmployee, VacationValidationErrorDetails } from '@/shared/types'
+import type { VacationEmployee, VacationValidationErrorDetails, RestrictionConflict } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
-import { X, FileText, Upload, AlertTriangle, Plus, Trash2 } from 'lucide-react'
+import { X, FileText, Upload, Plus, Trash2 } from 'lucide-react'
 import { personName } from '@/shared/lib/utils'
 
 interface CreateVacationFormModalProps {
@@ -30,6 +31,7 @@ interface CreateVacationFormModalProps {
   restrictionWarnings?: Array<{
     message: string
     details?: VacationValidationErrorDetails
+    conflicts?: RestrictionConflict[]
   }>
   userId?: string
   onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
@@ -528,26 +530,7 @@ export function CreateVacationFormModal({
             </div>
           )}
 
-          {restrictionWarnings.length > 0 && (
-            <div className="p-3 rounded-lg bg-[hsl(var(--warning)/0.1)] border border-[hsl(var(--warning)/0.25)]">
-              <div className="text-sm">
-                <div className="font-medium mb-2 flex items-center gap-2 text-[hsl(var(--warning))]">
-                  <AlertTriangle className="h-4 w-4" />
-                  ⚠️ Внимание
-                </div>
-                {restrictionWarnings.map((warning, index) => (
-                  <div key={index} className="text-[hsl(var(--warning)/0.85)] mb-2 last:mb-0">
-                    <div>{warning.message}</div>
-                    {warning.details?.conflictingEmployee && (
-                      <div className="text-xs text-[hsl(var(--warning)/0.7)] mt-1">
-                        Даты: {warning.details.conflictingEmployee.dates}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <RestrictionWarnings warnings={restrictionWarnings} />
 
           </div>
           <div className="px-6 py-4 border-t border-border/60 shrink-0">

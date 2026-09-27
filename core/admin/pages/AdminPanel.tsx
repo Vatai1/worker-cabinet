@@ -15,6 +15,7 @@ import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
 import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { OrganizationsTab } from '@/core/admin/components/OrganizationsTab'
 import { AdminBannerCard } from '@/core/admin/components/AdminBannerCard'
+import { InstructionsTab } from '@/core/admin/components/InstructionsTab'
 import { GlobalHierarchy } from '@/modules/hierarchy/pages/GlobalHierarchy'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
@@ -39,11 +40,11 @@ import {
   Zap, Briefcase, Plane,
   Pencil, Save, Bot, Package,
   Palette, Tag, LogIn, Network,
-  Bug, FlaskConical,
+  Bug, FlaskConical, Film,
 } from 'lucide-react'
 import type { AdminRole, AdminPermission, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
-type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports' | 'test-data'
+type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports' | 'test-data' | 'instructions'
 
 interface TabItem {
   id: TabId
@@ -101,6 +102,7 @@ const TAB_GROUPS: TabGroup[] = [
     label: 'Оформление',
     tabs: [
       { id: 'appearance', name: 'Темы', icon: Palette, description: 'Тема оформления системы', color: 'from-blue-500 to-cyan-600' },
+      { id: 'instructions', name: 'Инструкции', icon: Film, description: 'Видеоинструкции для пользователей', color: 'from-indigo-500 to-violet-600' },
     ],
   },
 ]
@@ -301,7 +303,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
       .catch(() => {})
   }, [])
 
-  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'global-hierarchy', 'bug-reports', 'test-data']
+  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'global-hierarchy', 'bug-reports', 'test-data', 'instructions']
 
   const filteredGroups = TAB_GROUPS
     .map((group) => ({
@@ -374,6 +376,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
         {activeTab === 'appearance' && <AppearanceTab />}
         {activeTab === 'bug-reports' && <AdminBugReports />}
         {activeTab === 'test-data' && <TestDataTab />}
+        {activeTab === 'instructions' && <InstructionsTab />}
       </div>
 
       <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />

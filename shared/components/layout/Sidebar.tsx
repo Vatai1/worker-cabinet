@@ -12,7 +12,7 @@ import {
   Calendar, Bell, Crown, Bot, UserCheck,
   Send, UserPlus, Network, Briefcase,
   Key, ShieldCheck, Boxes, Settings2,
-  Activity, Palette,
+  Activity, Palette, Film,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -113,7 +113,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
 // показываем их и в разделе «Настройки организации» в сайдбаре.
 const ORG_HIDDEN_ITEM_NAMES = new Set([
   'Роли и доступы', 'Роли по должности', 'Учреждения', 'Иерархия',
-  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система', 'Тестовые данные',
+  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система', 'Тестовые данные', 'Инструкции',
 ])
 
 const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg: boolean): NavItem[] => {
@@ -144,6 +144,7 @@ const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg:
       { name: 'Теги', href: `${basePath}?tab=dict_skills`, module: 'skills' },
     ]},
     { name: 'Темы', href: `${basePath}?tab=appearance`, icon: Palette, section },
+    { name: 'Инструкции', href: `${basePath}?tab=instructions`, icon: Film, section },
   ]
   if (!restrictToOrg) return items
   return items

@@ -558,16 +558,47 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(res.data.error, 'Заявка не найдена')
     })
 
-    it('end<start → 400', { skip: 'код не валидирует порядок дат переноса — расхождение с ТЗ, см. коммит' }, async () => {
+    it('end<start → 400', async () => {
       const id = await approvedVacation()
       const res = await call('POST', `/vacation/requests/${id}/transfer`, await tokenFor(emp), { newStartDate: shift(44), newEndDate: shift(40), reason: 'Проверка' })
       assert.strictEqual(res.status, 400)
     })
 
-    it('duration>available → 400', { skip: 'код не проверяет баланс при переносе — расхождение с ТЗ, см. коммит' }, async () => {
+    it('перенос длиннее исходного, но в пределах баланса → 201, разница резервируется', async () => {
       const id = await approvedVacation()
-      const res = await call('POST', `/vacation/requests/${id}/transfer`, await tokenFor(emp), { newStartDate: shift(40), newEndDate: shift(120), reason: 'Проверка' })
+      const year = yearOf(shift(10))
+      const before = await balanceOf(emp.id, year)
+      const res = await call('POST', `/vacation/requests/${id}/transfer`, await tokenFor(emp), { newStartDate: shift(40), newEndDate: shift(47), reason: 'Длиннее' })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      assert.strictEqual(res.data.duration, 8)
+      const after = await balanceOf(emp.id, year)
+      assert.strictEqual(after.reserved_days, before.reserved_days + 3)
+      assert.strictEqual(after.used_days, before.used_days)
+    })
+
+    it('перенос сверх доступного баланса → 400 «Не хватает дней»', async () => {
+      const id = await approvedVacation()
+      const year = yearOf(shift(10))
+      await query('UPDATE vacation_balances SET total_days = used_days + reserved_days + 1 WHERE user_id = $1 AND year = $2 AND organization_id = 1', [emp.id, year])
+      const res = await call('POST', `/vacation/requests/${id}/transfer`, await tokenFor(emp), { newStartDate: shift(40), newEndDate: shift(46), reason: 'Слишком длинный' })
       assert.strictEqual(res.status, 400)
+      assert.match(res.data.error, /Не хватает дней/)
+    })
+
+    it('перенос без причины → 201, причина пустая', async () => {
+      const id = await approvedVacation()
+      const res = await call('POST', `/vacation/requests/${id}/transfer`, await tokenFor(emp), { newStartDate: shift(40), newEndDate: shift(44), note: 'с оплатой проезда' })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      assert.strictEqual(res.data.transfer_reason, null)
+      assert.strictEqual(res.data.transfer_note, 'с оплатой проезда')
+    })
+
+    it('перенос в другой год → 400', async () => {
+      const id = await approvedVacation()
+      const nextYear = yearOf(shift(10)) + 1
+      const res = await call('POST', `/vacation/requests/${id}/transfer`, await tokenFor(emp), { newStartDate: `${nextYear}-03-02`, newEndDate: `${nextYear}-03-06`, reason: 'Другой год' })
+      assert.strictEqual(res.status, 400)
+      assert.match(res.data.error, /того же года/)
     })
   })
 
@@ -619,30 +650,24 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(row.original_id, originalId)
     })
 
-    it('баланс после transfer/approve: факт кода — used += new, reserved -= new без восстановления исходного', async () => {
+    it('баланс после transfer/approve: исходные дни возвращаются, списывается новая длительность', async () => {
       const { transferId } = await transferFlow()
+      const pending = await balanceOf(emp.id, yearOf(shift(10)))
+      assert.strictEqual(pending.used_days, 5)
+      assert.strictEqual(pending.reserved_days, 2)
       await call('POST', `/vacation/requests/${transferId}/transfer/approve`, await tokenFor(mgr), {})
-      const expected = {}
-      const bump = (year, used, reserved) => {
-        expected[year] = expected[year] || { used: 0, reserved: 0 }
-        expected[year].used += used
-        expected[year].reserved += reserved
-      }
-      bump(yearOf(shift(10)), 0, 5)
-      bump(yearOf(shift(10)), 5, -5)
-      bump(yearOf(shift(40)), 7, -7)
-      for (const [year, exp] of Object.entries(expected)) {
-        const actual = await balanceOf(emp.id, parseInt(year, 10))
-        assert.ok(actual, `баланс за ${year} не найден`)
-        assert.strictEqual(actual.used_days, exp.used, `used за ${year}`)
-        assert.strictEqual(actual.reserved_days, exp.reserved, `reserved за ${year}`)
-      }
+      const actual = await balanceOf(emp.id, yearOf(shift(10)))
+      assert.strictEqual(actual.used_days, 7)
+      assert.strictEqual(actual.reserved_days, 0)
     })
 
     it('transfer/reject: исходные даты прежние, перенос закрыт', async () => {
       const { originalId, transferId } = await transferFlow()
       const res = await call('POST', `/vacation/requests/${transferId}/transfer/reject`, await tokenFor(mgr), { reason: 'Нет возможности' })
       assert.strictEqual(res.status, 200)
+      const bal = await balanceOf(emp.id, yearOf(shift(10)))
+      assert.strictEqual(bal.used_days, 5)
+      assert.strictEqual(bal.reserved_days, 0)
       assert.strictEqual(await statusOf(transferId), 'rejected')
       assert.strictEqual(await statusOf(originalId), 'approved')
       const original = (await query('SELECT start_date, end_date FROM vacation_requests WHERE id = $1', [originalId])).rows[0]
@@ -657,6 +682,9 @@ describe('Модуль отпусков — user stories', () => {
       const { originalId, transferId } = await transferFlow()
       const res = await call('POST', `/vacation/requests/${transferId}/transfer/cancel`, await tokenFor(emp), {})
       assert.strictEqual(res.status, 200)
+      const bal = await balanceOf(emp.id, yearOf(shift(10)))
+      assert.strictEqual(bal.used_days, 5)
+      assert.strictEqual(bal.reserved_days, 0)
       assert.strictEqual(await statusOf(transferId), 'cancelled_by_employee')
       assert.strictEqual(await statusOf(originalId), 'approved')
       const original = (await query('SELECT start_date, end_date, transfer_reason FROM vacation_requests WHERE id = $1', [originalId])).rows[0]
@@ -811,6 +839,9 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(res.data[0].rule, 'group')
       assert.ok(res.data[0].message.includes('Превышен лимит'), res.data[0].message)
       assert.deepStrictEqual(res.data[0].names, ['Занятая Пётр'])
+      assert.deepStrictEqual(res.data[0].conflicts, [
+        { userId: String(emp2.id), name: 'Занятая Пётр', periods: [{ startDate: shift(10), endDate: shift(14) }] },
+      ])
     })
 
     it('check-restrictions: мимо дат → пусто', async () => {
@@ -1626,7 +1657,7 @@ describe('Модуль отпусков — user stories', () => {
     })
 
     it('идемпотентность: перенос с одинаковыми новыми датами дважды → даты и длительность совпадают', async () => {
-      const created = await postVacation(emp, { startDate: '2026-11-10', endDate: '2026-11-14', vacationType: 'annual_paid' })
+      const created = await postVacation(emp, { startDate: '2027-05-17', endDate: '2027-05-21', vacationType: 'annual_paid' })
       assert.strictEqual(created.status, 201, JSON.stringify(created.data))
       const approveRes = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
       assert.strictEqual(approveRes.status, 200, JSON.stringify(approveRes.data))

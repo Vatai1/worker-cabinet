@@ -7,6 +7,7 @@ import {
 import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
+import { InstructionVideoPlayer, useInstructionVideos, type InstructionPlacement } from '@/shared/components/InstructionVideos'
 import { cn } from '@/shared/lib/utils'
 
 interface VacationIntroModalProps {
@@ -93,6 +94,11 @@ function Section({
 export function VacationIntroModal({ open, onClose, isManager, isAdminOrSuperAdmin }: VacationIntroModalProps) {
   useModalOpen(open)
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['create']))
+  const videos = useInstructionVideos()
+  const videoFor = (placement: InstructionPlacement) => {
+    const video = videos.find((v) => v.placement === placement)
+    return video ? <InstructionVideoPlayer key={video.id} video={video} className="mb-4" /> : null
+  }
 
   const toggleSection = (id: string) => {
     setOpenSections((prev) => {
@@ -133,9 +139,16 @@ export function VacationIntroModal({ open, onClose, isManager, isAdminOrSuperAdm
   const transferSteps: Step[] = [
     { title: 'Перенести можно только уже одобренный отпуск', text: 'заявки со статусом «На согласовании» переносить не нужно — их можно просто отредактировать или отменить' },
     { title: 'Откройте форму переноса', text: 'вкладка «Заявления» → «Заявление на перенос», либо найдите отпуск в календаре или истории и выберите «Перенести»' },
-    { title: 'Укажите новые даты и причину переноса', text: 'перенос возможен только в пределах того же года' },
+    { title: 'Укажите новые даты', text: 'перенос возможен в пределах того же года; длительность можно изменить, если хватает дней в балансе. Причину указывать необязательно' },
     { title: 'Заявка на перенос уходит на согласование', text: 'тому же руководителю — он увидит её на вкладке «Согласование» как обычную заявку' },
     { title: 'После одобрения старый период закрывается', text: 'новый вступает в силу; дни отпуска не задваиваются. До одобрения действуют исходные даты' },
+  ]
+
+  const restrictionSteps: Step[] = [
+    { title: 'Откройте вкладку «Пересечения»', text: 'слева форма нового ограничения, справа — действующие ограничения с вашими сотрудниками' },
+    { title: 'Выберите сотрудников', text: 'список содержит сотрудников вашего отдела; тег помогает быстро найти нужных. Достаточно одного человека' },
+    { title: 'Укажите лимит', text: 'сколько человек из группы могут одновременно находиться в отпуске' },
+    { title: 'Следите за текущими пересечениями', text: 'ниже показаны актуальные пересечения ваших сотрудников; прошедшие отпуска не учитываются' },
   ]
 
   const features: { icon: React.ComponentType<{ className?: string }>; text: string }[] = [
@@ -175,16 +188,26 @@ export function VacationIntroModal({ open, onClose, isManager, isAdminOrSuperAdm
 
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-4 space-y-2.5">
           <Section id="create" icon={FilePlus2} title="Создание заявления на отпуск" accent="primary" open={openSections.has('create')} onToggle={toggleSection}>
+            {videoFor('vacation-create')}
             <Timeline steps={createSteps} accent="primary" />
           </Section>
 
           <Section id="approve" icon={UserCheck2} title="Согласование заявки" accent="amber" open={openSections.has('approve')} onToggle={toggleSection}>
+            {isManager && videoFor('vacation-approve')}
             <Timeline steps={approveSteps} accent="amber" />
           </Section>
 
           <Section id="transfer" icon={ArrowLeftRight} title="Перенос отпуска" accent="violet" open={openSections.has('transfer')} onToggle={toggleSection}>
+            {videoFor('vacation-transfer')}
             <Timeline steps={transferSteps} accent="violet" />
           </Section>
+
+          {isManager && (
+            <Section id="restrictions" icon={ShieldAlert} title="Пересечения отпусков" accent="amber" open={openSections.has('restrictions')} onToggle={toggleSection}>
+              {videoFor('vacation-restrictions')}
+              <Timeline steps={restrictionSteps} accent="amber" />
+            </Section>
+          )}
 
           <div className="rounded-xl border border-dashed border-border p-4">
             <p className="mb-3 text-[13px] font-semibold text-muted-foreground">Что есть в этом разделе</p>

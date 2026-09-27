@@ -1,8 +1,9 @@
-import { Sparkles, Plane, ClipboardList, FolderKanban, Calendar, Network, Send, UserPlus, Users, Building2 } from 'lucide-react'
+import { Sparkles, Plane, ClipboardList, FolderKanban, Calendar, Network, Send, UserPlus, Users, Building2, Video } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { Card } from '@/shared/components/ui/Card'
 import { PageBanner } from '@/shared/components/PageBanner'
+import { InstructionVideoCard, useInstructionVideos } from '@/shared/components/InstructionVideos'
 
 interface Feature {
   module: string
@@ -28,6 +29,7 @@ export function Dashboard() {
   const badges = useModulesStore((s) => s.badges)
   const loaded = useModulesStore((s) => s.loaded)
   const features = FEATURES.filter((f) => f.module === 'core' || !loaded || enabledModules.has(f.module))
+  const videos = useInstructionVideos()
 
   return (
     <div className="space-y-6">
@@ -69,6 +71,21 @@ export function Dashboard() {
           })}
         </div>
       </Card>
+
+      {videos.length > 0 && (
+        <Card className="p-6 lg:p-8 animate-slide-up stagger-2">
+          <div className="flex items-center gap-2.5 mb-1">
+            <Video className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-base font-semibold">Видеоинструкции</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-5">Короткие видео о том, как работать в кабинете</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            {videos.map((video) => (
+              <InstructionVideoCard key={video.id} video={video} />
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

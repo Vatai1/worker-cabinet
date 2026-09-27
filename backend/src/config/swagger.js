@@ -211,6 +211,7 @@ const options = {
       { name: 'UserDocuments', description: 'Документы пользователя' },
       { name: 'Admin', description: 'Админ-панель: роли, доступы, пользователи, настройки, аудит' },
       { name: 'Banner', description: 'Баннер предупреждения сверху страницы' },
+      { name: 'Instructions', description: 'Видеоинструкции: загрузка суперадмином и показ на дашборде' },
       { name: 'Appearance', description: 'Тема оформления системы' },
       { name: 'Push', description: 'Web Push уведомления (VAPID)' },
     ],

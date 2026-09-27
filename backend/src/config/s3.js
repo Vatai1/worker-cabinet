@@ -75,6 +75,19 @@ export const uploadToS3 = async (file, key) => {
   return key
 }
 
+export const uploadStreamToS3 = async (body, key, contentType, contentLength) => {
+  await ensureBucket()
+  await s3Client.send(new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+    ContentLength: contentLength,
+    ContentDisposition: 'inline',
+  }))
+  return key
+}
+
 export const getS3FileUrl = (key) => {
   const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/')
   return `${S3_PUBLIC_URL || S3_ENDPOINT}/${S3_BUCKET}/${encodedKey}`

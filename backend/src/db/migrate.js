@@ -1889,6 +1889,7 @@ async function runMigrations() {
     await migrateUserSessions(db)
     await migratePushSubscriptions(db)
     await migrateCalendarHolidays(db)
+    await migrateInstructionVideos(db)
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
@@ -1947,6 +1948,34 @@ async function migratePushSubscriptions(db) {
     console.log('  ✓ push_subscriptions ready')
   } catch (e) {
     console.log('  - push_subscriptions:', e.message)
+  }
+}
+
+async function migrateInstructionVideos(db) {
+  console.log('Checking instruction_videos table (видеоинструкции)...')
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS instruction_videos (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        audience VARCHAR(20) NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'manager')),
+        placement VARCHAR(40),
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        video_key TEXT NOT NULL,
+        video_mime VARCHAR(100),
+        video_size BIGINT,
+        poster_key TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_instruction_videos_active ON instruction_videos(is_active, sort_order)`)
+    console.log('  ✓ instruction_videos ready')
+  } catch (e) {
+    console.log('  - instruction_videos:', e.message)
   }
 }
 

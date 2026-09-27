@@ -3,7 +3,11 @@ import { X, AlertTriangle } from 'lucide-react'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { Button } from '@/shared/components/ui/Button'
 import { formatDate } from '@/shared/lib/utils'
+import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import type { VacationRequest } from '@/shared/types'
+
+const daysInclusive = (startDate: string, endDate: string) =>
+  Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1
 
 interface VacationTransferModalProps {
   isOpen: boolean
@@ -20,6 +24,18 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
   const [reason, setReason] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
+  const [availableDays, setAvailableDays] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!isOpen || !request) return
+    let cancelled = false
+    setAvailableDays(null)
+    vacationApi
+      .getBalance(request.userId, new Date(request.startDate).getFullYear())
+      .then((b) => { if (!cancelled) setAvailableDays(b.availableDays) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [isOpen, request])
 
   useEffect(() => {
     if (!isOpen) return
@@ -38,7 +54,6 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
 
     if (!newStartDate) newErrors.newStartDate = 'Укажите дату начала'
     if (!newEndDate) newErrors.newEndDate = 'Укажите дату окончания'
-    if (!reason.trim()) newErrors.reason = 'Укажите причину переноса'
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -61,10 +76,10 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
       newErrors.newEndDate = 'Перенос возможен только в пределах того же года'
     }
 
-    if (newStartDate && newEndDate) {
-      const newDuration = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-      if (newDuration > request.duration) {
-        newErrors.newEndDate = `Новая продолжительность (${newDuration} дн.) превышает исходную (${request.duration} дн.)`
+    if (newStartDate && newEndDate && end >= start && availableDays !== null) {
+      const extraDays = daysInclusive(newStartDate, newEndDate) - request.duration
+      if (extraDays > availableDays) {
+        newErrors.newEndDate = `Не хватает дней в балансе: новый период длиннее текущего на ${extraDays} дн., а доступно ${availableDays} дн.`
       }
     }
 
@@ -76,7 +91,7 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
     setErrors({})
     setSubmitting(true)
     try {
-      await onSubmit({ newStartDate, newEndDate, reason })
+      await onSubmit({ newStartDate, newEndDate, reason: reason.trim() })
       setNewStartDate('')
       setNewEndDate('')
       setReason('')
@@ -119,7 +134,10 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
               </div>
               <p className="text-sm text-amber-700 mt-2">
                 Будет создана новая заявка на согласовании. После её одобрения старая заявка будет отменена.
-                <strong> Новая продолжительность не должна превышать {request.duration} дней.</strong>
+                <strong>
+                  {' '}Новый период может быть любой длины, если хватает дней в балансе
+                  {availableDays !== null ? `: сверх текущих ${request.duration} дн. доступно ещё ${availableDays} дн.` : '.'}
+                </strong>
               </p>
             </div>
 
@@ -166,7 +184,7 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
 
             <div>
               <label className="block text-sm font-medium text-muted-foreground mb-1">
-                Причина переноса
+                Причина переноса <span className="text-muted-foreground">(необязательно)</span>
               </label>
               <textarea
                 value={reason}
@@ -201,7 +219,7 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
               </Button>
               <Button
                 type="submit"
-                disabled={loading || submitting || !reason.trim() || !newStartDate || !newEndDate}
+                disabled={loading || submitting || !newStartDate || !newEndDate}
                 className="flex-1"
               >
                 {submitting ? 'Отправка...' : 'Запросить перенос'}

@@ -30,6 +30,7 @@ import mailingsRoutes from './routes/mailings.js'
 import organizationsRoutes from './routes/organizations.js'
 import bugReportsRoutes from './routes/bugReports.js'
 import bannerRoutes from './routes/banner.js'
+import instructionsRoutes from './routes/instructions.js'
 import pushRoutes from './routes/push.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { runMigrations } from './db/migrate.js'
@@ -158,6 +159,7 @@ app.use('/api/mailings', mailingsRoutes)
 app.use('/api/organizations', organizationsRoutes)
 app.use('/api/bug-reports', bugReportsRoutes)
 app.use('/api/banner', bannerRoutes)
+app.use('/api/instructions', instructionsRoutes)
 app.use('/api/push', pushRoutes)
 
 app.get('/api/health', (req, res) => {

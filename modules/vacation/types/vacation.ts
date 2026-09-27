@@ -221,10 +221,17 @@ export interface VacationValidationErrorDetails {
   conflictingEmployee?: { dates: string; employeeName?: string }
 }
 
+export interface RestrictionConflict {
+  userId: string
+  name: string
+  periods: Array<{ startDate: string; endDate: string }>
+}
+
 export interface VacationValidationError {
   field: 'startDate' | 'endDate' | 'duration' | 'balance' | 'overlap' | 'travel' | 'referenceDocument' | 'restriction'
   message: string
   details?: VacationValidationErrorDetails
+  conflicts?: RestrictionConflict[]
 }
 
 export interface VacationSubstitution {

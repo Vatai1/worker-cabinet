@@ -150,7 +150,7 @@ export function VacationTransferApplicationPage() {
   }
 
   const handleSubmitForm = async () => {
-    if (!form.vacationId || !form.newStartDate || !form.newDays || !form.reason.trim()) {
+    if (!form.vacationId || !form.newStartDate || !form.newDays) {
       setFormError('Заполните все обязательные поля')
       return
     }
@@ -195,7 +195,7 @@ export function VacationTransferApplicationPage() {
         body: JSON.stringify({
           newStartDate: form.newStartDate,
           newEndDate,
-          reason: form.reason,
+          reason: form.reason.trim() || undefined,
           note: form.note || undefined,
           hasTravel: form.hasTravel,
           travelDestination: form.hasTravel ? form.travelDestination.trim() || undefined : undefined,
@@ -459,7 +459,7 @@ export function VacationTransferApplicationPage() {
             )}
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Причина переноса *</Label>
+              <Label className="text-xs">Причина переноса (необязательно)</Label>
               <Input
                 placeholder="Причина переноса"
                 value={form.reason}
@@ -545,7 +545,7 @@ export function VacationTransferApplicationPage() {
                 type="button"
                 size="sm"
                 onClick={handleSubmitForm}
-                disabled={submitting || !form.vacationId || !form.newStartDate || !form.newDays || !form.reason.trim()}
+                disabled={submitting || !form.vacationId || !form.newStartDate || !form.newDays}
               >
                 {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                 Подать на согласование

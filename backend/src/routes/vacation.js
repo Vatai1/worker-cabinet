@@ -1542,7 +1542,7 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [newStartDate, newEndDate, reason]
+ *             required: [newStartDate, newEndDate]
  *             properties:
  *               newStartDate: { type: string, format: date }
  *               newEndDate: { type: string, format: date }
@@ -1556,11 +1556,11 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
 
   try {
     const { id } = req.params
-    const { newStartDate, newEndDate, reason, hasTravel, travelDestination, travelChildren, substitute_ids } = req.body
+    const { newStartDate, newEndDate, reason, note, hasTravel, travelDestination, travelChildren, substitute_ids } = req.body
     const userId = req.user.id
 
-    if (!newStartDate || !newEndDate || !reason?.trim()) {
-      return res.status(400).json({ error: 'Укажите новые даты и причину переноса' })
+    if (!newStartDate || !newEndDate) {
+      return res.status(400).json({ error: 'Укажите новые даты переноса' })
     }
 
     if (hasTravel) {
@@ -1577,6 +1577,10 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
           }
         }
       }
+    }
+
+    if (newEndDate < newStartDate) {
+      return res.status(400).json({ error: 'Дата окончания не может быть раньше даты начала' })
     }
 
     let computedTransferDates
@@ -1613,8 +1617,34 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Можно переносить только согласованные заявки' })
     }
 
+    const originalYear = Number(String(original.start_date).slice(0, 4))
+    if (Number(newStartDate.slice(0, 4)) !== originalYear || Number(newEndDate.slice(0, 4)) !== originalYear) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Перенос возможен только в пределах того же года' })
+    }
+
     const newDuration = computedTransferDates.countedDays
     const computedNewEndDate = computedTransferDates.endDate
+
+    const extraDays = newDuration - original.duration
+    if (extraDays > 0) {
+      const balanceRow = (await client.query(
+        `SELECT available_days FROM vacation_balances
+         WHERE user_id = $1 AND year = $2${req.org ? ' AND organization_id = $3' : ''}
+         FOR UPDATE`,
+        req.org ? [original.user_id, originalYear, req.org.org_id] : [original.user_id, originalYear]
+      )).rows[0]
+      const available = balanceRow ? balanceRow.available_days : 0
+      if (extraDays > available) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: `Не хватает дней в балансе: новый период длиннее текущего на ${extraDays} дн., а доступно ${available} дн.` })
+      }
+      const { text: trResText, values: trResValues } = orgScopedQuery(
+        'UPDATE vacation_balances SET reserved_days = reserved_days + $1 WHERE user_id = $2 AND year = $3',
+        [extraDays, original.user_id, originalYear], req
+      )
+      await client.query(trResText, trResValues)
+    }
 
     const travelChildrenParsed = (hasTravel && Array.isArray(travelChildren)) ? travelChildren : []
     const travelChildrenJson = JSON.stringify(travelChildrenParsed)
@@ -1625,12 +1655,13 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     const insertResult = await client.query(
       `INSERT INTO vacation_requests
         (user_id, vacation_type_id, start_date, end_date, duration, status_id, transfer_reason, transferred_from_id, transfer_requested_at,
-         has_travel, travel_destination, travel_children, travel_children_count, organization_id, approver_id)
+         has_travel, travel_destination, travel_children, travel_children_count, organization_id, approver_id, transfer_note)
        VALUES ($1, $2, $3::date, $4::date, $5, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $6, $7, CURRENT_TIMESTAMP,
-         $8, $9, $10, $11, $12, $13)
+         $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
-      [original.user_id, original.vacation_type_id, newStartDate, computedNewEndDate, newDuration, reason, id,
-       hasTravel || false, hasTravel ? (travelDestination || null) : null, travelChildrenJson, travelChildrenCount, currentOrgId(req), approverId]
+      [original.user_id, original.vacation_type_id, newStartDate, computedNewEndDate, newDuration, reason?.trim() || null, id,
+       hasTravel || false, hasTravel ? (travelDestination || null) : null, travelChildrenJson, travelChildrenCount, currentOrgId(req), approverId,
+       note?.trim() || null]
     )
 
     await client.query(
@@ -1775,10 +1806,10 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
 
     const { text: tAppBalText, values: tAppBalValues } = orgScopedQuery(
       `UPDATE vacation_balances
-       SET reserved_days = reserved_days - $1,
-           used_days = used_days + $1
-       WHERE user_id = $2 AND year = EXTRACT(YEAR FROM $3::date)`,
-      [newRequest.duration, newRequest.user_id, newRequest.start_date], req
+       SET reserved_days = reserved_days - GREATEST($1::int - $2::int, 0),
+           used_days = used_days + ($1::int - $2::int)
+       WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
+      [newRequest.duration, originalRequest.duration, newRequest.user_id, originalRequest.start_date], req
     )
     await client.query(tAppBalText, tAppBalValues)
 
@@ -1915,10 +1946,9 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
 
     const { text: tRejBalText, values: tRejBalValues } = orgScopedQuery(
       `UPDATE vacation_balances
-        SET reserved_days = reserved_days - $1,
-            used_days = used_days + $2
+        SET reserved_days = reserved_days - GREATEST($1::int - $2::int, 0)
         WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
-      [newRequest.duration, originalRequest.duration, newRequest.user_id, newRequest.start_date], req
+      [newRequest.duration, originalRequest.duration, newRequest.user_id, originalRequest.start_date], req
     )
     await client.query(tRejBalText, tRejBalValues)
 
@@ -2043,10 +2073,9 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
 
     const { text: tCnlBalText, values: tCnlBalValues } = orgScopedQuery(
       `UPDATE vacation_balances
-        SET reserved_days = reserved_days - $1,
-            used_days = used_days + $2
+        SET reserved_days = reserved_days - GREATEST($1::int - $2::int, 0)
         WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
-      [newRequest.duration, originalRequest.duration, userId, newRequest.start_date], req
+      [newRequest.duration, originalRequest.duration, userId, originalRequest.start_date], req
     )
     await client.query(tCnlBalText, tCnlBalValues)
 
@@ -3436,6 +3465,11 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
             tagNames,
             names: concurrentNames,
             dates: concurrentIds.flatMap(id => overlapDatesMap.get(id) || []),
+            conflicts: concurrentIds.map(id => ({
+              userId: String(id),
+              name: fullNameOf(id),
+              periods: overlapDatesMap.get(id) || [],
+            })),
           })
         }
       }

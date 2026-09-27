@@ -2388,7 +2388,7 @@ router.post('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) =
         [emp.id, orgId]
       )
       const hasReq = await client.query(
-        `SELECT 1 FROM vacation_requests WHERE user_id = $1 AND transfer_reason IS NULL LIMIT 1`,
+        `SELECT 1 FROM vacation_requests WHERE user_id = $1 AND transferred_from_id IS NULL LIMIT 1`,
         [emp.id]
       )
       if (hasReq.rows.length === 0) {
