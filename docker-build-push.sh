@@ -157,7 +157,7 @@ generate_test_env() {
         echo "NODE_ENV=development"
         echo "DB_HOST=localhost"
         echo "DB_PORT=55432"
-        echo "DB_NAME=wc_test"
+        echo "DB_NAME=worker_cabinet"
         echo "DB_USER=postgres"
         echo "DB_PASSWORD=${TEST_PG_PASSWORD}"
         echo "DB_SSL=false"
@@ -187,12 +187,12 @@ step_test_db() {
     TEST_JWT_SECRET="$(openssl rand -hex 32)"
     docker run -d --rm --name "$TEST_PG_NAME" \
         -e POSTGRES_PASSWORD="$TEST_PG_PASSWORD" \
-        -e POSTGRES_DB=wc_test \
+        -e POSTGRES_DB=worker_cabinet \
         -p 55432:5432 \
         postgres:16-alpine >/dev/null
     local _ ready=false
     for _ in $(seq 1 30); do
-        if docker exec "$TEST_PG_NAME" pg_isready -U postgres -d wc_test >/dev/null 2>&1; then
+        if docker exec "$TEST_PG_NAME" pg_isready -U postgres -d worker_cabinet >/dev/null 2>&1; then
             ready=true
             break
         fi
