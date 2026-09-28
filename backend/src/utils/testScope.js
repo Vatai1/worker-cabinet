@@ -97,7 +97,7 @@ export async function applyTestContext(req) {
         [targetId]
       )
       const target = r.rows[0]
-      if (target && target.status === 'active' && target.role !== 'superadmin' && target.id !== realUser.id) {
+      if (target && target.status === 'active' && target.id !== realUser.id) {
         req.realUser = {
           id: realUser.id,
           role: 'superadmin',

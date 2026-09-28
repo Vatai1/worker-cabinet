@@ -343,7 +343,7 @@ router.get('/view-as/search', authenticateToken, requireRealSuper, asyncHandler(
     `SELECT u.id, u.first_name, u.last_name, u.middle_name, u.email, u.position, u.role, u.is_test, d.name AS department_name
      FROM users u
      LEFT JOIN departments d ON d.id = u.department_id
-     WHERE u.status = 'active' AND u.role <> 'superadmin' AND u.id <> $2
+     WHERE u.status = 'active' AND u.id <> $2
        AND (u.last_name || ' ' || u.first_name || ' ' || COALESCE(u.middle_name, '') ILIKE $1
             OR u.first_name || ' ' || u.last_name ILIKE $1 OR u.email ILIKE $1 OR u.position ILIKE $1)
      ORDER BY u.is_test, u.last_name, u.first_name
@@ -368,7 +368,7 @@ router.get('/view-as/search', authenticateToken, requireRealSuper, asyncHandler(
  * /auth/view-as:
  *   post:
  *     tags: [Auth]
- *     summary: Посмотреть кабинет от лица пользователя (суперадмин)
+ *     summary: Посмотреть кабинет от лица пользователя (суперадмин, включая другой аккаунт суперадмина — только просмотр)
  *     description: 'Для реального пользователя включается режим «только просмотр» — любые изменяющие запросы отклоняются с 403 VIEW_ONLY. За тестовых пользователей доступен полный вход. Вход и выход пишутся в журнал аудита'
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
@@ -384,7 +384,7 @@ router.get('/view-as/search', authenticateToken, requireRealSuper, asyncHandler(
  *       200:
  *         description: '{ success, userId, viewOnly }'
  *       400:
- *         description: Пользователь неактивен, суперадмин или это вы сами
+ *         description: Пользователь неактивен или это вы сами
  */
 router.post('/view-as', authenticateToken, requireRealSuper, asyncHandler(async (req, res) => {
   const userId = parseInt(req.body?.userId, 10)
@@ -396,7 +396,6 @@ router.post('/view-as', authenticateToken, requireRealSuper, asyncHandler(async 
   )).rows[0]
   if (!target) throw new ValidationError('Пользователь не найден')
   if (target.id === actorId) throw new ValidationError('Нельзя войти от своего имени')
-  if (target.role === 'superadmin') throw new ValidationError('Нельзя смотреть кабинет от лица суперадмина')
   if (target.status !== 'active') throw new ValidationError('Пользователь деактивирован')
 
   if (impersonationMode(req)) await logImpersonation(req, 'impersonation_stop', req.user, impersonationMode(req))
