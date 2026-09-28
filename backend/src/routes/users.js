@@ -6,6 +6,7 @@ import { uploadToS3, getS3FileUrl, deleteFromS3, S3_ENDPOINT, S3_BUCKET, S3_PUBL
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 import { getVisibleColleagueIds } from '../lib/colleagues.js'
+import { syncMembershipDepartment } from '../lib/departmentMembers.js'
 import { setKcUserEnabled, updateKcUserRole } from '../config/keycloak.js'
 
 const ELEVATED_ROLES = ['admin', 'superadmin', 'director']
@@ -1367,10 +1368,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     values.push(id)
 
+    const before = department_id !== undefined
+      ? (await query('SELECT department_id FROM users WHERE id = $1', [id])).rows[0]
+      : null
+
     await query(
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
       values
     )
+
+    if (before) await syncMembershipDepartment(null, id, before.department_id, department_id)
 
     res.json({ success: true })
   } catch (error) {

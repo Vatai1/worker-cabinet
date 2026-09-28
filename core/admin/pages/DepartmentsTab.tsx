@@ -1,30 +1,17 @@
 import { useState, useEffect, useMemo } from 'react'
-import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { fetchWithRetry } from '@/shared/lib/apiClient'
+import { createPortal } from 'react-dom'
+import { getAuthHeaders } from '@/shared/lib/authHeaders'
+import { apiGet, apiPost, fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
-import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { useOrgStore } from '@/shared/store/orgStore'
 import { Button } from '@/shared/components/ui/Button'
 import { toast } from 'sonner'
 import {
-  Building2, Users, UserX, Plus, Trash2, Pencil, X,
-  AlertTriangle, Loader2, Search, MoreVertical,
+  Building2, Users, UserX, Plus, Trash2, Settings2, X,
+  AlertTriangle, Loader2, Search, MoreVertical, Ban, Network,
 } from 'lucide-react'
-
-interface Dept {
-  id: number
-  name: string
-  manager_id: number | null
-  manager_name: string | null
-  manager_position: string | null
-  employee_count: string
-  vacation_requests_blocked: boolean
-  description: string | null
-  parent_id: number | null
-  parent_name: string | null
-}
+import { DeleteDepartmentDialog, DepartmentSettings, type Dept } from '@/core/admin/components/DepartmentSettings'
 
 type SortKey = 'name' | 'count'
 
@@ -43,11 +30,6 @@ const pluralRu = (n: number, one: string, few: string, many: string) => {
 }
 
 export function DepartmentsTab() {
-  const orgHeaders = (): Record<string, string> => {
-    const orgId = useOrgStore.getState().currentOrgId
-    return orgId != null ? { 'X-Organization-Id': String(orgId) } : {}
-  }
-
   const [departments, setDepartments] = useState<Dept[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -56,16 +38,22 @@ export function DepartmentsTab() {
   const [sort, setSort] = useState<SortKey>('name')
   const [openMenuId, setOpenMenuId] = useState<number | null>(null)
 
-  const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null)
-  const [editingId, setEditingId] = useState<number | null>(null)
+  const [creating, setCreating] = useState(false)
   const [formName, setFormName] = useState('')
+  const [formDescription, setFormDescription] = useState('')
   const [formManagerId, setFormManagerId] = useState<number | null>(null)
   const [formManagerName, setFormManagerName] = useState('')
   const [formParentId, setFormParentId] = useState<number | null>(null)
-  const [showPicker, setShowPicker] = useState(false)
+  const [pickerFor, setPickerFor] = useState<'create' | 'settings' | null>(null)
+  const [pickedManager, setPickedManager] = useState<{ id: number | null; name: string } | null>(null)
   const [saving, setSaving] = useState(false)
 
-  useModalOpen(modalMode !== null)
+  const [settingsId, setSettingsId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const settingsDept = departments.find((d) => d.id === settingsId) ?? null
+  const deletingDept = departments.find((d) => d.id === deletingId) ?? null
+
+  useModalOpen(creating)
 
   useEffect(() => { fetchDepartments() }, [])
 
@@ -80,97 +68,56 @@ export function DepartmentsTab() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setOpenMenuId(null)
-      if (showPicker) setShowPicker(false)
-      else closeModal()
+      if (pickerFor) setPickerFor(null)
+      else if (deletingId !== null) setDeletingId(null)
+      else if (settingsId !== null) setSettingsId(null)
+      else closeCreate()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [showPicker])
+  }, [pickerFor, deletingId, settingsId])
 
   const fetchDepartments = async () => {
-    setLoading(true)
     try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/departments`, { headers: getAuthHeaders() })
-      if (res.ok) setDepartments(await res.json())
-    } catch {} finally { setLoading(false) }
-  }
-
-  const descendantsOf = (rootId: number) => {
-    const children = new Map<number, number[]>()
-    for (const d of departments) {
-      if (d.parent_id !== null) {
-        children.set(d.parent_id, [...(children.get(d.parent_id) || []), d.id])
-      }
+      setDepartments(await apiGet<Dept[]>('/dictionaries/departments'))
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setLoading(false)
     }
-    const result = new Set<number>()
-    const stack = [rootId]
-    while (stack.length > 0) {
-      const cur = stack.pop()!
-      for (const child of children.get(cur) || []) {
-        if (!result.has(child)) { result.add(child); stack.push(child) }
-      }
-    }
-    return result
   }
 
   const openCreate = () => {
-    setModalMode('create')
-    setEditingId(null)
+    setCreating(true)
     setFormName('')
+    setFormDescription('')
     setFormManagerId(null)
     setFormManagerName('')
     setFormParentId(null)
     setError(null)
   }
 
-  const openEdit = (dept: Dept) => {
-    setModalMode('edit')
-    setEditingId(dept.id)
-    setFormName(dept.name)
-    setFormManagerId(dept.manager_id)
-    setFormManagerName(dept.manager_name || '')
-    setFormParentId(dept.parent_id)
-    setError(null)
+  const closeCreate = () => {
+    setCreating(false)
+    setPickerFor(null)
   }
 
-  const closeModal = () => {
-    setModalMode(null)
-    setEditingId(null)
-    setShowPicker(false)
+  const openSettings = (dept: Dept) => {
+    setPickedManager(null)
+    setSettingsId(dept.id)
   }
 
-  const submitForm = async () => {
+  const submitCreate = async () => {
     const name = formName.trim()
     if (!name) { setError('Название обязательно'); return }
     setSaving(true)
     try {
-      if (modalMode === 'edit' && editingId != null) {
-        const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${editingId}`, {
-          method: 'PUT', headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
-          body: JSON.stringify({ name, parent_id: formParentId, manager_id: formManagerId ?? null }),
-        })
-        if (res.ok) {
-          toast.success(`«${name}» — изменения сохранены`)
-          closeModal()
-          fetchDepartments()
-        } else {
-          const data = await res.json()
-          setError(data.error || 'Ошибка')
-        }
-      } else {
-        const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments`, {
-          method: 'POST', headers: { ...getAuthHeadersWithContentType(), ...orgHeaders() },
-          body: JSON.stringify({ name, manager_id: formManagerId, parent_id: formParentId }),
-        })
-        if (res.ok) {
-          toast.success(`«${name}» добавлен`)
-          closeModal()
-          fetchDepartments()
-        } else {
-          const data = await res.json()
-          setError(data.error || 'Ошибка')
-        }
-      }
+      await apiPost('/dictionaries/departments', {
+        name, description: formDescription, manager_id: formManagerId, parent_id: formParentId,
+      })
+      toast.success(`«${name}» добавлен`)
+      closeCreate()
+      fetchDepartments()
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {
@@ -178,39 +125,18 @@ export function DepartmentsTab() {
     }
   }
 
-  const removeDept = async (dept: Dept) => {
-    const confirmed = await confirmDialog({
-      title: 'Удалить отдел',
-      message: `Удалить отдел «${dept.name}»? Работники будут отвязаны от отдела.`,
-      confirmText: 'Удалить',
-      variant: 'danger',
-    })
-    if (!confirmed) return
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/departments/${dept.id}`, {
-        method: 'DELETE', headers: { ...getAuthHeaders(), ...orgHeaders() },
-      })
-      if (res.ok) {
-        toast.success(`«${dept.name}» удалён`)
-        fetchDepartments()
-      } else {
-        const data = await res.json().catch(() => ({}))
-        toast.error(data.error || 'Не удалось удалить отдел')
-      }
-    } catch (err) {
-      toast.error(getErrorMessage(err))
-    }
-  }
-
   const pickUser = (userId: number, userName: string) => {
-    setFormManagerId(userId)
-    setFormManagerName(userName)
-    setShowPicker(false)
+    if (pickerFor === 'settings') setPickedManager({ id: userId, name: userName })
+    else {
+      setFormManagerId(userId)
+      setFormManagerName(userName)
+    }
+    setPickerFor(null)
   }
 
   const stats = useMemo(() => {
     const total = departments.length
-    const people = departments.reduce((s, d) => s + (Number(d.employee_count) || 0), 0)
+    const people = departments.reduce((s, d) => s + d.employee_count, 0)
     const managers = departments.filter(d => d.manager_name).length
     return { total, people, managers }
   }, [departments])
@@ -222,13 +148,9 @@ export function DepartmentsTab() {
       : [...departments]
     list.sort((a, b) => sort === 'name'
       ? a.name.localeCompare(b.name, 'ru')
-      : (Number(b.employee_count) || 0) - (Number(a.employee_count) || 0) || a.name.localeCompare(b.name, 'ru'))
+      : b.employee_count - a.employee_count || a.name.localeCompare(b.name, 'ru'))
     return list
   }, [departments, search, sort])
-
-  const excludedParents = editingId != null
-    ? new Set([editingId, ...descendantsOf(editingId)])
-    : new Set<number>()
 
   if (loading) {
     return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
@@ -236,7 +158,7 @@ export function DepartmentsTab() {
 
   return (
     <div className="space-y-4">
-      {error && !modalMode && (
+      {error && !creating && (
         <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
           <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
@@ -293,11 +215,12 @@ export function DepartmentsTab() {
         <div className="grid grid-cols-1 gap-3">
           {visible.map((d) => {
             const hue = hueFromString(d.name)
-            const count = Number(d.employee_count) || 0
+            const count = d.employee_count
             return (
               <article
                 key={d.id}
-                className="flex items-center gap-3.5 rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-muted-foreground/30"
+                onClick={() => openSettings(d)}
+                className="flex cursor-pointer items-center gap-3.5 rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-muted-foreground/30"
               >
                 <div
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
@@ -309,9 +232,19 @@ export function DepartmentsTab() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-[14.5px] font-semibold leading-snug [overflow-wrap:anywhere]">{d.name}</h3>
-                    {d.parent_name && (
+                    {(d.parent_name || d.parent_user_name) && (
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        в составе: {d.parent_name}
+                        в составе: {d.parent_name || d.parent_user_name}
+                      </span>
+                    )}
+                    {d.vacation_requests_blocked && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                        <Ban className="h-2.5 w-2.5" /> заявки на отпуск закрыты
+                      </span>
+                    )}
+                    {d.on_hierarchy && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        <Network className="h-2.5 w-2.5" /> на схеме
                       </span>
                     )}
                   </div>
@@ -333,7 +266,7 @@ export function DepartmentsTab() {
                   )}
                 </div>
 
-                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <div className="flex shrink-0 flex-col items-end gap-1.5" onClick={e => e.stopPropagation()}>
                   <span className={cn(
                     'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold',
                     count === 0 ? 'bg-muted text-muted-foreground/60' : 'bg-primary/10 text-primary',
@@ -362,14 +295,14 @@ export function DepartmentsTab() {
                       >
                         <button
                           role="menuitem"
-                          onClick={() => { setOpenMenuId(null); openEdit(d) }}
+                          onClick={() => { setOpenMenuId(null); openSettings(d) }}
                           className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium hover:bg-muted"
                         >
-                          <Pencil className="h-3.5 w-3.5" /> Редактировать
+                          <Settings2 className="h-3.5 w-3.5" /> Настроить
                         </button>
                         <button
                           role="menuitem"
-                          onClick={() => { setOpenMenuId(null); removeDept(d) }}
+                          onClick={() => { setOpenMenuId(null); setDeletingId(d.id) }}
                           className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium text-destructive hover:bg-destructive/10"
                         >
                           <Trash2 className="h-3.5 w-3.5" /> Удалить
@@ -384,21 +317,19 @@ export function DepartmentsTab() {
         </div>
       )}
 
-      {modalMode && (
+      {creating && (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-5"
-          onClick={closeModal}
+          onClick={closeCreate}
         >
           <div
             role="dialog"
             aria-modal="true"
-            aria-label={modalMode === 'edit' ? 'Редактировать отдел' : 'Новый отдел'}
+            aria-label="Новый отдел"
             onClick={e => e.stopPropagation()}
             className="w-full max-w-[440px] rounded-2xl border border-border bg-card p-6 shadow-2xl max-h-[85vh] overflow-y-auto scrollbar-thin overscroll-contain"
           >
-            <h3 className="mb-4 text-base font-bold">
-              {modalMode === 'edit' ? 'Редактировать отдел' : 'Новый отдел'}
-            </h3>
+            <h3 className="mb-4 text-base font-bold">Новый отдел</h3>
 
             {error && (
               <div className="mb-3 flex items-center gap-2 rounded-lg bg-destructive/10 p-2.5 text-[13px] text-destructive">
@@ -407,7 +338,7 @@ export function DepartmentsTab() {
             )}
 
             <form
-              onSubmit={e => { e.preventDefault(); submitForm() }}
+              onSubmit={e => { e.preventDefault(); submitCreate() }}
               className="space-y-3.5"
             >
               <label className="flex flex-col gap-1.5">
@@ -422,47 +353,63 @@ export function DepartmentsTab() {
                 />
               </label>
 
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[12.5px] font-semibold text-muted-foreground">Описание</span>
+                <textarea
+                  value={formDescription}
+                  onChange={e => setFormDescription(e.target.value)}
+                  rows={2}
+                  maxLength={1000}
+                  className="resize-y rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+                />
+              </label>
+
               <div className="flex flex-col gap-1.5">
                 <span className="text-[12.5px] font-semibold text-muted-foreground">Руководитель</span>
-                <button
-                  type="button"
-                  onClick={() => setShowPicker(true)}
-                  className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/40"
-                >
-                  <span className={formManagerName ? 'text-foreground' : 'text-muted-foreground'}>
-                    {formManagerName || 'Не назначен'}
-                  </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPickerFor('create')}
+                    className="flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40"
+                  >
+                    <span className={formManagerName ? 'text-foreground' : 'text-muted-foreground'}>
+                      {formManagerName || 'Не назначен'}
+                    </span>
+                  </button>
                   {formManagerId != null && (
                     <button
                       type="button"
-                      onClick={e => { e.stopPropagation(); setFormManagerId(null); setFormManagerName('') }}
-                      className="rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => { setFormManagerId(null); setFormManagerName('') }}
+                      className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      aria-label="Снять руководителя"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-4 w-4" />
                     </button>
                   )}
-                </button>
+                </div>
               </div>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-[12.5px] font-semibold text-muted-foreground">Подразделение (родитель)</span>
+                <span className="text-[12.5px] font-semibold text-muted-foreground">Входит в подразделение</span>
                 <select
                   value={formParentId ?? ''}
                   onChange={e => setFormParentId(e.target.value ? Number(e.target.value) : null)}
                   className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
                 >
                   <option value="">—</option>
-                  {departments.filter(d => !excludedParents.has(d.id)).map(d => (
+                  {departments.map(d => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
               </label>
 
+              <p className="text-xs text-muted-foreground">Состав, запрет отпусков и видимость настраиваются после создания — кликните по отделу в списке</p>
+
               <div className="flex justify-end gap-2.5 pt-1">
-                <Button type="button" variant="outline" onClick={closeModal}>Отмена</Button>
+                <Button type="button" variant="outline" onClick={closeCreate}>Отмена</Button>
                 <Button type="submit" disabled={!formName.trim() || saving}>
                   {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                  {modalMode === 'edit' ? 'Сохранить' : 'Добавить'}
+                  Добавить
                 </Button>
               </div>
             </form>
@@ -470,8 +417,34 @@ export function DepartmentsTab() {
         </div>
       )}
 
-      {showPicker && (
-        <UserPickerModal onSelect={pickUser} onClose={() => setShowPicker(false)} />
+      {settingsDept && (
+        <DepartmentSettings
+          key={settingsDept.id}
+          dept={settingsDept}
+          departments={departments}
+          onClose={() => setSettingsId(null)}
+          onChanged={fetchDepartments}
+          onPickManager={() => setPickerFor('settings')}
+          pickedManager={pickedManager}
+          onDelete={() => setDeletingId(settingsDept.id)}
+        />
+      )}
+
+      {deletingDept && (
+        <DeleteDepartmentDialog
+          dept={deletingDept}
+          departments={departments}
+          onClose={() => setDeletingId(null)}
+          onDeleted={() => {
+            setDeletingId(null)
+            if (settingsId === deletingDept.id) setSettingsId(null)
+            fetchDepartments()
+          }}
+        />
+      )}
+
+      {pickerFor && (
+        <UserPickerModal onSelect={pickUser} onClose={() => setPickerFor(null)} />
       )}
     </div>
   )
@@ -502,8 +475,8 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
     return `${personName(u.last_name, u.first_name, u.middle_name)} ${u.email} ${u.position || ''}`.toLowerCase().includes(q)
   })
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
         <div className="p-4 border-b border-border shrink-0">
           <div className="flex items-center justify-between mb-3">
@@ -557,6 +530,7 @@ function UserPickerModal({ onSelect, onClose }: { onSelect: (id: number, name: s
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

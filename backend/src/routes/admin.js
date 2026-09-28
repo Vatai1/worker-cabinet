@@ -8,6 +8,7 @@ import { query, getClient } from '../config/database.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { requireRealSuperadmin, excludeTest, TEST_DEPT_NAME, TEST_USERS, TEST_USER_EMAILS, getTestDataState } from '../utils/testScope.js'
 import { personName } from '../utils/personName.js'
+import { syncMembershipDepartment } from '../lib/departmentMembers.js'
 import { getActiveWsCount } from '../config/ws.js'
 import { createRequire } from 'module'
 import path from 'path'
@@ -541,7 +542,11 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
   if (updates.length === 0) throw new ValidationError('Нет полей для обновления')
 
   values.push(id)
+  const before = body.department_id !== undefined
+    ? (await query('SELECT department_id FROM users WHERE id = $1', [id])).rows[0]
+    : null
   await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values)
+  if (before) await syncMembershipDepartment(null, id, before.department_id, body.department_id || null)
 
   if (body.first_name || body.last_name || body.email) {
     const guidCheck = await query('SELECT keycloak_guid, first_name, last_name, email FROM users WHERE id = $1', [id])

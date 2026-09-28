@@ -491,6 +491,15 @@ router.put('/:id/members/:userId', authenticateToken, authorizeRoles('admin', 'h
     `UPDATE user_organizations SET ${updates.join(', ')} WHERE user_id = $${paramIndex++} AND org_id = $${paramIndex} RETURNING *`,
     values
   )
+  if (department_id !== undefined) {
+    await query(
+      `UPDATE users SET department_id = $2
+       WHERE id = $1 AND department_id IS DISTINCT FROM $2
+         AND (department_id IS NULL OR department_id IN (SELECT id FROM departments WHERE organization_id = $3))
+         AND ($2::int IS NULL OR $2::int IN (SELECT id FROM departments WHERE organization_id = $3))`,
+      [userId, department_id || null, orgId]
+    )
+  }
   res.json(result.rows[0])
 }))
 

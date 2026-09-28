@@ -5,6 +5,7 @@ import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../middleware/errors.js'
 import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { departmentMembers, moveUsersToDepartment } from '../lib/departmentMembers.js'
 import multer from 'multer'
 
 async function validateOnlyOfficeUrl(url) {
@@ -70,10 +71,18 @@ const router = express.Router()
 router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
   let sql = `
     SELECT d.id, d.name, d.manager_id, d.description, d.vacation_requests_blocked,
+            d.parent_id, p.name AS parent_name,
+            d.parent_user_id,
+            pu.last_name || ' ' || pu.first_name || COALESCE(' ' || NULLIF(pu.middle_name, ''), '') AS parent_user_name,
+            d.vac_parent_sees_child, d.vac_child_sees_parent, d.vac_parent_approves,
+            d.emp_parent_sees_child, d.emp_child_sees_parent,
             m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
-            (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
+            m.position AS manager_position,
+            (SELECT COUNT(*) FROM users WHERE department_id = d.id AND status <> 'inactive')::int as employee_count
      FROM departments d
-     LEFT JOIN users m ON d.manager_id = m.id`
+     LEFT JOIN users m ON d.manager_id = m.id
+     LEFT JOIN departments p ON p.id = d.parent_id
+     LEFT JOIN users pu ON pu.id = d.parent_user_id`
   const params = []
   if (req.org) {
     params.push(currentOrgId(req))
@@ -81,8 +90,56 @@ router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asy
   }
   sql += ` ORDER BY d.name`
   const result = await query(sql, params)
-  res.json(result.rows)
+  const onCanvas = await hierarchyDepartmentIds(req.org ? currentOrgId(req) : null)
+  res.json(result.rows.map((d) => ({ ...d, on_hierarchy: onCanvas.has(d.id) })))
 }))
+
+async function hierarchyDepartmentIds(orgId) {
+  const result = orgId
+    ? await query('SELECT data FROM hr_hierarchy WHERE organization_id = $1', [orgId])
+    : await query('SELECT data FROM hr_hierarchy')
+  const ids = new Set()
+  for (const row of result.rows) {
+    for (const n of row.data?.nodes ?? []) {
+      if (n?.type === 'department' && n?.data?.id != null) ids.add(Number(n.data.id))
+    }
+  }
+  return ids
+}
+
+async function syncHierarchyParentFlags(client, orgId, deptId, flags) {
+  const row = (await client.query('SELECT data FROM hr_hierarchy WHERE organization_id = $1 FOR UPDATE', [orgId])).rows[0]
+  if (!row?.data) return
+  const data = row.data
+  const deptNodeIds = new Set((data.nodes ?? []).filter((n) => n?.type === 'department' && Number(n?.data?.id) === deptId).map((n) => n.id))
+  if (deptNodeIds.size === 0) return
+  let changed = false
+  data.edges = (data.edges ?? []).map((e) => {
+    if (!deptNodeIds.has(e?.target) || e?.data?.relation === 'plain') return e
+    changed = true
+    return {
+      ...e,
+      data: {
+        ...(e.data ?? {}),
+        vacationVisibility: {
+          ...(e.data?.vacationVisibility ?? {}),
+          parentSeesChild: flags.vac_parent_sees_child,
+          childSeesParent: flags.vac_child_sees_parent,
+          parentApproves: flags.vac_parent_approves,
+        },
+        employeeVisibility: {
+          parentSeesChild: flags.emp_parent_sees_child,
+          childSeesParent: flags.emp_child_sees_parent,
+        },
+      },
+    }
+  })
+  if (!changed) return
+  await client.query(
+    'UPDATE hr_hierarchy SET data = $1, updated_at = NOW(), version = version + 1 WHERE organization_id = $2',
+    [JSON.stringify(data), orgId]
+  )
+}
 
 async function validateDepartmentParent(parentId, deptId, orgId, req) {
   if (parentId === null || parentId === undefined) return
@@ -190,13 +247,16 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
  *       200:
  *         description: Отдел обновлён
  */
+const VISIBILITY_FLAGS = ['vac_parent_sees_child', 'vac_child_sees_parent', 'vac_parent_approves', 'emp_parent_sees_child', 'emp_child_sees_parent']
+
 router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
-  const { id } = req.params
+  const id = parseInt(req.params.id, 10)
   const { name, manager_id, description, parent_id } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
 
-  const existing = await query(...orgScopedQuery('SELECT id, organization_id FROM departments WHERE id = $1', [id], req))
+  const existing = await query(...orgScopedQuery('SELECT * FROM departments WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Отдел не найден')
+  const current = existing.rows[0]
 
   const duplicate = await query(...orgScopedQuery('SELECT id FROM departments WHERE name = $1 AND id != $2', [name.trim(), id], req))
   if (duplicate.rows.length > 0) throw new ConflictError('Отдел с таким названием уже существует')
@@ -209,16 +269,77 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
     }
   }
 
-  await validateDepartmentParent(parent_id ?? null, parseInt(id), existing.rows[0].organization_id, req)
+  const nextParentId = parent_id === undefined ? current.parent_id : (parent_id ?? null)
+  if (nextParentId !== current.parent_id) {
+    const onCanvas = await hierarchyDepartmentIds(current.organization_id)
+    if (onCanvas.has(id)) {
+      throw new ValidationError('Отдел размещён на схеме «Иерархия» — родителя меняйте связями на схеме')
+    }
+    await validateDepartmentParent(nextParentId, id, current.organization_id, req)
+  }
 
-  const result = await query(
-    ...orgScopedQuery(
-      'UPDATE departments SET name = $1, manager_id = $2, description = $3, parent_id = $4 WHERE id = $5 RETURNING id, name, manager_id, description, parent_id',
-      [name.trim(), manager_id || null, description?.trim() || null, parent_id ?? null, id],
+  const flags = {}
+  for (const f of VISIBILITY_FLAGS) flags[f] = typeof req.body[f] === 'boolean' ? req.body[f] : current[f]
+  const flagsChanged = VISIBILITY_FLAGS.some((f) => flags[f] !== current[f])
+  const blocked = typeof req.body.vacation_requests_blocked === 'boolean' ? req.body.vacation_requests_blocked : current.vacation_requests_blocked
+  const nextDescription = description === undefined ? current.description : (description?.trim() || null)
+
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+    const { text, values } = orgScopedQuery(
+      `UPDATE departments SET name = $1, manager_id = $2, description = $3, parent_id = $4, vacation_requests_blocked = $5,
+         vac_parent_sees_child = $6, vac_child_sees_parent = $7, vac_parent_approves = $8, emp_parent_sees_child = $9, emp_child_sees_parent = $10,
+         updated_at = NOW()
+       WHERE id = $11 RETURNING id, name, manager_id, description, parent_id`,
+      [name.trim(), manager_id || null, nextDescription, nextParentId, blocked, ...VISIBILITY_FLAGS.map((f) => flags[f]), id],
       req
     )
-  )
-  res.json(result.rows[0])
+    const result = await client.query(text, values)
+    if (flagsChanged && current.organization_id) await syncHierarchyParentFlags(client, current.organization_id, id, flags)
+    await client.query('COMMIT')
+    res.json(result.rows[0])
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}))
+
+router.get('/departments/:id/members', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const existing = await query(...orgScopedQuery('SELECT id FROM departments WHERE id = $1', [Number.isNaN(id) ? 0 : id], req))
+  if (existing.rows.length === 0) throw new NotFoundError('Отдел не найден')
+  res.json(await departmentMembers(null, id))
+}))
+
+router.post('/departments/:id/members', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const userIds = Array.isArray(req.body.userIds) ? [...new Set(req.body.userIds.map(Number).filter(Number.isInteger))] : []
+  if (userIds.length === 0) throw new ValidationError('Не выбраны работники')
+
+  const existing = await query(...orgScopedQuery('SELECT id, organization_id FROM departments WHERE id = $1', [Number.isNaN(id) ? 0 : id], req))
+  if (existing.rows.length === 0) throw new NotFoundError('Отдел не найден')
+  const orgId = existing.rows[0].organization_id
+
+  const found = orgId
+    ? await query('SELECT user_id FROM user_organizations WHERE org_id = $1 AND user_id = ANY($2)', [orgId, userIds])
+    : await query('SELECT id AS user_id FROM users WHERE id = ANY($1)', [userIds])
+  if (found.rows.length !== userIds.length) throw new ValidationError('Некоторые работники не состоят в этом учреждении')
+
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+    await moveUsersToDepartment(client, userIds, id)
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+  res.json({ moved: userIds.length })
 }))
 
 /**
@@ -234,7 +355,7 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
  *         name: id
  *         required: true
  *         schema: { type: integer }
- *     description: 'Нельзя удалить отдел, в котором есть действующие работники (по users.department_id или активному членству в организации) или отправленные/утверждённые табели. У деактивированных работников и неактивных членств ссылка на отдел очищается, черновики табелей удаляются вместе с отделом'
+ *     description: 'Нельзя удалить отдел, в котором есть действующие работники (users.department_id, кроме деактивированных), если не передан transfer_to — тогда работники переводятся в указанный отдел. Также нельзя удалить при отправленных/утверждённых табелях. Прочие ссылки на отдел очищаются, черновики табелей удаляются'
  *     responses:
  *       200:
  *         description: Отдел удалён
@@ -255,19 +376,22 @@ router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin
   const id = parseInt(req.params.id, 10)
   if (Number.isNaN(id)) throw new NotFoundError('Отдел не найден')
 
-  const existing = await query(...orgScopedQuery('SELECT id FROM departments WHERE id = $1', [id], req))
+  const existing = await query(...orgScopedQuery('SELECT id, organization_id FROM departments WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Отдел не найден')
 
-  const people = await query(
-    `SELECT DISTINCT u.id, u.last_name, u.first_name, u.middle_name
-     FROM users u
-     WHERE (u.department_id = $1 AND u.status <> 'inactive')
-        OR EXISTS (SELECT 1 FROM user_organizations uo WHERE uo.user_id = u.id AND uo.department_id = $1 AND uo.is_active AND u.status <> 'inactive')
-     ORDER BY u.last_name, u.first_name`,
-    [id]
-  )
-  if (people.rows.length > 0) {
-    throw new ConflictError(`Нельзя удалить отдел: в нём есть работники — ${listPreview(people.rows.map(shortPersonName))}. Переведите их в другой отдел`)
+  const transferRaw = req.query.transfer_to ?? req.body?.transfer_to
+  const transferTo = transferRaw != null && transferRaw !== '' ? parseInt(transferRaw, 10) : null
+  if (transferTo != null) {
+    if (Number.isNaN(transferTo) || transferTo === id) throw new ValidationError('Выберите другой отдел для перевода работников')
+    const target = await query(...orgScopedQuery('SELECT id, organization_id FROM departments WHERE id = $1', [transferTo], req))
+    if (target.rows.length === 0 || target.rows[0].organization_id !== existing.rows[0].organization_id) {
+      throw new ValidationError('Отдел для перевода не найден в этом учреждении')
+    }
+  }
+
+  const people = await departmentMembers(null, id)
+  if (people.length > 0 && transferTo == null) {
+    throw new ConflictError(`Нельзя удалить отдел: в нём есть работники — ${listPreview(people.map(shortPersonName))}. Переведите их в другой отдел`)
   }
 
   const sheets = await query('SELECT id, year, month, status FROM timesheets WHERE department_id = $1 ORDER BY year, month', [id])
@@ -280,8 +404,9 @@ router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin
   const client = await getClient()
   try {
     await client.query('BEGIN')
+    if (people.length > 0) await moveUsersToDepartment(client, people.map((p) => p.id), transferTo)
     await client.query('UPDATE user_organizations SET department_id = NULL WHERE department_id = $1', [id])
-    await client.query("UPDATE users SET department_id = NULL WHERE department_id = $1 AND status = 'inactive'", [id])
+    await client.query('UPDATE users SET department_id = NULL WHERE department_id = $1', [id])
     await client.query("DELETE FROM timesheets WHERE department_id = $1 AND status = 'draft'", [id])
     const { text, values } = orgScopedQuery('DELETE FROM departments WHERE id = $1', [id], req)
     await client.query(text, values)
@@ -292,7 +417,7 @@ router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin
   } finally {
     client.release()
   }
-  res.json({ success: true })
+  res.json({ success: true, moved: people.length })
 }))
 
 /**

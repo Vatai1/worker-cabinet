@@ -62,7 +62,7 @@ const TAB_GROUPS: TabGroup[] = [
   { label: 'Справочники', tabs: [
     { id: 'hr_employees', name: 'Сотрудники', icon: Users, description: 'Справочник сотрудников', module: null, color: 'from-blue-500 to-indigo-600' },
     { id: 'institution', name: 'Учреждение', icon: Building2, description: 'Информация и руководитель', module: 'dictionaries', color: 'from-indigo-500 to-blue-600' },
-    { id: 'hr_departments', name: 'Отделы', icon: Building2, description: 'Структура организации', module: 'dictionaries', color: 'from-blue-500 to-indigo-600' },
+    { id: 'hr_departments', name: 'Отделы', icon: Building2, description: 'Структура организации', module: null, color: 'from-blue-500 to-indigo-600' },
     { id: 'hr_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', module: 'dictionaries', color: 'from-violet-500 to-purple-600' },
     { id: 'hr_vacation_types', name: 'Типы отпусков', icon: Plane, description: 'Типы отпусков', module: 'vacation', color: 'from-amber-500 to-orange-600' },
     { id: 'hr_skills', name: 'Теги', icon: Tag, description: 'Каталог тегов', module: 'skills', color: 'from-emerald-500 to-teal-600' },
