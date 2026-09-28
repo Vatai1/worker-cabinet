@@ -4,6 +4,7 @@ import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 import { vacationStatusBatch } from '../lib/vacationDays.js'
+import { canEditDepartmentHierarchy, hasFullDepartmentAccess, managedDepartmentIds } from '../lib/departmentScope.js'
 
 const router = express.Router()
 
@@ -788,6 +789,40 @@ router.put('/global', authenticateToken, authorizeRoles('superadmin'), async (re
 
 /**
  * @swagger
+ * /hierarchy/my-departments:
+ *   get:
+ *     tags: [Hierarchy]
+ *     summary: Отделы, внутренние схемы которых текущий пользователь может редактировать
+ *     description: 'Руководитель — свой отдел и все нижестоящие (по parent_id); HR/admin — все отделы учреждения'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список отделов (id, name, parent_id)
+ */
+router.get('/my-departments', authenticateToken, async (req, res) => {
+  try {
+    const orgId = currentOrgId(req)
+    let rows
+    if (hasFullDepartmentAccess(req)) {
+      rows = (await query(
+        `SELECT id, name, parent_id FROM departments WHERE ($1::int IS NULL OR organization_id = $1) ${excludeTest(req, 'departments')} ORDER BY name`,
+        [orgId ?? null]
+      )).rows
+    } else {
+      const ids = [...await managedDepartmentIds(req.user.id, orgId)]
+      rows = ids.length === 0 ? [] : (await query('SELECT id, name, parent_id FROM departments WHERE id = ANY($1) ORDER BY name', [ids])).rows
+    }
+    res.json(rows)
+  } catch (error) {
+    res.locals.errorCause = error
+    console.error('GET /hierarchy/my-departments error:', error)
+    res.status(500).json({ error: 'Не удалось загрузить отделы' })
+  }
+})
+
+/**
+ * @swagger
  * /hierarchy/department/{id}:
  *   get:
  *     tags: [Hierarchy]
@@ -812,11 +847,12 @@ router.get('/department/:id', authenticateToken, async (req, res) => {
       req
     )
     const result = await query(text, values)
+    const can_edit = await canEditDepartmentHierarchy(req, id)
     if (result.rows.length === 0) {
-      return res.json({ data: DEFAULT_DATA, updated_at: null, updated_by: null })
+      return res.json({ data: DEFAULT_DATA, updated_at: null, updated_by: null, can_edit })
     }
     const row = result.rows[0]
-    res.json({ ...row, data: await enrichHierarchyData(row.data, currentOrgId(req)) })
+    res.json({ ...row, data: await enrichHierarchyData(row.data, currentOrgId(req)), can_edit })
   } catch (error) {
     res.locals.errorCause = error
     console.error('GET /hierarchy/department/:id error:', error)
@@ -829,7 +865,7 @@ router.get('/department/:id', authenticateToken, async (req, res) => {
  * /hierarchy/department/{id}:
  *   put:
  *     tags: [Hierarchy]
- *     summary: Сохранить иерархию отдела (HR/admin)
+ *     summary: Сохранить иерархию отдела (HR/admin или руководитель отдела/вышестоящего)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -858,7 +894,7 @@ router.get('/department/:id', authenticateToken, async (req, res) => {
  *       404:
  *         description: Отдел не найден
  */
-router.put('/department/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.put('/department/:id', authenticateToken, async (req, res) => {
   const { id } = req.params
   const { nodes, edges, viewport } = req.body
   if (!nodes || !edges) {
@@ -875,6 +911,9 @@ router.put('/department/:id', authenticateToken, authorizeRoles('hr', 'admin'), 
     }
     if (deptRow.rows[0].organization_id !== orgId) {
       return res.status(403).json({ error: 'Нет доступа к этому отделу' })
+    }
+    if (!(await canEditDepartmentHierarchy(req, id))) {
+      return res.status(403).json({ error: 'Схему отдела может менять его руководитель, руководитель вышестоящего отдела или HR' })
     }
     const data = JSON.stringify({ nodes, edges, viewport: viewport ?? DEFAULT_DATA.viewport })
     const result = await query(

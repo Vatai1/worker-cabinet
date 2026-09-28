@@ -12,7 +12,9 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Network, Pencil, X } from 'lucide-react'
+import { ChevronDown, Network, Pencil, X } from 'lucide-react'
+import { apiGet } from '@/shared/lib/apiClient'
+import { DepartmentSchemeModal } from '@/modules/hierarchy/components/DepartmentSchemeModal'
 import { useUIStore } from '@/shared/store/uiStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
@@ -35,6 +37,21 @@ export function MyHierarchy() {
   const currentOrgId = useOrgStore((s) => s.currentOrgId)
   const hierarchyEnabled = useModulesStore((s) => s.isModuleEnabled)('hierarchy')
   const canEdit = hierarchyEnabled && currentOrgId != null && hasAnyRole('hr', 'admin')
+  const [myDepartments, setMyDepartments] = useState<Array<{ id: number; name: string }>>([])
+  const [deptMenuOpen, setDeptMenuOpen] = useState(false)
+  const [schemeDept, setSchemeDept] = useState<{ id: number; name: string } | null>(null)
+
+  useEffect(() => {
+    if (!hierarchyEnabled || canEdit) return
+    apiGet<Array<{ id: number; name: string }>>('/hierarchy/my-departments')
+      .then(setMyDepartments)
+      .catch(() => setMyDepartments([]))
+  }, [hierarchyEnabled, canEdit])
+
+  const openScheme = (dept: { id: number; name: string }) => {
+    setDeptMenuOpen(false)
+    setSchemeDept(dept)
+  }
 
   const close = useCallback(() => navigate('/dashboard'), [navigate])
 
@@ -77,13 +94,13 @@ export function MyHierarchy() {
   }, [reloadKey])
 
   useEffect(() => {
-    if (editing) return
+    if (editing || schemeDept) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [close, editing])
+  }, [close, editing, schemeDept])
 
   if (editing && currentOrgId != null) {
     return (
@@ -100,12 +117,41 @@ export function MyHierarchy() {
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
+      {schemeDept && (
+        <DepartmentSchemeModal departmentId={schemeDept.id} departmentName={schemeDept.name} onClose={() => setSchemeDept(null)} />
+      )}
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2 min-w-0">
           <Network className="h-4 w-4 shrink-0 text-primary" />
           <span className="truncate text-[15px] font-semibold">Иерархия организации</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {myDepartments.length > 0 && (
+            <div className="relative">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => (myDepartments.length === 1 ? openScheme(myDepartments[0]) : setDeptMenuOpen((v) => !v))}
+              >
+                <Pencil className="mr-1.5 h-4 w-4" />
+                {myDepartments.length === 1 ? `Схема: ${myDepartments[0].name}` : 'Схемы моих отделов'}
+                {myDepartments.length > 1 && <ChevronDown className="ml-1 h-3.5 w-3.5" />}
+              </Button>
+              {deptMenuOpen && (
+                <div className="absolute right-0 top-[calc(100%+6px)] z-10 max-h-[60vh] min-w-[220px] overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-xl">
+                  {myDepartments.map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => openScheme(d)}
+                      className="block w-full rounded-lg px-2.5 py-2 text-left text-[13.5px] hover:bg-muted"
+                    >
+                      {d.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {canEdit && (
             <Button size="sm" onClick={() => setEditing(true)}>
               <Pencil className="mr-1.5 h-4 w-4" />

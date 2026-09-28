@@ -278,6 +278,25 @@ function extractYear(date) {
   return new Date(date).getFullYear()
 }
 
+async function institutionHeadData(req) {
+  const orgId = req.org?.org_id
+  const empty = { head_full_name: '', head_short_name: '', head_initials_name: '', head_position: '' }
+  if (!orgId) return empty
+  const h = (await query(
+    `SELECT u.first_name, u.last_name, u.middle_name, u.position
+     FROM organizations o JOIN users u ON u.id = o.head_id WHERE o.id = $1`,
+    [orgId]
+  )).rows[0]
+  if (!h) return empty
+  const initials = [h.first_name?.[0], h.middle_name?.[0]].filter(Boolean).map((c) => `${c}.`).join('')
+  return {
+    head_full_name: [h.last_name, h.first_name, h.middle_name].filter(Boolean).join(' '),
+    head_short_name: [h.last_name, initials].filter(Boolean).join(' '),
+    head_initials_name: [initials, h.last_name].filter(Boolean).join(' '),
+    head_position: h.position || '',
+  }
+}
+
 function applyYearPlaceholders(zip, year) {
   const yearStr = String(year)
   for (const fileName of Object.keys(zip.files)) {
@@ -2363,8 +2382,10 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       position: u.position || '',
       department: u.department_name || '',
       year: String(year),
+      selected_year: String(year),
       next_year: String(year + 1),
       date_today: formatDate(today),
+      ...(await institutionHeadData(req)),
       travel_period_start: u.hire_date ? formatDate(u.hire_date) : '',
       travel_period_end: u.hire_date ? formatDate(new Date(u.hire_date).setFullYear(new Date(u.hire_date).getFullYear() + 2)) : '',
       vacations,
@@ -2593,6 +2614,8 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
     const transferYear = transfersResult.rows[0]?.new_start
       ? extractYear(transfersResult.rows[0].new_start)
       : today.getFullYear()
+    data.selected_year = String(transferYear)
+    Object.assign(data, await institutionHeadData(req))
     const zip = new PizZip(buffer)
     applyYearPlaceholders(zip, transferYear)
     const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true })

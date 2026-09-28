@@ -25,8 +25,18 @@ const GROUPS = {
     label: 'Документ',
     items: [
       { tag: '{date_today}', desc: 'Дата генерации (ДД.ММ.ГГГГ)' },
-      { tag: '{year}', desc: 'Текущий год' },
+      { tag: '{selected_year}', desc: 'Год, выбранный при скачивании заявления (для переноса — год нового отпуска)' },
+      { tag: '{year}', desc: 'Год (в заявлении на отпуск — выбранный, в переносе — текущий)' },
       { tag: '{next_year}', desc: 'Следующий год' },
+    ],
+  },
+  head: {
+    label: 'Руководитель учреждения',
+    items: [
+      { tag: '{head_full_name}', desc: 'ФИО руководителя (Фамилия Имя Отчество)' },
+      { tag: '{head_short_name}', desc: 'Фамилия И.О. руководителя' },
+      { tag: '{head_initials_name}', desc: 'И.О. Фамилия руководителя' },
+      { tag: '{head_position}', desc: 'Должность руководителя' },
     ],
   },
   vacation_list: {
@@ -122,12 +132,14 @@ export const PLACEHOLDERS_BY_PURPOSE: Record<string, PlaceholderGroup[]> = {
   vacation_template: [
     GROUPS.person,
     GROUPS.meta,
+    GROUPS.head,
     GROUPS.vacation_list,
     GROUPS.vacation_loop,
   ],
   vacation_transfer_template: [
     GROUPS.person,
     GROUPS.meta,
+    GROUPS.head,
     GROUPS.transfer,
   ],
 }

@@ -28,7 +28,8 @@ modules/hierarchy/
 | GET | `/api/hierarchy/` | all | Полная иерархия (ReactFlow данные) |
 | PUT | `/api/hierarchy/` | hr, admin | Сохранить иерархию |
 | GET | `/api/hierarchy/department/:id` | all | Иерархия отдела |
-| PUT | `/api/hierarchy/department/:id` | hr, admin | Сохранить иерархию отдела |
+| GET | `/api/hierarchy/my-departments` | all | Отделы, схемы которых пользователь может редактировать |
+| PUT | `/api/hierarchy/department/:id` | hr, admin, руководитель отдела или вышестоящего | Сохранить внутреннюю схему отдела |
 
 ## Роли и доступ
 

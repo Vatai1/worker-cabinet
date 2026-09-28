@@ -3,7 +3,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Input } from '@/shared/components/ui/Input'
-import { Loader2, Search, Users, ArrowLeft, Crown, Mail, Phone, UserCircle, ChevronRight } from 'lucide-react'
+import { Loader2, Search, Users, ArrowLeft, Crown, Mail, Phone, UserCircle, ChevronRight, Network, Pencil } from 'lucide-react'
+import { Button } from '@/shared/components/ui/Button'
+import { apiGet } from '@/shared/lib/apiClient'
+import { useModulesStore } from '@/shared/store/modulesStore'
+import { DepartmentSchemeModal } from '@/modules/hierarchy/components/DepartmentSchemeModal'
 import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getErrorMessage, personName } from '@/shared/lib/utils'
@@ -45,6 +49,16 @@ export function DepartmentDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [schemeOpen, setSchemeOpen] = useState(false)
+  const [canEditScheme, setCanEditScheme] = useState(false)
+  const hierarchyEnabled = useModulesStore((s) => s.isModuleEnabled)('hierarchy')
+
+  useEffect(() => {
+    if (!id || !hierarchyEnabled) return
+    apiGet<Array<{ id: number }>>('/hierarchy/my-departments')
+      .then((rows) => setCanEditScheme(rows.some((d) => d.id === Number(id))))
+      .catch(() => setCanEditScheme(false))
+  }, [id, hierarchyEnabled])
 
   useEffect(() => {
     const fetchDepartment = async () => {
@@ -97,6 +111,9 @@ export function DepartmentDetail() {
 
   return (
     <div className="space-y-8 animate-fade-in">
+      {schemeOpen && (
+        <DepartmentSchemeModal departmentId={department.id} departmentName={department.name} onClose={() => setSchemeOpen(false)} />
+      )}
       <div className="page-header">
         <Link
           to="/departments"
@@ -110,6 +127,12 @@ export function DepartmentDetail() {
       <PageBanner
         icon={Users}
         title={department.name}
+        aside={hierarchyEnabled ? (
+          <Button variant={canEditScheme ? 'default' : 'outline'} size="sm" onClick={() => setSchemeOpen(true)}>
+            {canEditScheme ? <Pencil className="h-3.5 w-3.5" /> : <Network className="h-3.5 w-3.5" />}
+            {canEditScheme ? 'Редактировать схему' : 'Схема отдела'}
+          </Button>
+        ) : undefined}
         meta={
           <>
             <BannerPill icon={Users}>{department.employees.length} работников</BannerPill>

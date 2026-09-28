@@ -282,7 +282,7 @@ describe('US-Б4. «Отдел-поддерево»', () => {
     const token = await tokenFor(hrA)
     const res = await call('GET', `/hierarchy/department/${deptA}`, token, undefined, orgA)
     assert.strictEqual(res.status, 200)
-    assert.deepStrictEqual(res.data, { data: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }, updated_at: null, updated_by: null })
+    assert.deepStrictEqual(res.data, { data: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }, updated_at: null, updated_by: null, can_edit: true })
   })
 
   it('When HR делает PUT /department/:id, Then 200 и GET возвращает поддерево', async () => {

@@ -19,7 +19,7 @@ import {
   type NodeChange,
   type EdgeChange,
 } from '@xyflow/react'
-import { ChevronLeft, Save, Building2, User, AlignLeft } from 'lucide-react'
+import { ChevronLeft, Save, Building2, User, AlignLeft, Eye } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
@@ -64,6 +64,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
   const [dirty, setDirty] = useState(false)
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [confirmDeleteNode, setConfirmDeleteNode] = useState<{ nodeId: string; edgeCount: number } | null>(null)
+  const [canEdit, setCanEdit] = useState(false)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -118,7 +119,8 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
       try {
         const res = await fetch(`${API_BASE_URL}/hierarchy/department/${departmentId}`, { headers: getAuthHeaders() })
         if (!res.ok) throw new Error('Не удалось загрузить иерархию отдела')
-        const { data } = await res.json()
+        const { data, can_edit } = await res.json()
+        setCanEdit(can_edit !== false)
         if (data.nodes) setNodes(data.nodes)
         if (data.edges) setEdges((data.edges as Edge[]).map((ed: Edge) => ({ ...ed, type: 'editable' })))
         if (data.viewport) {
@@ -414,16 +416,23 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
         <div className="ml-auto flex items-center gap-2">
           {error && <span className="text-xs text-destructive">{error}</span>}
           {savedLabel && <span className="text-xs text-green-600 dark:text-green-400">Сохранено</span>}
-          <Button size="sm" variant="outline" onClick={save} disabled={saving}>
-            <Save className="h-4 w-4 mr-1.5" />
-            {saving ? 'Сохранение...' : 'Сохранить'}
-          </Button>
+          {canEdit ? (
+            <Button size="sm" variant="outline" onClick={save} disabled={saving}>
+              <Save className="h-4 w-4 mr-1.5" />
+              {saving ? 'Сохранение...' : 'Сохранить'}
+            </Button>
+          ) : !hierarchyLoading && (
+            <span className="flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+              <Eye className="h-3.5 w-3.5" /> Только просмотр
+            </span>
+          )}
         </div>
       </div>
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
         {/* Left panel */}
+        {canEdit && (
         <div className="w-52 flex-shrink-0 border-r border-border p-4 space-y-3">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             Элементы
@@ -471,6 +480,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
             </div>
           </div>
         </div>
+        )}
 
         {/* Canvas */}
         <SaveSnapshotContext.Provider value={saveSnapshot}>
@@ -484,8 +494,14 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
               <div className="text-center text-muted-foreground/40">
                 <Building2 className="h-16 w-16 mx-auto mb-3" />
-                <p className="text-sm">Перетащите блоки из панели слева</p>
-                <p className="text-xs mt-1">Соединяйте точки на краях блоков</p>
+                {canEdit ? (
+                  <>
+                    <p className="text-sm">Перетащите блоки из панели слева</p>
+                    <p className="text-xs mt-1">Соединяйте точки на краях блоков</p>
+                  </>
+                ) : (
+                  <p className="text-sm">Схема отдела ещё не построена</p>
+                )}
               </div>
             </div>
           )}
@@ -494,18 +510,22 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
             edges={edges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
-            onConnect={onConnect}
+            onConnect={canEdit ? onConnect : undefined}
             onNodeDragStart={onNodeDragStart}
             onInit={handleInit}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onNodeContextMenu={onNodeContextMenu}
-            onEdgeContextMenu={onEdgeContextMenu}
+            onDrop={canEdit ? onDrop : undefined}
+            onDragOver={canEdit ? onDragOver : undefined}
+            onNodeContextMenu={canEdit ? onNodeContextMenu : undefined}
+            onEdgeContextMenu={canEdit ? onEdgeContextMenu : undefined}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
-            onReconnect={onReconnect}
-            onReconnectStart={onReconnectStart}
-            onReconnectEnd={onReconnectEnd}
+            onReconnect={canEdit ? onReconnect : undefined}
+            onReconnectStart={canEdit ? onReconnectStart : undefined}
+            onReconnectEnd={canEdit ? onReconnectEnd : undefined}
+            nodesDraggable={canEdit}
+            nodesConnectable={canEdit}
+            edgesReconnectable={canEdit}
+            elementsSelectable={canEdit}
             connectionMode={ConnectionMode.Loose}
             colorMode={darkMode ? 'dark' : 'light'}
             deleteKeyCode={null}
