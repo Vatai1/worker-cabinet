@@ -1,6 +1,6 @@
 import express from 'express'
 import jwt from 'jsonwebtoken'
-import { query } from '../config/database.js'
+import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../middleware/errors.js'
 import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
@@ -234,22 +234,64 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
  *         name: id
  *         required: true
  *         schema: { type: integer }
+ *     description: 'Нельзя удалить отдел, в котором есть действующие работники (по users.department_id или активному членству в организации) или отправленные/утверждённые табели. У деактивированных работников и неактивных членств ссылка на отдел очищается, черновики табелей удаляются вместе с отделом'
  *     responses:
  *       200:
  *         description: Отдел удалён
+ *       409:
+ *         description: 'В отделе есть работники или отправленные/утверждённые табели — в тексте ошибки перечислено, что мешает'
  */
+const MONTHS_NOMINATIVE = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
+
+const shortPersonName = (u) => {
+  const initials = [u.first_name, u.middle_name].map((p) => p?.trim()?.[0]).filter(Boolean).map((c) => `${c}.`).join('')
+  return initials ? `${u.last_name} ${initials}` : u.last_name
+}
+
+const listPreview = (items, limit = 5) =>
+  items.length > limit ? `${items.slice(0, limit).join(', ')} и ещё ${items.length - limit}` : items.join(', ')
+
 router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
-  const { id } = req.params
+  const id = parseInt(req.params.id, 10)
+  if (Number.isNaN(id)) throw new NotFoundError('Отдел не найден')
 
   const existing = await query(...orgScopedQuery('SELECT id FROM departments WHERE id = $1', [id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Отдел не найден')
 
-  const usersInDept = await query('SELECT COUNT(*) as cnt FROM users WHERE department_id = $1', [id])
-  if (parseInt(usersInDept.rows[0].cnt) > 0) {
-    throw new ConflictError('Нельзя удалить отдел, в котором есть работники')
+  const people = await query(
+    `SELECT DISTINCT u.id, u.last_name, u.first_name, u.middle_name
+     FROM users u
+     WHERE (u.department_id = $1 AND u.status <> 'inactive')
+        OR EXISTS (SELECT 1 FROM user_organizations uo WHERE uo.user_id = u.id AND uo.department_id = $1 AND uo.is_active AND u.status <> 'inactive')
+     ORDER BY u.last_name, u.first_name`,
+    [id]
+  )
+  if (people.rows.length > 0) {
+    throw new ConflictError(`Нельзя удалить отдел: в нём есть работники — ${listPreview(people.rows.map(shortPersonName))}. Переведите их в другой отдел`)
   }
 
-  await query(...orgScopedQuery('DELETE FROM departments WHERE id = $1', [id], req))
+  const sheets = await query('SELECT id, year, month, status FROM timesheets WHERE department_id = $1 ORDER BY year, month', [id])
+  const finalSheets = sheets.rows.filter((t) => t.status !== 'draft')
+  if (finalSheets.length > 0) {
+    const periods = finalSheets.map((t) => `${MONTHS_NOMINATIVE[t.month - 1]} ${t.year}`)
+    throw new ConflictError(`Нельзя удалить отдел: по нему есть отправленные или утверждённые табели — ${listPreview(periods)}`)
+  }
+
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+    await client.query('UPDATE user_organizations SET department_id = NULL WHERE department_id = $1', [id])
+    await client.query("UPDATE users SET department_id = NULL WHERE department_id = $1 AND status = 'inactive'", [id])
+    await client.query("DELETE FROM timesheets WHERE department_id = $1 AND status = 'draft'", [id])
+    const { text, values } = orgScopedQuery('DELETE FROM departments WHERE id = $1', [id], req)
+    await client.query(text, values)
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
   res.json({ success: true })
 }))
 
