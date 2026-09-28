@@ -1713,4 +1713,542 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(result.countedDays, 10)
     })
   })
+
+  describe('US-16. Роуты без покрытия: балансы отдела, правка заявки, day-rules', () => {
+    let deptId, dept2Id, mgr, mgr2, hrUser, emp, emp2, emp2b
+    let modulesSnap
+
+    beforeEach(async () => {
+      modulesSnap = await enableModules()
+      mgr = await mkUser({ email: `us16.mgr${SUFFIX}`, role: 'manager', last: 'Сидоров' })
+      deptId = await mkDept('US16 Отдел vac-full', 1, mgr.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptId, mgr.id])
+      emp = await mkUser({ email: `us16.emp${SUFFIX}`, last: 'Иванов', deptId })
+      emp2 = await mkUser({ email: `us16.emp2${SUFFIX}`, last: 'Петров', deptId })
+      mgr2 = await mkUser({ email: `us16.mgr2${SUFFIX}`, role: 'manager', last: 'Николаев' })
+      dept2Id = await mkDept('US16 Отдел 2 vac-full', 1, mgr2.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [dept2Id, mgr2.id])
+      emp2b = await mkUser({ email: `us16.emp2b${SUFFIX}`, last: 'Смирнов', deptId: dept2Id })
+      hrUser = await mkUser({ email: `us16.hr${SUFFIX}`, role: 'hr', last: 'Смирнова' })
+      await mkBalance(emp.id, yearOf(shift(10)))
+      await mkBalance(emp2.id, yearOf(shift(10)))
+      await mkBalance(emp2b.id, yearOf(shift(10)), 1, 30)
+    })
+
+    afterEach(async () => {
+      await restoreModules(modulesSnap)
+      await query('DELETE FROM vacation_day_rules WHERE position LIKE \'US16%\'')
+      await cleanupFixtures({ deptIds: [deptId, dept2Id] })
+    })
+
+    it('GET /balances (hr): список отдела с тотал/использовано/доступно', async () => {
+      await mkVacation({ userId: emp.id, start: shift(10), end: shift(14), duration: 5, status: 'approved' })
+      await query('UPDATE vacation_balances SET used_days = 5, available_days = available_days - 5 WHERE user_id = $1 AND year = $2', [emp.id, yearOf(shift(10))])
+      const res = await call('GET', `/vacation/balances?departmentId=${deptId}&year=${yearOf(shift(10))}`, await tokenFor(hrUser))
+      assert.strictEqual(res.status, 200)
+      const mine = res.data.find((r) => r.user_id === emp.id)
+      assert.ok(mine, 'баланс работника отдела не найден')
+      assert.strictEqual(mine.total_days, 28)
+      assert.strictEqual(mine.used_days, 5)
+      assert.strictEqual(mine.available_days, 23)
+      assert.ok(res.data.every((r) => r.user_id !== emp2b.id), 'работник чужого отдела попал в список')
+    })
+
+    it('GET /balances от employee: чужой departmentId зажимается к своему отделу (200, не 403 — фактическое поведение)', async () => {
+      const res = await call('GET', `/vacation/balances?departmentId=${dept2Id}&year=${yearOf(shift(10))}`, await tokenFor(emp))
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.data.some((r) => r.user_id === emp.id), 'свой отдел не вернулся')
+      assert.ok(res.data.every((r) => r.user_id !== emp2b.id), 'чужой отдел не должен был вернуться')
+    })
+
+    it('PUT /requests/:id: владелец правит даты on_approval → 200, reserved пересчитан', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      const res = await call('PUT', `/vacation/requests/${created.data.id}`, await tokenFor(emp), {
+        startDate: shift(20), endDate: shift(22), vacationType: 'annual_paid', comment: 'Правка',
+      })
+      assert.strictEqual(res.status, 200, JSON.stringify(res.data))
+      assert.strictEqual(res.data.start_date, shift(20))
+      assert.strictEqual(res.data.duration, 3)
+      assert.strictEqual((await balanceOf(emp.id, yearOf(shift(20)))).reserved_days, 3)
+    })
+
+    it('PUT /requests/:id: чужой employee → 403', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      const res = await call('PUT', `/vacation/requests/${created.data.id}`, await tokenFor(emp2), {
+        startDate: shift(20), endDate: shift(22), vacationType: 'annual_paid',
+      })
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data.error, 'Доступ запрещён')
+    })
+
+    it('PUT /requests/:id: несуществующая заявка → 404', async () => {
+      const res = await call('PUT', '/vacation/requests/999999999', await tokenFor(emp), {
+        startDate: shift(20), endDate: shift(22), vacationType: 'annual_paid',
+      })
+      assert.strictEqual(res.status, 404)
+      assert.strictEqual(res.data.error, 'Заявка не найдена')
+    })
+
+    it('PUT /requests/:id: недопустимый тип → 400', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      const res = await call('PUT', `/vacation/requests/${created.data.id}`, await tokenFor(emp), {
+        startDate: shift(20), endDate: shift(22), vacationType: 'nonexistent',
+      })
+      assert.strictEqual(res.status, 400)
+      assert.strictEqual(res.data.error, 'Неверный тип отпуска')
+    })
+
+    it('PUT /requests/:id: approved заявка → 400', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
+      const res = await call('PUT', `/vacation/requests/${created.data.id}`, await tokenFor(emp), {
+        startDate: shift(20), endDate: shift(22), vacationType: 'annual_paid',
+      })
+      assert.strictEqual(res.status, 400)
+      assert.strictEqual(res.data.error, 'Можно редактировать только заявки на согласовании')
+    })
+
+    it('GET /day-rules (hr) → 200 со структурой; employee → 403', async () => {
+      await query('INSERT INTO vacation_day_rules (organization_id, position, days) VALUES (1, $1, 35)', ['US16 Тестер'])
+      const ok = await call('GET', '/vacation/day-rules', await tokenFor(hrUser))
+      assert.strictEqual(ok.status, 200)
+      assert.strictEqual(typeof ok.data.defaultDays, 'number')
+      assert.ok(Array.isArray(ok.data.positionRules))
+      assert.ok(Array.isArray(ok.data.userRules))
+      assert.ok(ok.data.positionRules.some((r) => r.position === 'US16 Тестер' && r.days === 35))
+      const forbidden = await call('GET', '/vacation/day-rules', await tokenFor(emp))
+      assert.strictEqual(forbidden.status, 403)
+    })
+
+    it('DELETE /day-rules/:id: своим → 200, повторно → 404, employee → 403', async () => {
+      const ruleId = (await query('INSERT INTO vacation_day_rules (organization_id, position, days) VALUES (1, $1, 35) RETURNING id', ['US16 Должность'])).rows[0].id
+      const removed = await call('DELETE', `/vacation/day-rules/${ruleId}`, await tokenFor(hrUser))
+      assert.strictEqual(removed.status, 200)
+      assert.strictEqual(removed.data.success, true)
+      const again = await call('DELETE', `/vacation/day-rules/${ruleId}`, await tokenFor(hrUser))
+      assert.strictEqual(again.status, 404)
+      assert.strictEqual(again.data.error, 'Настройка не найдена')
+      const nextId = (await query('INSERT INTO vacation_day_rules (organization_id, position, days) VALUES (1, $1, 30) RETURNING id', ['US16 Должность 2'])).rows[0].id
+      const forbidden = await call('DELETE', `/vacation/day-rules/${nextId}`, await tokenFor(emp))
+      assert.strictEqual(forbidden.status, 403)
+    })
+
+    it('DELETE /day-rules/group/:groupId: групповое удаление → 200, повторно → 404, employee → 403', async () => {
+      const { randomUUID } = await import('node:crypto')
+      const groupId = randomUUID()
+      await query('INSERT INTO vacation_day_rules (organization_id, position, days, group_id) VALUES (1, $1, 35, $2), (1, $3, 35, $2)', ['US16 Группа A', groupId, 'US16 Группа B'])
+      const removed = await call('DELETE', `/vacation/day-rules/group/${groupId}`, await tokenFor(hrUser))
+      assert.strictEqual(removed.status, 200)
+      const left = (await query('SELECT COUNT(*)::int AS n FROM vacation_day_rules WHERE group_id = $1', [groupId])).rows[0].n
+      assert.strictEqual(left, 0)
+      const again = await call('DELETE', `/vacation/day-rules/group/${groupId}`, await tokenFor(hrUser))
+      assert.strictEqual(again.status, 404)
+      assert.strictEqual(again.data.error, 'Правило не найдено')
+      await query('INSERT INTO vacation_day_rules (organization_id, position, days, group_id) VALUES (1, $1, 35, $2)', ['US16 Группа C', groupId])
+      const forbidden = await call('DELETE', `/vacation/day-rules/group/${groupId}`, await tokenFor(emp))
+      assert.strictEqual(forbidden.status, 403)
+    })
+  })
+
+  describe('US-17. Согласование по иерархии: vacationVisibility.parentApproves', () => {
+    let orgId, hrUser, headUser, parentMgr, childMgr, emp
+    let parentDeptId, childDeptId, ownDeptId
+
+    const mkOrg = async () => (await query(
+      'INSERT INTO organizations (name, slug, is_active) VALUES ($1, $2, true) RETURNING id',
+      [`US17 Орг ${Date.now()}`, `us17-org-${Date.now()}`])).rows[0].id
+
+    const saveHierarchy = async (edges, baseVersion) => {
+      const nodes = [
+        { id: `department-${parentDeptId}`, type: 'department', position: { x: 0, y: 0 }, data: { id: parentDeptId, name: 'US17 Родитель' } },
+        { id: `department-${childDeptId}`, type: 'department', position: { x: 300, y: 0 }, data: { id: childDeptId, name: 'US17 Ребёнок' } },
+      ]
+      if (ownDeptId) nodes.push({ id: `department-${ownDeptId}`, type: 'department', position: { x: 600, y: 0 }, data: { id: ownDeptId, name: 'US17 Свой' } })
+      return call('PUT', '/hierarchy', await tokenFor(hrUser), { nodes, edges, baseVersion }, orgId)
+    }
+
+    const linkEdge = (vacationVisibility) => ({
+      id: 'e-parent-child',
+      source: `department-${parentDeptId}`,
+      target: `department-${childDeptId}`,
+      type: 'editable',
+      data: { relation: 'parent', ...(vacationVisibility ? { vacationVisibility } : {}) },
+    })
+
+    const postOwn = async (user, offset = 10) => call('POST', '/vacation/requests', await tokenFor(user), {
+      startDate: shift(offset), endDate: shift(offset + 4), vacationType: 'annual_paid',
+    }, orgId)
+
+    const approverOf = async (id) => (await query('SELECT approver_id FROM vacation_requests WHERE id = $1', [id])).rows[0].approver_id
+
+    beforeEach(async () => {
+      orgId = await mkOrg()
+      await query('INSERT INTO vacation_types (code, name, organization_id) SELECT code, name, $1 FROM vacation_types WHERE organization_id = 1', [orgId])
+      hrUser = await mkUser({ email: `us17.hr${SUFFIX}`, role: 'hr', last: 'Смирнова', orgIds: [orgId] })
+      headUser = await mkUser({ email: `us17.head${SUFFIX}`, last: 'Глава', orgIds: [orgId] })
+      parentMgr = await mkUser({ email: `us17.pmgr${SUFFIX}`, role: 'manager', last: 'Родителев', orgIds: [orgId] })
+      childMgr = await mkUser({ email: `us17.cmgr${SUFFIX}`, role: 'manager', last: 'Детев', orgIds: [orgId] })
+      emp = await mkUser({ email: `us17.emp${SUFFIX}`, last: 'Иванов', orgIds: [orgId] })
+      parentDeptId = await mkDept('US17 Родитель', orgId, parentMgr.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [parentDeptId, parentMgr.id])
+      childDeptId = await mkDept('US17 Ребёнок', orgId)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [childDeptId, emp.id])
+      await query('UPDATE organizations SET head_id = $1 WHERE id = $2', [headUser.id, orgId])
+      await mkBalance(emp.id, yearOf(shift(10)), orgId)
+      ownDeptId = null
+    })
+
+    afterEach(async () => {
+      await query('DELETE FROM hr_hierarchy WHERE organization_id = $1', [orgId])
+      await query('UPDATE organizations SET head_id = NULL WHERE id = $1', [orgId])
+      await query('UPDATE departments SET manager_id = NULL, parent_id = NULL, parent_user_id = NULL WHERE organization_id = $1', [orgId])
+      await cleanupFixtures({ deptIds: [parentDeptId, childDeptId, ownDeptId].filter(Boolean) })
+      await query('DELETE FROM vacation_types WHERE organization_id = $1', [orgId])
+      await query('DELETE FROM organizations WHERE id = $1', [orgId])
+    })
+
+    it('связь по умолчанию (parentApproves не задан): approver = менеджер родительского отдела, он может согласовать', async () => {
+      const saved = await saveHierarchy([linkEdge(null)], 0)
+      assert.strictEqual(saved.status, 200, JSON.stringify(saved.data))
+      const created = await postOwn(emp)
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      assert.strictEqual(await approverOf(created.data.id), parentMgr.id)
+      const approved = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(parentMgr), {}, orgId)
+      assert.strictEqual(approved.status, 200)
+    })
+
+    it('parentApproves=true: согласует прямой родитель (менеджер родительского отдела)', async () => {
+      await saveHierarchy([linkEdge({ parentSeesChild: true, childSeesParent: true, parentApproves: true })], 0)
+      const created = await postOwn(emp)
+      assert.strictEqual(created.status, 201)
+      assert.strictEqual(await approverOf(created.data.id), parentMgr.id)
+    })
+
+    it('parentApproves=false: родитель пропускается, approver = глава организации; родителю approve → 403', async () => {
+      await saveHierarchy([linkEdge({ parentSeesChild: true, childSeesParent: true, parentApproves: false })], 0)
+      const created = await postOwn(emp)
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      assert.strictEqual(await approverOf(created.data.id), headUser.id)
+      const denied = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(parentMgr), {}, orgId)
+      assert.strictEqual(denied.status, 403)
+      const approved = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(headUser), {}, orgId)
+      assert.strictEqual(approved.status, 200)
+    })
+
+    it('контроль: менеджер своего отдела согласует всегда, даже при parentApproves=false на связи', async () => {
+      ownDeptId = await mkDept('US17 Свой', orgId, childMgr.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [ownDeptId, emp.id])
+      await saveHierarchy([linkEdge({ parentApproves: false })], 0)
+      const created = await postOwn(emp)
+      assert.strictEqual(created.status, 201)
+      assert.strictEqual(await approverOf(created.data.id), childMgr.id)
+    })
+
+    it('частичный PUT true→false на существующей связи: эффект применился к новым заявкам', async () => {
+      await saveHierarchy([linkEdge({ parentApproves: true })], 0)
+      const first = await postOwn(emp, 10)
+      assert.strictEqual(await approverOf(first.data.id), parentMgr.id)
+      const graph = await call('GET', '/hierarchy', await tokenFor(hrUser), undefined, orgId)
+      assert.strictEqual(graph.status, 200)
+      const edges = graph.data.data.edges.map((e) => (e.id === 'e-parent-child'
+        ? { ...e, data: { ...e.data, vacationVisibility: { ...e.data.vacationVisibility, parentApproves: false } } }
+        : e))
+      const updated = await saveHierarchy(edges, graph.data.version)
+      assert.strictEqual(updated.status, 200, JSON.stringify(updated.data))
+      const second = await postOwn(emp, 30)
+      assert.strictEqual(second.status, 201, JSON.stringify(second.data))
+      assert.strictEqual(await approverOf(second.data.id), headUser.id)
+    })
+
+    it('удаление связи: фолбэк-роутинг на главу организации', async () => {
+      await saveHierarchy([linkEdge(null)], 0)
+      await saveHierarchy([], 1)
+      const created = await postOwn(emp)
+      assert.strictEqual(created.status, 201)
+      assert.strictEqual(await approverOf(created.data.id), headUser.id)
+    })
+
+    it('GET /hierarchy: рёбра с vacationVisibility возвращаются как сохранены (round-trip)', async () => {
+      await saveHierarchy([linkEdge({ parentSeesChild: false, childSeesParent: true, parentApproves: false })], 0)
+      const graph = await call('GET', '/hierarchy', await tokenFor(hrUser), undefined, orgId)
+      assert.strictEqual(graph.status, 200)
+      const edge = graph.data.data.edges.find((e) => e.id === 'e-parent-child')
+      assert.ok(edge, 'связь не вернулась из GET /hierarchy')
+      assert.deepStrictEqual(edge.data.vacationVisibility, { parentSeesChild: false, childSeesParent: true, parentApproves: false })
+      const row = (await query('SELECT vac_parent_sees_child, vac_child_sees_parent, vac_parent_approves FROM departments WHERE id = $1', [childDeptId])).rows[0]
+      assert.strictEqual(row.vac_parent_sees_child, false)
+      assert.strictEqual(row.vac_child_sees_parent, true)
+      assert.strictEqual(row.vac_parent_approves, false)
+    })
+  })
+
+  describe('US-18. Защитные ветки approve/reject/cancel/transfer', () => {
+    let deptId, dept2Id, mgr, mgrOut, emp, outsider
+    let modulesSnap
+
+    beforeEach(async () => {
+      modulesSnap = await enableModules()
+      mgr = await mkUser({ email: `us18.mgr${SUFFIX}`, role: 'manager', last: 'Сидоров' })
+      deptId = await mkDept('US18 Отдел vac-full', 1, mgr.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptId, mgr.id])
+      emp = await mkUser({ email: `us18.emp${SUFFIX}`, last: 'Иванов', deptId })
+      mgrOut = await mkUser({ email: `us18.mgrout${SUFFIX}`, role: 'manager', last: 'Чужов' })
+      dept2Id = await mkDept('US18 Чужой отдел vac-full', 1, mgrOut.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [dept2Id, mgrOut.id])
+      outsider = await mkUser({ email: `us18.out${SUFFIX}`, last: 'Посторонний', deptId: dept2Id })
+      for (const year of new Set([yearOf(shift(10)), yearOf(shift(40))])) {
+        await mkBalance(emp.id, year)
+      }
+    })
+
+    afterEach(async () => {
+      await restoreModules(modulesSnap)
+      await cleanupFixtures({ deptIds: [deptId, dept2Id] })
+    })
+
+    it('404 на левом id: approve/reject/cancel/transfer и триада переноса', async () => {
+      const approve = await call('POST', '/vacation/requests/999999999/approve', await tokenFor(mgr), {})
+      assert.strictEqual(approve.status, 404)
+      assert.strictEqual(approve.data.error, 'Заявка не найдена')
+      const reject = await call('POST', '/vacation/requests/999999999/reject', await tokenFor(mgr), { reason: 'x' })
+      assert.strictEqual(reject.status, 404)
+      assert.strictEqual(reject.data.error, 'Заявка не найдена')
+      const cancel = await call('POST', '/vacation/requests/999999999/cancel', await tokenFor(emp), {})
+      assert.strictEqual(cancel.status, 404)
+      assert.strictEqual(cancel.data.error, 'Заявка не найдена')
+      const transfer = await call('POST', '/vacation/requests/999999999/transfer', await tokenFor(emp), { newStartDate: shift(40), newEndDate: shift(44) })
+      assert.strictEqual(transfer.status, 404)
+      assert.strictEqual(transfer.data.error, 'Заявка не найдена')
+      for (const action of ['approve', 'reject', 'cancel']) {
+        const res = await call('POST', `/vacation/requests/999999999/transfer/${action}`, await tokenFor(mgr), action === 'reject' ? { reason: 'x' } : {})
+        assert.strictEqual(res.status, 404)
+        assert.strictEqual(res.data.error, 'Запрос на перенос не найден')
+      }
+    })
+
+    it('reject: 403 не-согласующему; 400 на заявке не на согласовании', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      const denied = await call('POST', `/vacation/requests/${created.data.id}/reject`, await tokenFor(outsider), { reason: 'Занят' })
+      assert.strictEqual(denied.status, 403)
+      assert.strictEqual(denied.data.error, 'Нет прав на согласование этой заявки')
+      await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
+      const late = await call('POST', `/vacation/requests/${created.data.id}/reject`, await tokenFor(mgr), { reason: 'Поздно' })
+      assert.strictEqual(late.status, 400)
+      assert.strictEqual(late.data.error, 'Заявка не на согласовании')
+    })
+
+    it('cancel: 400 на rejected и cancelled; cancel approved возвращает used_days', async () => {
+      const rejected = await mkVacation({ userId: emp.id, start: shift(10), end: shift(14), duration: 5, status: 'rejected' })
+      const rejRes = await call('POST', `/vacation/requests/${rejected.id}/cancel`, await tokenFor(emp), {})
+      assert.strictEqual(rejRes.status, 400)
+      assert.strictEqual(rejRes.data.error, 'Нельзя отменить эту заявку')
+      const cancelled = await mkVacation({ userId: emp.id, start: shift(20), end: shift(24), duration: 5, status: 'cancelled_by_employee' })
+      const cnlRes = await call('POST', `/vacation/requests/${cancelled.id}/cancel`, await tokenFor(emp), {})
+      assert.strictEqual(cnlRes.status, 400)
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
+      assert.strictEqual((await balanceOf(emp.id, yearOf(shift(10)))).used_days, 5)
+      const cancelRes = await call('POST', `/vacation/requests/${created.data.id}/cancel`, await tokenFor(emp), {})
+      assert.strictEqual(cancelRes.status, 200)
+      assert.strictEqual(await statusOf(created.data.id), 'cancelled_by_employee')
+      assert.strictEqual((await balanceOf(emp.id, yearOf(shift(10)))).used_days, 0)
+    })
+
+    it('transfer: 403 чужого руководителя в approve/reject; cancel переноса — только владелец', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
+      const transfer = await call('POST', `/vacation/requests/${created.data.id}/transfer`, await tokenFor(emp), { newStartDate: shift(40), newEndDate: shift(44), reason: 'Перенос' })
+      assert.strictEqual(transfer.status, 201, JSON.stringify(transfer.data))
+      const deniedApprove = await call('POST', `/vacation/requests/${transfer.data.id}/transfer/approve`, await tokenFor(mgrOut), {})
+      assert.strictEqual(deniedApprove.status, 403)
+      const deniedReject = await call('POST', `/vacation/requests/${transfer.data.id}/transfer/reject`, await tokenFor(mgrOut), { reason: 'Нет' })
+      assert.strictEqual(deniedReject.status, 403)
+      const deniedCancel = await call('POST', `/vacation/requests/${transfer.data.id}/transfer/cancel`, await tokenFor(mgr), {})
+      assert.strictEqual(deniedCancel.status, 403)
+      assert.strictEqual(deniedCancel.data.error, 'Доступ запрещён')
+    })
+
+    it('transfer: 400 без дат; 400 проезд без города; 400 на не-approved исходнике', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      const noDates = await call('POST', `/vacation/requests/${created.data.id}/transfer`, await tokenFor(emp), {})
+      assert.strictEqual(noDates.status, 400)
+      assert.strictEqual(noDates.data.error, 'Укажите новые даты переноса')
+      const noCity = await call('POST', `/vacation/requests/${created.data.id}/transfer`, await tokenFor(emp), { newStartDate: shift(40), newEndDate: shift(44), hasTravel: true })
+      assert.strictEqual(noCity.status, 400)
+      assert.strictEqual(noCity.data.error, 'Укажите город проезда')
+      const notApproved = await call('POST', `/vacation/requests/${created.data.id}/transfer`, await tokenFor(emp), { newStartDate: shift(40), newEndDate: shift(44) })
+      assert.strictEqual(notApproved.status, 400)
+      assert.strictEqual(notApproved.data.error, 'Можно переносить только согласованные заявки')
+    })
+  })
+
+  describe('US-19. Валидации создания заявки', () => {
+    let deptId, mgr, hrUser, emp, emp2
+    let modulesSnap
+
+    beforeEach(async () => {
+      modulesSnap = await enableModules()
+      mgr = await mkUser({ email: `us19.mgr${SUFFIX}`, role: 'manager', last: 'Сидоров' })
+      deptId = await mkDept('US19 Отдел vac-full', 1, mgr.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptId, mgr.id])
+      hrUser = await mkUser({ email: `us19.hr${SUFFIX}`, role: 'hr', last: 'Смирнова' })
+      emp = await mkUser({ email: `us19.emp${SUFFIX}`, last: 'Иванов', deptId })
+      emp2 = await mkUser({ email: `us19.emp2${SUFFIX}`, last: 'Петров', deptId })
+      for (const year of new Set([yearOf(shift(10)), yearOf(shift(40))])) {
+        await mkBalance(emp.id, year)
+      }
+    })
+
+    afterEach(async () => {
+      await restoreModules(modulesSnap)
+      await query('UPDATE departments SET vacation_requests_blocked = false WHERE id = $1', [deptId])
+      await cleanupFixtures({ deptIds: [deptId] })
+    })
+
+    it('400: учебный отпуск без справки', async () => {
+      const res = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'educational' })
+      assert.strictEqual(res.status, 400)
+      assert.strictEqual(res.data.error, 'Для учебного отпуска необходимо приложить справку')
+    })
+
+    it('400: пересечение с существующей заявкой', async () => {
+      await mkVacation({ userId: emp.id, start: shift(10), end: shift(14), duration: 5, status: 'approved' })
+      const res = await postVacation(emp, { startDate: shift(12), endDate: shift(16), vacationType: 'annual_paid' })
+      assert.strictEqual(res.status, 400)
+      assert.strictEqual(res.data.error, 'Пересечение с существующей заявкой')
+    })
+
+    it('409: дубль заявки с проездом на согласовании', async () => {
+      const pending = await mkVacation({ userId: emp.id, start: shift(10), end: shift(14), duration: 5, status: 'on_approval' })
+      await query('UPDATE vacation_requests SET has_travel = true, travel_destination = \'Южно-Сахалинск\' WHERE id = $1', [pending.id])
+      const res = await postVacation(emp, { startDate: shift(40), endDate: shift(44), vacationType: 'annual_paid', hasTravel: true, travelDestination: 'Москва' })
+      assert.strictEqual(res.status, 409)
+      assert.strictEqual(res.data.error, 'Уже есть заявка с проездом на согласовании')
+    })
+
+    it('201: ребёнок 18+ принимается — возраст не валидируется (фактическое поведение)', async () => {
+      const res = await postVacation(emp, {
+        startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid',
+        hasTravel: true, travelDestination: 'Южно-Сахалинск',
+        travelChildren: [{ fullName: 'Иванов Совершеннолетний', birthDate: '2000-01-01' }],
+      })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      const row = (await query('SELECT travel_children FROM vacation_requests WHERE id = $1', [res.data.id])).rows[0]
+      assert.strictEqual(row.travel_children[0].birthDate, '2000-01-01')
+    })
+
+    it('403: подача заявок заблокирована для отдела (флаг через departments endpoint)', async () => {
+      const blockRes = await call('PATCH', `/departments/${deptId}/vacation-block`, await tokenFor(hrUser), { blocked: true })
+      assert.strictEqual(blockRes.status, 200, JSON.stringify(blockRes.data))
+      assert.strictEqual(blockRes.data.vacation_requests_blocked, true)
+      const res = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data.error, 'Подача заявок на отпуск для вашего отдела временно заблокирована HR')
+      const unblock = await call('PATCH', `/departments/${deptId}/vacation-block`, await tokenFor(hrUser), { blocked: false })
+      assert.strictEqual(unblock.status, 200)
+      const after = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      assert.strictEqual(after.status, 201, JSON.stringify(after.data))
+    })
+  })
+
+  describe('US-20. Замещающие и ограничения: защитные ветки', () => {
+    let deptId, mgr, mgrOther, hrUser, emp, sub, foreignUser
+    let modulesSnap
+
+    beforeEach(async () => {
+      modulesSnap = await enableModules()
+      mgr = await mkUser({ email: `us20.mgr${SUFFIX}`, role: 'manager', last: 'Сидоров' })
+      deptId = await mkDept('US20 Отдел vac-full', 1, mgr.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptId, mgr.id])
+      hrUser = await mkUser({ email: `us20.hr${SUFFIX}`, role: 'hr', last: 'Смирнова' })
+      emp = await mkUser({ email: `us20.emp${SUFFIX}`, last: 'Иванов', deptId })
+      sub = await mkUser({ email: `us20.sub${SUFFIX}`, last: 'Козлов', deptId })
+      mgrOther = await mkUser({ email: `us20.mgro${SUFFIX}`, role: 'manager', last: 'Чужов' })
+      foreignUser = await mkUser({ email: `us20.foreign${SUFFIX}`, last: 'Иностранцев', orgIds: [2] })
+      for (const year of new Set([yearOf(shift(10)), yearOf(shift(40))])) {
+        await mkBalance(emp.id, year)
+      }
+    })
+
+    afterEach(async () => {
+      await restoreModules(modulesSnap)
+      await cleanupFixtures({ deptIds: [deptId], templateNames: ['vac-full us20 nofile', 'vac-full us20 notfile'] })
+    })
+
+    it('substitutes POST: пустой список → 400; левая заявка → 404; чужой employee → 403', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      const empty = await call('POST', `/vacation/requests/${created.data.id}/substitutes`, await tokenFor(emp), { substitute_ids: [] })
+      assert.strictEqual(empty.status, 400)
+      assert.strictEqual(empty.data.error, 'Укажите замещающих')
+      const missing = await call('POST', '/vacation/requests/999999999/substitutes', await tokenFor(emp), { substitute_ids: [sub.id] })
+      assert.strictEqual(missing.status, 404)
+      assert.strictEqual(missing.data.error, 'Заявка не найдена')
+      const denied = await call('POST', `/vacation/requests/${created.data.id}/substitutes`, await tokenFor(mgrOther), { substitute_ids: [sub.id] })
+      assert.strictEqual(denied.status, 403)
+      assert.strictEqual(denied.data.error, 'Нет прав')
+    })
+
+    it('substitutes POST: работник не из организации → 400; DELETE: левая заявка → 404', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      const foreign = await call('POST', `/vacation/requests/${created.data.id}/substitutes`, await tokenFor(emp), { substitute_ids: [foreignUser.id] })
+      assert.strictEqual(foreign.status, 400)
+      assert.strictEqual(foreign.data.error, 'Замещающие не найдены в организации')
+      const missing = await call('DELETE', `/vacation/requests/999999999/substitutes/${sub.id}`, await tokenFor(emp))
+      assert.strictEqual(missing.status, 404)
+      assert.strictEqual(missing.data.error, 'Заявка не найдена')
+    })
+
+    it('restrictions PUT: без type → 400; manager-не-владелец → 403; DELETE: manager-не-владелец → 403', async () => {
+      const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), {
+        departmentId: deptId, type: 'group', employeeIds: [emp.id, sub.id], maxConcurrent: 1,
+      })
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      const noType = await call('PUT', `/vacation/restrictions/${created.data.id}`, await tokenFor(mgr), { departmentId: deptId })
+      assert.strictEqual(noType.status, 400)
+      assert.strictEqual(noType.data.error, 'Укажите type')
+      const deniedPut = await call('PUT', `/vacation/restrictions/${created.data.id}`, await tokenFor(mgrOther), {
+        departmentId: deptId, type: 'group', employeeIds: [emp.id, sub.id],
+      })
+      assert.strictEqual(deniedPut.status, 403)
+      assert.strictEqual(deniedPut.data.error, 'Изменять ограничение может только его владелец или HR')
+      const deniedDelete = await call('DELETE', `/vacation/restrictions/${created.data.id}`, await tokenFor(mgrOther))
+      assert.strictEqual(deniedDelete.status, 403)
+      assert.strictEqual(deniedDelete.data.error, 'Удалить ограничение может только его владелец или HR')
+      const hrDelete = await call('DELETE', `/vacation/restrictions/${created.data.id}`, await tokenFor(hrUser))
+      assert.strictEqual(hrDelete.status, 200)
+    })
+
+    it('violations: manager по чужому departmentId → 403', async () => {
+      const otherDept = await mkDept('US20 Чужой отдел vac-full', 1, mgrOther.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [otherDept, mgrOther.id])
+      const res = await call('GET', `/vacation/restrictions/violations?departmentId=${otherDept}`, await tokenFor(mgr))
+      assert.strictEqual(res.status, 403)
+      assert.strictEqual(res.data.error, 'Доступ только к своему отделу')
+    })
+
+    it('check-restrictions: диапазон с 6+ праздниками → 400 «слишком много праздничных»', async () => {
+      const res = await call('POST', '/vacation/check-restrictions', await tokenFor(emp), { userId: emp.id, startDate: '2027-01-01', endDate: '2027-01-08' })
+      assert.strictEqual(res.status, 400)
+      assert.match(res.data.error, /слишком много праздничных/i)
+    })
+
+    it('generate-application и generate-transfer-application: шаблон без файла → 400', async () => {
+      const template = (await createDocTemplate(await tokenFor(hrUser), 'vac-full us20 nofile', 'vacation_template')).data
+      await query('UPDATE document_templates SET file_key = \'\' WHERE id = $1', [template.id])
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
+      await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
+      const app = await call('POST', '/vacation/generate-application', await tokenFor(emp), { year: yearOf(shift(10)), templateId: template.id })
+      assert.strictEqual(app.status, 400)
+      assert.strictEqual(app.data.error, 'Файл шаблона не прикреплён')
+      const transfer = await call('POST', `/vacation/requests/${created.data.id}/transfer`, await tokenFor(emp), { newStartDate: shift(40), newEndDate: shift(44), reason: 'Перенос' })
+      assert.strictEqual(transfer.status, 201, JSON.stringify(transfer.data))
+      const transferApproved = await call('POST', `/vacation/requests/${transfer.data.id}/transfer/approve`, await tokenFor(mgr), {})
+      assert.strictEqual(transferApproved.status, 200, JSON.stringify(transferApproved.data))
+      const transferTemplate = (await createDocTemplate(await tokenFor(hrUser), 'vac-full us20 notfile', 'vacation_transfer_template')).data
+      await query('UPDATE document_templates SET file_key = \'\' WHERE id = $1', [transferTemplate.id])
+      const trApp = await call('POST', '/vacation/generate-transfer-application', await tokenFor(emp), { templateId: transferTemplate.id, transferIds: [transfer.data.id] })
+      assert.strictEqual(trApp.status, 400)
+      assert.strictEqual(trApp.data.error, 'Файл шаблона не прикреплён')
+    })
+  })
 })

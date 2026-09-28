@@ -1,6 +1,7 @@
-import { describe, it, before } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert'
-import { BASE, headers as _baseHeaders, headersJSON as _baseHeadersJSON, getAdminToken, getEmployeeToken, getEmployeeUser, getFirstDepartment } from './helpers.js'
+import { BASE, headers as _baseHeaders, headersJSON as _baseHeadersJSON, tryLogin, getAdminToken, getEmployeeToken, getEmployeeUser, getFirstDepartment } from './helpers.js'
+import { pool, query } from '../config/database.js'
 const headers = (t) => ({ ..._baseHeaders(t), 'x-organization-id': '1' })
 const headersJSON = (t) => ({ ..._baseHeadersJSON(t), 'x-organization-id': '1' })
 
@@ -318,6 +319,93 @@ describe('Admin API', () => {
     it('GET /admin/stats returns 401 without token', async () => {
       const res = await fetch(`${BASE}/admin/stats`)
       assert.strictEqual(res.status, 401)
+    })
+  })
+
+  describe('Module Settings', () => {
+    const MODULE_CODE = 'calendar'
+    let superadminToken, calendarModuleId, settingsSnap, overrideSnap
+
+    before(async () => {
+      superadminToken = await tryLogin('superadmin@example.com')
+      assert.ok(superadminToken, 'superadmin@example.com не смог войти')
+      calendarModuleId = (await query('SELECT id FROM modules WHERE code = $1', [MODULE_CODE])).rows[0].id
+      settingsSnap = (await query('SELECT settings FROM modules WHERE code = $1', [MODULE_CODE])).rows[0].settings
+      overrideSnap = (await query('SELECT settings FROM module_overrides WHERE org_id = 1 AND module_code = $1', [MODULE_CODE])).rows[0]?.settings ?? null
+    })
+
+    after(async () => {
+      await query('UPDATE modules SET settings = $1 WHERE code = $2', [JSON.stringify(settingsSnap), MODULE_CODE])
+      if (overrideSnap === null) {
+        await query('DELETE FROM module_overrides WHERE org_id = 1 AND module_code = $1', [MODULE_CODE])
+      } else {
+        await query('UPDATE module_overrides SET settings = $1 WHERE org_id = 1 AND module_code = $2', [JSON.stringify(overrideSnap), MODULE_CODE])
+      }
+      await pool.end()
+    })
+
+    it('GET /admin/modules/:id/settings → 200 с настройками; несуществующий модуль → 404', async () => {
+      const res = await fetch(`${BASE}/admin/modules/${MODULE_CODE}/settings`, { headers: headers(adminToken) })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(typeof await res.json(), 'object')
+      const missing = await fetch(`${BASE}/admin/modules/no-such-module-xyz/settings`, { headers: headers(adminToken) })
+      assert.strictEqual(missing.status, 404)
+      assert.strictEqual((await missing.json()).error, 'Модуль не найден')
+    })
+
+    it('PATCH от superadmin пишет глобальные настройки + аудит module_settings_update', async () => {
+      const res = await fetch(`${BASE}/admin/modules/${MODULE_CODE}/settings`, {
+        method: 'PATCH',
+        headers: headersJSON(superadminToken),
+        body: JSON.stringify({ us16GlobalFlag: 'written-by-superadmin' }),
+      })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual((await res.json()).us16GlobalFlag, 'written-by-superadmin')
+      const stored = (await query('SELECT settings FROM modules WHERE code = $1', [MODULE_CODE])).rows[0].settings
+      assert.strictEqual(stored.us16GlobalFlag, 'written-by-superadmin')
+      const audit = (await query(
+        "SELECT details FROM audit_log WHERE action = 'module_settings_update' AND entity_id = $1 ORDER BY id DESC LIMIT 1",
+        [String(calendarModuleId)])).rows[0]
+      assert.ok(audit, 'запись аудита module_settings_update не найдена')
+      assert.strictEqual(audit.details.scope, 'global')
+    })
+
+    it('PATCH от admin (org) пишет override; GET мержит global + override', async () => {
+      const res = await fetch(`${BASE}/admin/modules/${MODULE_CODE}/settings`, {
+        method: 'PATCH',
+        headers: headersJSON(adminToken),
+        body: JSON.stringify({ us16OrgFlag: 42 }),
+      })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual((await res.json()).us16OrgFlag, 42)
+      const merged = await (await fetch(`${BASE}/admin/modules/${MODULE_CODE}/settings`, { headers: headers(adminToken) })).json()
+      assert.strictEqual(merged.us16OrgFlag, 42)
+      assert.strictEqual(merged.us16GlobalFlag, 'written-by-superadmin')
+      const audit = (await query(
+        "SELECT details FROM audit_log WHERE action = 'module_settings_update' AND entity_id = $1 ORDER BY id DESC LIMIT 1",
+        [String(calendarModuleId)])).rows[0]
+      assert.strictEqual(audit.details.scope, 'org')
+      assert.strictEqual(audit.details.org_id, 1)
+    })
+
+    it('PATCH от employee → 403', async () => {
+      const res = await fetch(`${BASE}/admin/modules/${MODULE_CODE}/settings`, {
+        method: 'PATCH',
+        headers: headersJSON(employeeToken),
+        body: JSON.stringify({ x: 1 }),
+      })
+      assert.strictEqual(res.status, 403)
+    })
+
+    it('PATCH с невалидным payload (массив) принимается — валидации нет (фактическое поведение)', async () => {
+      const res = await fetch(`${BASE}/admin/modules/${MODULE_CODE}/settings`, {
+        method: 'PATCH',
+        headers: headersJSON(adminToken),
+        body: JSON.stringify([1, 2, 3]),
+      })
+      assert.strictEqual(res.status, 200)
+      const stored = (await query("SELECT settings FROM module_overrides WHERE org_id = 1 AND module_code = 'calendar'")).rows[0]
+      assert.ok(Array.isArray(stored.settings))
     })
   })
 })

@@ -479,3 +479,94 @@ describe('Видимость в разделе «Работники» по св�
     assert.deepStrictEqual((await groupsOf(empB)).map((g) => g.dept), [deptB])
   })
 })
+
+describe('Проекция флагов видимости отпусков (vac_parent_*)', () => {
+  const vacFlagsOf = async (deptId) => (await query(
+    'SELECT vac_parent_sees_child, vac_child_sees_parent, vac_parent_approves FROM departments WHERE id = $1', [deptId])).rows[0]
+
+  it('PUT /hierarchy c vacationVisibility пишет флаги в отдел-потомок; без vis — true по умолчанию', async () => {
+    const token = await tokenFor(hrA)
+    const nodes = [deptNode(deptA, 'Отдел А hier'), deptNode(deptB, 'Отдел Б hier', 300)]
+    const plain = await call('PUT', '/hierarchy', token, {
+      nodes, edges: [parentEdge(`department-${deptA}-t1`, `department-${deptB}-t1`)], baseVersion: 0,
+    }, orgA)
+    assert.strictEqual(plain.status, 200, JSON.stringify(plain.data))
+    assert.deepStrictEqual(await vacFlagsOf(deptB), { vac_parent_sees_child: true, vac_child_sees_parent: true, vac_parent_approves: true })
+
+    const flagged = await call('PUT', '/hierarchy', token, {
+      nodes,
+      edges: [parentEdge(`department-${deptA}-t1`, `department-${deptB}-t1`, {
+        vacationVisibility: { parentSeesChild: false, childSeesParent: true, parentApproves: false },
+      })],
+      baseVersion: plain.data.version,
+    }, orgA)
+    assert.strictEqual(flagged.status, 200, JSON.stringify(flagged.data))
+    assert.deepStrictEqual(await vacFlagsOf(deptB), { vac_parent_sees_child: false, vac_child_sees_parent: true, vac_parent_approves: false })
+    assert.deepStrictEqual(await vacFlagsOf(deptA), { vac_parent_sees_child: true, vac_child_sees_parent: true, vac_parent_approves: true })
+
+    const graph = await call('GET', '/hierarchy', token, undefined, orgA)
+    assert.strictEqual(graph.status, 200)
+    const edge = graph.data.data.edges.find((e) => e.target === `department-${deptB}-t1`)
+    assert.ok(edge, 'связь не вернулась из GET /hierarchy')
+    assert.deepStrictEqual(edge.data.vacationVisibility, { parentSeesChild: false, childSeesParent: true, parentApproves: false })
+  })
+
+  it('каскад parentApproves=false течёт вниз через промежуточный отдел без своей настройки', async () => {
+    const deptC = await mkDept('Отдел В hier', orgA)
+    const token = await tokenFor(hrA)
+    const aId = `department-${deptA}-t1`, bId = `department-${deptB}-t1`, cId = `department-${deptC}-t1`
+    const put = await call('PUT', '/hierarchy', token, {
+      nodes: [deptNode(deptA, 'Отдел А hier'), deptNode(deptB, 'Отдел Б hier', 300), deptNode(deptC, 'Отдел В hier', 600)],
+      edges: [
+        parentEdge(aId, bId, { vacationVisibility: { parentApproves: false, cascadeParentApproves: true } }),
+        parentEdge(bId, cId),
+      ],
+      baseVersion: 0,
+    }, orgA)
+    assert.strictEqual(put.status, 200, JSON.stringify(put.data))
+    assert.strictEqual((await vacFlagsOf(deptB)).vac_parent_approves, false)
+    assert.strictEqual((await vacFlagsOf(deptC)).vac_parent_approves, false)
+    assert.strictEqual((await vacFlagsOf(deptC)).vac_parent_sees_child, true)
+    await query('DELETE FROM departments WHERE id = $1', [deptC])
+  })
+
+  it('связь «руководитель → работник» c vacationVisibility пишет флаги в users потомка', async () => {
+    await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptA, empA.id])
+    const empB = await mkUser({ email: `vacuser${SUFFIX}`, role: 'employee', orgId: orgA, deptId: deptB })
+    const token = await tokenFor(hrA)
+    const put = await call('PUT', '/hierarchy', token, {
+      nodes: [deptNode(deptA, 'Отдел А hier'), deptNode(deptB, 'Отдел Б hier', 300), empNode(empA.id), empNode(empB.id, 700)],
+      edges: [parentEdge(`employee-${empA.id}-t1`, `employee-${empB.id}-t1`, {
+        vacationVisibility: { parentSeesChild: false, childSeesParent: true, parentApproves: false },
+      })],
+      baseVersion: 0,
+    }, orgA)
+    assert.strictEqual(put.status, 200, JSON.stringify(put.data))
+    const row = (await query(
+      'SELECT manager_id, vac_parent_sees_child, vac_child_sees_parent, vac_parent_approves FROM users WHERE id = $1', [empB.id])).rows[0]
+    assert.strictEqual(row.manager_id, empA.id)
+    assert.strictEqual(row.vac_parent_sees_child, false)
+    assert.strictEqual(row.vac_child_sees_parent, true)
+    assert.strictEqual(row.vac_parent_approves, false)
+  })
+
+  it('PUT /hierarchy/department/:id сохраняет подграф с vacationVisibility; GET возвращает как сохранено; левый отдел → 404', async () => {
+    const token = await tokenFor(hrA)
+    const aId = `department-${deptA}-t2`, bId = `department-${deptB}-t2`
+    const nodes = [
+      { id: aId, type: 'department', position: { x: 0, y: 0 }, data: { id: deptA, name: 'Отдел А hier' } },
+      { id: bId, type: 'department', position: { x: 300, y: 0 }, data: { id: deptB, name: 'Отдел Б hier' } },
+    ]
+    const edge = parentEdge(aId, bId, { vacationVisibility: { parentSeesChild: true, childSeesParent: false, parentApproves: false } })
+    const put = await call('PUT', `/hierarchy/department/${deptA}`, token, { nodes, edges: [edge] }, orgA)
+    assert.strictEqual(put.status, 200, JSON.stringify(put.data))
+    const got = await call('GET', `/hierarchy/department/${deptA}`, token, undefined, orgA)
+    assert.strictEqual(got.status, 200)
+    const savedEdge = got.data.data.edges.find((e) => e.target === bId)
+    assert.ok(savedEdge, 'связь не вернулась из GET /hierarchy/department/:id')
+    assert.deepStrictEqual(savedEdge.data.vacationVisibility, { parentSeesChild: true, childSeesParent: false, parentApproves: false })
+    const missing = await call('PUT', '/hierarchy/department/999999999', token, { nodes, edges: [edge] }, orgA)
+    assert.strictEqual(missing.status, 404)
+    assert.strictEqual(missing.data.error, 'Отдел не найден')
+  })
+})
