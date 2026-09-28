@@ -109,11 +109,31 @@ check_environment() {
         return 1
     fi
     log_success "Все зависимости установлены"
-    local port
+    local port pids _
     for port in 3000 5000; do
-        if lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
-            log_error "Порт ${port} занят — останови dev-стек и перезапусти скрипт"
-            return 1
+        pids="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN -t 2>/dev/null || true)"
+        if [ -z "$pids" ]; then
+            continue
+        fi
+        log_warning "Порт ${port} занят (PID: ${pids//$'\n'/ }) — останавливаю"
+        while read -r _pid; do
+            [ -n "$_pid" ] && kill "$_pid" 2>/dev/null || true
+        done <<< "$pids"
+        for _ in $(seq 1 10); do
+            pids="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN -t 2>/dev/null || true)"
+            [ -z "$pids" ] && break
+            sleep 1
+        done
+        if [ -n "$pids" ]; then
+            while read -r _pid; do
+                [ -n "$_pid" ] && kill -9 "$_pid" 2>/dev/null || true
+            done <<< "$pids"
+            sleep 1
+            pids="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN -t 2>/dev/null || true)"
+            if [ -n "$pids" ]; then
+                log_error "Не удалось освободить порт ${port} — останови процесс вручную и перезапусти скрипт"
+                return 1
+            fi
         fi
     done
     log_success "Порты 3000/5000 свободны"
@@ -229,10 +249,10 @@ step_backend_server() {
         sleep 1
     done
     if [ "$ready" != "true" ]; then
-        log_error "Бэкенд для E2E не поднялся за 30 с (лог: ${BACKEND_LOG})"
+        log_error "Бэкенд не поднялся за 30 с (лог: ${BACKEND_LOG})"
         return 1
     fi
-    log_success "Бэкенд для E2E готов (PID ${BACKEND_PID})"
+    log_success "Бэкенд готов (PID ${BACKEND_PID})"
 }
 
 step_e2e() {
@@ -256,8 +276,8 @@ main() {
         run_step "Временная БД (postgres)" step_test_db
         run_step "Миграции" step_migrate
         run_step "Сид" step_seed
+        run_step "Бэкенд на :5000 (тесты + E2E)" step_backend_server
         run_step "Интеграционные тесты (бэкенд)" step_backend_tests
-        run_step "Бэкенд для E2E" step_backend_server
         run_step "E2E (Playwright)" step_e2e
 
         cleanup
