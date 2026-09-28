@@ -359,6 +359,14 @@ function rejectViewOnlyWrite(req, res) {
   return true
 }
 
+export const ACCOUNT_DISABLED_MESSAGE = 'Учётная запись деактивирована. Обратитесь к HR или администратору'
+
+const rejectDisabledAccount = (req, res) => {
+  if (req.user?.status !== 'inactive') return false
+  res.status(401).json({ error: ACCOUNT_DISABLED_MESSAGE, code: 'ACCOUNT_DISABLED' })
+  return true
+}
+
 export const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1] || req.cookies?.auth_token
@@ -382,6 +390,7 @@ export const authenticateToken = async (req, res, next) => {
         return res.status(403).json({ error: 'Пользователь не найден' })
       }
       req.user = result.rows[0]
+      if (rejectDisabledAccount(req, res)) return
       return attachOrgContext(req, res, next)
     }
 
@@ -397,6 +406,7 @@ export const authenticateToken = async (req, res, next) => {
     }
 
     req.user = result.rows[0]
+    if (rejectDisabledAccount(req, res)) return
     await applyTestContext(req)
     if (rejectViewOnlyWrite(req, res)) return
     return attachOrgContext(req, res, next)

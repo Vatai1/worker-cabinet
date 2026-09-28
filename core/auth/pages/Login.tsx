@@ -201,8 +201,8 @@ export function Login() {
     try {
       await login(email, password)
       navigate('/dashboard')
-    } catch {
-      setError('Неверный email или пароль')
+    } catch (err) {
+      setError(err instanceof Error && !(err instanceof TypeError) && err.message ? err.message : 'Неверный email или пароль')
     } finally {
       setIsLoading(false)
     }
@@ -216,8 +216,8 @@ export function Login() {
     try {
       await login(demoEmail, 'password123')
       navigate('/dashboard')
-    } catch {
-      setError('Неверный email или пароль')
+    } catch (err) {
+      setError(err instanceof Error && !(err instanceof TypeError) && err.message ? err.message : 'Неверный email или пароль')
     } finally {
       setIsLoading(false)
     }

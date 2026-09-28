@@ -2,25 +2,32 @@ import { Building2, FolderKanban } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { personName } from '@/shared/lib/utils'
+import { matchesAnyWordPrefix, searchTokens, wordPrefixIndex } from '@/shared/lib/wordSearch'
 import { PROJECT_STATUS_LABELS } from '@/shared/hooks/useGlobalSearch'
 import type { GlobalSearchUser, GlobalSearchDepartment, GlobalSearchProject } from '@/shared/hooks/useGlobalSearch'
 
 type RowVariant = 'compact' | 'cozy'
 
 export function highlightMatch(text: string, query: string) {
-  const q = query.trim()
-  if (!q) return text
-  const idx = text.toLowerCase().indexOf(q.toLowerCase())
-  if (idx === -1) return text
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark className="rounded-[3px] bg-primary/15 px-0.5 -mx-0.5 font-semibold text-primary">
-        {text.slice(idx, idx + q.length)}
-      </mark>
-      {text.slice(idx + q.length)}
-    </>
-  )
+  const ranges = searchTokens(query)
+    .map((t) => ({ start: wordPrefixIndex(text, t), length: t.length }))
+    .filter((r) => r.start !== -1)
+    .sort((a, b) => a.start - b.start)
+  if (ranges.length === 0) return text
+  const parts: React.ReactNode[] = []
+  let cursor = 0
+  for (const r of ranges) {
+    if (r.start < cursor) continue
+    parts.push(text.slice(cursor, r.start))
+    parts.push(
+      <mark key={r.start} className="rounded-[3px] bg-primary/15 px-0.5 -mx-0.5 font-semibold text-primary">
+        {text.slice(r.start, r.start + r.length)}
+      </mark>,
+    )
+    cursor = r.start + r.length
+  }
+  parts.push(text.slice(cursor))
+  return <>{parts}</>
 }
 
 interface EmployeeRowProps {
@@ -31,8 +38,7 @@ interface EmployeeRowProps {
 }
 
 export function EmployeeResultRow({ user, query, onClick, variant = 'compact' }: EmployeeRowProps) {
-  const q = query.trim().toLowerCase()
-  const matchedTag = q ? user.skills?.find((s) => s.toLowerCase().includes(q)) : undefined
+  const matchedTag = user.skills?.find((s) => matchesAnyWordPrefix(s, query))
   const name = personName(user.last_name, user.first_name, user.middle_name)
 
   if (variant === 'cozy') {

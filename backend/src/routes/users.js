@@ -7,6 +7,8 @@ import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 import { getVisibleColleagueIds } from '../lib/colleagues.js'
 import { syncMembershipDepartment } from '../lib/departmentMembers.js'
+import { revokeAllUserSessions } from '../lib/sessionTokens.js'
+import { phrasePrefixPattern, wordPrefixPatterns } from '../lib/wordSearch.js'
 import { setKcUserEnabled, updateKcUserRole } from '../config/keycloak.js'
 
 const ELEVATED_ROLES = ['admin', 'superadmin', 'director']
@@ -200,7 +202,7 @@ router.get('/search', authenticateToken, async (req, res) => {
       const orgIsActiveVals = parseList(orgIsActive).map((v) => v === 'true')
       if (orgIsActiveVals.length > 0) {
         params.push(orgIsActiveVals)
-        orgWhere += ` AND uo.is_active = ANY($${params.length}::bool[])`
+        orgWhere += ` AND (uo.is_active AND u.status <> 'inactive') = ANY($${params.length}::bool[])`
       } else if (includeInactive !== 'true') {
         orgWhere += ' AND uo.is_active = true'
       }
@@ -289,24 +291,35 @@ router.get('/search', authenticateToken, async (req, res) => {
       params.push(statuses)
     }
 
-    if (q) {
-      sql += ` AND (u.first_name ILIKE $${params.length + 1} OR u.last_name ILIKE $${params.length + 1} OR u.position ILIKE $${params.length + 1} OR EXISTS (
-        SELECT 1 FROM user_skills us2 JOIN skills_dictionary sd2 ON us2.skill_id = sd2.id
-        WHERE us2.user_id = u.id AND sd2.name ILIKE $${params.length + 1}
-      ))`
-      params.push(`%${q}%`)
+    const patterns = wordPrefixPatterns(q)
+    let orderBy = ' ORDER BY u.last_name, u.first_name'
+    if (patterns.length > 0) {
+      for (const pattern of patterns) {
+        params.push(pattern)
+        const idx = params.length
+        sql += ` AND (u.last_name ~* $${idx} OR u.first_name ~* $${idx} OR u.middle_name ~* $${idx} OR u.position ~* $${idx} OR EXISTS (
+          SELECT 1 FROM user_skills us2 JOIN skills_dictionary sd2 ON us2.skill_id = sd2.id
+          WHERE us2.user_id = u.id AND sd2.name ~* $${idx}
+        ))`
+      }
+      params.push(phrasePrefixPattern(q))
+      orderBy = ` ORDER BY EXISTS (
+        SELECT 1 FROM user_skills us3 JOIN skills_dictionary sd3 ON us3.skill_id = sd3.id
+        WHERE us3.user_id = u.id AND sd3.name ~* $${params.length}
+      ) DESC, u.last_name, u.first_name`
     }
 
     if (page === null) {
-      sql += ' ORDER BY u.last_name, u.first_name'
+      sql += orderBy
       const result = await query(sql, params)
       return res.json(result.rows)
     }
 
-    const countResult = await query(`SELECT COUNT(*) FROM (${sql}) t`, params)
+    const countParams = patterns.length > 0 ? params.slice(0, -1) : params
+    const countResult = await query(`SELECT COUNT(*) FROM (${sql}) t`, countParams)
     const total = parseInt(countResult.rows[0].count)
 
-    sql += ' ORDER BY u.last_name, u.first_name'
+    sql += orderBy
     params.push(limit, (page - 1) * limit)
     sql += ` LIMIT $${params.length - 1} OFFSET $${params.length}`
 
@@ -460,11 +473,14 @@ router.put('/bulk-status', authenticateToken, authorizeRoles('hr', 'admin'), asy
     }
 
     const result = await query('UPDATE users SET status = $1 WHERE id = ANY($2)', [status, userIds])
+    if (status === 'inactive') {
+      for (const userId of userIds) await revokeAllUserSessions(userId)
+    }
 
     if (result.rowCount > 0) {
       const guids = await query('SELECT keycloak_guid FROM users WHERE id = ANY($1) AND keycloak_guid IS NOT NULL', [userIds])
       for (const row of guids.rows) {
-        await setKcUserEnabled(row.keycloak_guid, status === 'active').catch(() => {})
+        await setKcUserEnabled(row.keycloak_guid, status !== 'inactive').catch(() => {})
       }
     }
 

@@ -4,6 +4,7 @@ import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
+import { matchesAllWordPrefixes } from '@/shared/lib/wordSearch'
 
 export interface GlobalSearchUser {
   id: number
@@ -81,8 +82,7 @@ export function useGlobalSearch(query: string, limits: GlobalSearchLimits) {
     setLoading(true)
     setSearched(false)
 
-    const lower = q.toLowerCase()
-    setDepartments(deptCache.filter((d) => d.name.toLowerCase().includes(lower)).slice(0, deptLimit))
+    setDepartments(deptCache.filter((d) => matchesAllWordPrefixes(d.name, q)).slice(0, deptLimit))
 
     Promise.allSettled([
       getJson<GlobalSearchUser[]>(`/users/search?q=${encodeURIComponent(q)}`, controller.signal),

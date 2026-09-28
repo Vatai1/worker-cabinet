@@ -98,6 +98,8 @@ interface OrgMembership {
   is_active: boolean
 }
 
+const ACCOUNT_STATUS_LABELS: Record<string, string> = { active: 'активен', inactive: 'деактивирован', on_leave: 'в отпуске' }
+
 const STATUS_FILTER_OPTIONS: CheckListItem[] = [
   { id: 'active', label: 'Активен' },
   { id: 'inactive', label: 'Отключён' },
@@ -639,7 +641,7 @@ function EmployeeSettingsModal({
                   )}
                   {status === 'active' ? 'Деактивировать' : 'Активировать'}
                 </Button>
-                <span className="text-xs text-muted-foreground">Текущий статус: {status}</span>
+                <span className="text-xs text-muted-foreground">Текущий статус: {ACCOUNT_STATUS_LABELS[status] || status}</span>
               </div>
 
               <div className="mb-2">
@@ -1170,8 +1172,8 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
                       </div>
                     </td>
                     <td className="px-4 py-2.5">
-                      <Badge variant={r.org_is_active === false ? 'destructive' : 'success'}>
-                        {r.org_is_active === false ? 'Отключён' : 'Активен'}
+                      <Badge variant={r.status === 'inactive' || r.org_is_active === false ? 'destructive' : 'success'}>
+                        {r.status === 'inactive' ? 'Деактивирован' : r.org_is_active === false ? 'Отключён' : 'Активен'}
                       </Badge>
                     </td>
                   </tr>

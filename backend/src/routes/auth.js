@@ -3,8 +3,8 @@ import bcrypt from 'bcryptjs'
 import { query } from '../config/database.js'
 import { authLimiter } from '../middleware/rateLimiter.js'
 import { validateLogin, validateRegister, sanitizeInput } from '../middleware/validation.js'
-import { asyncHandler, ValidationError, UnauthorizedError } from '../middleware/errors.js'
-import { authenticateToken, logScopes, verifyKeycloakToken, findOrCreateUser } from '../middleware/auth.js'
+import { asyncHandler, ValidationError, UnauthorizedError, ForbiddenError } from '../middleware/errors.js'
+import { authenticateToken, logScopes, verifyKeycloakToken, findOrCreateUser, ACCOUNT_DISABLED_MESSAGE } from '../middleware/auth.js'
 import { isRealSuperadmin, signValue, testCookieOptions, TEST_PREVIEW_ROLES, getTestDataState } from '../utils/testScope.js'
 import { personName } from '../utils/personName.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
@@ -63,6 +63,8 @@ router.post('/callback', asyncHandler(async (req, res) => {
   // the session is entirely our own: our JWT access token + our own DB-backed refresh token.
   const kcPayload = await verifyKeycloakToken(tokenData.access_token)
   const user = await findOrCreateUser(kcPayload)
+  const statusRow = (await query('SELECT status FROM users WHERE id = $1', [user.id])).rows[0]
+  if (statusRow?.status === 'inactive') throw new ForbiddenError(ACCOUNT_DISABLED_MESSAGE)
 
   const { sessionLifetime, sessionMs, refreshLifetime, refreshMs } = await getAuthSettings()
   const accessToken = signAccessToken(user, sessionLifetime)
@@ -262,6 +264,8 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
   if (user.failed_login_count > 0 || user.locked_until) {
     await query(`UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE id = $1`, [user.id])
   }
+
+  if (user.status === 'inactive') throw new ForbiddenError(ACCOUNT_DISABLED_MESSAGE)
 
   const { sessionLifetime, sessionMs, refreshLifetime, refreshMs } = await getAuthSettings()
   const token = signAccessToken(user, sessionLifetime)

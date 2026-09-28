@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth.js'
 import { upload, uploadWithMagicBytes } from '../middleware/upload.js'
 import { uploadToS3, deleteFromS3, getFromS3, getPresignedUrl } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
+import { wordPrefixPatterns } from '../lib/wordSearch.js'
 import jwt from 'jsonwebtoken'
 
 const router = express.Router()
@@ -128,9 +129,9 @@ router.get('/', authenticateToken, async (req, res) => {
       sql += ` AND p.status = $${params.length}`
     }
 
-    if (search) {
-      params.push(`%${search}%`)
-      sql += ` AND (p.name ILIKE $${params.length} OR p.full_name ILIKE $${params.length} OR p.description ILIKE $${params.length})`
+    for (const pattern of wordPrefixPatterns(search)) {
+      params.push(pattern)
+      sql += ` AND (p.name ~* $${params.length} OR p.full_name ~* $${params.length} OR p.description ~* $${params.length})`
     }
 
     sql += ' GROUP BY p.id ORDER BY p.created_at DESC'

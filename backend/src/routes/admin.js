@@ -9,6 +9,7 @@ import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { requireRealSuperadmin, excludeTest, TEST_DEPT_NAME, TEST_USERS, TEST_USER_EMAILS, getTestDataState } from '../utils/testScope.js'
 import { personName } from '../utils/personName.js'
 import { syncMembershipDepartment } from '../lib/departmentMembers.js'
+import { revokeAllUserSessions } from '../lib/sessionTokens.js'
 import { getActiveWsCount } from '../config/ws.js'
 import { createRequire } from 'module'
 import path from 'path'
@@ -433,10 +434,11 @@ router.put('/users/:id/status', asyncHandler(async (req, res) => {
 
   const oldStatus = userCheck.rows[0].status
   await query('UPDATE users SET status = $1 WHERE id = $2', [status, id])
+  if (status === 'inactive') await revokeAllUserSessions(id)
 
   const guidCheck = await query('SELECT keycloak_guid FROM users WHERE id = $1', [id])
   if (guidCheck.rows[0]?.keycloak_guid) {
-    await setKcUserEnabled(guidCheck.rows[0].keycloak_guid, status === 'active').catch(() => {})
+    await setKcUserEnabled(guidCheck.rows[0].keycloak_guid, status !== 'inactive').catch(() => {})
   }
 
   await logAudit(req.user.id, personName(req.user), 'user_status_change', 'user', id,
@@ -801,11 +803,14 @@ router.put('/users/bulk-status', asyncHandler(async (req, res) => {
     `UPDATE users SET status = $1 WHERE id = ANY($2)`,
     [status, userIds]
   )
+  if (status === 'inactive') {
+    for (const userId of userIds) await revokeAllUserSessions(userId)
+  }
 
   if (result.rowCount > 0) {
     const guids = await query('SELECT keycloak_guid FROM users WHERE id = ANY($1) AND keycloak_guid IS NOT NULL', [userIds])
     for (const row of guids.rows) {
-      await setKcUserEnabled(row.keycloak_guid, status === 'active').catch(() => {})
+      await setKcUserEnabled(row.keycloak_guid, status !== 'inactive').catch(() => {})
     }
   }
 
