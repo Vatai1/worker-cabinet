@@ -236,6 +236,8 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
   const parentUserByUser = new Map()
   const visByDept = new Map()
   const visByUser = new Map()
+  const empVisByDept = new Map()
+  const empVisByUser = new Map()
   for (const e of Array.isArray(edges) ? edges : []) {
     if (e?.data?.relation === 'plain') continue
     // Связь, ведущая В блок должности, сама по себе не создаёт изменений —
@@ -278,6 +280,10 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     if (e?.data?.vacationVisibility) {
       if (targetDept != null) visByDept.set(targetDept, e.data.vacationVisibility)
       else if (targetUser != null) visByUser.set(targetUser, e.data.vacationVisibility)
+    }
+    if (e?.data?.employeeVisibility) {
+      if (targetDept != null) empVisByDept.set(targetDept, e.data.employeeVisibility)
+      else if (targetUser != null) empVisByUser.set(targetUser, e.data.employeeVisibility)
     }
   }
 
@@ -457,6 +463,8 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
       vacParentSeesChild: vis?.parentSeesChild !== false,
       vacChildSeesParent: vis?.childSeesParent !== false,
       vacParentApproves: vis?.parentApproves !== false,
+      empParentSeesChild: empVisByDept.get(deptId)?.parentSeesChild === true,
+      empChildSeesParent: empVisByDept.get(deptId)?.childSeesParent === true,
     })
   }
 
@@ -474,6 +482,8 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
       vacParentSeesChild: vis?.parentSeesChild !== false,
       vacChildSeesParent: vis?.childSeesParent !== false,
       vacParentApproves: vis?.parentApproves !== false,
+      empParentSeesChild: empVisByUser.get(userId)?.parentSeesChild === true,
+      empChildSeesParent: empVisByUser.get(userId)?.childSeesParent === true,
     })
   }
   return { deptChanges, userChanges }
@@ -655,19 +665,19 @@ router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), 
       [data, req.user.id, orgId, orgId]
     )
 
-    for (const { deptId, parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, vacParentApproves } of parentChanges.deptChanges) {
+    for (const { deptId, parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, empParentSeesChild, empChildSeesParent } of parentChanges.deptChanges) {
       const { text, values } = orgScopedQuery(
-        'UPDATE departments SET parent_id = $1, parent_user_id = $2, vac_parent_sees_child = $3, vac_child_sees_parent = $4, vac_parent_approves = $5 WHERE id = $6',
-        [parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, deptId],
+        'UPDATE departments SET parent_id = $1, parent_user_id = $2, vac_parent_sees_child = $3, vac_child_sees_parent = $4, vac_parent_approves = $5, emp_parent_sees_child = $6, emp_child_sees_parent = $7 WHERE id = $8',
+        [parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, empParentSeesChild, empChildSeesParent, deptId],
         req
       )
       await client.query(text, values)
     }
 
-    for (const { userId, managerId, vacParentSeesChild, vacChildSeesParent, vacParentApproves } of parentChanges.userChanges) {
+    for (const { userId, managerId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, empParentSeesChild, empChildSeesParent } of parentChanges.userChanges) {
       await client.query(
-        'UPDATE users SET manager_id = $1, vac_parent_sees_child = $2, vac_child_sees_parent = $3, vac_parent_approves = $4 WHERE id = $5',
-        [managerId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, userId]
+        'UPDATE users SET manager_id = $1, vac_parent_sees_child = $2, vac_child_sees_parent = $3, vac_parent_approves = $4, emp_parent_sees_child = $5, emp_child_sees_parent = $6 WHERE id = $7',
+        [managerId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, empParentSeesChild, empChildSeesParent, userId]
       )
     }
 

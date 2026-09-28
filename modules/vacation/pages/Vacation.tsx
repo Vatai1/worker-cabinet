@@ -350,6 +350,7 @@ export function Vacation() {
       } else {
         await approveRequest(requestId, user.id)
       }
+      toast.success('Заявка одобрена')
       fetchUserRequests(user.id)
       reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
@@ -375,22 +376,6 @@ export function Vacation() {
       toast.error(getErrorMessage(err))
       throw err
     }
-  }
-
-  const handleApproveCard = (request: VacationRequest) => {
-    setLeavingApprovalIds((prev) => new Set(prev).add(request.id))
-    setTimeout(() => {
-      handleApprove(request.id)
-        .then(() => toast.success('Заявка одобрена'))
-        .catch(() => {})
-        .finally(() => {
-          setLeavingApprovalIds((prev) => {
-            const next = new Set(prev)
-            next.delete(request.id)
-            return next
-          })
-        })
-    }, 250)
   }
 
   const handleRejectCardToggle = (requestId: string) => {
@@ -1494,8 +1479,8 @@ export function Vacation() {
                           </div>
                         </button>
                         <div className="flex shrink-0 gap-2">
-                          <Button size="sm" onClick={(e) => { e.stopPropagation(); handleApproveCard(request) }}>
-                            Одобрить
+                          <Button size="sm" onClick={(e) => { e.stopPropagation(); handleOpenDetailModal(request) }}>
+                            Подробнее
                           </Button>
                           <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleRejectCardToggle(request.id) }}>
                             Отклонить

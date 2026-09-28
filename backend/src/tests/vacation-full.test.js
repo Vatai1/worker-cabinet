@@ -1019,6 +1019,31 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(denied.status, 403)
     })
 
+    it('scope-employees: работники, видимые по связи иерархии (emp_parent_sees_child), доступны руководителю', async () => {
+      const otherMgr = await mkUser({ email: `us9.linkmgr${SUFFIX}`, role: 'manager', last: 'Связанный' })
+      const linkedDept = await mkDept('US9 Связанный отдел vac-full', 1, otherMgr.id)
+      const linked = await mkUser({ email: `us9.linked${SUFFIX}`, last: 'Связанная', deptId: linkedDept })
+      try {
+        const before = await call('GET', '/vacation/restrictions/scope-employees', await tokenFor(mgr))
+        assert.ok(!before.data.some((e) => e.id === String(linked.id)))
+
+        await query('UPDATE departments SET parent_id = $1, emp_parent_sees_child = true WHERE id = $2', [deptId, linkedDept])
+        const after = await call('GET', '/vacation/restrictions/scope-employees', await tokenFor(mgr))
+        assert.ok(after.data.some((e) => e.id === String(linked.id)), 'связанный работник должен быть в списке')
+
+        const created = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { type: 'group', employeeIds: [emp.id, linked.id] })
+        assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+        const upd = await call('PUT', `/vacation/restrictions/${created.data.id}`, await tokenFor(mgr), { type: 'group', employeeIds: [linked.id], maxConcurrent: 1, description: 'Изменено' })
+        assert.strictEqual(upd.status, 200, JSON.stringify(upd.data))
+        assert.deepStrictEqual(upd.data.employeeIds, [String(linked.id)])
+        const list = await call('GET', '/vacation/restrictions?scope=mine', await tokenFor(mgr))
+        assert.ok(list.data.some((r) => r.id === created.data.id && r.description === 'Изменено'))
+        await query('DELETE FROM vacation_restrictions WHERE id = $1', [created.data.id])
+      } finally {
+        await cleanupFixtures({ deptIds: [linkedDept] })
+      }
+    })
+
     it('manager может добавить работника другого отдела; своё ограничение видно в scope=mine', async () => {
       const outsider = await mkUser({ email: `us9.out2${SUFFIX}`, last: 'Чужой' })
       const res = await call('POST', '/vacation/restrictions', await tokenFor(mgr), { type: 'group', employeeIds: [outsider.id] })

@@ -420,3 +420,62 @@ describe('US-Б5. «Целостность»', () => {
     assert.strictEqual(noNodes.data.error, 'Поля nodes и edges обязательны')
   })
 })
+
+describe('Видимость в разделе «Работники» по связям иерархии', () => {
+  const groupsOf = async (user) => {
+    const res = await call('GET', '/users/colleagues', await tokenFor(user), undefined, orgA)
+    assert.strictEqual(res.status, 200, JSON.stringify(res.data))
+    return res.data.groups.map((g) => ({ dept: g.departmentId === null ? null : Number(g.departmentId), isOwn: g.isOwn, ids: g.employees.map((e) => e.id) }))
+  }
+
+  it('без галочек каждый видит только свой отдел; «Родитель видит работников подчинённых» открывает дочерний отдел', async () => {
+    await query('UPDATE users SET department_id = $1 WHERE id = ANY($2)', [deptA, [empA.id, empA2.id]])
+    const empB = await mkUser({ email: `empb${SUFFIX}`, role: 'employee', orgId: orgA, deptId: deptB })
+    const token = await tokenFor(hrA)
+    const nodes = [deptNode(deptA, 'Отдел А hier'), deptNode(deptB, 'Отдел Б hier', 300)]
+
+    const plain = await call('PUT', '/hierarchy', token, { nodes, edges: [parentEdge(`department-${deptA}-t1`, `department-${deptB}-t1`)], baseVersion: 0 }, orgA)
+    assert.strictEqual(plain.status, 200, JSON.stringify(plain.data))
+    assert.deepStrictEqual((await groupsOf(empA)).map((g) => g.dept), [deptA])
+    assert.deepStrictEqual((await groupsOf(empB)).map((g) => g.dept), [deptB])
+
+    const withFlag = await call('PUT', '/hierarchy', token, {
+      nodes,
+      edges: [parentEdge(`department-${deptA}-t1`, `department-${deptB}-t1`, { employeeVisibility: { parentSeesChild: true, childSeesParent: false } })],
+      baseVersion: plain.data.version,
+    }, orgA)
+    assert.strictEqual(withFlag.status, 200, JSON.stringify(withFlag.data))
+    const flags = (await query('SELECT emp_parent_sees_child, emp_child_sees_parent FROM departments WHERE id = $1', [deptB])).rows[0]
+    assert.deepStrictEqual(flags, { emp_parent_sees_child: true, emp_child_sees_parent: false })
+
+    const fromA = await groupsOf(empA)
+    assert.deepStrictEqual(fromA.map((g) => [g.dept, g.isOwn]), [[deptA, true], [deptB, false]])
+    assert.ok(fromA[0].ids.includes(empA.id) && fromA[0].ids.includes(empA2.id))
+    assert.deepStrictEqual(fromA[1].ids, [empB.id])
+    assert.deepStrictEqual((await groupsOf(empB)).map((g) => g.dept), [deptB])
+
+    const both = await call('PUT', '/hierarchy', token, {
+      nodes,
+      edges: [parentEdge(`department-${deptA}-t1`, `department-${deptB}-t1`, { employeeVisibility: { parentSeesChild: true, childSeesParent: true } })],
+      baseVersion: withFlag.data.version,
+    }, orgA)
+    assert.strictEqual(both.status, 200, JSON.stringify(both.data))
+    assert.deepStrictEqual((await groupsOf(empB)).map((g) => [g.dept, g.isOwn]), [[deptB, true], [deptA, false]])
+  })
+
+  it('связь «руководитель → работник»: руководитель видит работника, работник видит руководителя по своим галочкам', async () => {
+    await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptA, empA.id])
+    const empB = await mkUser({ email: `empb2${SUFFIX}`, role: 'employee', orgId: orgA, deptId: deptB })
+    const token = await tokenFor(hrA)
+    const put = await call('PUT', '/hierarchy', token, {
+      nodes: [deptNode(deptA, 'Отдел А hier'), deptNode(deptB, 'Отдел Б hier', 300), empNode(empA.id), empNode(empB.id, 700)],
+      edges: [parentEdge(`employee-${empA.id}-t1`, `employee-${empB.id}-t1`, { employeeVisibility: { parentSeesChild: true, childSeesParent: false } })],
+      baseVersion: 0,
+    }, orgA)
+    assert.strictEqual(put.status, 200, JSON.stringify(put.data))
+    const fromManager = await groupsOf(empA)
+    assert.deepStrictEqual(fromManager.map((g) => g.dept), [deptA, deptB])
+    assert.deepStrictEqual(fromManager[1].ids, [empB.id])
+    assert.deepStrictEqual((await groupsOf(empB)).map((g) => g.dept), [deptB])
+  })
+})

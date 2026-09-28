@@ -965,6 +965,16 @@ type EdgeDraft = {
   lineStyle: 'solid' | 'dashed'
   note: string
   vacationVisibility?: Partial<VacationVisibility>
+  employeeVisibility?: Partial<EmployeeVisibility>
+}
+
+function EmployeeVisibilityRow({ label, checked, onCheckedChange }: { label: string; checked: boolean; onCheckedChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
+      <p className="text-sm font-medium">{label}</p>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  )
 }
 
 function VacationVisibilityRow({
@@ -1006,7 +1016,7 @@ function EdgeSettingsModal({
   onClose,
 }: {
   draft: EdgeDraft
-  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed', vacationVisibility: VacationVisibility | undefined) => void
+  onConfirm: (relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed', vacationVisibility: VacationVisibility | undefined, employeeVisibility: EmployeeVisibility | undefined) => void
   onDelete?: () => void
   onClose: () => void
 }) {
@@ -1022,6 +1032,8 @@ function EdgeSettingsModal({
   const [cascadeChildSeesParent, setCascadeChildSeesParent] = useState(draft.vacationVisibility?.cascadeChildSeesParent ?? false)
   const [cascadeParentSeesChild, setCascadeParentSeesChild] = useState(draft.vacationVisibility?.cascadeParentSeesChild ?? false)
   const [cascadeParentApproves, setCascadeParentApproves] = useState(draft.vacationVisibility?.cascadeParentApproves ?? false)
+  const [empParentSeesChild, setEmpParentSeesChild] = useState(draft.employeeVisibility?.parentSeesChild ?? false)
+  const [empChildSeesParent, setEmpChildSeesParent] = useState(draft.employeeVisibility?.childSeesParent ?? false)
   const parentAvailable = draft.sourceType !== 'text' && draft.targetType !== 'text' &&
     (draft.sourceType === 'department' || draft.targetType === 'department' ||
       (draft.sourceType === 'employee' && draft.targetType === 'employee') ||
@@ -1209,6 +1221,13 @@ function EdgeSettingsModal({
               )}
             </div>
           )}
+          {vacationApplicable && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Видимость в разделе «Работники»</p>
+              <EmployeeVisibilityRow label="Родитель видит работников подчинённых" checked={empParentSeesChild} onCheckedChange={setEmpParentSeesChild} />
+              <EmployeeVisibilityRow label="Работники родителя видны подчинённым" checked={empChildSeesParent} onCheckedChange={setEmpChildSeesParent} />
+            </div>
+          )}
           <div className="space-y-1.5">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Примечание</p>
             <textarea
@@ -1227,7 +1246,7 @@ function EdgeSettingsModal({
             </Button>
           )}
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(effectiveRelation, parentIsSource, note, strokeWidth, strokeColor, lineStyle, buildVacationVisibility())}>
+          <Button className="flex-1" onClick={() => onConfirm(effectiveRelation, parentIsSource, note, strokeWidth, strokeColor, lineStyle, buildVacationVisibility(), vacationApplicable ? { parentSeesChild: empParentSeesChild, childSeesParent: empChildSeesParent } : undefined)}>
             Сохранить
           </Button>
         </div>
@@ -1237,6 +1256,11 @@ function EdgeSettingsModal({
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+
+type EmployeeVisibility = {
+  parentSeesChild: boolean
+  childSeesParent: boolean
+}
 
 type VacationVisibility = {
   childSeesParent: boolean
@@ -1355,10 +1379,13 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
   edge: Edge
   sourceType?: string
   targetType?: string
-  onConfirm: (childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean, cascade?: { childSeesParent: boolean; parentSeesChild: boolean; parentApproves: boolean }) => void
+  onConfirm: (childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean, cascade: { childSeesParent: boolean; parentSeesChild: boolean; parentApproves: boolean } | undefined, employeeVisibility: EmployeeVisibility) => void
   onClose: () => void
 }) {
   const vis = (edge.data as { vacationVisibility?: Partial<VacationVisibility> } | undefined)?.vacationVisibility
+  const empVis = (edge.data as { employeeVisibility?: Partial<EmployeeVisibility> } | undefined)?.employeeVisibility
+  const [empParentSeesChild, setEmpParentSeesChild] = useState(empVis?.parentSeesChild ?? false)
+  const [empChildSeesParent, setEmpChildSeesParent] = useState(empVis?.childSeesParent ?? false)
   const isEmpToEmp = sourceType === 'employee' && targetType === 'employee'
   const [childSeesParent, setChildSeesParent] = useState(vis?.childSeesParent ?? true)
   const [parentSeesChild, setParentSeesChild] = useState(vis?.parentSeesChild ?? true)
@@ -1406,6 +1433,9 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
               cascade={cascadeParentApproves} onCascadeChange={setCascadeParentApproves}
             />
           )}
+          <p className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Видимость в разделе «Работники»</p>
+          <EmployeeVisibilityRow label="Родитель видит работников подчинённых" checked={empParentSeesChild} onCheckedChange={setEmpParentSeesChild} />
+          <EmployeeVisibilityRow label="Работники родителя видны подчинённым" checked={empChildSeesParent} onCheckedChange={setEmpChildSeesParent} />
         </div>
         <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
@@ -1413,7 +1443,7 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
             childSeesParent: cascadeChildSeesParent,
             parentSeesChild: cascadeParentSeesChild,
             parentApproves: isEmpToEmp ? false : cascadeParentApproves,
-          })}>
+          }, { parentSeesChild: empParentSeesChild, childSeesParent: empChildSeesParent })}>
             Сохранить
           </Button>
         </div>
@@ -1855,11 +1885,12 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     const s = nodeOf(edge.source)
     const t = nodeOf(edge.target)
     if (!s || !t) return
-    const data = edge.data as { relation?: EdgeRelation; note?: string; lineStyle?: 'solid' | 'dashed'; vacationVisibility?: Partial<VacationVisibility> } | undefined
+    const data = edge.data as { relation?: EdgeRelation; note?: string; lineStyle?: 'solid' | 'dashed'; vacationVisibility?: Partial<VacationVisibility>; employeeVisibility?: Partial<EmployeeVisibility> } | undefined
     setEdgeDraft({
       mode: 'edit',
       edgeId: edge.id,
       vacationVisibility: data?.vacationVisibility,
+      employeeVisibility: data?.employeeVisibility,
       source: edge.source,
       target: edge.target,
       sourceHandle: edge.sourceHandle ?? null,
@@ -1877,11 +1908,14 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     })
   }, [])
 
-  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed', vacationVisibility: VacationVisibility | undefined) => {
+  const confirmEdgeDraft = useCallback((relation: EdgeRelation, parentIsSource: boolean, note: string, strokeWidth: number, strokeColor: string, lineStyle: 'solid' | 'dashed', vacationVisibility: VacationVisibility | undefined, employeeVisibility: EmployeeVisibility | undefined) => {
     const d = edgeDraft
     if (!d) return
     saveSnapshot()
-    const visData = relation === 'parent' && vacationVisibility ? { vacationVisibility } : {}
+    const visData = {
+      ...(relation === 'parent' && vacationVisibility ? { vacationVisibility } : {}),
+      ...(relation === 'parent' && employeeVisibility ? { employeeVisibility } : {}),
+    }
     const personDept = relation === 'parent' && d.sourceType !== d.targetType &&
       (d.sourceType === 'employee' || d.targetType === 'employee') &&
       (d.sourceType === 'department' || d.targetType === 'department')
@@ -1917,6 +1951,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
         if (e.id !== d.edgeId) return e
         const base = { ...(e.data as Record<string, unknown>) }
         delete base.vacationVisibility
+        delete base.employeeVisibility
         return {
           ...e,
           source,
@@ -2116,7 +2151,8 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
 
   const saveParentEdgeSettings = useCallback((
     childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean,
-    cascade?: { childSeesParent: boolean; parentSeesChild: boolean; parentApproves: boolean },
+    cascade: { childSeesParent: boolean; parentSeesChild: boolean; parentApproves: boolean } | undefined,
+    employeeVisibility: EmployeeVisibility,
   ) => {
     if (!parentEdgeId) return
     saveSnapshot()
@@ -2126,7 +2162,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
           cascadeChildSeesParent: cascade?.childSeesParent ?? false,
           cascadeParentSeesChild: cascade?.parentSeesChild ?? false,
           cascadeParentApproves: cascade?.parentApproves ?? false,
-        } } }
+        }, employeeVisibility } }
       : e))
     setParentEdgeId(null)
   }, [parentEdgeId, saveSnapshot, setEdges])
@@ -2601,6 +2637,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             { title: 'Связи', text: 'Потяните от точки на краю блока к другому блоку. Клик по связи открывает все настройки, включая видимость и согласование отпусков.' },
             { title: 'Родительские связи', text: 'Отдел ↔ отдел задаёт структуру подразделений, работник ↔ отдел назначает куратора, работник ↔ работник — личного руководителя. С текстовыми блоками родительская связь недоступна.' },
             { title: 'Видимость отпусков', text: 'В настройках родительской связи: «Родитель видит отпуска подчинённых», «Отпуск родителя виден подчинённым» и «Родитель согласовывает отпуска подчинённых». Флаги применяются после сохранения. Дублирующий вход — ПКМ по связи.' },
+            { title: 'Видимость в разделе «Работники»', text: 'В настройках родительской связи: «Родитель видит работников подчинённых» и «Работники родителя видны подчинённым». По умолчанию выключено — каждый видит только свой отдел. Работники показываются в разделе «Работники», сгруппированными по отделам.' },
             { title: 'Точки опоры', text: 'Наведите на связь — появятся точки добавления опоры. Клик по линии — настройки. Выделите связь: точки можно тянуть, двойной клик — удалить' },
             { title: 'Группы и описание', text: 'Пунктирные рамки объединяют элементы визуально, текстовые блоки служат для заметок. Группу тащат за полосу заголовка; клик по полосе выделяет группу — дальше её можно перемещать за любую точку и менять размер. Редактирование и удаление — через ПКМ.' },
             { title: 'Сохранение и отмена', text: 'Кнопка «Сохранить» записывает схему. Ctrl+Z — отменить последнее действие. Удаление блоков и связей требует подтверждения, а выход с несохранёнными изменениями предупреждает.' },

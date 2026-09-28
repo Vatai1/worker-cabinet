@@ -10,6 +10,7 @@ import PizZip from 'pizzip'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 import { resolveVacationDays, applyRuleToExistingBalances } from '../lib/vacationDays.js'
+import { getVisibleColleagueIds } from '../lib/colleagues.js'
 
 const router = express.Router()
 
@@ -2621,9 +2622,11 @@ async function getRestrictionScopeUserIds(req) {
     const me = await query('SELECT department_id FROM users WHERE id = $1', [req.user.id])
     if (me.rows[0]?.department_id) deptIds = [me.rows[0].department_id]
   }
-  if (deptIds.length === 0) return []
-  const users = await query('SELECT id FROM users WHERE department_id = ANY($1::int[])', [deptIds])
-  return users.rows.map(r => r.id)
+  const [deptUsers, colleagueIds] = await Promise.all([
+    deptIds.length > 0 ? query('SELECT id FROM users WHERE department_id = ANY($1::int[])', [deptIds]) : Promise.resolve({ rows: [] }),
+    getVisibleColleagueIds(req.user.id),
+  ])
+  return [...new Set([...deptUsers.rows.map(r => r.id), ...colleagueIds])]
 }
 
 function touchesScope(memberIds, scopeIds) {

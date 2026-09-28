@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Users, Trash2, Plus, Tag, AlertTriangle, ChevronDown, ChevronRight, UserRound } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Users, Trash2, Plus, Tag, AlertTriangle, ChevronDown, ChevronRight, UserRound, Pencil, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
@@ -7,8 +7,8 @@ import { RestrictionMemberPicker } from '@/modules/vacation/components/Restricti
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { Button } from '@/shared/components/ui/Button'
 import { Card } from '@/shared/components/ui/Card'
-import { formatDate, getErrorMessage } from '@/shared/lib/utils'
-import type { RestrictionScopeEmployee } from '@/shared/types'
+import { cn, formatDate, getErrorMessage } from '@/shared/lib/utils'
+import type { RestrictionScopeEmployee, VacationRestriction } from '@/shared/types'
 
 export function VacationRestrictions() {
   const restrictions = useVacationStore((state) => state.restrictions)
@@ -24,6 +24,9 @@ export function VacationRestrictions() {
   const [maxConcurrent, setMaxConcurrent] = useState<number>(1)
   const [description, setDescription] = useState('')
   const [violationsExpanded, setViolationsExpanded] = useState(true)
+  const [editing, setEditing] = useState<VacationRestriction | null>(null)
+  const [saving, setSaving] = useState(false)
+  const formRef = useRef<HTMLDivElement>(null)
 
   const reload = useCallback(
     () => Promise.all([fetchRestrictions('', 'mine'), fetchViolations(undefined, 'mine')]),
@@ -46,30 +49,60 @@ export function VacationRestrictions() {
       .finally(() => setEmployeesLoading(false))
   }, [])
 
-  const handleCreateRestriction = async () => {
-    if (selectedEmployees.length === 0) return
+  const resetForm = () => {
+    setEditing(null)
+    setSelectedEmployees([])
+    setMaxConcurrent(1)
+    setDescription('')
+  }
 
+  const startEdit = (restriction: VacationRestriction) => {
+    setEditing(restriction)
+    setDescription(restriction.description ?? '')
+    setSelectedEmployees(restriction.employeeIds)
+    setMaxConcurrent(restriction.maxConcurrent ?? 1)
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const handleSubmit = async () => {
+    if (selectedEmployees.length === 0 && (editing?.tagIds?.length ?? 0) === 0) return
+    setSaving(true)
     try {
-      await useVacationStore.getState().createRestriction('', {
-        type: 'group',
-        employeeIds: selectedEmployees,
-        tagIds: [],
-        maxConcurrent,
-        description: description || undefined,
-      })
+      if (editing) {
+        await vacationApi.updateRestriction(editing.id, editing.departmentId ?? '', {
+          type: 'group',
+          employeeIds: selectedEmployees,
+          tagIds: editing.tagIds ?? [],
+          maxConcurrent,
+          description: description || undefined,
+        })
+        toast.success('Ограничение сохранено')
+      } else {
+        await useVacationStore.getState().createRestriction('', {
+          type: 'group',
+          employeeIds: selectedEmployees,
+          tagIds: [],
+          maxConcurrent,
+          description: description || undefined,
+        })
+        toast.success('Ограничение создано')
+      }
       await reload()
-      setSelectedEmployees([])
-      setMaxConcurrent(1)
-      setDescription('')
-      toast.success('Ограничение создано')
+      resetForm()
     } catch (err: unknown) {
       toast.error(getErrorMessage(err))
+    } finally {
+      setSaving(false)
     }
   }
+
+  const knownIds = new Set(employees.map((e) => e.id))
+  const hiddenSelectedCount = employeesLoading ? 0 : selectedEmployees.filter((id) => !knownIds.has(id)).length
 
   const handleDeleteRestriction = async (restrictionId: string) => {
     try {
       await useVacationStore.getState().deleteRestriction(restrictionId)
+      if (editing?.id === restrictionId) resetForm()
       await reload()
     } catch (err: unknown) {
       toast.error(getErrorMessage(err))
@@ -92,8 +125,15 @@ export function VacationRestrictions() {
 
       <div className="p-5">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">Новое ограничение</h3>
+          <div ref={formRef} className="space-y-4 scroll-mt-24">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
+              {editing ? 'Изменение ограничения' : 'Новое ограничение'}
+            </h3>
+            {editing && (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 px-3.5 py-2.5 text-sm">
+                Вы редактируете ограничение{editing.description ? ` «${editing.description}»` : ''}. Измените название, состав или лимит и нажмите «Сохранить».
+              </div>
+            )}
 
             <div className="space-y-2">
               <label className="block text-sm font-medium">Название (необязательно)</label>
@@ -114,6 +154,12 @@ export function VacationRestrictions() {
               skillsEnabled={skillsEnabled}
             />
 
+            {hiddenSelectedCount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Ещё {hiddenSelectedCount} из выбранных не входят в ваш список работников — они останутся в ограничении
+              </p>
+            )}
+
             <div className="space-y-2">
               <label className="block text-sm font-medium">Максимум одновременно в отпуске</label>
               <input
@@ -126,15 +172,32 @@ export function VacationRestrictions() {
               />
             </div>
 
-            <Button
-              type="button"
-              onClick={handleCreateRestriction}
-              disabled={selectedEmployees.length === 0}
-              className="w-full gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Создать ограничение
-            </Button>
+            {editing ? (
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={resetForm} disabled={saving} className="flex-1">
+                  Отмена
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={saving || (selectedEmployees.length === 0 && (editing.tagIds?.length ?? 0) === 0)}
+                  className="flex-1 gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  Сохранить
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={saving || selectedEmployees.length === 0}
+                className="w-full gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Создать ограничение
+              </Button>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -148,7 +211,10 @@ export function VacationRestrictions() {
             ) : (
               <div className="space-y-2.5">
                 {restrictions.map((restriction) => (
-                  <div key={restriction.id} className="rounded-xl border border-border/60 p-4">
+                  <div
+                    key={restriction.id}
+                    className={cn('rounded-xl border p-4 transition-colors', editing?.id === restriction.id ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20' : 'border-border/60')}
+                  >
                     <div className="mb-2 flex items-start justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
                         {restriction.description && (
@@ -161,14 +227,24 @@ export function VacationRestrictions() {
                         )}
                       </div>
                       {restriction.canManage && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteRestriction(restriction.id)}
-                          className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                          title="Удалить"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(restriction)}
+                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            title="Изменить"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRestriction(restriction.id)}
+                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            title="Удалить"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       )}
                     </div>
                     <p className="text-sm">

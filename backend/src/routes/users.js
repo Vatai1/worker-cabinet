@@ -5,6 +5,7 @@ import { uploadAvatar } from '../middleware/upload.js'
 import { uploadToS3, getS3FileUrl, deleteFromS3, S3_ENDPOINT, S3_BUCKET, S3_PUBLIC_URL } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
+import { getVisibleColleagueIds } from '../lib/colleagues.js'
 import { setKcUserEnabled, updateKcUserRole } from '../config/keycloak.js'
 
 const ELEVATED_ROLES = ['admin', 'superadmin', 'director']
@@ -619,6 +620,63 @@ router.delete('/me/avatar', authenticateToken, async (req, res) => {
     res.locals.errorCause = error
     console.error('Error resetting avatar:', error)
     res.status(500).json({ error: 'Не удалось сбросить аватар' })
+  }
+})
+
+/**
+ * @swagger
+ * /users/colleagues:
+ *   get:
+ *     tags: [Users]
+ *     summary: Работники для раздела «Работники», сгруппированные по отделам
+ *     description: 'Свой отдел — всегда; плюс работники по родительским связям иерархии с включённой видимостью: «Родитель видит работников подчинённых» (emp_parent_sees_child) и «Работники родителя видны подчинённым» (emp_child_sees_parent) — для связей отдел→отдел, куратор→отдел и руководитель→работник'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: '{ groups: [{ departmentId, departmentName, isOwn, employees: [...] }] }'
+ */
+router.get('/colleagues', authenticateToken, async (req, res) => {
+  try {
+    const me = (await query('SELECT id, department_id FROM users WHERE id = $1', [req.user.id])).rows[0]
+    const params = []
+    const orgJoin = req.org ? 'JOIN user_organizations uo ON u.id = uo.user_id' : ''
+    let orgWhere = ''
+    if (req.org) {
+      params.push(currentOrgId(req))
+      orgWhere = ` AND uo.org_id = $${params.length}`
+    }
+    const visibleIds = await getVisibleColleagueIds(req.user.id)
+    params.push(visibleIds)
+    const result = await query(
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.middle_name, u.position, u.department_id,
+              d.name AS department_name, u.phone, u.status, u.role, u.avatar, u.gender
+       FROM users u
+       ${orgJoin}
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE u.id = ANY($${params.length}::int[])
+         ${orgWhere} ${excludeTest(req, 'u')}
+       ORDER BY d.name NULLS LAST, u.last_name, u.first_name`,
+      params
+    )
+
+    const groups = new Map()
+    for (const row of result.rows) {
+      const key = row.department_id ?? 'none'
+      if (!groups.has(key)) {
+        groups.set(key, {
+          departmentId: row.department_id === null ? null : String(row.department_id),
+          departmentName: row.department_name || 'Без отдела',
+          isOwn: me?.department_id != null && row.department_id === me.department_id,
+          employees: [],
+        })
+      }
+      groups.get(key).employees.push(row)
+    }
+    const list = [...groups.values()].sort((a, b) => Number(b.isOwn) - Number(a.isOwn))
+    res.json({ groups: list })
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить список работников' })
   }
 })
 
