@@ -175,7 +175,7 @@ Each role has its own navigation function (`getEmployeeNavigation`, `getManagerN
 
 - **employee**: Дашборд, Отпуск, Опросы, Работники, Отделы, Проекты, Профиль, Заявления, Документы, Уведомления
 - **manager**: Дашборд, Профиль, Работники, Отделы, Проекты, Рассмотреть заявки, Отпуск, Табель, Опросы, Документы, Уведомления
-- **hr/admin**: Дашборд, Профиль, HR (Опросы, Онбординг, Отпуск, Иерархия, Справочники, Табель), Мои опросы, Отпуск, Работники, Отделы, Проекты, Документы, Уведомления
+- **hr/admin**: Дашборд, Профиль, Иерархия, HR (Опросы, Онбординг, Отпуск, Справочники, Табель), Мои опросы, Отпуск, Работники, Отделы, Проекты, Документы, Уведомления
 - **onboarding**: Онбординг, Работники, Отделы
 
 Every role has "Отделы" → `/departments` (under "Работа"; "Основное" for onboarding) — "Отпуск" and "Работники" live as flat items directly under the "Работа" section (previously nested under an "Отдел" accordion for employee/manager). Department management for HR/admin still lives under Справочники → Отделы (a tab, not a top-level nav item). "Основное" and "Работа" section groups are expanded by default; all section expand/collapse state persists in the `sidebar_expanded_sections` cookie.
@@ -199,7 +199,9 @@ Manager access is scoped to their department (`getManagerDepartmentId` checks `d
 
 Frontend: `modules/timesheet/pages/ManagerTimesheet.tsx` for manager, `shared/components/timesheet/TimesheetGrid.tsx` for the editable grid. Attendance codes and colors defined in `@/shared/lib/timesheetCodes`.
 
-### HR Hierarchy (`/hr/hierarchy`)
+### HR Hierarchy (`/my-hierarchy`)
+One entry point for everyone: sidebar «Иерархия» → `/my-hierarchy` (read-only view). Users with hr/admin/superadmin role see «Редактировать», which opens the `HRHierarchy` editor for the current org. The former HR-panel tab was removed; `/hr?tab=hierarchy` redirects to `/my-hierarchy`.
+
 React Flow (`@xyflow/react`) canvas. Lazy-loaded via `React.lazy`. Nodes: `department`, `employee`, `text`. All handles are `type="source"` with `ConnectionMode.Loose`. Custom `EditableEdge`: smoothstep rendering by default, switches to polyline when `data.waypoints` array is populated.
 
 ### AI Assistant

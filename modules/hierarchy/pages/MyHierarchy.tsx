@@ -12,12 +12,16 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Network, X } from 'lucide-react'
+import { Network, Pencil, X } from 'lucide-react'
 import { useUIStore } from '@/shared/store/uiStore'
+import { useOrgStore } from '@/shared/store/orgStore'
+import { useModulesStore } from '@/shared/store/modulesStore'
+import { hasAnyRole } from '@/shared/lib/permissions'
+import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getErrorMessage } from '@/shared/lib/utils'
-import { nodeTypes, edgeTypes } from '@/modules/hierarchy/pages/HRHierarchy'
+import { nodeTypes, edgeTypes, HRHierarchy } from '@/modules/hierarchy/pages/HRHierarchy'
 
 export function MyHierarchy() {
   const navigate = useNavigate()
@@ -26,6 +30,11 @@ export function MyHierarchy() {
   const [edges, setEdges] = useState<Edge[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const currentOrgId = useOrgStore((s) => s.currentOrgId)
+  const hierarchyEnabled = useModulesStore((s) => s.isModuleEnabled)('hierarchy')
+  const canEdit = hierarchyEnabled && currentOrgId != null && hasAnyRole('hr', 'admin')
 
   const close = useCallback(() => navigate('/dashboard'), [navigate])
 
@@ -65,15 +74,29 @@ export function MyHierarchy() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   useEffect(() => {
+    if (editing) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [close])
+  }, [close, editing])
+
+  if (editing && currentOrgId != null) {
+    return (
+      <HRHierarchy
+        fullscreen
+        orgId={currentOrgId}
+        onClose={() => {
+          setEditing(false)
+          setReloadKey((k) => k + 1)
+        }}
+      />
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
@@ -82,14 +105,22 @@ export function MyHierarchy() {
           <Network className="h-4 w-4 shrink-0 text-primary" />
           <span className="truncate text-[15px] font-semibold">Иерархия организации</span>
         </div>
-        <button
-          type="button"
-          onClick={close}
-          className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Закрыть"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {canEdit && (
+            <Button size="sm" onClick={() => setEditing(true)}>
+              <Pencil className="mr-1.5 h-4 w-4" />
+              Редактировать
+            </Button>
+          )}
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Закрыть"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="relative flex-1" style={{ minHeight: 0 }}>

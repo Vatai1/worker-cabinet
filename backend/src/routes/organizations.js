@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken, authorizeRoles, authorizeGlobalRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError, ConflictError, ForbiddenError } from '../middleware/errors.js'
+import { grantManagerRole, revokeManagerRoleIfUnused } from '../lib/managerRole.js'
 
 const router = Router()
 
@@ -271,6 +272,14 @@ router.put('/:id', authenticateToken, asyncHandler(async (req, res) => {
     `UPDATE organizations SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
     values
   )
+
+  const oldHeadId = orgResult.rows[0].head_id
+  const newHeadId = result.rows[0].head_id
+  if (oldHeadId !== newHeadId) {
+    if (newHeadId !== null) await grantManagerRole(newHeadId, orgId)
+    if (oldHeadId !== null) await revokeManagerRoleIfUnused(oldHeadId, orgId)
+  }
+
   res.json(result.rows[0])
 }))
 

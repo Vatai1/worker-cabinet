@@ -1,13 +1,12 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 import {
-  Users, ClipboardList, UserPlus, Plane, Network,
+  Users, ClipboardList, UserPlus, Plane,
   Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Tag, Send,
   HelpCircle,
 } from 'lucide-react'
 import { useModulesStore } from '@/shared/store/modulesStore'
-import { useOrgStore } from '@/shared/store/orgStore'
 import { getCookie, setCookie } from '@/shared/lib/cookies'
 import { HRPanelIntroModal } from '@/shared/components/HRPanelIntroModal'
 import { PageBanner } from '@/shared/components/PageBanner'
@@ -22,14 +21,13 @@ import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
 import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
 import { HRTimesheet } from '@/modules/timesheet/pages/HRTimesheet'
 import { HRInstitution } from '@/modules/institution/pages/HRInstitution'
-const GlobalHierarchy = lazy(() => import('@/modules/hierarchy/pages/GlobalHierarchy').then(m => ({ default: m.GlobalHierarchy })))
 const HRDocTemplates = lazy(() => import('@/modules/documents/pages/HRDocTemplates').then(m => ({ default: m.HRDocTemplates })))
 const HRMailing = lazy(() => import('@/modules/mailing/pages/HRMailing').then(m => ({ default: m.HRMailing })))
 const HRPositionsTab = () => <DictionariesTab variant="hr" initialTab="positions" />
 const HRVacationTypesTab = () => <DictionariesTab variant="hr" initialTab="vacationTypes" />
 const HRSkillsTab = () => <DictionariesTab variant="hr" initialTab="skills" />
 
-type TabId = 'hr_employees' | 'surveys' | 'onboarding' | 'vacation' | 'hierarchy' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
+type TabId = 'hr_employees' | 'surveys' | 'onboarding' | 'vacation' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
 
 interface TabItem {
   id: TabId
@@ -54,7 +52,6 @@ const TAB_GROUPS: TabGroup[] = [
   ]},
   { label: 'Отпуска и структура', tabs: [
     { id: 'vacation', name: 'Отпуск', icon: Plane, description: 'Календарь отпусков, дни, доступ, пересечения', module: 'vacation', color: 'from-orange-500 to-amber-600' },
-    { id: 'hierarchy', name: 'Иерархия', icon: Network, description: 'Оргструктура', module: 'hierarchy', color: 'from-pink-500 to-rose-600' },
   ]},
   { label: 'Документы', tabs: [
     { id: 'doc-templates', name: 'Шаблоны документов', icon: FileText, description: 'Шаблоны документов организации', module: 'documents', color: 'from-pink-500 to-rose-600' },
@@ -69,13 +66,12 @@ const TAB_GROUPS: TabGroup[] = [
   ]},
 ]
 
-const TOP_NAV_TABS = ['mailing', 'timesheet', 'hierarchy', 'doc-templates'] as const
+const TOP_NAV_TABS = ['mailing', 'timesheet', 'doc-templates'] as const
 
 export function HRPanel() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
-  const currentOrgId = useOrgStore((s) => s.currentOrgId)
-  const prevTabRef = useRef<TabId>('surveys')
 
   const filteredGroups = useMemo(() =>
     TAB_GROUPS
@@ -95,10 +91,8 @@ export function HRPanel() {
     (safeActiveTab ? isModuleEnabled(allTabs.find(t => t.id === safeActiveTab)?.module || '') : false)
 
   useEffect(() => {
-    if (safeActiveTab && safeActiveTab !== 'hierarchy') prevTabRef.current = safeActiveTab
-  }, [safeActiveTab])
-
-  const closeHierarchy = () => setSearchParams(prevTabRef.current ? { tab: prevTabRef.current } : {})
+    if (searchParams.get('tab') === 'hierarchy') navigate('/my-hierarchy', { replace: true })
+  }, [searchParams, navigate])
 
   const [visitedTabs, setVisitedTabs] = useState<Set<TabId>>(() => new Set(safeActiveTab ? [safeActiveTab] : []))
   useEffect(() => {
@@ -138,11 +132,6 @@ export function HRPanel() {
       ) : isFullBleedTab ? (
         <div className="space-y-4 animate-fade-in">
           {safeActiveTab === 'timesheet' && <HRTimesheet />}
-          {safeActiveTab === 'hierarchy' && isModuleEnabled('hierarchy') && (
-            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-              <GlobalHierarchy fullscreen editScopeOrgId={currentOrgId ?? undefined} initialOrgId={currentOrgId ?? undefined} onClose={closeHierarchy} />
-            </Suspense>
-          )}
           {safeActiveTab === 'doc-templates' && isModuleEnabled('documents') && (
             <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
               <HRDocTemplates />

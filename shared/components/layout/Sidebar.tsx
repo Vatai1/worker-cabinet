@@ -83,7 +83,6 @@ const getHRSectionItems = (): NavItem[] => [
   { name: 'Онбординг', href: '/hr?tab=onboarding', icon: UserPlus, module: 'onboarding', section: 'HR' },
   { name: 'Табель', href: '/hr?tab=timesheet', icon: Calendar, module: 'timesheet', section: 'HR' },
   { name: 'Отпуск', href: '/hr?tab=vacation', icon: Plane, module: 'vacation', section: 'HR' },
-  { name: 'Иерархия', href: '/hr?tab=hierarchy', icon: Network, module: 'hierarchy', section: 'HR' },
   { name: 'Шаблоны документов', href: '/hr?tab=doc-templates', icon: FileText, module: 'documents', section: 'HR' },
   { name: 'Справочники', icon: Boxes, section: 'HR', children: [
     { name: 'Сотрудники', href: '/hr?tab=hr_employees' },
