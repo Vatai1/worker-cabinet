@@ -2152,7 +2152,7 @@ describe('Модуль отпусков — user stories', () => {
   })
 
   describe('US-20. Замещающие и ограничения: защитные ветки', () => {
-    let deptId, mgr, mgrOther, hrUser, emp, sub, foreignUser
+    let deptId, mgr, mgrOther, hrUser, emp, sub, foreignUser, foreignOrgId
     let modulesSnap
 
     beforeEach(async () => {
@@ -2164,7 +2164,10 @@ describe('Модуль отпусков — user stories', () => {
       emp = await mkUser({ email: `us20.emp${SUFFIX}`, last: 'Иванов', deptId })
       sub = await mkUser({ email: `us20.sub${SUFFIX}`, last: 'Козлов', deptId })
       mgrOther = await mkUser({ email: `us20.mgro${SUFFIX}`, role: 'manager', last: 'Чужов' })
-      foreignUser = await mkUser({ email: `us20.foreign${SUFFIX}`, last: 'Иностранцев', orgIds: [2] })
+      foreignOrgId = (await query(
+        "INSERT INTO organizations (name, slug, is_active) VALUES ('US20 Чужая org', $1, true) RETURNING id",
+        [`us20-org-${Date.now()}`])).rows[0].id
+      foreignUser = await mkUser({ email: `us20.foreign${SUFFIX}`, last: 'Иностранцев', orgIds: [foreignOrgId] })
       for (const year of new Set([yearOf(shift(10)), yearOf(shift(40))])) {
         await mkBalance(emp.id, year)
       }
@@ -2173,6 +2176,7 @@ describe('Модуль отпусков — user stories', () => {
     afterEach(async () => {
       await restoreModules(modulesSnap)
       await cleanupFixtures({ deptIds: [deptId], templateNames: ['vac-full us20 nofile', 'vac-full us20 notfile'] })
+      await query('DELETE FROM organizations WHERE id = $1', [foreignOrgId])
     })
 
     it('substitutes POST: пустой список → 400; левая заявка → 404; чужой employee → 403', async () => {

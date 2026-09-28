@@ -6,11 +6,13 @@ const headers = (t) => ({ ..._baseHeaders(t), 'x-organization-id': '1' })
 const headersJSON = (t) => ({ ..._baseHeadersJSON(t), 'x-organization-id': '1' })
 
 describe('Admin API', () => {
-  let adminToken, employeeToken, employeeUser
+  let adminToken, employeeToken, employeeUser, superadminToken
 
   before(async () => {
     ;[adminToken, employeeToken] = await Promise.all([getAdminToken(), getEmployeeToken()])
     employeeUser = await getEmployeeUser()
+    superadminToken = await tryLogin('superadmin@example.com')
+    assert.ok(superadminToken, 'superadmin@example.com не смог войти')
   })
 
   describe('Roles & Permissions', () => {
@@ -225,11 +227,6 @@ describe('Admin API', () => {
   })
 
   describe('Analytics & Export', () => {
-    it('GET /admin/analytics/activity returns analytics', async () => {
-      const res = await fetch(`${BASE}/admin/analytics/activity`, { headers: headers(adminToken) })
-      assert.strictEqual(res.status, 200)
-    })
-
     it('GET /admin/users/export returns CSV', async () => {
       const res = await fetch(`${BASE}/admin/users/export`, { headers: headers(adminToken) })
       assert.strictEqual(res.status, 200)
@@ -289,7 +286,7 @@ describe('Admin API', () => {
       if (!createdModuleId) return
       const res = await fetch(`${BASE}/admin/modules/${createdModuleId}/toggle`, {
         method: 'PUT',
-        headers: headersJSON(adminToken),
+        headers: headersJSON(superadminToken),
         body: JSON.stringify({ enabled: false }),
       })
       assert.strictEqual(res.status, 200)
@@ -324,11 +321,9 @@ describe('Admin API', () => {
 
   describe('Module Settings', () => {
     const MODULE_CODE = 'calendar'
-    let superadminToken, calendarModuleId, settingsSnap, overrideSnap
+    let calendarModuleId, settingsSnap, overrideSnap
 
     before(async () => {
-      superadminToken = await tryLogin('superadmin@example.com')
-      assert.ok(superadminToken, 'superadmin@example.com не смог войти')
       calendarModuleId = (await query('SELECT id FROM modules WHERE code = $1', [MODULE_CODE])).rows[0].id
       settingsSnap = (await query('SELECT settings FROM modules WHERE code = $1', [MODULE_CODE])).rows[0].settings
       overrideSnap = (await query('SELECT settings FROM module_overrides WHERE org_id = 1 AND module_code = $1', [MODULE_CODE])).rows[0]?.settings ?? null

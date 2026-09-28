@@ -4,7 +4,7 @@ const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 1000 : 10,
+  max: isDev ? 10000 : 10,
   message: { error: 'Слишком много попыток входа. Попробуйте позже.' },
   standardHeaders: true,
   legacyHeaders: false,

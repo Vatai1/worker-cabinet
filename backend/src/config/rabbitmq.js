@@ -35,6 +35,7 @@ export function getChannel() {
 }
 
 export async function publishNotification({ notificationId, userId, type, channel: msgChannel, data }) {
+  if (!connection || !channel) return false
   const rmqChannel = getChannel()
   const routingKey = `notification.${msgChannel || 'email'}`
   const payload = {
