@@ -197,7 +197,7 @@ describe('Модуль отпусков — user stories', () => {
       const notification = await waitNotification(mgr.id, 'vacation_created', (n) => n.data.days === 5)
       assert.ok(notification, 'уведомление vacation_created согласующему не получено')
       assert.strictEqual(notification.data.employeeName, 'Иванов Пётр')
-      assert.strictEqual(notification.data.link, '/leader')
+      assert.strictEqual(notification.data.link, '/vacation')
       assert.strictEqual(notification.data.requestId, res.data.id)
       assert.strictEqual(notification.data.employeeId, emp.id)
     })

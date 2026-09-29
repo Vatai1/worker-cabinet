@@ -209,7 +209,7 @@ async function notifyVacationCreated(request, employeeId, req) {
     startDate: fmtDate(request.start_date),
     endDate: fmtDate(request.end_date),
     days: request.duration,
-    link: '/leader'
+    link: '/vacation'
   }
   if (request.approver_id) {
     const approverIds = await getApproverIds(request.approver_id, req)

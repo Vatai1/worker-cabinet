@@ -60,7 +60,7 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
 ]
 
 const getManagerNavigation = (userId?: string): NavItem[] => [
-  { name: 'Дашборд', href: '/leader', icon: Users, section: 'Основное' },
+  { name: 'Дашборд', href: '/dashboard', icon: LayoutDashboard, section: 'Основное' },
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },

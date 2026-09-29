@@ -143,7 +143,7 @@ JSDoc annotations on all route files generate OpenAPI 3.0 spec via `swagger-jsdo
 ## Roles and Access
 
 Roles: `employee`, `manager`, `hr`, `admin`, `onboarding`
-- `manager` → `/leader`, `onboarding` → `/onboarding` (restricted to `/onboarding`, `/employees`, `/departments`)
+- all roles → `/dashboard`, `onboarding` → `/onboarding` (restricted to `/onboarding`, `/employees`, `/departments`)
 - Backend: `authenticateToken` + `authorizeRoles('admin', 'hr')`
 - Frontend guards in `App.tsx`: `ProtectedRoute`, `HRRoute`, `ManagerRoute`, `OnboardingRoute`, `BlockOnboardingRoute`
 

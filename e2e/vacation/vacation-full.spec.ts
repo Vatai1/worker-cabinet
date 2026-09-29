@@ -41,6 +41,7 @@ let admToken = ''
 let petrovId = 0
 let kuznetsovId = 0
 let petrovTotalDays: number | null = null
+let ivanovTotalDays: number | null = null
 
 async function apiLogin(email: string) {
   const res = await api.post(`${API}/auth/login`, { data: { email, password: 'password123' } })
@@ -158,6 +159,14 @@ test.beforeAll(async () => {
     data: {},
   })
   if (!mgrApproved.ok()) throw new Error(`отпуск руководителя не согласован: ${mgrApproved.status()}`)
+  const ivanovBalance = await api.get(`${API}/vacation/balance/3?year=${new Date().getFullYear()}`, {
+    headers: { ...ORG, Authorization: `Bearer ${admToken}` },
+  })
+  ivanovTotalDays = ((await ivanovBalance.json()) as { total_days?: number }).total_days ?? null
+  await api.patch(`${API}/vacation/balances/3`, {
+    headers: { ...ORG, Authorization: `Bearer ${admToken}` },
+    data: { year: new Date().getFullYear(), total_days: 80 },
+  })
   await api.patch(`${API}/vacation/balances/3`, {
     headers: { ...ORG, Authorization: `Bearer ${admToken}` },
     data: { year: new Date().getFullYear() + 1, total_days: 28 },
@@ -167,6 +176,12 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await cleanupE2EData()
   await cancelUserVacations(mgrToken, petrovId)
+  if (ivanovTotalDays !== null) {
+    await api.patch(`${API}/vacation/balances/3`, {
+      headers: { ...ORG, Authorization: `Bearer ${admToken}` },
+      data: { year: new Date().getFullYear(), total_days: ivanovTotalDays },
+    })
+  }
   if (petrovTotalDays !== null) {
     await api.patch(`${API}/vacation/balances/${petrovId}`, {
       headers: { ...ORG, Authorization: `Bearer ${admToken}` },

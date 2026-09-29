@@ -4,7 +4,7 @@
 
 - **Код**: `requests`
 - **Категория**: `work`
-- **Маршрут**: `/requests`, `/leader`, `/manager`
+- **Маршрут**: `/requests`
 - **Иконка**: `ClipboardCheck`
 - **Сортировка**: 25
 - **Описание**: Дашборды заявок для работников, руководителей и менеджеров
@@ -16,9 +16,7 @@ modules/requests/
 ├── store/
 │   └── requestsStore.ts
 ├── pages/
-│   ├── Requests.tsx
-│   ├── ManagerDashboard.tsx
-│   └── LeaderDashboard.tsx
+│   └── Requests.tsx
 └── components/forms/
     └── VacationRequestForm.tsx
 ```
@@ -38,7 +36,7 @@ modules/requests/
 | Роль | Доступ |
 |------|--------|
 | employee | `/dashboard`, `/requests` |
-| manager | `/manager`, `/leader` (если руководитель), `/requests` |
+| manager | `/dashboard`, `/requests` |
 | hr | `/requests` |
 | admin | `/requests` |
 | onboarding | Заблокировано (BlockOnboardingRoute) |

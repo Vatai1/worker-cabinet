@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import html2canvas from 'html2canvas'
+import * as rasterizeHTML from 'rasterizehtml'
 import { Bug, X, Loader2, Camera, Trash2, Monitor } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
@@ -19,37 +19,6 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   const [submitting, setSubmitting] = useState(false)
   const [capturing, setCapturing] = useState(false)
 
-  const convertHsl = (v: string) => v.replace(
-    /hsl\(([\d.]+) ([\d.]+)% ([\d.]+)%(?: *\/ *([\d.]+%?))?\)/g,
-    (_m, h: string, s: string, l: string, a?: string) => a != null
-      ? `hsla(${h}, ${s}%, ${l}%, ${a.endsWith('%') ? String(parseFloat(a) / 100) : a})`
-      : `hsl(${h}, ${s}%, ${l}%)`
-  )
-
-  const withHslCompat = async <T,>(fn: () => Promise<T>): Promise<T> => {
-    const orig = window.getComputedStyle
-    window.getComputedStyle = ((el: Element, pseudo?: string | null) => {
-      const style = orig.call(window, el, pseudo)
-      const wrap = (value: unknown) => (typeof value === 'string' && value.includes('hsl(') ? convertHsl(value) : value)
-      return new Proxy(style, {
-        get(target, prop) {
-          if (prop === 'getPropertyValue') {
-            const raw = target.getPropertyValue.bind(target)
-            return (name: string) => wrap(raw(name))
-          }
-          const value = Reflect.get(target, prop, target)
-          if (typeof value === 'function') return value.bind(target)
-          return wrap(value)
-        },
-      }) as CSSStyleDeclaration
-    }) as typeof window.getComputedStyle
-    try {
-      return await fn()
-    } finally {
-      window.getComputedStyle = orig
-    }
-  }
-
   const canvasToJpegBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> => {
     const w = canvas.width
     if (w > 1920) {
@@ -65,53 +34,38 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   const captureDom = async (): Promise<Blob | null> => {
     try {
       if (document.fonts?.ready) await document.fonts.ready
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-      const pending = Array.from(document.images).filter((img) => !img.complete)
-      if (pending.length > 0) {
-        await Promise.all(pending.map((img) => new Promise((res) => {
-          img.addEventListener('load', res, { once: true })
-          img.addEventListener('error', res, { once: true })
-          setTimeout(res, 1500)
-        })))
-      }
-      const canvas = await withHslCompat(() => html2canvas(document.body, {
-        logging: false,
-        useCORS: true,
-        scale: Math.min(window.devicePixelRatio || 1, 2),
-        onclone: (doc) => {
-          const style = doc.createElement('style')
-          style.textContent = `*, *::before, *::after { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif !important; }`
-          doc.head.appendChild(style)
-          const win = doc.defaultView
-          if (win) {
-            doc.querySelectorAll<HTMLElement>('*').forEach((el) => {
-              const cs = win.getComputedStyle(el)
-              const clipText = cs.webkitBackgroundClip === 'text' || cs.backgroundClip === 'text'
-              const transparentText = cs.webkitTextFillColor === 'rgba(0, 0, 0, 0)' || cs.color === 'rgba(0, 0, 0, 0)' || cs.color === 'transparent'
-              if (clipText || transparentText) {
-                el.style.background = 'none'
-                el.style.webkitBackgroundClip = 'unset'
-                el.style.backgroundClip = 'unset'
-                el.style.webkitTextFillColor = 'unset'
-                if (transparentText) {
-                  const raw = win.getComputedStyle(doc.documentElement).getPropertyValue('--primary').trim()
-                  el.style.color = /^\d/.test(raw) ? `hsl(${raw})` : (raw || '#0f172a')
-                }
-              }
-            })
+      const root = document.documentElement
+      const clone = root.cloneNode(true) as HTMLElement
+      const live = [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))]
+      const copies = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>('*'))]
+      live.forEach((el, i) => {
+        const copy = copies[i]
+        if (el instanceof HTMLInputElement) {
+          if (el.type === 'checkbox' || el.type === 'radio') copy.toggleAttribute('checked', el.checked)
+          else copy.setAttribute('value', el.value)
+        } else if (el instanceof HTMLTextAreaElement) {
+          copy.textContent = el.value
+        } else if (el instanceof HTMLSelectElement) {
+          copy.querySelectorAll('option').forEach((o, j) => o.toggleAttribute('selected', j === el.selectedIndex))
+        }
+        if (el.scrollTop || el.scrollLeft) {
+          copy.style.overflow = 'hidden'
+          for (const child of Array.from(copy.children) as HTMLElement[]) {
+            child.style.translate = `${-el.scrollLeft}px ${-el.scrollTop}px`
           }
-          doc.querySelectorAll<HTMLElement>('[class*="animate-"], [class*="stagger-"]').forEach((el) => {
-            for (const cls of Array.from(el.classList)) {
-              if (cls.startsWith('animate-') || cls.startsWith('stagger-')) el.classList.remove(cls)
-            }
-            el.style.animation = 'none'
-            el.style.transition = 'none'
-            el.style.opacity = '1'
-            el.style.transform = 'none'
-          })
-        },
-      }))
-      if (!canvas.width || !canvas.height) return null
+        }
+      })
+      clone.querySelectorAll('script, [data-bug-report-modal]').forEach((el) => el.remove())
+      const style = document.createElement('style')
+      style.textContent = '*, *::before, *::after { animation: none !important; transition: none !important; }'
+      clone.querySelector('head')?.appendChild(style)
+      const width = window.innerWidth
+      const height = window.innerHeight
+      const zoom = Math.min(window.devicePixelRatio || 1, 2)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(width * zoom)
+      canvas.height = Math.round(height * zoom)
+      await rasterizeHTML.drawHTML(clone.outerHTML, canvas, { baseUrl: location.href, width, height, zoom })
       return await canvasToJpegBlob(canvas)
     } catch {
       return null
@@ -246,7 +200,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
       </button>
 
       {phase === 'open' && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
+        <div data-bug-report-modal className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
           <div className="bg-card rounded-xl shadow-2xl w-full max-w-lg mx-4 animate-scale-in max-h-[85vh] flex flex-col overflow-hidden">
             <div className="p-5 border-b flex items-center justify-between shrink-0">
               <h2 className="text-lg font-semibold flex items-center gap-2">

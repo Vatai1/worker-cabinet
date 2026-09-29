@@ -13,8 +13,6 @@ import { ErrorBoundary } from '@/shared/components/ErrorBoundary'
 
 const Requests = lazy(() => import('@/modules/requests/pages/Requests').then(m => ({ default: m.Requests })))
 const Documents = lazy(() => import('@/modules/documents/pages/Documents').then(m => ({ default: m.Documents })))
-const ManagerDashboard = lazy(() => import('@/modules/requests/pages/ManagerDashboard').then(m => ({ default: m.ManagerDashboard })))
-const LeaderDashboard = lazy(() => import('@/modules/requests/pages/LeaderDashboard').then(m => ({ default: m.LeaderDashboard })))
 const Vacation = lazy(() => import('@/modules/vacation/pages/Vacation').then(m => ({ default: m.Vacation })))
 const VacationApplicationPage = lazy(() => import('@/modules/vacation/pages/VacationApplicationPage').then(m => ({ default: m.VacationApplicationPage })))
 const VacationTransferApplicationPage = lazy(() => import('@/modules/vacation/pages/VacationTransferApplicationPage').then(m => ({ default: m.VacationTransferApplicationPage })))
@@ -171,8 +169,8 @@ function App() {
                   }
                 />
                 <Route path="dashboard" element={<BlockOnboardingRoute><Dashboard /></BlockOnboardingRoute>} />
-                <Route path="leader" element={<BlockOnboardingRoute><LeaderDashboard /></BlockOnboardingRoute>} />
-                <Route path="manager" element={<BlockOnboardingRoute><ManagerDashboard /></BlockOnboardingRoute>} />
+                <Route path="leader" element={<Navigate to="/dashboard" replace />} />
+                <Route path="manager" element={<Navigate to="/dashboard" replace />} />
                 <Route path="vacation" element={<ModuleGuard module="vacation"><BlockOnboardingRoute><Vacation /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="vacation/application" element={<ModuleGuard module="vacation"><BlockOnboardingRoute><VacationApplicationPage /></BlockOnboardingRoute></ModuleGuard>} />
                 <Route path="vacation/transfer-application" element={<ModuleGuard module="vacation"><BlockOnboardingRoute><VacationTransferApplicationPage /></BlockOnboardingRoute></ModuleGuard>} />
