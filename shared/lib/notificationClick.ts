@@ -14,6 +14,10 @@ export async function openNotification(
   const target = getNotificationTarget(n, currentUserId)
   if (target) navigate(target.path)
   if (n.read_at) return false
-  await markNotificationRead(n.id).catch(() => {})
-  return true
+  try {
+    await markNotificationRead(n.id)
+    return true
+  } catch {
+    return false
+  }
 }

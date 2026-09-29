@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ExternalLink, Loader2 } from 'lucide-react'
+import { Button } from '@/shared/components/ui/Button'
 import { apiGet } from '@/shared/lib/apiClient'
 import { getErrorMessage } from '@/shared/lib/utils'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { DepartmentHierarchyOverlay } from '@/modules/hierarchy/components/DepartmentHierarchyOverlay'
 import type { Department } from '@/modules/hierarchy/pages/HRHierarchy'
 
-export function DepartmentSchemeModal({ departmentId, departmentName, onClose }: { departmentId: number; departmentName: string; onClose: () => void }) {
+export function DepartmentSchemeModal({ departmentId, departmentName, onClose, showPageLink = false }: { departmentId: number; departmentName: string; onClose: () => void; showPageLink?: boolean }) {
+  const navigate = useNavigate()
   const [departments, setDepartments] = useState<Department[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,6 +31,12 @@ export function DepartmentSchemeModal({ departmentId, departmentName, onClose }:
             departmentName={departmentName}
             departments={departments}
             onClose={onClose}
+            headerExtra={showPageLink ? (
+              <Button size="sm" variant="outline" onClick={() => { onClose(); navigate(`/departments/${departmentId}`) }}>
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                Страница отдела
+              </Button>
+            ) : undefined}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">

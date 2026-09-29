@@ -751,6 +751,8 @@ function EmployeeSettingsModal({
   )
 }
 
+const FILTER_POPOVER_WIDTH = 320
+
 function FilterableHeader({
   label,
   sortActive,
@@ -771,16 +773,44 @@ function FilterableHeader({
   searchPlaceholder?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (ref.current?.contains(target) || popoverRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const close = () => setOpen(false)
+    const onScroll = (e: Event) => {
+      if (popoverRef.current?.contains(e.target as Node)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    window.addEventListener('resize', close)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', onScroll, true)
+    }
   }, [open])
+
+  const toggleOpen = () => {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    const rect = ref.current?.getBoundingClientRect()
+    if (rect) {
+      const width = Math.min(FILTER_POPOVER_WIDTH, window.innerWidth - 32)
+      setPos({ left: Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)), top: rect.bottom + 6 })
+    }
+    setOpen(true)
+  }
 
   const activeCount = selected.length
 
@@ -788,7 +818,7 @@ function FilterableHeader({
     <div ref={ref} className="relative inline-flex items-center gap-1">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         className={cn(
           'inline-flex items-center gap-1 hover:text-foreground',
           activeCount > 0 && 'text-primary font-semibold'
@@ -807,9 +837,11 @@ function FilterableHeader({
           {sortActive ? (sortDir === 'asc' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />}
         </button>
       )}
-      {open && (
+      {open && pos && createPortal(
         <div
-          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-border bg-card p-2.5 shadow-lg"
+          ref={popoverRef}
+          style={{ left: pos.left, top: pos.top, width: `min(${FILTER_POPOVER_WIDTH}px, calc(100vw - 2rem))` }}
+          className="fixed z-[70] rounded-xl border border-border bg-card p-2.5 text-left font-normal normal-case tracking-normal shadow-lg"
           onClick={(e) => e.stopPropagation()}
         >
           <SearchableCheckList
@@ -827,7 +859,8 @@ function FilterableHeader({
               Сбросить фильтр
             </button>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
@@ -863,6 +896,8 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkAction, setBulkAction] = useState('')
   const [bulkRole, setBulkRole] = useState('')
+  const [bulkDepartment, setBulkDepartment] = useState('')
+  const [bulkPosition, setBulkPosition] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
 
   useEffect(() => {
@@ -956,9 +991,15 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
   const executeBulkAction = async () => {
     if (selectedIds.size === 0 || !bulkAction) return
     const ids = Array.from(selectedIds)
+    const targetDepartment = departments.find((d) => String(d.id) === bulkDepartment)
+    const actionText = bulkAction === 'setDepartment' && targetDepartment
+      ? `Перевести ${ids.length} сотр. в отдел «${targetDepartment.name}»?`
+      : bulkAction === 'setPosition'
+        ? `Назначить ${ids.length} сотр. должность «${bulkPosition.trim()}»?`
+        : `Применить к ${ids.length} сотрудникам?`
     const confirmed = await confirmDialog({
       title: 'Массовое действие',
-      message: `Применить к ${ids.length} сотрудникам?`,
+      message: actionText,
       confirmText: 'Применить',
     })
     if (!confirmed) return
@@ -968,10 +1009,17 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
         await apiPut('/users/bulk-status', { userIds: ids, status: bulkAction === 'activate' ? 'active' : 'inactive' })
       } else if (bulkAction === 'setRole' && bulkRole) {
         await apiPut('/users/bulk-role', { userIds: ids, role: bulkRole })
+      } else if (bulkAction === 'setDepartment' && bulkDepartment) {
+        await apiPost(`/dictionaries/departments/${bulkDepartment}/members`, { userIds: ids })
+      } else if (bulkAction === 'setPosition' && bulkPosition.trim()) {
+        await apiPut('/users/bulk-position', { userIds: ids, position: bulkPosition.trim() })
+        if (!positions.includes(bulkPosition.trim())) setPositions((prev) => [...prev, bulkPosition.trim()].sort((a, b) => a.localeCompare(b, 'ru')))
       }
       setSelectedIds(new Set())
       setBulkAction('')
       setBulkRole('')
+      setBulkDepartment('')
+      setBulkPosition('')
       fetchEmployees()
       toast.success('Изменения применены')
     } catch (err) {
@@ -1036,10 +1084,38 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
                 { value: 'activate', label: 'Активировать' },
                 { value: 'deactivate', label: 'Деактивировать' },
                 { value: 'setRole', label: 'Сменить роль' },
+                { value: 'setDepartment', label: 'Перевести в отдел' },
+                { value: 'setPosition', label: 'Сменить должность' },
               ]}
               value={bulkAction}
               onChange={setBulkAction}
             />
+            {bulkAction === 'setDepartment' && (
+              <SelectDropdown
+                options={[
+                  { value: '', label: 'Отдел…' },
+                  ...[...departments].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((d) => ({ value: String(d.id), label: d.name })),
+                ]}
+                value={bulkDepartment}
+                onChange={setBulkDepartment}
+                className="min-w-[220px]"
+              />
+            )}
+            {bulkAction === 'setPosition' && (
+              <>
+                <input
+                  list="hr-bulk-positions"
+                  value={bulkPosition}
+                  onChange={(e) => setBulkPosition(e.target.value)}
+                  placeholder="Должность — выберите или впишите"
+                  maxLength={255}
+                  className="h-9 min-w-[260px] flex-1 rounded-[10px] border border-border bg-card px-3 text-[13px] text-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
+                />
+                <datalist id="hr-bulk-positions">
+                  {positions.map((p) => <option key={p} value={p} />)}
+                </datalist>
+              </>
+            )}
             {bulkAction === 'setRole' && (
               <SelectDropdown
                 options={[{ value: '', label: 'Роль…' }, ...systemRoles.map((r) => ({ value: r.name, label: SYSTEM_ROLE_LABELS[r.name] || r.name }))]}
@@ -1047,14 +1123,23 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
                 onChange={setBulkRole}
               />
             )}
-            <Button size="sm" onClick={executeBulkAction} disabled={bulkBusy || !bulkAction || (bulkAction === 'setRole' && !bulkRole)}>
+            <Button
+              size="sm"
+              onClick={executeBulkAction}
+              disabled={
+                bulkBusy || !bulkAction ||
+                (bulkAction === 'setRole' && !bulkRole) ||
+                (bulkAction === 'setDepartment' && !bulkDepartment) ||
+                (bulkAction === 'setPosition' && !bulkPosition.trim())
+              }
+            >
               {bulkBusy && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
               Применить
             </Button>
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkRole('') }}
+              onClick={() => { setSelectedIds(new Set()); setBulkAction(''); setBulkRole(''); setBulkDepartment(''); setBulkPosition('') }}
             >
               <X className="h-3.5 w-3.5" />
             </Button>

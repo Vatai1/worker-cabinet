@@ -9,7 +9,7 @@ import { ImpersonationBanner } from '@/shared/components/TestSwitcher'
 
 export function Layout() {
   return (
-    <div className="flex h-screen overflow-hidden gradient-bg">
+    <div className="flex h-screen overflow-hidden gradient-bg pt-[var(--impersonation-offset)]">
       <ImpersonationBanner />
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden lg:ml-[288px]">

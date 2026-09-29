@@ -36,7 +36,7 @@ function EmployeeRow({
         <span className="block truncate text-sm font-medium">
           {employee.lastName} {employee.firstName}
         </span>
-        <span className="block truncate text-xs text-muted-foreground">
+        <span className="block break-words text-xs leading-snug text-muted-foreground">
           {[employee.position, showDepartment ? employee.departmentName : null].filter(Boolean).join(' · ')}
         </span>
       </span>

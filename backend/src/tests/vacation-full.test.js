@@ -1788,7 +1788,7 @@ describe('Модуль отпусков — user stories', () => {
         startDate: shift(20), endDate: shift(22), vacationType: 'annual_paid',
       })
       assert.strictEqual(res.status, 403)
-      assert.strictEqual(res.data.error, 'Доступ запрещён')
+      assert.strictEqual(res.data.error, 'Редактировать заявку может только её автор')
     })
 
     it('PUT /requests/:id: несуществующая заявка → 404', async () => {

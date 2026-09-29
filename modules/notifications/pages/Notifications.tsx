@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import {
   Bell, CheckCheck, Mail, Sparkles, ChevronLeft, ChevronRight,
@@ -23,6 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
   vacation_substitution_removed: 'Замещение отменено',
   bug_report_new: 'Баг-репорт',
   bug_report_update: 'Статус баг-репорта',
+  bug_report_reply: 'Ответ на баг-репорт',
   document_assigned: 'Документ для ознакомления',
   survey_assigned: 'Новый опрос',
   onboarding_task: 'Задача онбординга',
@@ -37,6 +39,7 @@ const TYPE_META: Record<string, { icon: typeof Bell; className: string }> = {
   vacation_substitution_removed: { icon: Plane, className: 'text-muted-foreground bg-muted' },
   bug_report_new: { icon: Bug, className: 'text-red-600 bg-red-500/15' },
   bug_report_update: { icon: Bug, className: 'text-orange-600 bg-orange-500/15' },
+  bug_report_reply: { icon: Bug, className: 'text-emerald-600 bg-emerald-500/15' },
   document_assigned: { icon: FileText, className: 'text-pink-600 bg-pink-500/15' },
   survey_assigned: { icon: BarChart3, className: 'text-purple-600 bg-purple-500/15' },
   onboarding_task: { icon: GraduationCap, className: 'text-amber-600 bg-amber-500/15' },
@@ -89,7 +92,12 @@ export function Notifications() {
   }
 
   const markAllAsRead = async () => {
-    await markAllNotificationsRead()
+    try {
+      await markAllNotificationsRead()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+      return
+    }
     setNotifications((prev) =>
       prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
     )
@@ -178,7 +186,7 @@ export function Notifications() {
                         {isUnread && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />}
                       </div>
                       {message && (
-                        <p className="mt-0.5 truncate text-sm text-muted-foreground">{message}</p>
+                        <p className={cn('mt-0.5 text-sm text-muted-foreground', n.type === 'bug_report_reply' ? 'whitespace-pre-wrap break-words' : 'truncate')}>{message}</p>
                       )}
                       {imageUrls.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-2">

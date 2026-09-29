@@ -65,13 +65,14 @@ export function MultiSelectDropdown({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={cn(selectClass, 'flex min-w-[150px] max-w-[200px] items-center justify-between gap-2 text-left', className)}
+        title={label}
+        className={cn(selectClass, 'flex min-w-[150px] max-w-[280px] items-center justify-between gap-2 text-left', className)}
       >
         <span className="truncate">{label}</span>
         <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="absolute z-20 mt-1.5 max-h-72 w-max min-w-[240px] max-w-[min(420px,70vw)] overflow-hidden rounded-[10px] border border-border bg-card shadow-lg flex flex-col">
+        <div className="absolute z-20 mt-1.5 max-h-72 w-max min-w-[240px] max-w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-[10px] border border-border bg-card shadow-lg flex flex-col">
           {searchable && (
             <div className="relative shrink-0 border-b border-border p-1.5">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

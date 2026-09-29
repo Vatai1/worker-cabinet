@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Trash2, Loader2, Search } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, Loader2, Search, Send } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -23,6 +24,9 @@ interface BugReport {
   created_at: string
   reporter_name: string
   reviewer_name: string | null
+  user_reply: string | null
+  user_reply_at: string | null
+  replier_name: string | null
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
@@ -53,6 +57,8 @@ export function AdminBugReports() {
   const [editStatus, setEditStatus] = useState('')
   const [editPriority, setEditPriority] = useState('')
   const [editComment, setEditComment] = useState('')
+  const [editReply, setEditReply] = useState('')
+  const [sendingReply, setSendingReply] = useState(false)
   const [saving, setSaving] = useState(false)
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
 
@@ -99,6 +105,7 @@ export function AdminBugReports() {
     setEditStatus(report.status)
     setEditPriority(report.priority)
     setEditComment(report.admin_comment || '')
+    setEditReply('')
     setScreenshotUrl(null)
     if (report.screenshot_s3_key) loadScreenshot(report.id)
   }
@@ -125,6 +132,30 @@ export function AdminBugReports() {
     } catch {
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSendReply = async (id: number) => {
+    const reply = editReply.trim()
+    if (!reply) return
+    setSendingReply(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/bug-reports/${id}`, {
+        method: 'PATCH',
+        headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ user_reply: reply }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Не удалось отправить ответ')
+      }
+      setEditReply('')
+      await fetchReports()
+      toast.success('Ответ отправлен — пользователь увидит его в уведомлениях')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Не удалось отправить ответ')
+    } finally {
+      setSendingReply(false)
     }
   }
 
@@ -267,13 +298,40 @@ export function AdminBugReports() {
                     </div>
 
                     <div>
-                      <label className="text-xs text-muted-foreground block mb-1">Комментарий администратора</label>
+                      <label className="text-xs text-muted-foreground block mb-1">Комментарий администратора · виден только администраторам</label>
                       <textarea
                         value={editComment}
                         onChange={(e) => setEditComment(e.target.value)}
                         rows={2}
                         className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
                       />
+                    </div>
+
+                    <div className="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                      <label className="block text-xs font-medium text-foreground">Ответ пользователю · придёт ему в уведомления</label>
+                      {report.user_reply && (
+                        <div className="rounded-lg border border-border bg-background px-3 py-2">
+                          <p className="whitespace-pre-wrap break-words text-sm">{report.user_reply}</p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Отправлено {report.user_reply_at ? formatDateTime(report.user_reply_at) : ''}
+                            {report.replier_name && ` · ${report.replier_name}`}
+                          </p>
+                        </div>
+                      )}
+                      <textarea
+                        value={editReply}
+                        onChange={(e) => setEditReply(e.target.value)}
+                        rows={3}
+                        maxLength={5000}
+                        placeholder={report.user_reply ? 'Новый ответ заменит предыдущий и тоже придёт в уведомления' : 'Например: исправили, обновите страницу'}
+                        className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+                      />
+                      <div className="flex justify-end">
+                        <Button size="sm" variant="outline" onClick={() => handleSendReply(report.id)} disabled={sendingReply || !editReply.trim()}>
+                          {sendingReply ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1.5" />}
+                          Отправить ответ
+                        </Button>
+                      </div>
                     </div>
 
                     {report.reviewed_at && (

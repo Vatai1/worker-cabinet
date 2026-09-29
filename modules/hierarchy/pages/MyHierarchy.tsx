@@ -12,7 +12,7 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ChevronDown, Network, Pencil, X } from 'lucide-react'
+import { ChevronDown, ExternalLink, Network, Pencil, User, X } from 'lucide-react'
 import { apiGet } from '@/shared/lib/apiClient'
 import { DepartmentSchemeModal } from '@/modules/hierarchy/components/DepartmentSchemeModal'
 import { HierarchyTagsToggle } from '@/modules/hierarchy/components/HierarchyTagsToggle'
@@ -40,7 +40,7 @@ export function MyHierarchy() {
   const canEdit = hierarchyEnabled && currentOrgId != null && hasAnyRole('hr', 'admin')
   const [myDepartments, setMyDepartments] = useState<Array<{ id: number; name: string }>>([])
   const [deptMenuOpen, setDeptMenuOpen] = useState(false)
-  const [schemeDept, setSchemeDept] = useState<{ id: number; name: string } | null>(null)
+  const [schemeDept, setSchemeDept] = useState<{ id: number; name: string; fromCanvas?: boolean } | null>(null)
 
   useEffect(() => {
     if (!hierarchyEnabled || canEdit) return
@@ -56,12 +56,51 @@ export function MyHierarchy() {
 
   const close = useCallback(() => navigate('/dashboard'), [navigate])
 
+  const [nodeMenu, setNodeMenu] = useState<{ x: number; y: number; kind: 'department' | 'employee'; id: number; name: string } | null>(null)
+
+  const onNodeContextMenu = useCallback<NodeMouseHandler>((e, node) => {
+    if (node.type !== 'department' && node.type !== 'employee') return
+    const d = node.data as { id?: number; name?: string } | undefined
+    if (d?.id == null) return
+    e.preventDefault()
+    setDeptMenuOpen(false)
+    setNodeMenu({
+      x: Math.min(e.clientX, window.innerWidth - 260),
+      y: Math.min(e.clientY, window.innerHeight - 120),
+      kind: node.type,
+      id: Number(d.id),
+      name: d.name ?? 'Отдел',
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!nodeMenu) return
+    const close = () => setNodeMenu(null)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopImmediatePropagation()
+        setNodeMenu(null)
+      }
+    }
+    window.addEventListener('mousedown', close)
+    window.addEventListener('wheel', close, { passive: true })
+    window.addEventListener('resize', close)
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('wheel', close)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('keydown', onKey, true)
+    }
+  }, [nodeMenu])
+
   const onNodeClick = useCallback<NodeMouseHandler>((_, node) => {
     if (node.type !== 'department') return
-    const departmentId = (node.data as { id?: number } | undefined)?.id
-    if (departmentId == null) return
-    navigate(`/departments/${departmentId}`)
-  }, [navigate])
+    const d = node.data as { id?: number; name?: string } | undefined
+    if (d?.id == null) return
+    setDeptMenuOpen(false)
+    setSchemeDept({ id: Number(d.id), name: d.name ?? 'Отдел', fromCanvas: true })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -119,7 +158,7 @@ export function MyHierarchy() {
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-background">
       {schemeDept && (
-        <DepartmentSchemeModal departmentId={schemeDept.id} departmentName={schemeDept.name} onClose={() => setSchemeDept(null)} />
+        <DepartmentSchemeModal departmentId={schemeDept.id} departmentName={schemeDept.name} showPageLink={schemeDept.fromCanvas} onClose={() => setSchemeDept(null)} />
       )}
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2 min-w-0">
@@ -208,6 +247,8 @@ export function MyHierarchy() {
             colorMode={darkMode ? 'dark' : 'light'}
             proOptions={{ hideAttribution: true }}
             onNodeClick={onNodeClick}
+            onNodeContextMenu={onNodeContextMenu}
+            onPaneContextMenu={(e) => { e.preventDefault(); setNodeMenu(null) }}
             fitView
             fitViewOptions={{ maxZoom: 1 }}
           >
@@ -218,6 +259,43 @@ export function MyHierarchy() {
           </ReactFlow>
         )}
       </div>
+
+      {nodeMenu && (
+        <div
+          role="menu"
+          style={{ left: nodeMenu.x, top: nodeMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="fixed z-[65] min-w-[240px] rounded-xl border border-border bg-card p-1.5 shadow-xl animate-scale-in"
+        >
+          {nodeMenu.kind === 'department' ? (
+            <>
+              <p className="truncate px-2.5 pb-1 pt-0.5 text-[11px] font-medium text-muted-foreground">{nodeMenu.name}</p>
+              <button
+                role="menuitem"
+                onClick={() => { setSchemeDept({ id: nodeMenu.id, name: nodeMenu.name, fromCanvas: true }); setNodeMenu(null) }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] hover:bg-muted"
+              >
+                <Network className="h-3.5 w-3.5 text-muted-foreground" /> Открыть структуру подразделения
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => navigate(`/departments/${nodeMenu.id}`)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] hover:bg-muted"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" /> Страница отдела
+              </button>
+            </>
+          ) : (
+            <button
+              role="menuitem"
+              onClick={() => navigate(`/employees/${nodeMenu.id}`)}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] hover:bg-muted"
+            >
+              <User className="h-3.5 w-3.5 text-muted-foreground" /> Открыть профиль
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

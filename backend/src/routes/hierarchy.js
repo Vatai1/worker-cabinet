@@ -802,9 +802,13 @@ router.put('/global', authenticateToken, authorizeRoles('superadmin'), async (re
  *   get:
  *     tags: [Hierarchy]
  *     summary: Отделы, внутренние схемы которых текущий пользователь может редактировать
- *     description: 'Руководитель — свой отдел и все нижестоящие (по parent_id); HR/admin — все отделы учреждения'
+ *     description: 'Руководитель — свой отдел и все нижестоящие (по parent_id); HR/admin — все отделы учреждения. С managed=1 — только отделы, где пользователь руководитель, и нижестоящие, независимо от роли'
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: managed
+ *         schema: { type: string, enum: ['1'] }
  *     responses:
  *       200:
  *         description: Список отделов (id, name, parent_id)
@@ -813,7 +817,7 @@ router.get('/my-departments', authenticateToken, async (req, res) => {
   try {
     const orgId = currentOrgId(req)
     let rows
-    if (hasFullDepartmentAccess(req)) {
+    if (hasFullDepartmentAccess(req) && req.query.managed !== '1') {
       rows = (await query(
         `SELECT id, name, parent_id FROM departments WHERE ($1::int IS NULL OR organization_id = $1) ${excludeTest(req, 'departments')} ORDER BY name`,
         [orgId ?? null]

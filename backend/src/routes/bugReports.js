@@ -60,10 +60,12 @@ router.get('/', authenticateToken, authorizeRoles('admin', 'superadmin'), asyncH
   const result = await query(
     `SELECT br.*, 
        u.first_name AS reporter_first, u.last_name AS reporter_last,
-       ru.first_name AS reviewer_first, ru.last_name AS reviewer_last
+       ru.first_name AS reviewer_first, ru.last_name AS reviewer_last,
+       rpu.first_name AS replier_first, rpu.last_name AS replier_last
      FROM bug_reports br
      LEFT JOIN users u ON br.user_id = u.id
      LEFT JOIN users ru ON br.reviewed_by = ru.id
+     LEFT JOIN users rpu ON br.user_reply_by = rpu.id
      ${where}
      ORDER BY br.created_at DESC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -75,6 +77,7 @@ router.get('/', authenticateToken, authorizeRoles('admin', 'superadmin'), asyncH
       ...r,
       reporter_name: `${r.reporter_last || ''} ${r.reporter_first || ''}`.trim(),
       reviewer_name: r.reviewer_first ? `${r.reviewer_last || ''} ${r.reviewer_first || ''}`.trim() : null,
+      replier_name: r.replier_first ? `${r.replier_last || ''} ${r.replier_first || ''}`.trim() : null,
     })),
     total, page, limit
   })
@@ -88,7 +91,7 @@ router.get('/stats', authenticateToken, authorizeRoles('admin', 'superadmin'), a
 
 router.patch('/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
   const { id } = req.params
-  const { status, priority, admin_comment } = req.body
+  const { status, priority, admin_comment, user_reply } = req.body
 
   const existing = await query('SELECT * FROM bug_reports WHERE id = $1', [id])
   if (existing.rows.length === 0) return res.status(404).json({ error: 'Баг-репорт не найден' })
@@ -98,6 +101,17 @@ router.patch('/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), a
   if (status) { params.push(status); updates.push(`status = $${params.length}`) }
   if (priority) { params.push(priority); updates.push(`priority = $${params.length}`) }
   if (admin_comment !== undefined) { params.push(admin_comment); updates.push(`admin_comment = $${params.length}`) }
+  const reply = typeof user_reply === 'string' ? user_reply.trim() : ''
+  if (user_reply !== undefined && typeof user_reply !== 'string') return res.status(400).json({ error: 'Некорректный ответ' })
+  if (reply.length > 5000) return res.status(400).json({ error: 'Ответ слишком длинный' })
+  const replyChanged = reply !== '' && reply !== (existing.rows[0].user_reply || '')
+  if (replyChanged) {
+    params.push(reply)
+    updates.push(`user_reply = $${params.length}`)
+    updates.push('user_reply_at = NOW()')
+    params.push(req.user.id)
+    updates.push(`user_reply_by = $${params.length}`)
+  }
 
   if (updates.length > 0) {
     updates.push('reviewed_at = NOW()')
@@ -108,6 +122,13 @@ router.patch('/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), a
   }
 
   const report = existing.rows[0]
+  if (replyChanged) {
+    notify({
+      userId: report.user_id,
+      type: 'bug_report_reply',
+      data: { reportId: id, title: report.title, subject: `Ответ на баг-репорт: ${report.title}`, message: reply },
+    }).catch(() => {})
+  }
   if (status && status !== report.status) {
     notify({
       userId: report.user_id,
@@ -116,12 +137,13 @@ router.patch('/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), a
     }).catch(() => {})
   }
 
-  const updated = await query(`SELECT br.*, u.first_name AS reporter_first, u.last_name AS reporter_last, ru.first_name AS reviewer_first, ru.last_name AS reviewer_last FROM bug_reports br LEFT JOIN users u ON br.user_id = u.id LEFT JOIN users ru ON br.reviewed_by = ru.id WHERE br.id = $1`, [id])
+  const updated = await query(`SELECT br.*, u.first_name AS reporter_first, u.last_name AS reporter_last, ru.first_name AS reviewer_first, ru.last_name AS reviewer_last, rpu.first_name AS replier_first, rpu.last_name AS replier_last FROM bug_reports br LEFT JOIN users u ON br.user_id = u.id LEFT JOIN users ru ON br.reviewed_by = ru.id LEFT JOIN users rpu ON br.user_reply_by = rpu.id WHERE br.id = $1`, [id])
   const r = updated.rows[0]
   res.json({
     ...r,
     reporter_name: `${r.reporter_last || ''} ${r.reporter_first || ''}`.trim(),
     reviewer_name: r.reviewer_first ? `${r.reviewer_last || ''} ${r.reviewer_first || ''}`.trim() : null,
+    replier_name: r.replier_first ? `${r.replier_last || ''} ${r.replier_first || ''}`.trim() : null,
   })
 }))
 

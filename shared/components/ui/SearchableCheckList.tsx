@@ -45,7 +45,7 @@ export function SearchableCheckList({
           className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
         />
       </div>
-      <div className="max-h-48 overflow-y-auto rounded-lg border border-border scrollbar-thin overscroll-contain">
+      <div className="max-h-64 overflow-y-auto rounded-lg border border-border scrollbar-thin overscroll-contain">
         {filtered.length === 0 ? (
           <p className="px-3 py-4 text-center text-xs text-muted-foreground">{emptyText}</p>
         ) : (
@@ -55,7 +55,7 @@ export function SearchableCheckList({
               <label
                 key={item.id}
                 className={cn(
-                  'flex cursor-pointer items-center gap-2.5 border-b border-border/50 px-3 py-2 text-sm transition-colors last:border-0 hover:bg-muted/50',
+                  'flex cursor-pointer items-start gap-2.5 border-b border-border/50 px-3 py-2 text-sm transition-colors last:border-0 hover:bg-muted/50',
                   checked && 'bg-primary/5'
                 )}
               >
@@ -63,9 +63,9 @@ export function SearchableCheckList({
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggle(item.id)}
-                  className="h-3.5 w-3.5 shrink-0 rounded border-border accent-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="mt-[3px] h-3.5 w-3.5 shrink-0 rounded border-border accent-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
-                <span className="truncate">{item.label}</span>
+                <span className="min-w-0 whitespace-normal break-words leading-snug">{item.label}</span>
               </label>
             )
           })

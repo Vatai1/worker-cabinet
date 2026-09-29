@@ -276,11 +276,23 @@ export function TestSwitcher({ isCrct }: { isCrct?: boolean }) {
   )
 }
 
+const IMPERSONATION_BANNER_HEIGHT = 32
+
 export function ImpersonationBanner() {
   const isImpersonated = useAuthStore((s) => s.isImpersonated)
   const viewOnly = useAuthStore((s) => s.viewOnly)
   const user = useAuthStore((s) => s.user)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!isImpersonated) return
+    document.documentElement.style.setProperty('--impersonation-offset', `${IMPERSONATION_BANNER_HEIGHT}px`)
+    document.body.classList.add('impersonating')
+    return () => {
+      document.documentElement.style.removeProperty('--impersonation-offset')
+      document.body.classList.remove('impersonating')
+    }
+  }, [isImpersonated])
 
   if (!isImpersonated) return null
 
@@ -295,13 +307,14 @@ export function ImpersonationBanner() {
 
   return (
     <div
+      style={{ height: IMPERSONATION_BANNER_HEIGHT }}
       className={cn(
-        'fixed inset-x-0 top-0 z-[10001] flex items-center justify-center gap-3 px-4 py-1.5 text-[13px] font-medium',
+        'fixed inset-x-0 top-0 z-[10001] flex items-center justify-center gap-3 overflow-hidden px-4 text-[13px] font-medium',
         viewOnly ? 'bg-sky-600 text-white' : 'bg-amber-500 text-black',
       )}
     >
-      <span className="inline-flex items-center gap-1.5">
-        {viewOnly && <Eye className="h-3.5 w-3.5" />}
+      <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
+        {viewOnly && <Eye className="h-3.5 w-3.5 shrink-0" />}
         {viewOnly
           ? `Режим просмотра: кабинет глазами ${[user?.lastName, user?.firstName, user?.middleName].filter(Boolean).join(' ')} — изменения недоступны`
           : `Вы: ${user?.lastName} ${user?.firstName} (тестовый вход)`}
@@ -310,7 +323,7 @@ export function ImpersonationBanner() {
         type="button"
         onClick={stop}
         disabled={busy}
-        className="rounded-md bg-black/15 px-2 py-0.5 text-xs hover:bg-black/25 disabled:opacity-50"
+        className="shrink-0 rounded-md bg-black/15 px-2 py-0.5 text-xs hover:bg-black/25 disabled:opacity-50"
       >
         Вернуться
       </button>

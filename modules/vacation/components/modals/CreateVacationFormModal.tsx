@@ -36,6 +36,18 @@ interface CreateVacationFormModalProps {
   userId?: string
   onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
   showSubstitutes?: boolean
+  mode?: 'create' | 'edit'
+  initial?: {
+    startDate: string
+    endDate: string
+    vacationType: VacationType
+    hasTravel: boolean
+    travelDestination?: string
+    travelChildren?: Array<{ fullName: string; birthDate: string }>
+    comment?: string
+    referenceDocument?: string
+    substituteIds?: number[]
+  }
 }
 
 export function CreateVacationFormModal({
@@ -48,7 +60,10 @@ export function CreateVacationFormModal({
   userId,
   onCheckRestrictions,
   showSubstitutes = false,
+  mode = 'create',
+  initial,
 }: CreateVacationFormModalProps) {
+  const isEdit = mode === 'edit'
   useModalOpen(isOpen)
 
   useEffect(() => {
@@ -60,18 +75,18 @@ export function CreateVacationFormModal({
     return () => window.removeEventListener('keydown', handler)
   }, [isOpen, onClose])
 
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
-  const [hasTravel, setHasTravel] = useState(false)
-  const [travelDestination, setTravelDestination] = useState('')
-  const [travelChildren, setTravelChildren] = useState<Array<{ fullName: string; birthDate: string }>>([])
-  const [comment, setComment] = useState('')
+  const [startDate, setStartDate] = useState(initial?.startDate ?? '')
+  const [endDate, setEndDate] = useState(initial?.endDate ?? '')
+  const [vacationType, setVacationType] = useState<VacationType>(initial?.vacationType ?? VacationType.ANNUAL_PAID)
+  const [hasTravel, setHasTravel] = useState(initial?.hasTravel ?? false)
+  const [travelDestination, setTravelDestination] = useState(initial?.travelDestination ?? '')
+  const [travelChildren, setTravelChildren] = useState<Array<{ fullName: string; birthDate: string }>>(initial?.travelChildren ?? [])
+  const [comment, setComment] = useState(initial?.comment ?? '')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const [selectedSubstitutes, setSelectedSubstitutes] = useState<number[]>([])
+  const [selectedSubstitutes, setSelectedSubstitutes] = useState<number[]>(initial?.substituteIds ?? [])
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [employees, setEmployees] = useState<Array<{ id: number; first_name: string; last_name: string; middle_name?: string | null; position: string }>>([])
 
@@ -161,7 +176,7 @@ export function CreateVacationFormModal({
     setErrors(validationErrors)
     if (Object.keys(validationErrors).length > 0) return
 
-    const referenceDocument = referenceFile ? referenceFile.name : undefined
+    const referenceDocument = referenceFile ? referenceFile.name : initial?.referenceDocument
 
     onSubmit({
       startDate,
@@ -201,7 +216,7 @@ export function CreateVacationFormModal({
             <div className="p-2 rounded-xl bg-primary/10">
               <FileText className="h-5 w-5 text-primary" />
             </div>
-            <h2 className="text-xl font-bold">Создать заявку на отпуск</h2>
+            <h2 className="text-xl font-bold">{isEdit ? 'Изменить заявку на отпуск' : 'Создать заявку на отпуск'}</h2>
           </div>
           <button
             onClick={onClose}
@@ -560,11 +575,11 @@ export function CreateVacationFormModal({
                 !endDate ||
                 (countsInCounter && !hasEnoughDays) ||
                 (hasTravel && !canUseTravel) ||
-                (vacationType === VacationType.EDUCATIONAL && !referenceFile)
+                (vacationType === VacationType.EDUCATIONAL && !referenceFile && !initial?.referenceDocument)
               }
               className="flex-1"
             >
-              {loading ? 'Создание...' : 'Создать заявку'}
+              {isEdit ? (loading ? 'Сохранение...' : 'Сохранить изменения') : (loading ? 'Создание...' : 'Создать заявку')}
             </Button>
             </div>
           </div>

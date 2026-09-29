@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { fetchWithRetry } from '@/shared/lib/apiClient'
 
 export interface NotificationItem {
   id: number
@@ -13,7 +14,7 @@ export interface NotificationItem {
 }
 
 export async function fetchMyNotifications(page = 1, limit = 20): Promise<{ notifications: NotificationItem[]; total: number }> {
-  const res = await fetch(`${API_BASE_URL}/notifications/my?page=${page}&limit=${limit}`, {
+  const res = await fetchWithRetry(`${API_BASE_URL}/notifications/my?page=${page}&limit=${limit}`, {
     headers: getAuthHeaders(),
   })
   if (!res.ok) throw new Error('Ошибка загрузки')
@@ -21,7 +22,7 @@ export async function fetchMyNotifications(page = 1, limit = 20): Promise<{ noti
 }
 
 export async function fetchUnreadCount(): Promise<number> {
-  const res = await fetch(`${API_BASE_URL}/notifications/my/unread-count`, {
+  const res = await fetchWithRetry(`${API_BASE_URL}/notifications/my/unread-count`, {
     headers: getAuthHeaders(),
   })
   if (!res.ok) return 0
@@ -30,15 +31,17 @@ export async function fetchUnreadCount(): Promise<number> {
 }
 
 export async function markNotificationRead(id: number): Promise<void> {
-  await fetch(`${API_BASE_URL}/notifications/my/${id}/read`, {
+  const res = await fetchWithRetry(`${API_BASE_URL}/notifications/my/${id}/read`, {
     method: 'PATCH',
     headers: getAuthHeadersWithContentType(),
   })
+  if (!res.ok) throw new Error('Не удалось отметить уведомление прочитанным')
 }
 
 export async function markAllNotificationsRead(): Promise<void> {
-  await fetch(`${API_BASE_URL}/notifications/my/read-all`, {
+  const res = await fetchWithRetry(`${API_BASE_URL}/notifications/my/read-all`, {
     method: 'PATCH',
     headers: getAuthHeadersWithContentType(),
   })
+  if (!res.ok) throw new Error('Не удалось отметить уведомления прочитанными')
 }

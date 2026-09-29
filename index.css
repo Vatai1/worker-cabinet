@@ -414,3 +414,11 @@
 .react-flow .react-flow__node.hierarchy-group-node {
   pointer-events: none !important;
 }
+
+:root {
+  --impersonation-offset: 0px;
+}
+
+body.impersonating .fixed.inset-0 {
+  top: var(--impersonation-offset);
+}

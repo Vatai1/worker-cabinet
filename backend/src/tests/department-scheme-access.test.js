@@ -87,4 +87,11 @@ describe('Внутренняя схема отдела — права руков
     const hr = await call('PUT', `/hierarchy/department/${depts.side}`, 'admin@example.com', scheme)
     assert.strictEqual(hr.status, 200)
   })
+
+  it('managed=1 — только отделы, где пользователь руководитель, и нижестоящие', async () => {
+    const boss = await call('GET', '/hierarchy/my-departments?managed=1', `boss${SUFFIX}`)
+    assert.deepStrictEqual(boss.data.map((d) => d.id).sort((a, b) => a - b), [depts.x, depts.child, depts.grandchild].sort((a, b) => a - b))
+    const admin = await call('GET', '/hierarchy/my-departments?managed=1', 'admin@example.com')
+    assert.ok(!admin.data.some((d) => Object.values(depts).includes(d.id)))
+  })
 })

@@ -1239,7 +1239,11 @@ router.post('/requests', authenticateToken, async (req, res) => {
  *               vacationType: { $ref: '#/components/schemas/VacationType' }
  *               comment: { type: string }
  *               hasTravel: { type: boolean }
+ *               travelDestination: { type: string }
+ *               travelChildren: { type: array, items: { type: object } }
  *               referenceDocument: { type: string }
+ *               substitute_ids: { type: array, items: { type: integer }, description: 'Если передан — заменяет список замещающих' }
+ *     description: 'Только автор и только в статусе «На согласовании». Длительность, дата окончания и праздники считаются так же, как при создании; резерв на балансе переносится, табель обновляется'
  *     responses:
  *       200:
  *         description: Заявка обновлена
@@ -1249,15 +1253,25 @@ router.post('/requests', authenticateToken, async (req, res) => {
  */
 router.put('/requests/:id', authenticateToken, async (req, res) => {
   const client = await getClient()
-  
   try {
     const { id } = req.params
-    const { startDate, endDate, vacationType, comment, hasTravel, referenceDocument } = req.body
+    const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, travelChildren, referenceDocument, substitute_ids } = req.body
     const userId = req.user.id
 
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(startDate || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(endDate || ''))) {
+      return res.status(400).json({ error: 'Укажите даты отпуска' })
+    }
     if (!VALID_VACATION_TYPES.includes(vacationType)) {
-      await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Неверный тип отпуска' })
+    }
+    if (vacationType === 'educational' && !referenceDocument) {
+      return res.status(400).json({ error: 'Для учебного отпуска необходимо приложить справку' })
+    }
+    if (startDate < todayISO()) {
+      return res.status(400).json({ error: 'Нельзя перенести начало отпуска на прошедшую дату' })
+    }
+    if (endDate < startDate) {
+      return res.status(400).json({ error: 'Дата окончания не может быть раньше даты начала' })
     }
 
     await client.query('BEGIN')
@@ -1270,77 +1284,169 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
       [id], req
     )
     const requestResult = await client.query(rrText, rrValues)
-
     if (requestResult.rows.length === 0) {
       await client.query('ROLLBACK')
       return res.status(404).json({ error: 'Заявка не найдена' })
     }
-
     const request = requestResult.rows[0]
 
-    if (request.user_id !== userId && req.user.role === 'employee') {
+    if (request.user_id !== userId) {
       await client.query('ROLLBACK')
-      return res.status(403).json({ error: 'Доступ запрещён' })
+      return res.status(403).json({ error: 'Редактировать заявку может только её автор' })
     }
-
     if (request.status !== 'on_approval') {
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Можно редактировать только заявки на согласовании' })
     }
 
-    const start = new Date(startDate)
-    const end = new Date(endDate)
-    const newDuration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
+    let computedDates
+    try {
+      computedDates = await computeVacationDates(startDate, endDate)
+    } catch (err) {
+      res.locals.errorCause = err
+      await client.query('ROLLBACK')
+      if (err instanceof VacationValidationError) return res.status(400).json({ error: err.message })
+      throw err
+    }
+    const newDuration = computedDates.countedDays
+    const newEndDate = computedDates.endDate
+    const oldYear = extractYear(request.start_date)
+    const newYear = Number(startDate.slice(0, 4))
 
-    if (request.status === 'on_approval') {
-      const origYear = extractYear(request.start_date)
-      await client.query(`SELECT 1 FROM vacation_balances WHERE user_id = $1 AND year = $2${req.org ? ' AND organization_id = $3' : ''} FOR UPDATE`, req.org ? [request.user_id, origYear, req.org.org_id] : [request.user_id, origYear])
-      const { text: ubResText, values: ubResValues } = orgScopedQuery(
-        `UPDATE vacation_balances
-         SET reserved_days = reserved_days - $1 + $2
-         WHERE user_id = $3 AND year = $4`,
-        [request.duration, newDuration, request.user_id, origYear], req
-      )
-      await client.query(ubResText, ubResValues)
-    } else if (request.status === 'approved') {
-      const origYear = extractYear(request.start_date)
-      await client.query(`SELECT 1 FROM vacation_balances WHERE user_id = $1 AND year = $2${req.org ? ' AND organization_id = $3' : ''} FOR UPDATE`, req.org ? [request.user_id, origYear, req.org.org_id] : [request.user_id, origYear])
-      const { text: ubUseText, values: ubUseValues } = orgScopedQuery(
-        `UPDATE vacation_balances
-         SET used_days = used_days - $1 + $2
-         WHERE user_id = $3 AND year = $4`,
-        [request.duration, newDuration, request.user_id, origYear], req
-      )
-      await client.query(ubUseText, ubUseValues)
+    const orgBal = req.org ? ' AND organization_id = $3' : ''
+    const lockYears = [...new Set([oldYear, newYear])]
+    for (const y of lockYears) {
+      await client.query(`SELECT 1 FROM vacation_balances WHERE user_id = $1 AND year = $2${orgBal} FOR UPDATE`, req.org ? [userId, y, req.org.org_id] : [userId, y])
+    }
+    const { text: balText, values: balValues } = orgScopedQuery(
+      'SELECT available_days FROM vacation_balances WHERE user_id = $1 AND year = $2',
+      [userId, newYear], req
+    )
+    const balance = (await client.query(balText, balValues)).rows[0]
+    const availableForEdit = (balance?.available_days ?? 0) + (newYear === oldYear ? request.duration : 0)
+    if (!balance || availableForEdit < newDuration) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Недостаточно дней на балансе', available: availableForEdit, required: newDuration })
     }
 
-    const { text: vrUpdtText, values: vrUpdtValues } = req.org
-      ? { text: `UPDATE vacation_requests
-       SET start_date = $1, end_date = $2, duration = $3, vacation_type_id = (SELECT id FROM vacation_types WHERE code = $4 AND organization_id = $9), comment = $5, has_travel = $6, reference_document = $7
-       WHERE id = $8 AND organization_id = $9
-       RETURNING *`, values: [startDate, endDate, newDuration, vacationType, comment, hasTravel || false, referenceDocument || null, id, req.org.org_id] }
-      : { text: `UPDATE vacation_requests
-       SET start_date = $1, end_date = $2, duration = $3, vacation_type_id = (SELECT id FROM vacation_types WHERE code = $4), comment = $5, has_travel = $6, reference_document = $7
-       WHERE id = $8
-       RETURNING *`, values: [startDate, endDate, newDuration, vacationType, comment, hasTravel || false, referenceDocument || null, id] }
-    const result = await client.query(vrUpdtText, vrUpdtValues)
+    if (hasTravel) {
+      const { text: ptText, values: ptValues } = orgScopedQuery(
+        `SELECT 1 FROM vacation_requests vr
+         JOIN request_statuses rs ON rs.id = vr.status_id
+         WHERE vr.user_id = $1 AND vr.id <> $2 AND vr.has_travel = true AND rs.code IN ('on_approval')
+         LIMIT 1`,
+        [userId, id], req
+      )
+      if ((await client.query(ptText, ptValues)).rows.length > 0) {
+        await client.query('ROLLBACK')
+        return res.status(409).json({ error: 'Уже есть другая заявка с проездом на согласовании' })
+      }
+      if (!travelDestination || !String(travelDestination).trim()) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'Укажите город проезда' })
+      }
+      for (const child of Array.isArray(travelChildren) ? travelChildren : []) {
+        if (!child.fullName || !String(child.fullName).trim()) {
+          await client.query('ROLLBACK')
+          return res.status(400).json({ error: 'Укажите ФИО ребёнка' })
+        }
+        if (!child.birthDate) {
+          await client.query('ROLLBACK')
+          return res.status(400).json({ error: 'Укажите дату рождения ребёнка' })
+        }
+      }
+    }
+
+    const { text: ovText, values: ovValues } = orgScopedQuery(
+      `SELECT vr.id FROM vacation_requests vr
+        JOIN request_statuses rs ON vr.status_id = rs.id
+        WHERE vr.user_id = $1 AND vr.id <> $4
+        AND rs.code IN ('on_approval', 'approved')
+        AND vr.start_date <= $3 AND vr.end_date >= $2`,
+      [userId, startDate, newEndDate, id], req
+    )
+    if ((await client.query(ovText, ovValues)).rows.length > 0) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Пересечение с существующей заявкой' })
+    }
+
+    const { text: relText, values: relValues } = orgScopedQuery(
+      'UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
+      [request.duration, userId, oldYear], req
+    )
+    await client.query(relText, relValues)
+    const { text: resText, values: resValues } = orgScopedQuery(
+      'UPDATE vacation_balances SET reserved_days = reserved_days + $1 WHERE user_id = $2 AND year = $3',
+      [newDuration, userId, newYear], req
+    )
+    await client.query(resText, resValues)
+
+    const children = hasTravel && Array.isArray(travelChildren) ? travelChildren : []
+    const typeOrg = req.org ? ' AND organization_id = $13' : ''
+    const result = await client.query(
+      `UPDATE vacation_requests
+       SET start_date = $1, end_date = $2, duration = $3,
+           vacation_type_id = (SELECT id FROM vacation_types WHERE code = $4${typeOrg} LIMIT 1),
+           comment = $5, has_travel = $6, travel_destination = $7, travel_children = $8, travel_children_count = $9,
+           reference_document = $10, updated_at = NOW()
+       WHERE id = $11 AND user_id = $12
+       RETURNING *`,
+      [
+        startDate, newEndDate, newDuration, vacationType, comment ?? null, !!hasTravel,
+        hasTravel ? String(travelDestination).trim() : null, JSON.stringify(children), children.length,
+        referenceDocument || null, id, userId, ...(req.org ? [req.org.org_id] : []),
+      ]
+    )
+    const updated = result.rows[0]
+
+    await clearVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req)
+    await fillVacationTimesheetEntries(client, userId, updated.start_date, updated.end_date, req)
+
+    let addedSubs = []
+    let removedSubs = []
+    if (Array.isArray(substitute_ids)) {
+      const wanted = [...new Set(substitute_ids.map(Number).filter((n) => Number.isInteger(n) && n !== userId))]
+      const current = (await client.query('SELECT substitute_user_id FROM vacation_substitutions WHERE vacation_request_id = $1', [id])).rows.map((r) => r.substitute_user_id)
+      addedSubs = wanted.filter((s) => !current.includes(s))
+      removedSubs = current.filter((s) => !wanted.includes(s))
+      if (removedSubs.length > 0) {
+        await client.query('DELETE FROM vacation_substitutions WHERE vacation_request_id = $1 AND substitute_user_id = ANY($2)', [id, removedSubs])
+      }
+      for (const subId of addedSubs) {
+        await client.query(
+          `INSERT INTO vacation_substitutions (vacation_request_id, substitute_user_id, assigned_by, organization_id)
+           VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+          [id, subId, userId, currentOrgId(req)]
+        )
+      }
+    }
 
     await client.query('COMMIT')
 
-    const fullResult = await client.query(
+    if (addedSubs.length > 0 || removedSubs.length > 0) {
+      const empName = await getEmpName(userId)
+      const payload = { requestId: Number(id), employeeName: empName, startDate: fmtDate(updated.start_date), endDate: fmtDate(updated.end_date), link: '/vacation' }
+      for (const subId of addedSubs) {
+        notify({ userId: subId, type: 'vacation_substitution', data: payload }).catch((err) => console.warn(`[NOTIFY] substitute ${subId}: ${err.message}`))
+      }
+      for (const subId of removedSubs) {
+        notify({ userId: subId, type: 'vacation_substitution_removed', data: payload }).catch((err) => console.warn(`[NOTIFY] substitute removed ${subId}: ${err.message}`))
+      }
+    }
+
+    const fullResult = await query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
        FROM vacation_requests vr
        JOIN users u ON vr.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1${req.org ? ' AND vr.organization_id = $2' : ''}`,
-      req.org ? [id, req.org.org_id] : [id]
+       WHERE vr.id = $1`,
+      [id]
     )
-
-    res.json(fullResult.rows[0])
+    res.json({ ...fullResult.rows[0], returnDate: addDaysISO(updated.end_date, 1), holidaysCount: computedDates.holidaysCount })
     notifyVacationChanged(req, id, 'updated')
   } catch (error) {
     res.locals.errorCause = error
-    await client.query('ROLLBACK')
+    await client.query('ROLLBACK').catch(() => {})
     res.status(500).json({ error: 'Не удалось обновить заявку на отпуск' })
   } finally {
     client.release()

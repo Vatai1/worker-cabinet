@@ -1,6 +1,7 @@
 import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { asyncHandler, ValidationError } from '../middleware/errors.js'
 import { uploadAvatar } from '../middleware/upload.js'
 import { uploadToS3, getS3FileUrl, deleteFromS3, S3_ENDPOINT, S3_BUCKET, S3_PUBLIC_URL } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
@@ -552,6 +553,44 @@ router.put('/bulk-role', authenticateToken, authorizeRoles('hr', 'admin'), async
     res.status(500).json({ error: 'Failed to update role' })
   }
 })
+
+/**
+ * @swagger
+ * /users/bulk-position:
+ *   put:
+ *     tags: [Users]
+ *     summary: Массовое изменение должности (HR/admin)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userIds, position]
+ *             properties:
+ *               userIds: { type: array, items: { type: integer } }
+ *               position: { type: string }
+ *     responses:
+ *       200:
+ *         description: Должности обновлены
+ */
+router.put('/bulk-position', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+  const { userIds, position } = req.body
+  const ids = Array.isArray(userIds) ? [...new Set(userIds.map(Number).filter(Number.isInteger))] : []
+  if (ids.length === 0) throw new ValidationError('Выберите хотя бы одного пользователя')
+  const value = typeof position === 'string' ? position.trim() : ''
+  if (!value) throw new ValidationError('Укажите должность')
+  if (value.length > 255) throw new ValidationError('Слишком длинное название должности')
+
+  if (req.org) {
+    const members = await query('SELECT user_id FROM user_organizations WHERE org_id = $1 AND user_id = ANY($2)', [currentOrgId(req), ids])
+    if (members.rows.length !== ids.length) throw new ValidationError('Некоторые сотрудники не состоят в этом учреждении')
+  }
+
+  const result = await query('UPDATE users SET position = $1 WHERE id = ANY($2)', [value, ids])
+  res.json({ success: true, updated: result.rowCount })
+}))
 
 // Upload current user avatar
 /**

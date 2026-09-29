@@ -5,6 +5,7 @@ const TYPE_LABELS = {
   vacation_substitution_removed: 'Замещение отменено',
   bug_report_new: 'Баг-репорт',
   bug_report_update: 'Статус баг-репорта',
+  bug_report_reply: 'Ответ на баг-репорт',
   document_assigned: 'Документ для ознакомления',
   survey_assigned: 'Новый опрос',
   onboarding_task: 'Задача онбординга',
@@ -27,6 +28,8 @@ function buildBody(type, data) {
       return d.author || ''
     case 'bug_report_update':
       return STATUS_LABELS[d.status] || d.status || ''
+    case 'bug_report_reply':
+      return d.message || ''
     case 'document_assigned':
     case 'survey_assigned':
     case 'onboarding_task':

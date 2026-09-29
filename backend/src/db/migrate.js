@@ -1626,6 +1626,9 @@ async function runMigrations() {
       )
     `).catch(e => console.log('  - bug_reports:', e.message))
     console.log('  ✓ bug_reports')
+    await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS user_reply TEXT').catch(() => {})
+    await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS user_reply_at TIMESTAMPTZ').catch(() => {})
+    await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS user_reply_by INTEGER REFERENCES users(id) ON DELETE SET NULL').catch(() => {})
 
     console.log('Creating notification tables...')
     await db.query(`

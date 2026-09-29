@@ -23,7 +23,7 @@ import { DepartmentBalanceTable } from '@/modules/vacation/components/Department
 import { VacationIntroModal } from '@/modules/vacation/components/VacationIntroModal'
 import { VacationTransferModal } from '@/modules/vacation/components/modals/VacationTransferModal'
 import { VacationRequestStatus, VacationType, VACATION_TYPES } from '@/shared/types'
-import type { VacationRequest, VacationBalance, VacationValidationError, VacationEmployee } from '@/shared/types'
+import type { VacationRequest, VacationBalance, VacationValidationError, VacationEmployee, VacationFormData } from '@/shared/types'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { apiGet } from '@/shared/lib/apiClient'
@@ -36,8 +36,9 @@ import { getCookie, setCookie } from '@/shared/lib/cookies'
 import {
   ChevronLeft, ChevronRight, ChevronDown, FileText, Clock, CheckCircle2, CheckCircle,
   UserCheck, Search, RotateCcw, XCircle, PieChart,
-  Calendar as CalendarIcon, Lightbulb, HelpCircle, AlertTriangle, Plane,
+  Calendar as CalendarIcon, Lightbulb, HelpCircle, AlertTriangle, Plane, Pencil,
 } from 'lucide-react'
+import { CreateVacationFormModal } from '@/modules/vacation/components/modals/CreateVacationFormModal'
 import { PageBanner } from '@/shared/components/PageBanner'
 
 const VACATION_INTRO_COOKIE = 'vacation_intro_seen'
@@ -105,6 +106,8 @@ export function Vacation() {
   } = useVacationStore()
 
   const [balance, setBalance] = useState<VacationBalance | null>(null)
+  const [editingRequest, setEditingRequest] = useState<VacationRequest | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
   const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null)
   const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null)
   const [showCreateFromCalendar, setShowCreateFromCalendar] = useState(false)
@@ -422,6 +425,23 @@ export function Vacation() {
     }
   }
 
+  const handleEditSubmit = async (data: VacationFormData) => {
+    if (!user || !editingRequest) return
+    setSavingEdit(true)
+    try {
+      await vacationApi.updateRequest(editingRequest.id, data)
+      setEditingRequest(null)
+      fetchUserRequests(user.id)
+      reloadRequests()
+      fetchBalance(user.id, year).then(setBalance)
+      toast.success('Заявка изменена')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   const handleCancelClose = () => {
     setShowCancelModal(false)
     setCancellingRequestId(null)
@@ -643,6 +663,27 @@ export function Vacation() {
     }
   }
 
+  const [managedDeptIds, setManagedDeptIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (!user?.id) return
+    apiGet<Array<{ id: number }>>('/hierarchy/my-departments?managed=1')
+      .then(rows => setManagedDeptIds(new Set(rows.map(d => String(d.id)))))
+      .catch(() => setManagedDeptIds(new Set()))
+  }, [user?.id, currentOrgId])
+
+  const historyRequests = useMemo(() => {
+    const myDept = user?.departmentId != null ? String(user.departmentId) : null
+    const byId = new Map(currentUserRequests.map(r => [r.id, r]))
+    departmentRequests.forEach(r => {
+      const dept = r.departmentId != null ? String(r.departmentId) : null
+      const inMyDepartment = myDept !== null && dept === myDept
+      const inManagedDepartment = dept !== null && managedDeptIds.has(dept)
+      const iManage = String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id
+      if ((inMyDepartment || inManagedDepartment || iManage) && !byId.has(r.id)) byId.set(r.id, r)
+    })
+    return [...byId.values()]
+  }, [currentUserRequests, departmentRequests, managedDeptIds, user?.departmentId, user?.id])
+
   const calendarRequests = useMemo(() => {
     const base = calendarScope === 'mine'
       ? currentUserRequests
@@ -744,6 +785,7 @@ export function Vacation() {
   }, [myRequests, expandedRequestId])
 
   const getReviewerName = (request: VacationRequest) => {
+    if (request.status !== VacationRequestStatus.APPROVED && request.status !== VacationRequestStatus.REJECTED) return undefined
     const entry = [...(request.statusHistory || [])].reverse().find((h) => h.status === request.status)
     return entry?.changedByName
   }
@@ -1228,7 +1270,7 @@ export function Vacation() {
                                     </div>
                                     {reviewerName && (
                                       <div className="text-sm">
-                                        <span className="text-muted-foreground">Согласовал: </span>
+                                        <span className="text-muted-foreground">{request.status === VacationRequestStatus.REJECTED ? 'Отклонил: ' : 'Согласовал: '}</span>
                                         {reviewerName}
                                       </div>
                                     )}
@@ -1310,6 +1352,17 @@ export function Vacation() {
                                           >
                                             <UserCheck className="w-4 h-4 mr-1" />
                                             Добавить замещающего
+                                          </Button>
+                                        )}
+                                        {request.status === VacationRequestStatus.ON_APPROVAL && request.userId === user?.id && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={(e) => { e.stopPropagation(); setEditingRequest(request) }}
+                                            disabled={loading}
+                                          >
+                                            <Pencil className="w-4 h-4 mr-1" />
+                                            Изменить
                                           </Button>
                                         )}
                                         <Button
@@ -1548,7 +1601,7 @@ export function Vacation() {
 
       {activeTab === 'history' && (
         <Card className="overflow-hidden">
-          <VacationHistoryList requests={isManager ? departmentRequests : currentUserRequests} />
+          <VacationHistoryList requests={historyRequests} />
         </Card>
       )}
 
@@ -1562,6 +1615,36 @@ export function Vacation() {
           loading={loading}
           intersectionWarnings={intersectionWarnings}
           onTransfer={detailRequest && user?.id === detailRequest?.userId && detailRequest?.status === VacationRequestStatus.APPROVED ? handleTransferClick : undefined}
+        />
+      )}
+
+      {editingRequest && (
+        <CreateVacationFormModal
+          key={editingRequest.id}
+          isOpen
+          mode="edit"
+          initial={{
+            startDate: editingRequest.startDate.slice(0, 10),
+            endDate: editingRequest.endDate.slice(0, 10),
+            vacationType: editingRequest.vacationType,
+            hasTravel: editingRequest.hasTravel,
+            travelDestination: editingRequest.travelDestination,
+            travelChildren: editingRequest.travelChildren,
+            comment: editingRequest.comment,
+            referenceDocument: editingRequest.referenceDocument,
+            substituteIds: (editingRequest.substitutes ?? []).map((s) => s.id),
+          }}
+          onClose={() => setEditingRequest(null)}
+          onSubmit={handleEditSubmit}
+          loading={savingEdit}
+          balance={balance ? {
+            ...balance,
+            availableDays: balance.availableDays + (editingRequest.startDate.slice(0, 4) === String(year) ? editingRequest.duration : 0),
+          } : undefined}
+          userId={user?.id}
+          restrictionWarnings={restrictionWarningsCalendar}
+          onCheckRestrictions={handleCheckRestrictionsCalendar}
+          showSubstitutes
         />
       )}
 

@@ -9,7 +9,7 @@ import {
   LayoutDashboard, User, FileText, FolderKanban,
   LogOut, Menu, X, Users, Plane, Settings, Sun, Moon, Undo2,
   ChevronDown, Building2, ClipboardList,
-  Calendar, Bell, Crown, Bot, UserCheck,
+  Calendar, Bell, Crown, Bot,
   Send, UserPlus, Network, Briefcase,
   Key, ShieldCheck, Boxes, Settings2,
   Activity, Palette, Film,
@@ -53,7 +53,6 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
-  { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'vacation', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Заявления', href: '/requests', icon: FileText, section: 'Работа' },
@@ -66,12 +65,10 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
   { name: 'Табель', href: '/leader/timesheet', icon: Calendar, module: 'timesheet', section: 'Управление' },
-  { name: 'Рассмотреть заявки', href: '/manager', icon: FileText, section: 'Управление' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Управление' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Работа' },
   { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Работа' },
-  { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'vacation', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
@@ -104,7 +101,6 @@ const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Работа' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
-  { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'vacation', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
   ...getHRSectionItems(),
@@ -166,7 +162,6 @@ const getAdminNavigation = (userId?: string, isSuper?: boolean): NavItem[] => [
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Работа' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
-  { name: 'Мои замещения', href: '/vacation/my-substitutions', icon: UserCheck, module: 'vacation', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
   ...(isSuper ? getAdminSettingsItems('/admin/global', 'Глобальные настройки', false) : []),
@@ -334,7 +329,7 @@ export function Sidebar() {
       )}
 
       <aside className={cn(
-        'fixed left-3 top-3 bottom-3 z-50 flex w-[272px] flex-col overflow-hidden rounded-2xl border shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
+        'fixed left-3 top-[calc(0.75rem_+_var(--impersonation-offset))] bottom-3 z-50 flex w-[272px] flex-col overflow-hidden rounded-2xl border shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]',
         isCrctSidebar
           ? 'border-sidebar-border bg-sidebar-bg sidebar-crct'
           : 'border-border/60 bg-card/80 backdrop-blur-xl sidebar-legacy',

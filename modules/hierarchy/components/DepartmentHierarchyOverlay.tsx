@@ -51,9 +51,10 @@ interface Props {
   departmentName: string
   departments: Department[]
   onClose: () => void
+  headerExtra?: React.ReactNode
 }
 
-export function DepartmentHierarchyOverlay({ departmentId, departmentName, departments, onClose }: Props) {
+export function DepartmentHierarchyOverlay({ departmentId, departmentName, departments, onClose, headerExtra }: Props) {
   const { darkMode } = useUIStore()
   const [hierarchyLoading, setHierarchyLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -452,6 +453,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
         <span className="text-sm font-semibold">{departmentName}</span>
         <div className="ml-auto flex items-center gap-2">
           {error && <span className="text-xs text-destructive">{error}</span>}
+          {headerExtra}
           <HierarchyTagsToggle />
           {savedLabel && <span className="text-xs text-green-600 dark:text-green-400">Сохранено</span>}
           {canEdit ? (

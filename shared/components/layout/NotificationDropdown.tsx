@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { Bell, CheckCheck } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
@@ -17,6 +18,7 @@ const TYPE_LABELS: Record<string, string> = {
   vacation_substitution_removed: 'Замещение отменено',
   bug_report_new: 'Баг-репорт',
   bug_report_update: 'Статус баг-репорта',
+  bug_report_reply: 'Ответ на баг-репорт',
   document_assigned: 'Документ для ознакомления',
   survey_assigned: 'Новый опрос',
   onboarding_task: 'Задача онбординга',
@@ -79,7 +81,12 @@ export function NotificationDropdown({ unreadCount, onUnreadCountChange }: Notif
   }
 
   const handleMarkAllRead = async () => {
-    await markAllNotificationsRead()
+    try {
+      await markAllNotificationsRead()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Не удалось отметить уведомления прочитанными')
+      return
+    }
     setItems((prev) => prev.map((it) => ({ ...it, read_at: it.read_at || new Date().toISOString() })))
     onUnreadCountChange(0)
   }

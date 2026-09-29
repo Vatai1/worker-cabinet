@@ -179,7 +179,7 @@ function UserPickerModal({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{fullName}</p>
-                      <p className="text-xs text-muted-foreground truncate">{u.position || '—'}</p>
+                      <p className="text-xs leading-snug text-muted-foreground break-words">{u.position || '—'}</p>
                     </div>
                   </label>
                 )

@@ -174,7 +174,7 @@ try {
 Each role has its own navigation function (`getEmployeeNavigation`, `getManagerNavigation`, `getHRNavigation`). When adding items to one role, verify all other roles also have the equivalent items where appropriate. The current expected items per role:
 
 - **employee**: Дашборд, Отпуск, Опросы, Работники, Отделы, Проекты, Профиль, Заявления, Документы, Уведомления
-- **manager**: Дашборд, Профиль, Работники, Отделы, Проекты, Рассмотреть заявки, Отпуск, Табель, Опросы, Документы, Уведомления
+- **manager**: Дашборд, Профиль, Работники, Отделы, Проекты, Отпуск, Табель, Опросы, Документы, Уведомления
 - **hr/admin**: Дашборд, Профиль, Иерархия, HR (Опросы, Онбординг, Отпуск, Справочники, Табель), Мои опросы, Отпуск, Работники, Отделы, Проекты, Документы, Уведомления
 - **onboarding**: Онбординг, Работники, Отделы
 

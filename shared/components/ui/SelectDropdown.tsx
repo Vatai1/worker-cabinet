@@ -40,13 +40,14 @@ export function SelectDropdown({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        title={label}
         className={cn(selectClass, 'flex min-w-[140px] items-center justify-between gap-2 text-left cursor-pointer', className)}
       >
         <span className="truncate">{label}</span>
         <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="absolute z-20 mt-1.5 max-h-64 w-60 overflow-y-auto rounded-[10px] border border-border bg-card p-1.5 shadow-lg">
+        <div className="absolute z-20 mt-1.5 max-h-72 w-max min-w-full max-w-[min(420px,calc(100vw-2rem))] overflow-y-auto rounded-[10px] border border-border bg-card p-1.5 shadow-lg sm:min-w-[15rem]">
           {options.map((o) => {
             const active = o.value === value
             return (
@@ -55,7 +56,7 @@ export function SelectDropdown({
                 type="button"
                 onClick={() => { onChange(o.value); setOpen(false) }}
                 className={cn(
-                  'block w-full truncate rounded-[8px] px-2.5 py-1.5 text-left text-[13px] hover:bg-muted',
+                  'block w-full whitespace-normal break-words rounded-[8px] px-2.5 py-1.5 text-left text-[13px] leading-snug hover:bg-muted',
                   active ? 'font-semibold text-primary' : 'text-foreground'
                 )}
               >

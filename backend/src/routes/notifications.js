@@ -53,7 +53,7 @@ const router = express.Router()
  *                       id: { type: integer }
  *                       type:
  *                         type: string
- *                         enum: [vacation_created, vacation_status_changed, vacation_substitution, vacation_substitution_removed, bug_report_new, bug_report_update, document_assigned, survey_assigned, onboarding_task, mailing, generic]
+ *                         enum: [vacation_created, vacation_status_changed, vacation_substitution, vacation_substitution_removed, bug_report_new, bug_report_update, bug_report_reply, document_assigned, survey_assigned, onboarding_task, mailing, generic]
  *                       channel: { type: string }
  *                       status: { type: string }
  *                       sent_at: { type: string, nullable: true }
