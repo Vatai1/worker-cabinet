@@ -42,11 +42,22 @@ export class World {
   users: Record<string, FixtureUser> = {}
   departments: Record<string, number> = {}
 
-  constructor(readonly ns: string, readonly orgId: number) {}
+  orgId = 0
+
+  constructor(readonly ns: string, private readonly org: number | string) {}
 
   async init() {
     this.api = await pwRequest.newContext()
     this.adminToken = await this.login('admin@example.com')
+    if (typeof this.org === 'number') {
+      this.orgId = this.org
+      return
+    }
+    const res = await this.api.get(`${API}/organizations`, { headers: { Authorization: `Bearer ${this.adminToken}` } })
+    const orgs = (await res.json()) as Array<{ id: number; slug: string }>
+    const found = orgs.find((o) => o.slug === this.org)
+    if (!found) throw new Error(`учреждение ${this.org} не найдено среди учреждений администратора`)
+    this.orgId = found.id
   }
 
   headers(token = this.adminToken) {

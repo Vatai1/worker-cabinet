@@ -7,14 +7,14 @@ import {
 
 test.describe.configure({ mode: 'serial' })
 
-const ORG_ID = 3
+const ORG_SLUG = 'mindit'
 const PARENT_DEPT = 'E2E ВХ Управление'
 const CHILD_DEPT = 'E2E ВХ Отдел'
 const APPROVES = 'Родитель согласовывает отпуска подчинённых'
 const PARENT_SEES = 'Родитель видит отпуска подчинённых'
 const BLOCKED_TEXT = 'Подача заявок на отпуск для вашего отдела временно заблокирована HR'
 
-const world = new World('vh', ORG_ID)
+const world = new World('vh', ORG_SLUG)
 let canvasSnapshot: Awaited<ReturnType<World['hierarchySnapshot']>> | null = null
 
 const R1 = { s: iso(workdayOffset(40)), e: iso(workdayOffset(40) + 2) }

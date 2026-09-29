@@ -1894,6 +1894,7 @@ async function runMigrations() {
     await migratePushSubscriptions(db)
     await migrateCalendarHolidays(db)
     await migrateInstructionVideos(db)
+    await migrateMembershipDepartmentSync(db)
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
@@ -2080,16 +2081,6 @@ async function migrateApprovalHierarchy(db) {
   } catch (e) {
     console.log('  - approval hierarchy:', e.message)
   }
-  try {
-    const synced = await db.query(`
-      UPDATE user_organizations uo SET department_id = u.department_id
-      FROM users u JOIN departments d ON d.id = u.department_id
-      WHERE uo.user_id = u.id AND uo.org_id = d.organization_id AND uo.department_id IS DISTINCT FROM u.department_id
-    `)
-    if (synced.rowCount > 0) console.log(`  ✓ user_organizations.department_id synced for ${synced.rowCount} memberships`)
-  } catch (e) {
-    console.log('  - membership department sync:', e.message)
-  }
 }
 
 async function migrateTravelChildren(db) {
@@ -2218,5 +2209,18 @@ async function migrateVacationDayRules(db) {
     console.log('  ✓ vacation_day_rules ready')
   } catch (e) {
     console.log('  - vacation_day_rules:', e.message)
+  }
+}
+
+async function migrateMembershipDepartmentSync(db) {
+  try {
+    const synced = await db.query(`
+      UPDATE user_organizations uo SET department_id = u.department_id
+      FROM users u JOIN departments d ON d.id = u.department_id
+      WHERE uo.user_id = u.id AND uo.org_id = d.organization_id AND uo.department_id IS DISTINCT FROM u.department_id
+    `)
+    if (synced.rowCount > 0) console.log(`  ✓ user_organizations.department_id synced for ${synced.rowCount} memberships`)
+  } catch (e) {
+    console.log('  - membership department sync:', e.message)
   }
 }

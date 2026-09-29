@@ -317,6 +317,8 @@ generate_test_env() {
         echo "JWT_SECRET=${TEST_JWT_SECRET}"
         echo "KEYCLOAK_URL="
         echo "RABBITMQ_URL="
+        (cd backend && node --input-type=module -e "import webpush from 'web-push'; const k = webpush.generateVAPIDKeys(); console.log('VAPID_PUBLIC_KEY=' + k.publicKey); console.log('VAPID_PRIVATE_KEY=' + k.privateKey)")
+        echo "VAPID_SUBJECT=mailto:e2e@example.com"
     } > "$TEST_ENV_FILE" || return 1
     local var val
     for var in S3_ENDPOINT S3_PUBLIC_URL S3_ACCESS_KEY S3_SECRET_KEY S3_BUCKET; do
