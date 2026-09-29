@@ -297,8 +297,9 @@ router.get('/:id', async (req, res) => {
     const empResult = await query(
       `SELECT id, first_name, last_name, middle_name FROM users
        WHERE department_id = $1 AND role IN ('employee', 'manager') ${excludeTest(req, 'users')}
+         AND (status <> 'inactive' OR id IN (SELECT employee_id FROM timesheet_entries WHERE timesheet_id = $2))
        ORDER BY last_name, first_name`,
-      [tsResult.rows[0].department_id]
+      [tsResult.rows[0].department_id, id]
     )
 
     const ts = tsResult.rows[0]

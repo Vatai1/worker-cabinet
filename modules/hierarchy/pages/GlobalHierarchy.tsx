@@ -25,6 +25,7 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { useUIStore } from '@/shared/store/uiStore'
+import { HierarchyTagsToggle } from '@/modules/hierarchy/components/HierarchyTagsToggle'
 import { nodeTypes as hierarchyNodeTypes, GroupNode, TextNode, TextInputModal, InstructionModal, HRHierarchy, ChildOrgNode, buildOrgOverlay, animateOrgReveal, ConfirmLeaveModal } from '@/modules/hierarchy/pages/HRHierarchy'
 
 interface OrgItem {
@@ -329,6 +330,7 @@ function OrgHierarchyViewer({ org, canEditOrg, autoEdit = false, onClose }: { or
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <HierarchyTagsToggle />
           {navStack.length > 0 && (
             <Button size="sm" variant="outline" onClick={goBack}>
               <ArrowLeft className="h-4 w-4 mr-1.5" />

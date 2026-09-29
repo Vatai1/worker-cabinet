@@ -1268,7 +1268,7 @@ router.get('/managers', authenticateToken, authorizeRoles('hr', 'admin'), asyncH
   const result = await query(
     `SELECT id, first_name, last_name, middle_name, position
      FROM users
-     WHERE role IN ('manager', 'admin')
+     WHERE role IN ('manager', 'admin') AND status <> 'inactive'
      ORDER BY last_name, first_name`
   )
   res.json(result.rows)

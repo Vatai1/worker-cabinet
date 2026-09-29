@@ -191,7 +191,7 @@ async function notifyVacationCreated(request, employeeId, req) {
   const hrResult = await query(
     `SELECT u.id FROM users u
      JOIN user_organizations uo ON uo.user_id = u.id
-     WHERE u.role = 'hr' AND uo.is_active = true${orgClause}`,
+     WHERE u.role = 'hr' AND u.status <> 'inactive' AND uo.is_active = true${orgClause}`,
     req.org ? [req.org.org_id] : []
   )
   for (const row of hrResult.rows) {
@@ -363,6 +363,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       params.push(req.org.org_id)
     }
     whereClause += ' ' + excludeTest(req, 'u')
+    if (!userId) whereClause += " AND u.status <> 'inactive'"
 
     if (scope === 'connections') {
       whereClause += ` AND (${userParentSeesChildVacations(params.length + 1)} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userChildSeesParentVacations(params.length + 1)} OR ${childSeesParentVacations(params.length + 1)})`
@@ -2698,7 +2699,7 @@ router.get('/restrictions/scope-employees', authenticateToken, authorizeRoles('m
        FROM users u
        ${orgJoin}
        LEFT JOIN departments d ON u.department_id = d.id
-       WHERE 1=1 ${excludeTest(req, 'u')} ${scopeClause}
+       WHERE u.status <> 'inactive' ${excludeTest(req, 'u')} ${scopeClause}
        ORDER BY u.last_name, u.first_name`,
       params
     )
@@ -3009,7 +3010,8 @@ router.get('/restrictions/violations', authenticateToken, async (req, res) => {
     const { text: reqText, values: reqValues } = orgScopedQuery(
       `SELECT vr.user_id, vr.start_date, vr.end_date FROM vacation_requests vr
        JOIN request_statuses rs ON vr.status_id = rs.id
-       WHERE vr.user_id = ANY($1) AND rs.code IN ('on_approval', 'approved') AND vr.end_date >= $2`,
+       WHERE vr.user_id = ANY($1) AND rs.code IN ('on_approval', 'approved') AND vr.end_date >= $2
+         AND vr.user_id IN (SELECT id FROM users WHERE status <> 'inactive')`,
       [allMemberIds, todayISO()], req
     )
     const [reqRows, nameRows, tagRows] = await Promise.all([
@@ -3437,7 +3439,8 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
            JOIN request_statuses rs ON vr.status_id = rs.id
            WHERE vr.user_id = ANY($1)
            AND rs.code IN ('on_approval', 'approved')
-           AND vr.start_date <= $3 AND vr.end_date >= $2`,
+           AND vr.start_date <= $3 AND vr.end_date >= $2
+           AND vr.user_id IN (SELECT id FROM users WHERE status <> 'inactive')`,
         [allIds, startDate, endDate], req
       )
       const [overlapResult, namesResult] = await Promise.all([
@@ -3562,7 +3565,7 @@ router.post('/requests/:id/substitutes', authenticateToken, async (req, res) => 
     const validUsers = await query(
       `SELECT u.id FROM users u
        JOIN user_organizations uo ON uo.user_id = u.id AND uo.is_active = true
-       WHERE u.id = ANY($1)${req.org ? ' AND uo.org_id = $2' : ''}`,
+       WHERE u.id = ANY($1) AND u.status <> 'inactive'${req.org ? ' AND uo.org_id = $2' : ''}`,
       req.org ? [substitute_ids, req.org.org_id] : [substitute_ids]
     )
     const validIds = validUsers.rows.map((r) => r.id)

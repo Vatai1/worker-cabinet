@@ -15,6 +15,7 @@ import '@xyflow/react/dist/style.css'
 import { ChevronDown, Network, Pencil, X } from 'lucide-react'
 import { apiGet } from '@/shared/lib/apiClient'
 import { DepartmentSchemeModal } from '@/modules/hierarchy/components/DepartmentSchemeModal'
+import { HierarchyTagsToggle } from '@/modules/hierarchy/components/HierarchyTagsToggle'
 import { useUIStore } from '@/shared/store/uiStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
@@ -126,6 +127,7 @@ export function MyHierarchy() {
           <span className="truncate text-[15px] font-semibold">Иерархия организации</span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <HierarchyTagsToggle />
           {myDepartments.length > 0 && (
             <div className="relative">
               <Button

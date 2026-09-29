@@ -30,7 +30,7 @@ async function enrichHierarchyData(data, orgId) {
       ? query(
           `SELECT d.id, d.name,
                   m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
-                  (SELECT COUNT(*) FROM users WHERE department_id = d.id) as employee_count
+                  (SELECT COUNT(*) FROM users WHERE department_id = d.id AND status <> 'inactive') as employee_count
            FROM departments d
            LEFT JOIN users m ON d.manager_id = m.id
            WHERE d.id = ANY($1::int[])`,
@@ -39,7 +39,8 @@ async function enrichHierarchyData(data, orgId) {
       : Promise.resolve({ rows: [] }),
     userIds.length
       ? query(
-          `SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, dep.name as department_name
+          `SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, u.status, dep.name as department_name,
+                  COALESCE((SELECT json_agg(sd.name ORDER BY sd.name) FROM user_skills us JOIN skills_dictionary sd ON us.skill_id = sd.id WHERE us.user_id = u.id), '[]') AS tags
            FROM users u
            LEFT JOIN departments dep ON u.department_id = dep.id
            WHERE u.id = ANY($1::int[])`,
@@ -50,8 +51,12 @@ async function enrichHierarchyData(data, orgId) {
   ])
   const deptById = new Map(deptResult.rows.map((r) => [r.id, r]))
   const userById = new Map(userResult.rows.map((r) => [r.id, r]))
+  const inactiveUserIds = new Set(userResult.rows.filter((r) => r.status === 'inactive').map((r) => r.id))
+  const hiddenNodeIds = new Set(
+    nodes.filter((n) => n.type === 'employee' && inactiveUserIds.has(Number(n.data?.id))).map((n) => n.id)
+  )
 
-  const enrichedNodes = nodes.map((n) => {
+  const enrichedNodes = nodes.filter((n) => !hiddenNodeIds.has(n.id)).map((n) => {
     if (n.type === 'department' && n.data?.id != null) {
       const fresh = deptById.get(Number(n.data.id))
       if (fresh) {
@@ -69,6 +74,7 @@ async function enrichHierarchyData(data, orgId) {
             middleName: fresh.middle_name,
             position: fresh.position,
             department: fresh.department_name ?? undefined,
+            tags: fresh.tags,
             vacation: vacationMap.get(Number(n.data.id)),
           },
         }
@@ -76,7 +82,10 @@ async function enrichHierarchyData(data, orgId) {
     }
     return n
   })
-  return { ...data, nodes: enrichedNodes }
+  const edges = hiddenNodeIds.size === 0
+    ? data.edges
+    : (data.edges ?? []).filter((e) => !hiddenNodeIds.has(e.source) && !hiddenNodeIds.has(e.target))
+  return { ...data, nodes: enrichedNodes, edges }
 }
 
 function buildAutoHierarchy(rows) {
@@ -548,7 +557,7 @@ router.get('/', authenticateToken, async (req, res) => {
                 pu.last_name as parent_user_last_name,
                 pu.middle_name as parent_user_middle_name,
                 pu.position as parent_user_position,
-                (SELECT COUNT(*) FROM users WHERE department_id = d.id ${excludeTest(req, 'users')}) as employee_count
+                (SELECT COUNT(*) FROM users WHERE department_id = d.id AND status <> 'inactive' ${excludeTest(req, 'users')}) as employee_count
          FROM departments d
          LEFT JOIN users m ON d.manager_id = m.id
          LEFT JOIN users pu ON d.parent_user_id = pu.id${targetOrgId ? ' WHERE d.organization_id = $1' : ''}

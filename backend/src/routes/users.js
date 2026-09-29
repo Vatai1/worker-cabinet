@@ -207,6 +207,9 @@ router.get('/search', authenticateToken, async (req, res) => {
         orgWhere += ' AND uo.is_active = true'
       }
     }
+    if (includeInactive !== 'true' && parseList(orgIsActive).length === 0 && parseList(status).length === 0) {
+      orgWhere += " AND u.status <> 'inactive'"
+    }
 
     let balanceJoin = ''
     if (year) {
@@ -400,7 +403,7 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
       ${orgJoin}
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN users m ON u.manager_id = m.id
-      WHERE 1=1${orgWhere} ${excludeTest(req, "u")}
+      WHERE u.status <> 'inactive'${orgWhere} ${excludeTest(req, "u")}
     `
 
     if (departmentId) {
@@ -804,7 +807,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     let subordinates = []
     if (user.role === 'manager' || user.role === 'hr' || user.role === 'admin') {
       const subordinatesResult = await query(
-        'SELECT id, first_name, last_name FROM users WHERE manager_id = $1',
+        "SELECT id, first_name, last_name FROM users WHERE manager_id = $1 AND status <> 'inactive'",
         [id]
       )
       subordinates = subordinatesResult.rows

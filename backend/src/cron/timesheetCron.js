@@ -34,7 +34,7 @@ async function addDayEntries(year, month, day) {
       await client.query('BEGIN')
 
       const empResult = await client.query(
-        `SELECT id FROM users WHERE department_id = $1 AND role IN ('employee', 'manager')`,
+        `SELECT id FROM users WHERE department_id = $1 AND role IN ('employee', 'manager') AND status <> 'inactive'`,
         [ts.department_id]
       )
       const employees = empResult.rows

@@ -20,7 +20,7 @@ export async function getVisibleColleagueIds(userId) {
        UNION SELECT manager_id FROM me WHERE manager_id IS NOT NULL AND emp_child_sees_parent
      )
      SELECT u.id FROM users u
-     WHERE u.department_id IN (SELECT id FROM visible_depts) OR u.id IN (SELECT id FROM visible_users)`,
+     WHERE u.status <> 'inactive' AND (u.department_id IN (SELECT id FROM visible_depts) OR u.id IN (SELECT id FROM visible_users))`,
     [userId]
   )
   return result.rows.map((r) => r.id)

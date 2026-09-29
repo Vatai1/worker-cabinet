@@ -43,6 +43,9 @@ import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { getErrorMessage, cn, personName, formatDate } from '@/shared/lib/utils'
 import { useUIStore } from '@/shared/store/uiStore'
+import { useHierarchyViewStore } from '@/modules/hierarchy/store/hierarchyViewStore'
+import { HierarchyTagsToggle } from '@/modules/hierarchy/components/HierarchyTagsToggle'
+import { MissingEmployees, EMPLOYEE_DRAG_ID } from '@/modules/hierarchy/components/MissingEmployees'
 
 const SaveSnapshotContext = createContext<() => void>(() => {})
 
@@ -55,6 +58,7 @@ interface DeptEmployee {
   departmentName?: string
   departmentId?: number
   managerId?: number | null
+  tags?: string[]
 }
 
 interface OrgMemberRow {
@@ -66,6 +70,7 @@ interface OrgMemberRow {
   department_id: number | null
   department_name: string | null
   manager_id: number | null
+  tags?: { id: number; name: string }[]
 }
 
 interface ChildOrgItem {
@@ -226,7 +231,8 @@ function DepartmentNode({ data, selected }: NodeProps) {
 }
 
 function EmployeeNode({ data, selected }: NodeProps) {
-  const d = data as { firstName: string; lastName: string; middleName?: string; position: string; department?: string; description?: string; color?: string; vacation?: { active: true; startDate: string; endDate: string; substitutes: string[] } }
+  const d = data as { firstName: string; lastName: string; middleName?: string; position: string; department?: string; description?: string; color?: string; tags?: string[]; vacation?: { active: true; startDate: string; endDate: string; substitutes: string[] } }
+  const showTags = useHierarchyViewStore((s) => s.showTags)
   const initials = `${d.firstName[0]}${d.lastName[0]}`
   const onVacation = d.vacation?.active
   const datesLabel = d.vacation ? `В отпуске с ${formatDate(d.vacation.startDate)} по ${formatDate(d.vacation.endDate)}` : ''
@@ -271,6 +277,13 @@ function EmployeeNode({ data, selected }: NodeProps) {
       {d.description && (
         <div className="px-3 pb-2.5 text-xs text-foreground/70 border-t border-border/50 pt-2 whitespace-pre-wrap break-words">
           {d.description}
+        </div>
+      )}
+      {showTags && d.tags && d.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 border-t border-border/50 px-3 pb-2 pt-1.5">
+          {d.tags.map((t) => (
+            <span key={t} className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary">{t}</span>
+          ))}
         </div>
       )}
       {HANDLES}
@@ -1760,6 +1773,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
             departmentName: u.department_name ?? undefined,
             departmentId: u.department_id ?? undefined,
             managerId: u.manager_id ?? null,
+            tags: (u.tags ?? []).map(t => t.name),
           })))
         }
       } catch {
@@ -1788,15 +1802,16 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     const byId = new Map(orgMembers.map(m => [m.id, m]))
     setNodes(nds => nds.map(n => {
       if (n.type !== 'employee') return n
-      const d = n.data as { id?: number; firstName?: string; lastName?: string; middleName?: string | null; position?: string; department?: string }
+      const d = n.data as { id?: number; firstName?: string; lastName?: string; middleName?: string | null; position?: string; department?: string; tags?: string[] }
       if (d?.id == null) return n
       const fresh = byId.get(d.id)
       if (!fresh) return n
+      const freshTags = fresh.tags ?? []
       if (d.firstName === fresh.first_name && d.lastName === fresh.last_name && d.middleName === fresh.middle_name &&
-        d.position === fresh.position && d.department === fresh.departmentName) return n
+        d.position === fresh.position && d.department === fresh.departmentName && (d.tags ?? []).join('|') === freshTags.join('|')) return n
       return {
         ...n,
-        data: { ...n.data, firstName: fresh.first_name, lastName: fresh.last_name, middleName: fresh.middle_name, position: fresh.position, department: fresh.departmentName },
+        data: { ...n.data, firstName: fresh.first_name, lastName: fresh.last_name, middleName: fresh.middle_name, position: fresh.position, department: fresh.departmentName, tags: freshTags },
       }
     }))
   }, [orgMembers, setNodes])
@@ -1998,6 +2013,14 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     const inst = rfInstanceRef.current
     if (!inst) return
     const position = inst.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    const employeeId = Number(e.dataTransfer.getData(EMPLOYEE_DRAG_ID))
+    if (type === 'employee' && employeeId) {
+      const emp = orgMembersRef.current.find(m => m.id === employeeId)
+      if (emp) {
+        placeEmployeeRef.current(emp, position)
+        return
+      }
+    }
     setPendingDrop({ type, position })
   }, [])
 
@@ -2046,6 +2069,35 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     ])
   }, [nodes, setNodes, saveSnapshot])
 
+  const orgMembersRef = useRef<DeptEmployee[]>([])
+  orgMembersRef.current = orgMembers
+
+  const placeEmployee = useCallback((emp: DeptEmployee, position?: { x: number; y: number }) => {
+    saveSnapshot()
+    setNodes(nds => {
+      const base = nds.filter(n => n.type !== 'organization')
+      const auto = {
+        x: base.length ? Math.max(...base.map(n => n.position?.x ?? 0)) + 260 : 0,
+        y: base.length ? Math.min(...base.map(n => n.position?.y ?? 0)) : 0,
+      }
+      return [...nds, {
+        id: `employee-${emp.id}-${Date.now()}`,
+        type: 'employee',
+        position: position ?? auto,
+        data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, tags: emp.tags ?? [], description: '' },
+      } as Node]
+    })
+  }, [setNodes, saveSnapshot])
+  const placeEmployeeRef = useRef(placeEmployee)
+  placeEmployeeRef.current = placeEmployee
+
+  const missingEmployees = useMemo(() => {
+    const onCanvas = new Set(
+      nodes.filter(n => n.type === 'employee').map(n => Number((n.data as { id?: number } | undefined)?.id))
+    )
+    return orgMembers.filter(m => !onCanvas.has(m.id))
+  }, [orgMembers, nodes])
+
   const handleSelectEmployee = (emp: DeptEmployee, description: string) => {
     if (!pendingDrop) return
     saveSnapshot()
@@ -2053,7 +2105,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       id: `employee-${emp.id}-${Date.now()}`,
       type: 'employee',
       position: pendingDrop.position,
-      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, description },
+      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, tags: emp.tags ?? [], description },
     } as Node])
     setPendingDrop(null)
   }
@@ -2248,7 +2300,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     saveSnapshot()
     setNodes(nds => nds.map(n => n.id === editingNode.id ? {
       ...n,
-      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, description },
+      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, tags: emp.tags ?? [], description },
     } : n))
     setEditingNode(null)
   }
@@ -2414,6 +2466,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
         </div>
         <div className="flex items-center gap-2">
           {savedLabel && <span className="text-xs text-green-600 dark:text-green-400">Сохранено</span>}
+          <HierarchyTagsToggle />
           {fullscreen && onBack && (
             <Button size="sm" variant="outline" onClick={() => runAfterLeaveGuarded(() => onBack())}>
               <ArrowLeft className="h-4 w-4 mr-1.5" />
@@ -2435,7 +2488,7 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
       {/* Body */}
       <div className="relative flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
         {/* Left panel */}
-        <div className="w-52 flex-shrink-0 border-r border-border p-4 space-y-3">
+        <div className="w-52 flex-shrink-0 overflow-y-auto overscroll-contain border-r border-border p-4 space-y-3">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             Элементы
           </p>
@@ -2559,6 +2612,8 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
               )}
             </div>
           )}
+
+          <MissingEmployees employees={missingEmployees} groupByDepartment onAdd={(e) => placeEmployee(e as DeptEmployee)} />
 
           <Button variant="outline" size="sm" className="w-full" onClick={() => setShowInstruction(true)}>
             <BookOpen className="h-4 w-4 mr-1.5" />

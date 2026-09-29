@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useRef } from 'react'
+﻿import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   ReactFlow,
   addEdge,
@@ -39,6 +39,8 @@ import {
   NODE_COLORS,
 } from '@/modules/hierarchy/pages/HRHierarchy'
 import type { Department, DeptEmployee } from '@/modules/hierarchy/pages/HRHierarchy'
+import { HierarchyTagsToggle } from '@/modules/hierarchy/components/HierarchyTagsToggle'
+import { MissingEmployees, EMPLOYEE_DRAG_ID } from '@/modules/hierarchy/components/MissingEmployees'
 
 type PendingDrop = { type: 'department' | 'employee' | 'text'; position: { x: number; y: number } }
 type ContextMenu = { nodeId: string; nodeType: 'department' | 'employee' | 'text'; x: number; y: number }
@@ -158,15 +160,16 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
     const byId = new Map(allEmployees.map(m => [m.id, m]))
     setNodes(nds => nds.map(n => {
       if (n.type !== 'employee') return n
-      const d = n.data as { id?: number; firstName?: string; lastName?: string; middleName?: string | null; position?: string; department?: string }
+      const d = n.data as { id?: number; firstName?: string; lastName?: string; middleName?: string | null; position?: string; department?: string; tags?: string[] }
       if (d?.id == null) return n
       const fresh = byId.get(d.id)
       if (!fresh) return n
+      const freshTags = fresh.tags ?? []
       if (d.firstName === fresh.first_name && d.lastName === fresh.last_name && d.middleName === fresh.middle_name &&
-        d.position === fresh.position && d.department === fresh.departmentName) return n
+        d.position === fresh.position && d.department === fresh.departmentName && (d.tags ?? []).join('|') === freshTags.join('|')) return n
       return {
         ...n,
-        data: { ...n.data, firstName: fresh.first_name, lastName: fresh.last_name, middleName: fresh.middle_name, position: fresh.position, department: fresh.departmentName },
+        data: { ...n.data, firstName: fresh.first_name, lastName: fresh.last_name, middleName: fresh.middle_name, position: fresh.position, department: fresh.departmentName, tags: freshTags },
       }
     }))
   }, [departments, setNodes])
@@ -212,6 +215,34 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
     e.dataTransfer.dropEffect = 'move'
   }, [])
 
+  const deptEmployees = useMemo<DeptEmployee[]>(() => {
+    const dept = departments.find(d => d.id === departmentId)
+    return (dept?.employees ?? []).map(e => ({ ...e, departmentName: dept?.name }))
+  }, [departments, departmentId])
+
+  const missingEmployees = useMemo(() => {
+    const onCanvas = new Set(
+      nodes.filter(n => n.type === 'employee').map(n => Number((n.data as { id?: number } | undefined)?.id))
+    )
+    return deptEmployees.filter(e => !onCanvas.has(e.id))
+  }, [deptEmployees, nodes])
+
+  const placeEmployee = useCallback((emp: DeptEmployee, position?: { x: number; y: number }) => {
+    saveSnapshot()
+    setNodes(nds => {
+      const auto = {
+        x: nds.length ? Math.max(...nds.map(n => n.position?.x ?? 0)) + 260 : 0,
+        y: nds.length ? Math.min(...nds.map(n => n.position?.y ?? 0)) : 0,
+      }
+      return [...nds, {
+        id: `employee-${emp.id}-${Date.now()}`,
+        type: 'employee',
+        position: position ?? auto,
+        data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, tags: emp.tags ?? [], description: '' },
+      } as Node]
+    })
+  }, [setNodes, saveSnapshot])
+
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const type = e.dataTransfer.getData('reactflow-type') as 'department' | 'employee'
@@ -219,8 +250,14 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
     const inst = rfInstanceRef.current
     if (!inst) return
     const position = inst.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    const employeeId = Number(e.dataTransfer.getData(EMPLOYEE_DRAG_ID))
+    const emp = type === 'employee' && employeeId ? deptEmployees.find(m => m.id === employeeId) : undefined
+    if (emp) {
+      placeEmployee(emp, position)
+      return
+    }
     setPendingDrop({ type, position })
-  }, [])
+  }, [deptEmployees, placeEmployee])
 
   const onNodeContextMenu: NodeMouseHandler = useCallback((e, node) => {
     e.preventDefault()
@@ -313,7 +350,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
       id: `employee-${emp.id}-${Date.now()}`,
       type: 'employee',
       position: pendingDrop.position,
-      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, description },
+      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, tags: emp.tags ?? [], description },
     } as Node])
     setPendingDrop(null)
   }
@@ -323,7 +360,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
     saveSnapshot()
     setNodes(nds => nds.map(n => n.id === editingNode.id ? {
       ...n,
-      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, description },
+      data: { id: emp.id, firstName: emp.first_name, lastName: emp.last_name, middleName: emp.middle_name, position: emp.position, department: emp.departmentName, tags: emp.tags ?? [], description },
     } : n))
     setEditingNode(null)
   }
@@ -415,6 +452,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
         <span className="text-sm font-semibold">{departmentName}</span>
         <div className="ml-auto flex items-center gap-2">
           {error && <span className="text-xs text-destructive">{error}</span>}
+          <HierarchyTagsToggle />
           {savedLabel && <span className="text-xs text-green-600 dark:text-green-400">Сохранено</span>}
           {canEdit ? (
             <Button size="sm" variant="outline" onClick={save} disabled={saving}>
@@ -433,7 +471,7 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
       <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
         {/* Left panel */}
         {canEdit && (
-        <div className="w-52 flex-shrink-0 border-r border-border p-4 space-y-3">
+        <div className="w-52 flex-shrink-0 overflow-y-auto overscroll-contain border-r border-border p-4 space-y-3">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             Элементы
           </p>
@@ -479,6 +517,8 @@ export function DepartmentHierarchyOverlay({ departmentId, departmentName, depar
               <div className="text-[10px] text-muted-foreground">Перетащите на холст</div>
             </div>
           </div>
+
+          <MissingEmployees employees={missingEmployees} onAdd={(e) => placeEmployee(e as DeptEmployee)} />
         </div>
         )}
 

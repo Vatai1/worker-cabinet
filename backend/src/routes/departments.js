@@ -37,7 +37,7 @@ router.get('/', authenticateToken, async (req, res) => {
         m.last_name || ' ' || m.first_name || COALESCE(' ' || NULLIF(m.middle_name, ''), '') as manager_name,
         m.position as manager_position,
         pd.name as parent_name,
-        (SELECT COUNT(*) FROM users WHERE department_id = d.id ${excludeTest(req, 'users')}) as employee_count
+        (SELECT COUNT(*) FROM users WHERE department_id = d.id AND status <> 'inactive' ${excludeTest(req, 'users')}) as employee_count
       FROM departments d
       LEFT JOIN users m ON d.manager_id = m.id
       LEFT JOIN departments pd ON d.parent_id = pd.id
@@ -58,9 +58,10 @@ router.get('/', authenticateToken, async (req, res) => {
         u.status,
         u.role,
         u.avatar,
-        u.department_id
+        u.department_id,
+        COALESCE((SELECT json_agg(sd.name ORDER BY sd.name) FROM user_skills us JOIN skills_dictionary sd ON us.skill_id = sd.id WHERE us.user_id = u.id), '[]') AS tags
       FROM users u
-      WHERE u.department_id IS NOT NULL ${excludeTest(req, 'u')}
+      WHERE u.department_id IS NOT NULL AND u.status <> 'inactive' ${excludeTest(req, 'u')}
       ORDER BY u.last_name, u.first_name
     `)
 
@@ -136,7 +137,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.role,
         u.avatar
       FROM users u
-      WHERE u.department_id = $1 ${excludeTest(req, 'u')}
+      WHERE u.department_id = $1 AND u.status <> 'inactive' ${excludeTest(req, 'u')}
       ORDER BY u.last_name, u.first_name
     `, [id])
 

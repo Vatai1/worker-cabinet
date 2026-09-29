@@ -45,7 +45,7 @@ async function getProjectWithMembers(projectId, req) {
      FROM company_project_members m
      JOIN users u ON m.user_id = u.id
      LEFT JOIN departments d ON u.department_id = d.id
-     WHERE m.project_id = $1
+     WHERE m.project_id = $1 AND u.status <> 'inactive'
      ORDER BY
        CASE m.role WHEN 'lead' THEN 0 ELSE 1 END,
        u.last_name`,
@@ -114,7 +114,7 @@ router.get('/', authenticateToken, async (req, res) => {
               'avatar',     u.avatar
             )
             ORDER BY CASE m.role WHEN 'lead' THEN 0 ELSE 1 END, u.last_name
-          ) FILTER (WHERE m.user_id IS NOT NULL),
+          ) FILTER (WHERE m.user_id IS NOT NULL AND u.status <> 'inactive'),
           '[]'
         ) AS members
       FROM company_projects p
