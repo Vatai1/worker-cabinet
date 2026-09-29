@@ -1,0 +1,11 @@
+*
+!backend
+backend/node_modules
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/src/tests
+backend/*.mjs
+backend/**/*.log
+backend/**/.DS_Store
+backend/.test-server.log
