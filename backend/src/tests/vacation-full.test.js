@@ -40,6 +40,15 @@ async function mkUser({ email, role = 'employee', last = 'Пробников', f
   return { id, email, token: null }
 }
 
+async function ensureTestOrg(orgId) {
+  const found = await query('SELECT 1 FROM organizations WHERE id = $1', [orgId])
+  if (found.rows.length === 0) {
+    await query('INSERT INTO organizations (id, name, slug, is_active) VALUES ($1, $2, $3, true)', [orgId, `Тест org ${orgId}`, `test-org-${orgId}`])
+    await query("SELECT setval('organizations_id_seq', (SELECT MAX(id) FROM organizations))")
+  }
+  return orgId
+}
+
 async function tokenFor(user) {
   if (!user.token) user.token = await login(user.email)
   return user.token
@@ -1412,6 +1421,7 @@ describe('Модуль отпусков — user stories', () => {
     let modulesSnap
 
     beforeEach(async () => {
+      await ensureTestOrg(2)
       modulesSnap = await enableModules()
       mgr1 = await mkUser({ email: `us12.mgr1${SUFFIX}`, role: 'manager', last: 'Сидоров' })
       dept1 = await mkDept('US12 Отдел vac-full', 1, mgr1.id)
@@ -2164,9 +2174,7 @@ describe('Модуль отпусков — user stories', () => {
       emp = await mkUser({ email: `us20.emp${SUFFIX}`, last: 'Иванов', deptId })
       sub = await mkUser({ email: `us20.sub${SUFFIX}`, last: 'Козлов', deptId })
       mgrOther = await mkUser({ email: `us20.mgro${SUFFIX}`, role: 'manager', last: 'Чужов' })
-      foreignOrgId = (await query(
-        "INSERT INTO organizations (name, slug, is_active) VALUES ('US20 Чужая org', $1, true) RETURNING id",
-        [`us20-org-${Date.now()}`])).rows[0].id
+      foreignOrgId = await ensureTestOrg(2)
       foreignUser = await mkUser({ email: `us20.foreign${SUFFIX}`, last: 'Иностранцев', orgIds: [foreignOrgId] })
       for (const year of new Set([yearOf(shift(10)), yearOf(shift(40))])) {
         await mkBalance(emp.id, year)
@@ -2176,7 +2184,6 @@ describe('Модуль отпусков — user stories', () => {
     afterEach(async () => {
       await restoreModules(modulesSnap)
       await cleanupFixtures({ deptIds: [deptId], templateNames: ['vac-full us20 nofile', 'vac-full us20 notfile'] })
-      await query('DELETE FROM organizations WHERE id = $1', [foreignOrgId])
     })
 
     it('substitutes POST: пустой список → 400; левая заявка → 404; чужой employee → 403', async () => {
