@@ -104,7 +104,7 @@ async function canvasPoint(page: Page, fx: number, fy: number) {
 async function pickDepartment(page: Page, rowIndex: number) {
   const modal = editorRoot(page).locator('.animate-scale-in').filter({ hasText: 'Выберите отдел' })
   await expect(modal).toBeVisible({ timeout: 10000 })
-  await modal.locator('.max-h-52 button').nth(rowIndex).click()
+  await modal.locator('.overflow-y-auto button').nth(rowIndex).click()
   await modal.getByRole('button', { name: 'Добавить', exact: true }).click()
   await expect(modal).toBeHidden({ timeout: 5000 })
 }
@@ -277,7 +277,7 @@ test.describe('Модуль Иерархия', () => {
       await dropFromPalette(page, 'Работник', pt.x, pt.y)
       const modal = editorRoot(page).locator('.animate-scale-in').filter({ hasText: 'Выберите работника' })
       await expect(modal).toBeVisible({ timeout: 10000 })
-      await modal.locator('.max-h-48 button').first().click()
+      await modal.locator('.overflow-y-auto button').first().click()
       await modal.getByRole('button', { name: 'Добавить', exact: true }).click()
       await expect(modal).toBeHidden({ timeout: 5000 })
       await expect(editorNodes(page)).toHaveCount(1, { timeout: 10000 })
@@ -352,7 +352,7 @@ test.describe('Модуль Иерархия', () => {
       await buildTwoDepartmentsWithEdge(page)
       const mid = await edgeMidpoint(page)
       await dropFromPalette(page, 'Группа', mid.x, mid.y)
-      const modal = editorRoot(page).locator('.animate-scale-in').filter({ hasText: 'Текстовый блок' })
+      const modal = editorRoot(page).locator('.animate-scale-in').filter({ has: page.getByRole('heading', { name: 'Группа', exact: true }) })
       await expect(modal).toBeVisible({ timeout: 10000 })
       await modal.getByRole('button', { name: 'Сохранить', exact: true }).click()
       await expect(modal).toBeHidden({ timeout: 5000 })

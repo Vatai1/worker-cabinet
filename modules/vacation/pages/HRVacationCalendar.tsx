@@ -148,7 +148,7 @@ export function HRVacationCalendar() {
   }
 
   const visibleRequests = useMemo(() => {
-    let reqs = requests
+    let reqs = requests.filter((r) => r.status === VacationRequestStatus.APPROVED || r.status === VacationRequestStatus.ON_APPROVAL)
     if (reqFilters.statuses.length > 0) reqs = reqs.filter((r) => reqFilters.statuses.includes(r.status))
     if (reqFilters.vacationTypes.length > 0) reqs = reqs.filter((r) => reqFilters.vacationTypes.includes(r.vacationType))
     return reqs

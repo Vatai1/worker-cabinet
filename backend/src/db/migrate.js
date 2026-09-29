@@ -1,5 +1,6 @@
 import pg from 'pg'
 import dotenv from 'dotenv'
+import { PRODUCTION_CALENDAR } from './productionCalendar.js'
 
 dotenv.config()
 
@@ -1994,36 +1995,19 @@ async function migrateCalendarHolidays(db) {
     `)
     await db.query(`CREATE INDEX IF NOT EXISTS idx_calendar_holidays_year ON calendar_holidays(year)`)
 
-    const holidays2027 = [
-      ['2027-01-01', 'Новый год'],
-      ['2027-01-04', 'Новогодние каникулы'],
-      ['2027-01-05', 'Новогодние каникулы'],
-      ['2027-01-06', 'Новогодние каникулы'],
-      ['2027-01-07', 'Рождество Христово'],
-      ['2027-01-08', 'Новогодние каникулы'],
-      ['2027-02-20', 'Выходной день (перенос в связи с Днём защитника Отечества)'],
-      ['2027-02-22', 'Выходной день (перенос в связи с Днём защитника Отечества)'],
-      ['2027-02-23', 'День защитника Отечества'],
-      ['2027-03-08', 'Международный женский день'],
-      ['2027-04-30', 'Выходной день (перенос в связи с Праздником Весны и Труда)'],
-      ['2027-05-03', 'Праздник Весны и Труда (перенос с 01.05)'],
-      ['2027-05-10', 'День Победы (перенос с 09.05)'],
-      ['2027-06-11', 'Выходной день (перенос в связи с Днём России)'],
-      ['2027-06-14', 'День России (перенос с 12.06)'],
-      ['2027-11-03', 'Выходной день (перенос в связи с Днём народного единства)'],
-      ['2027-11-04', 'День народного единства'],
-      ['2027-11-05', 'Выходной день (перенос в связи с Днём народного единства)'],
-      ['2027-12-31', 'Выходной день (предновогодний)'],
-    ]
+    await db.query(`ALTER TABLE calendar_holidays ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'holiday'`)
 
-    for (const [day, description] of holidays2027) {
-      await db.query(
-        `INSERT INTO calendar_holidays (day, year, description) VALUES ($1, $2, $3) ON CONFLICT (day) DO NOTHING`,
-        [day, 2027, description]
-      )
+    for (const [year, days] of Object.entries(PRODUCTION_CALENDAR)) {
+      for (const [day, kind, description] of days) {
+        await db.query(
+          `INSERT INTO calendar_holidays (day, year, description, kind) VALUES ($1, $2, $3, $4)
+           ON CONFLICT (day) DO UPDATE SET year = EXCLUDED.year, description = EXCLUDED.description, kind = EXCLUDED.kind`,
+          [day, Number(year), description, kind]
+        )
+      }
+      await db.query('DELETE FROM calendar_holidays WHERE year = $1 AND NOT (day = ANY($2::date[]))', [Number(year), days.map(([day]) => day)])
+      console.log(`  ✓ calendar_holidays ${year}: ${days.length} дат`)
     }
-
-    console.log(`  ✓ calendar_holidays ready (2027: ${holidays2027.length} дат)`)
   } catch (e) {
     console.log('  - calendar_holidays:', e.message)
   }

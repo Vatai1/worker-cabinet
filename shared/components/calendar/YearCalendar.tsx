@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react'
 import type { VacationRequest } from '@/shared/types'
 import { VacationRequestStatus } from '@/shared/types'
 import { cn } from '@/shared/lib/utils'
+import { useProductionCalendar } from '@/shared/lib/productionCalendar'
 
 interface YearCalendarProps {
   year: number
@@ -78,6 +79,7 @@ export function YearCalendar({
   showHeader = true,
   showLegend = true,
 }: YearCalendarProps) {
+  const productionDays = useProductionCalendar(year)
   const [hoverDate, setHoverDate] = useState<string | null>(null)
   const [showLegendExpanded, setShowLegendExpanded] = useState(true)
   const [contextMenu, setContextMenu] = useState<{
@@ -297,9 +299,12 @@ export function YearCalendar({
                 const vacations = getVacationsForDay(day)
                 const isSelected = isDateInSelection(day)
                 const isHovered = !isSelected && isDateInHoverRange(day)
-                const weekend = isWeekendDay(day)
-                const holiday = isPublicHoliday(day)
                 const dateStr = format(day, 'yyyy-MM-dd')
+                const productionDay = productionDays && productionDays.size > 0 ? productionDays.get(dateStr) : undefined
+                const holiday = productionDays && productionDays.size > 0
+                  ? productionDay?.kind === 'holiday' || productionDay?.kind === 'transfer'
+                  : isPublicHoliday(day)
+                const weekend = isWeekendDay(day) && productionDay?.kind !== 'shortened'
                 const hasVacation = vacations.length > 0
                 const visibleVacations = vacations.slice(0, 3)
                 const remainingCount = vacations.length > 3 ? vacations.length - 3 : 0

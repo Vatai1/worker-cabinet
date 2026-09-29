@@ -1703,10 +1703,10 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(t2.status, 201, JSON.stringify(t2.data))
 
       assert.strictEqual(t1.data.end_date, '2027-06-16')
-      assert.strictEqual(t1.data.duration, 5)
+      assert.strictEqual(t1.data.duration, 6)
       assert.strictEqual(t1.data.end_date, t2.data.end_date)
       assert.strictEqual(t1.data.duration, t2.data.duration)
-      assert.strictEqual(t1.data.holidaysCount, 2)
+      assert.strictEqual(t1.data.holidaysCount, 1)
     })
 
     it('2028 год (данных нет) → даты без изменений', async () => {
@@ -2183,7 +2183,8 @@ describe('Модуль отпусков — user stories', () => {
 
     afterEach(async () => {
       await restoreModules(modulesSnap)
-      await cleanupFixtures({ deptIds: [deptId], templateNames: ['vac-full us20 nofile', 'vac-full us20 notfile'] })
+      const strayDeptIds = (await query("SELECT id FROM departments WHERE name = 'US20 Чужой отдел vac-full'")).rows.map((r) => r.id)
+      await cleanupFixtures({ deptIds: [deptId, ...strayDeptIds], templateNames: ['vac-full us20 nofile', 'vac-full us20 notfile'] })
     })
 
     it('substitutes POST: пустой список → 400; левая заявка → 404; чужой employee → 403', async () => {

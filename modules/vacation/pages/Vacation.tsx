@@ -1220,7 +1220,7 @@ export function Vacation() {
                         const reviewerName = getReviewerName(request)
 
                         return (
-                          <div key={request.id} className="rounded-lg border border-border overflow-hidden transition-colors">
+                          <div key={request.id} data-testid="my-request-card" data-expanded={isExpanded ? "true" : "false"} className="rounded-lg border border-border overflow-hidden transition-colors">
                             <div
                               className="p-4 cursor-pointer flex items-center justify-between gap-4 hover:bg-muted/40"
                               onClick={() => {

@@ -48,7 +48,7 @@ async function computeVacationDates(startDate, endDate) {
     return { startDate, endDate, countedDays: daysBetweenInclusive(startDate, endDate), holidaysCount: 0 }
   }
 
-  const holidaysResult = await query('SELECT day FROM calendar_holidays WHERE day BETWEEN $1 AND $2', [startDate, endDate])
+  const holidaysResult = await query("SELECT day FROM calendar_holidays WHERE day BETWEEN $1 AND $2 AND kind = 'holiday'", [startDate, endDate])
   const holidaysCount = holidaysResult.rows.length
 
   if (holidaysCount === 0) {
@@ -224,7 +224,7 @@ async function fillVacationTimesheetEntries(client, userId, startDate, endDate, 
   const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
   const deptId = deptResult.rows[0]?.department_id
   if (!deptId) return
-  const holidaysResult = await client.query('SELECT day FROM calendar_holidays WHERE day BETWEEN $1 AND $2', [startDate, endDate])
+  const holidaysResult = await client.query("SELECT day FROM calendar_holidays WHERE day BETWEEN $1 AND $2 AND kind = 'holiday'", [startDate, endDate])
   const holidaySet = new Set(holidaysResult.rows.map((r) => r.day))
   const byMonth = await vacationDatesByMonth(startDate, endDate)
   for (const { year, month, dates: allDates } of Object.values(byMonth)) {
@@ -307,6 +307,36 @@ function applyYearPlaceholders(zip, year) {
     zip.file(fileName, content.replaceAll('{{selected_year}}', yearStr).replaceAll('{{year}}', yearStr))
   }
 }
+
+/**
+ * @swagger
+ * /vacation/production-calendar:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Производственный календарь за год
+ *     description: 'kind: holiday — нерабочий праздник (ст. 112 ТК РФ, не входит в отпуск), transfer — выходной по переносу (входит в отпуск), shortened — сокращённый рабочий день (в т.ч. рабочая суббота)'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: '{ year, days: [{ day, kind, description }] }; пустой days — календарь за год не загружен'
+ */
+router.get('/production-calendar', authenticateToken, async (req, res) => {
+  const year = parseInt(req.query.year, 10)
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) return res.status(400).json({ error: 'Укажите год' })
+  try {
+    const result = await query('SELECT day, kind, description FROM calendar_holidays WHERE year = $1 ORDER BY day', [year])
+    res.json({ year, days: result.rows })
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить производственный календарь' })
+  }
+})
 
 /**
  * @swagger
@@ -954,7 +984,7 @@ router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin
  *   post:
  *     tags: [Vacation]
  *     summary: Создать заявку на отпуск
- *     description: Если в диапазоне дат есть праздники из производственного календаря (calendar_holidays), даты не меняются, а праздничные дни не входят в длительность и не списываются с баланса. Диапазон с более чем 5 праздниками отклоняется с 400.
+ *     description: Если в диапазоне дат есть нерабочие праздничные дни по ст. 112 ТК РФ (calendar_holidays с kind = 'holiday'), даты не меняются, а праздничные дни не входят в длительность и не списываются с баланса (ст. 120 ТК РФ). Перенесённые выходные (kind = 'transfer') входят в отпуск. Диапазон с более чем 5 праздниками отклоняется с 400.
  *     security:
  *       - bearerAuth: []
  *     requestBody:

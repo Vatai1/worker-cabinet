@@ -204,6 +204,9 @@ One entry point for everyone: sidebar «Иерархия» → `/my-hierarchy` (
 
 React Flow (`@xyflow/react`) canvas. Lazy-loaded via `React.lazy`. Nodes: `department`, `employee`, `text`. All handles are `type="source"` with `ConnectionMode.Loose`. Custom `EditableEdge`: smoothstep rendering by default, switches to polyline when `data.waypoints` array is populated.
 
+### Production Calendar (производственный календарь)
+Data lives in `backend/src/db/productionCalendar.js` (per year, source consultant.ru) and is upserted into `calendar_holidays (day, year, description, kind)` by `migrate.js`. `kind`: `holiday` — non-working holiday per ТК РФ ст. 112 (including ones falling on weekends), `transfer` — transferred day off, `shortened` — shortened working day (incl. working Saturdays). Vacation duration subtracts only `holiday` days (ст. 120); transferred days off are part of the vacation. `GET /api/vacation/production-calendar?year=` feeds `YearCalendar` (falls back to hardcoded ст. 112 dates when a year is not loaded). To add a year, append it to `PRODUCTION_CALENDAR`.
+
 ### AI Assistant
 Backend proxy to OpenAI-compatible API. Config stored in `system_settings` table (4 keys). Admin UI exists in AdminPanel. Frontend: `modules/assistant/`.
 
