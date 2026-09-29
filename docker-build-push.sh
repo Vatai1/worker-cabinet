@@ -335,9 +335,9 @@ generate_test_env() {
     done
     local key
     if [ -f backend/.env ]; then
-        while IFS= read -r key; do
+        sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' backend/.env | tr -d '\r' | while IFS= read -r key; do
             grep -q "^${key}=" "$TEST_ENV_FILE" || echo "${key}=" >> "$TEST_ENV_FILE"
-        done < <(sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' backend/.env | tr -d '\r')
+        done
     fi
 }
 
