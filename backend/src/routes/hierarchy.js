@@ -388,7 +388,7 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     }
   }
 
-  // ─── Каскад настроек видимости отпусков ──────────────────────────────
+  // ─── Каскад настроек видимости отпусков и работников ─────────────────
   // На родительской связи HR может включить «каскад» для отдельного пункта
   // (видит/виден/согласовывает) — тогда это значение течёт вниз через все
   // уровни поддерева, а не только на прямого потомка. Явная настройка на
@@ -426,23 +426,34 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     ['childSeesParent', 'cascadeChildSeesParent'],
     ['parentApproves', 'cascadeParentApproves'],
   ]
+  const EMP_VIS_FIELDS = [
+    ['parentSeesChild', 'cascadeParentSeesChild'],
+    ['childSeesParent', 'cascadeChildSeesParent'],
+  ]
   const effectiveVisByDept = new Map()
   const effectiveVisByUser = new Map()
-  const visitCascade = (node, inherited, seen) => {
+  const effectiveEmpVisByDept = new Map()
+  const effectiveEmpVisByUser = new Map()
+  const cascadeStep = (ownVis, inherited, fields, fallback) => {
+    const effective = {}
+    const toChildren = {}
+    for (const [field, cascadeField] of fields) {
+      const ownValue = ownVis && ownVis[field] !== undefined ? ownVis[field] : undefined
+      effective[field] = ownValue !== undefined ? ownValue : (inherited[field] !== undefined ? inherited[field] : fallback)
+      toChildren[field] = (ownVis && ownVis[cascadeField]) ? effective[field] : inherited[field]
+    }
+    return { effective, toChildren }
+  }
+  const visitCascade = (node, inherited, inheritedEmp, seen) => {
     const key = `${node.kind}:${node.id}`
     if (seen.has(key)) return
     seen.add(key)
-    const ownVis = node.kind === 'dept' ? visByDept.get(node.id) : visByUser.get(node.id)
-    const effective = {}
-    const toChildren = {}
-    for (const [field, cascadeField] of VIS_FIELDS) {
-      const ownValue = ownVis && ownVis[field] !== undefined ? ownVis[field] : undefined
-      effective[field] = ownValue !== undefined ? ownValue : (inherited[field] !== undefined ? inherited[field] : true)
-      toChildren[field] = (ownVis && ownVis[cascadeField]) ? effective[field] : inherited[field]
-    }
-    if (node.kind === 'dept') effectiveVisByDept.set(node.id, effective)
-    else effectiveVisByUser.set(node.id, effective)
-    for (const child of childrenOfNode(node)) visitCascade(child, toChildren, seen)
+    const isDept = node.kind === 'dept'
+    const vac = cascadeStep(isDept ? visByDept.get(node.id) : visByUser.get(node.id), inherited, VIS_FIELDS, true)
+    const emp = cascadeStep(isDept ? empVisByDept.get(node.id) : empVisByUser.get(node.id), inheritedEmp, EMP_VIS_FIELDS, false)
+    ;(isDept ? effectiveVisByDept : effectiveVisByUser).set(node.id, vac.effective)
+    ;(isDept ? effectiveEmpVisByDept : effectiveEmpVisByUser).set(node.id, emp.effective)
+    for (const child of childrenOfNode(node)) visitCascade(child, vac.toChildren, emp.toChildren, seen)
   }
   const deptsWithParent = new Set([...parentsByDept.keys(), ...parentUserByDept.keys()])
   const deptKeys = new Set([
@@ -455,10 +466,10 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
   ])
   const seenCascade = new Set()
   for (const id of deptKeys) {
-    if (!deptsWithParent.has(id)) visitCascade({ kind: 'dept', id }, {}, seenCascade)
+    if (!deptsWithParent.has(id)) visitCascade({ kind: 'dept', id }, {}, {}, seenCascade)
   }
   for (const id of userKeys) {
-    if (!parentUserByUser.has(id)) visitCascade({ kind: 'user', id }, {}, seenCascade)
+    if (!parentUserByUser.has(id)) visitCascade({ kind: 'user', id }, {}, {}, seenCascade)
   }
 
   const deptChanges = []
@@ -473,8 +484,8 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
       vacParentSeesChild: vis?.parentSeesChild !== false,
       vacChildSeesParent: vis?.childSeesParent !== false,
       vacParentApproves: vis?.parentApproves !== false,
-      empParentSeesChild: empVisByDept.get(deptId)?.parentSeesChild === true,
-      empChildSeesParent: empVisByDept.get(deptId)?.childSeesParent === true,
+      empParentSeesChild: (effectiveEmpVisByDept.get(deptId) ?? empVisByDept.get(deptId))?.parentSeesChild === true,
+      empChildSeesParent: (effectiveEmpVisByDept.get(deptId) ?? empVisByDept.get(deptId))?.childSeesParent === true,
     })
   }
 
@@ -492,8 +503,8 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
       vacParentSeesChild: vis?.parentSeesChild !== false,
       vacChildSeesParent: vis?.childSeesParent !== false,
       vacParentApproves: vis?.parentApproves !== false,
-      empParentSeesChild: empVisByUser.get(userId)?.parentSeesChild === true,
-      empChildSeesParent: empVisByUser.get(userId)?.childSeesParent === true,
+      empParentSeesChild: (effectiveEmpVisByUser.get(userId) ?? empVisByUser.get(userId))?.parentSeesChild === true,
+      empChildSeesParent: (effectiveEmpVisByUser.get(userId) ?? empVisByUser.get(userId))?.childSeesParent === true,
     })
   }
   return { deptChanges, userChanges }

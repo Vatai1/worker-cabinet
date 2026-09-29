@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Check } from 'lucide-react'
 import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 
 interface AddSkillModalProps {
   open: boolean
   onClose: () => void
-  onAdd: (skill: string) => void
+  onAdd: (skills: string[]) => void
   userId: string
 }
 
@@ -20,12 +20,14 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
   const [allSkills, setAllSkills] = useState<string[]>([])
   const [userSkills, setUserSkills] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [selected, setSelected] = useState<string[]>([])
 
   useEffect(() => {
     if (!open) {
       setSearchQuery('')
       setNewSkill('')
       setMode('select')
+      setSelected([])
     }
   }, [open])
 
@@ -64,15 +66,20 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
     .filter(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => a.localeCompare(b))
 
-  const handleSelectSkill = (skill: string) => {
-    onAdd(skill)
+  const toggleSkill = (skill: string) => {
+    setSelected(prev => prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill])
+  }
+
+  const handleAddSelected = () => {
+    if (selected.length === 0) return
+    onAdd(selected)
     onClose()
   }
 
   const handleCreateSkill = (e: React.FormEvent) => {
     e.preventDefault()
     if (newSkill.trim()) {
-      onAdd(newSkill.trim())
+      onAdd([...new Set([...selected, newSkill.trim()])])
       setNewSkill('')
       onClose()
     }
@@ -99,7 +106,7 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
             <h2 className="text-xl font-semibold">Добавить тег</h2>
           </div>
           <p className="text-sm text-muted-foreground mb-6">
-            {mode === 'select' ? 'Выберите тег из списка или создайте новый' : 'Введите название нового тега'}
+            {mode === 'select' ? 'Отметьте один или несколько тегов или создайте новый' : 'Введите название нового тега'}
           </p>
 
           {mode === 'select' ? (
@@ -126,15 +133,24 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
                   <div className="text-center py-8 text-sm text-muted-foreground">Загрузка...</div>
                 ) : filteredSkills.length > 0 ? (
                   <div className="max-h-60 overflow-y-auto space-y-1 border rounded-lg p-2">
-                    {filteredSkills.map((skill) => (
-                      <button
-                        key={skill}
-                        onClick={() => handleSelectSkill(skill)}
-                        className="w-full text-left px-3 py-2 rounded-md hover:bg-muted transition-colors text-sm"
-                      >
-                        {skill}
-                      </button>
-                    ))}
+                    {filteredSkills.map((skill) => {
+                      const checked = selected.includes(skill)
+                      return (
+                        <button
+                          key={skill}
+                          type="button"
+                          role="checkbox"
+                          aria-checked={checked}
+                          onClick={() => toggleSkill(skill)}
+                          className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-md transition-colors text-sm ${checked ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+                        >
+                          <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border'}`}>
+                            {checked && <Check className="h-3 w-3" />}
+                          </span>
+                          {skill}
+                        </button>
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-sm text-muted-foreground">
@@ -156,6 +172,10 @@ export function AddSkillModal({ open, onClose, onAdd, userId }: AddSkillModalPro
               <div className="flex justify-end gap-3">
                 <Button type="button" variant="ghost" onClick={onClose}>
                   Отмена
+                </Button>
+                <Button type="button" onClick={handleAddSelected} disabled={selected.length === 0}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {selected.length > 0 ? `Добавить (${selected.length})` : 'Добавить'}
                 </Button>
               </div>
             </div>

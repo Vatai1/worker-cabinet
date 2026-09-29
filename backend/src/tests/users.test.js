@@ -89,6 +89,18 @@ describe('Users API', () => {
     assert.ok(res.status === 200 || res.status === 201)
   })
 
+  it('POST/DELETE /users/:id/skills чужому профилю — 403 для работника', async () => {
+    const managerUser = await getManagerUser()
+    for (const method of ['POST', 'DELETE']) {
+      const res = await fetch(`${BASE}/users/${managerUser.id}/skills`, {
+        method,
+        headers: headersJSON(employeeToken),
+        body: JSON.stringify({ skill: 'TestSkill_Foreign_12345' }),
+      })
+      assert.strictEqual(res.status, 403)
+    }
+  })
+
   it('DELETE /users/:id/skills removes a skill', async () => {
     await fetch(`${BASE}/users/${employeeUser.id}/skills`, {
       method: 'POST',

@@ -981,15 +981,6 @@ type EdgeDraft = {
   employeeVisibility?: Partial<EmployeeVisibility>
 }
 
-function EmployeeVisibilityRow({ label, checked, onCheckedChange }: { label: string; checked: boolean; onCheckedChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
-      <p className="text-sm font-medium">{label}</p>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
-    </div>
-  )
-}
-
 function VacationVisibilityRow({
   label, hint, checked, onCheckedChange, cascade, onCascadeChange,
 }: {
@@ -1047,6 +1038,8 @@ function EdgeSettingsModal({
   const [cascadeParentApproves, setCascadeParentApproves] = useState(draft.vacationVisibility?.cascadeParentApproves ?? false)
   const [empParentSeesChild, setEmpParentSeesChild] = useState(draft.employeeVisibility?.parentSeesChild ?? false)
   const [empChildSeesParent, setEmpChildSeesParent] = useState(draft.employeeVisibility?.childSeesParent ?? false)
+  const [empCascadeParentSeesChild, setEmpCascadeParentSeesChild] = useState(draft.employeeVisibility?.cascadeParentSeesChild ?? false)
+  const [empCascadeChildSeesParent, setEmpCascadeChildSeesParent] = useState(draft.employeeVisibility?.cascadeChildSeesParent ?? false)
   const parentAvailable = draft.sourceType !== 'text' && draft.targetType !== 'text' &&
     (draft.sourceType === 'department' || draft.targetType === 'department' ||
       (draft.sourceType === 'employee' && draft.targetType === 'employee') ||
@@ -1237,8 +1230,8 @@ function EdgeSettingsModal({
           {vacationApplicable && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Видимость в разделе «Работники»</p>
-              <EmployeeVisibilityRow label="Родитель видит работников подчинённых" checked={empParentSeesChild} onCheckedChange={setEmpParentSeesChild} />
-              <EmployeeVisibilityRow label="Работники родителя видны подчинённым" checked={empChildSeesParent} onCheckedChange={setEmpChildSeesParent} />
+              <VacationVisibilityRow label="Родитель видит работников подчинённых" checked={empParentSeesChild} onCheckedChange={setEmpParentSeesChild} cascade={empCascadeParentSeesChild} onCascadeChange={setEmpCascadeParentSeesChild} />
+              <VacationVisibilityRow label="Работники родителя видны подчинённым" checked={empChildSeesParent} onCheckedChange={setEmpChildSeesParent} cascade={empCascadeChildSeesParent} onCascadeChange={setEmpCascadeChildSeesParent} />
             </div>
           )}
           <div className="space-y-1.5">
@@ -1259,7 +1252,7 @@ function EdgeSettingsModal({
             </Button>
           )}
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(effectiveRelation, parentIsSource, note, strokeWidth, strokeColor, lineStyle, buildVacationVisibility(), vacationApplicable ? { parentSeesChild: empParentSeesChild, childSeesParent: empChildSeesParent } : undefined)}>
+          <Button className="flex-1" onClick={() => onConfirm(effectiveRelation, parentIsSource, note, strokeWidth, strokeColor, lineStyle, buildVacationVisibility(), vacationApplicable ? { parentSeesChild: empParentSeesChild, childSeesParent: empChildSeesParent, cascadeParentSeesChild: empCascadeParentSeesChild, cascadeChildSeesParent: empCascadeChildSeesParent } : undefined)}>
             Сохранить
           </Button>
         </div>
@@ -1273,6 +1266,8 @@ function EdgeSettingsModal({
 type EmployeeVisibility = {
   parentSeesChild: boolean
   childSeesParent: boolean
+  cascadeParentSeesChild?: boolean
+  cascadeChildSeesParent?: boolean
 }
 
 type VacationVisibility = {
@@ -1399,6 +1394,8 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
   const empVis = (edge.data as { employeeVisibility?: Partial<EmployeeVisibility> } | undefined)?.employeeVisibility
   const [empParentSeesChild, setEmpParentSeesChild] = useState(empVis?.parentSeesChild ?? false)
   const [empChildSeesParent, setEmpChildSeesParent] = useState(empVis?.childSeesParent ?? false)
+  const [empCascadeParentSeesChild, setEmpCascadeParentSeesChild] = useState(empVis?.cascadeParentSeesChild ?? false)
+  const [empCascadeChildSeesParent, setEmpCascadeChildSeesParent] = useState(empVis?.cascadeChildSeesParent ?? false)
   const isEmpToEmp = sourceType === 'employee' && targetType === 'employee'
   const [childSeesParent, setChildSeesParent] = useState(vis?.childSeesParent ?? true)
   const [parentSeesChild, setParentSeesChild] = useState(vis?.parentSeesChild ?? true)
@@ -1447,8 +1444,8 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
             />
           )}
           <p className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Видимость в разделе «Работники»</p>
-          <EmployeeVisibilityRow label="Родитель видит работников подчинённых" checked={empParentSeesChild} onCheckedChange={setEmpParentSeesChild} />
-          <EmployeeVisibilityRow label="Работники родителя видны подчинённым" checked={empChildSeesParent} onCheckedChange={setEmpChildSeesParent} />
+          <VacationVisibilityRow label="Родитель видит работников подчинённых" checked={empParentSeesChild} onCheckedChange={setEmpParentSeesChild} cascade={empCascadeParentSeesChild} onCascadeChange={setEmpCascadeParentSeesChild} />
+          <VacationVisibilityRow label="Работники родителя видны подчинённым" checked={empChildSeesParent} onCheckedChange={setEmpChildSeesParent} cascade={empCascadeChildSeesParent} onCascadeChange={setEmpCascadeChildSeesParent} />
         </div>
         <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
@@ -1456,7 +1453,7 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
             childSeesParent: cascadeChildSeesParent,
             parentSeesChild: cascadeParentSeesChild,
             parentApproves: isEmpToEmp ? false : cascadeParentApproves,
-          }, { parentSeesChild: empParentSeesChild, childSeesParent: empChildSeesParent })}>
+          }, { parentSeesChild: empParentSeesChild, childSeesParent: empChildSeesParent, cascadeParentSeesChild: empCascadeParentSeesChild, cascadeChildSeesParent: empCascadeChildSeesParent })}>
             Сохранить
           </Button>
         </div>

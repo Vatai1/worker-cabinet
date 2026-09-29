@@ -1033,7 +1033,7 @@ router.post('/:id/skills', authenticateToken, async (req, res) => {
     const { id } = req.params
     const { skill } = req.body
 
-    if (!(await checkProfileAccess(req, parseInt(id)))) {
+    if (!checkProfileEditAccess(req, parseInt(id))) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
@@ -1117,7 +1117,7 @@ router.delete('/:id/skills', authenticateToken, async (req, res) => {
     const { id } = req.params
     const { skill } = req.body
 
-    if (!(await checkProfileAccess(req, parseInt(id)))) {
+    if (!checkProfileEditAccess(req, parseInt(id))) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 

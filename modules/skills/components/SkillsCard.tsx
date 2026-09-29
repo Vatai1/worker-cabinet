@@ -29,17 +29,19 @@ export function SkillsCard({ skills, userId, isOwnProfile, onSkillsChange }: Pro
   const [addingSkill, setAddingSkill] = useState(false)
   const [removingSkill, setRemovingSkill] = useState<string | null>(null)
 
-  const handleAddSkill = async (skill: string) => {
+  const handleAddSkills = async (added: string[]) => {
     setAddingSkill(true)
-    const newSkills = [...(skills || []), skill]
-    onSkillsChange(newSkills)
+    onSkillsChange([...new Set([...(skills || []), ...added])])
 
     try {
-      await fetch(`${API_BASE_URL}/users/${userId}/skills`, {
-        method: 'POST',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ skill }),
-      })
+      for (const skill of added) {
+        const res = await fetch(`${API_BASE_URL}/users/${userId}/skills`, {
+          method: 'POST',
+          headers: getAuthHeadersWithContentType(),
+          body: JSON.stringify({ skill }),
+        })
+        if (!res.ok) throw new Error()
+      }
     } catch {
       onSkillsChange(skills)
     } finally {
@@ -155,7 +157,7 @@ export function SkillsCard({ skills, userId, isOwnProfile, onSkillsChange }: Pro
       <AddSkillModal
         open={isAddSkillModalOpen}
         onClose={() => setIsAddSkillModalOpen(false)}
-        onAdd={handleAddSkill}
+        onAdd={handleAddSkills}
         userId={userId}
       />
     </>

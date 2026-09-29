@@ -1,4 +1,5 @@
-﻿import { useState } from 'react'
+﻿import { format } from 'date-fns'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useRequestsStore } from '@/modules/requests/store/requestsStore'
 import { useAuthStore } from '@/core/auth/store/authStore'
@@ -56,7 +57,7 @@ export function VacationRequestForm({ onSuccess }: VacationRequestFormProps) {
     }
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = format(new Date(), 'yyyy-MM-dd')
   const daysCount = startDate && endDate 
     ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
     : 0

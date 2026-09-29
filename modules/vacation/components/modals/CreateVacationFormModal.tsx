@@ -1,3 +1,4 @@
+import { format } from 'date-fns'
 import { useVacationDuration, useReturnToWork, pluralDays } from '@/shared/lib/productionCalendar'
 import { useAllowOverBalance } from '@/modules/vacation/store/vacationSettingsStore'
 import { useState, useEffect, useRef } from 'react'
@@ -237,7 +238,7 @@ export function CreateVacationFormModal({
                 id="startDate"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={format(new Date(), 'yyyy-MM-dd')}
                 className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                 disabled={loading}
               />
@@ -254,7 +255,7 @@ export function CreateVacationFormModal({
                 id="endDate"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                min={startDate || new Date().toISOString().split('T')[0]}
+                min={startDate || format(new Date(), 'yyyy-MM-dd')}
                 className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
                 disabled={loading || !startDate}
               />

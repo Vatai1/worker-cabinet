@@ -1,3 +1,4 @@
+import { format } from 'date-fns'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -719,7 +720,7 @@ export function Vacation() {
   }, [fetchMySubstitutions])
 
   const hasActiveSubstitution = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = format(new Date(), 'yyyy-MM-dd')
     return mySubstitutions.some((s) => s.status === 'approved' && s.start_date <= today && s.end_date >= today)
   }, [mySubstitutions])
 

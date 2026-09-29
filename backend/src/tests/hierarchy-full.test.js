@@ -530,6 +530,30 @@ describe('Проекция флагов видимости отпусков (vac
     await query('DELETE FROM departments WHERE id = $1', [deptC])
   })
 
+  it('каскад видимости работников: parentSeesChild течёт вниз только при включённом каскаде', async () => {
+    const deptC = await mkDept('Отдел Г hier', orgA)
+    const token = await tokenFor(hrA)
+    const aId = `department-${deptA}-t1`, bId = `department-${deptB}-t1`, cId = `department-${deptC}-t1`
+    const nodes = [deptNode(deptA, 'Отдел А hier'), deptNode(deptB, 'Отдел Б hier', 300), deptNode(deptC, 'Отдел Г hier', 600)]
+    const empFlagsOf = async (id) => (await query('SELECT emp_parent_sees_child, emp_child_sees_parent FROM departments WHERE id = $1', [id])).rows[0]
+    const noCascade = await call('PUT', '/hierarchy', token, {
+      nodes,
+      edges: [parentEdge(aId, bId, { employeeVisibility: { parentSeesChild: true, childSeesParent: false } }), parentEdge(bId, cId)],
+      baseVersion: 0,
+    }, orgA)
+    assert.strictEqual(noCascade.status, 200, JSON.stringify(noCascade.data))
+    assert.deepStrictEqual(await empFlagsOf(deptB), { emp_parent_sees_child: true, emp_child_sees_parent: false })
+    assert.deepStrictEqual(await empFlagsOf(deptC), { emp_parent_sees_child: false, emp_child_sees_parent: false })
+    const cascade = await call('PUT', '/hierarchy', token, {
+      nodes,
+      edges: [parentEdge(aId, bId, { employeeVisibility: { parentSeesChild: true, childSeesParent: false, cascadeParentSeesChild: true } }), parentEdge(bId, cId)],
+      baseVersion: noCascade.data.version,
+    }, orgA)
+    assert.strictEqual(cascade.status, 200, JSON.stringify(cascade.data))
+    assert.deepStrictEqual(await empFlagsOf(deptC), { emp_parent_sees_child: true, emp_child_sees_parent: false })
+    await query('DELETE FROM departments WHERE id = $1', [deptC])
+  })
+
   it('связь «руководитель → работник» c vacationVisibility пишет флаги в users потомка', async () => {
     await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptA, empA.id])
     const empB = await mkUser({ email: `vacuser${SUFFIX}`, role: 'employee', orgId: orgA, deptId: deptB })

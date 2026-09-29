@@ -128,6 +128,7 @@ async function syncHierarchyParentFlags(client, orgId, deptId, flags) {
           parentApproves: flags.vac_parent_approves,
         },
         employeeVisibility: {
+          ...(e.data?.employeeVisibility ?? {}),
           parentSeesChild: flags.emp_parent_sees_child,
           childSeesParent: flags.emp_child_sees_parent,
         },
