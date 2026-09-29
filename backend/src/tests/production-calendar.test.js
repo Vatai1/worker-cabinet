@@ -2,7 +2,7 @@ import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert'
 import bcrypt from 'bcryptjs'
 import { query } from '../config/database.js'
-import { BASE, login } from './helpers.js'
+import { BASE, login, getHrToken, headersJSON } from './helpers.js'
 import { PRODUCTION_CALENDAR } from '../db/productionCalendar.js'
 
 const EMAIL = `prodcal-${Date.now()}@prod-calendar.test`
@@ -31,12 +31,13 @@ describe('Производственный календарь 2027', () => {
     await query("INSERT INTO user_organizations (user_id, org_id, org_role, is_active) VALUES ($1, 1, 'employee', true)", [userId])
     await query(
       `INSERT INTO vacation_balances (user_id, year, total_days, used_days, reserved_days, available_days, organization_id)
-       VALUES ($1, 2027, 60, 0, 0, 60, 1)`,
+       VALUES ($1, 2027, 80, 0, 0, 80, 1)`,
       [userId]
     )
   })
 
   after(async () => {
+    await query('UPDATE vacation_settings SET allow_over_balance = false WHERE organization_id = 1')
     await query('DELETE FROM vacation_request_status_history WHERE request_id IN (SELECT id FROM vacation_requests WHERE user_id = $1)', [userId])
     await query('DELETE FROM vacation_request_status_history WHERE changed_by = $1', [userId])
     await query('DELETE FROM vacation_requests WHERE user_id = $1', [userId])
@@ -59,6 +60,16 @@ describe('Производственный календарь 2027', () => {
     assert.strictEqual(res.status, 201, JSON.stringify(res.data))
     assert.strictEqual(res.data.duration, 25)
     assert.strictEqual(res.data.holidaysCount, 1)
+    assert.strictEqual(res.data.returnDate, '2027-03-01')
+  })
+
+  it('выход на работу — первый рабочий день: после 05.03 (пятница, затем выходные и 8 марта) — 09.03, после 30.04 (1.05 праздник, 3.05 перенос) — 04.05', async () => {
+    const march = await createVacation('2027-03-03', '2027-03-05')
+    assert.strictEqual(march.status, 201, JSON.stringify(march.data))
+    assert.strictEqual(march.data.returnDate, '2027-03-09')
+    const april = await createVacation('2027-04-28', '2027-04-30')
+    assert.strictEqual(april.status, 201, JSON.stringify(april.data))
+    assert.strictEqual(april.data.returnDate, '2027-05-04')
   })
 
   it('1–10 мая 2027: 1 и 9 мая вычитаются, перенесённые 3 и 10 мая входят в отпуск — 8 дней', async () => {
@@ -73,5 +84,22 @@ describe('Производственный календарь 2027', () => {
     assert.deepStrictEqual(empty.data.days, [])
     const bad = await call('GET', '/vacation/production-calendar?year=abc')
     assert.strictEqual(bad.status, 400)
+  })
+
+  it('настройка HR «сверх баланса»: выключена — 400, включена — 201, сотруднику менять нельзя', async () => {
+    const setAllow = async (value) => fetch(`${BASE}/vacation/settings`, {
+      method: 'PUT',
+      headers: { ...headersJSON(await getHrToken()), 'X-Organization-Id': '1', 'X-CSRF-Token': 'dd', Cookie: 'csrf_token=dd' },
+      body: JSON.stringify({ allowOverBalance: value }),
+    })
+    assert.strictEqual((await setAllow(false)).status, 200)
+    const blocked = await createVacation('2027-07-01', '2027-09-30')
+    assert.strictEqual(blocked.status, 400, JSON.stringify(blocked.data))
+    assert.strictEqual((await call('PUT', '/vacation/settings', { allowOverBalance: true })).status, 403)
+    assert.strictEqual((await setAllow(true)).status, 200)
+    assert.deepStrictEqual((await call('GET', '/vacation/settings')).data, { allowOverBalance: true })
+    const allowed = await createVacation('2027-07-01', '2027-09-30')
+    assert.strictEqual(allowed.status, 201, JSON.stringify(allowed.data))
+    assert.strictEqual((await setAllow(false)).status, 200)
   })
 })

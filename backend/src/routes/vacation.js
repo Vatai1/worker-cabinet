@@ -43,6 +43,38 @@ function todayISO() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
+const LAW_HOLIDAYS = ['01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08', '02-23', '03-08', '05-01', '05-09', '06-12', '11-04']
+
+async function nextWorkingDay(endDate) {
+  const end = String(endDate).slice(0, 10)
+  const until = addDaysISO(end, 60)
+  const rows = (await query('SELECT day, kind, year FROM calendar_holidays WHERE day > $1 AND day <= $2', [end, until])).rows
+  const byDay = new Map(rows.map((r) => [r.day, r.kind]))
+  const loadedYears = new Set((await query('SELECT DISTINCT year FROM calendar_holidays WHERE year = ANY($1)', [[Number(end.slice(0, 4)), Number(end.slice(0, 4)) + 1]])).rows.map((r) => r.year))
+  let day = end
+  for (let i = 0; i < 60; i++) {
+    day = addDaysISO(day, 1)
+    const weekday = parseISODate(day).getUTCDay()
+    const weekend = weekday === 0 || weekday === 6
+    let nonWorking
+    if (loadedYears.has(Number(day.slice(0, 4)))) {
+      const kind = byDay.get(day)
+      nonWorking = kind === 'holiday' || kind === 'transfer' || (weekend && kind !== 'shortened')
+    } else {
+      nonWorking = weekend || LAW_HOLIDAYS.includes(day.slice(5))
+    }
+    if (!nonWorking) return day
+  }
+  return addDaysISO(end, 1)
+}
+
+async function allowOverBalance(req) {
+  const orgId = currentOrgId(req)
+  if (!orgId) return false
+  const row = (await query('SELECT allow_over_balance FROM vacation_settings WHERE organization_id = $1', [orgId])).rows[0]
+  return row?.allow_over_balance === true
+}
+
 async function computeVacationDates(startDate, endDate) {
   if (startDate < todayISO()) {
     return { startDate, endDate, countedDays: daysBetweenInclusive(startDate, endDate), holidaysCount: 0 }
@@ -307,6 +339,62 @@ function applyYearPlaceholders(zip, year) {
     zip.file(fileName, content.replaceAll('{{selected_year}}', yearStr).replaceAll('{{year}}', yearStr))
   }
 }
+
+/**
+ * @swagger
+ * /vacation/settings:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Настройки отпусков учреждения
+ *     description: 'allowOverBalance — разрешено подавать заявки и переносы сверх доступных дней баланса (остаток может уйти в минус)'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: '{ allowOverBalance }'
+ *   put:
+ *     tags: [Vacation]
+ *     summary: Изменить настройки отпусков учреждения (HR/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [allowOverBalance]
+ *             properties:
+ *               allowOverBalance: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: '{ allowOverBalance }'
+ */
+router.get('/settings', authenticateToken, async (req, res) => {
+  try {
+    res.json({ allowOverBalance: await allowOverBalance(req) })
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить настройки отпусков' })
+  }
+})
+
+router.put('/settings', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+  const orgId = currentOrgId(req)
+  if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
+  if (typeof req.body?.allowOverBalance !== 'boolean') return res.status(400).json({ error: 'Укажите allowOverBalance' })
+  try {
+    await query(
+      `INSERT INTO vacation_settings (organization_id, allow_over_balance, updated_at, updated_by) VALUES ($1, $2, NOW(), $3)
+       ON CONFLICT (organization_id) DO UPDATE SET allow_over_balance = EXCLUDED.allow_over_balance, updated_at = NOW(), updated_by = EXCLUDED.updated_by`,
+      [orgId, req.body.allowOverBalance, req.user.id]
+    )
+    res.json({ allowOverBalance: req.body.allowOverBalance })
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось сохранить настройки отпусков' })
+  }
+})
 
 /**
  * @swagger
@@ -1092,7 +1180,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const balanceResult = await client.query(balText, balValues)
 
     const balance = balanceResult.rows[0]
-    if (!balance || balance.available_days < finalDuration) {
+    if ((!balance || balance.available_days < finalDuration) && !(await allowOverBalance(req))) {
       await client.query('ROLLBACK')
       return res.status(400).json({
         error: 'Недостаточно дней на балансе',
@@ -1231,7 +1319,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     res.status(201).json({
       ...request,
-      returnDate: addDaysISO(request.end_date, 1),
+      returnDate: await nextWorkingDay(request.end_date),
       holidaysCount: computedDates.holidaysCount,
     })
     notifyVacationChanged(req, request.id, 'created')
@@ -1354,7 +1442,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     )
     const balance = (await client.query(balText, balValues)).rows[0]
     const availableForEdit = (balance?.available_days ?? 0) + (newYear === oldYear ? request.duration : 0)
-    if (!balance || availableForEdit < newDuration) {
+    if ((!balance || availableForEdit < newDuration) && !(await allowOverBalance(req))) {
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Недостаточно дней на балансе', available: availableForEdit, required: newDuration })
     }
@@ -1472,7 +1560,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
        WHERE vr.id = $1`,
       [id]
     )
-    res.json({ ...fullResult.rows[0], returnDate: addDaysISO(updated.end_date, 1), holidaysCount: computedDates.holidaysCount })
+    res.json({ ...fullResult.rows[0], returnDate: await nextWorkingDay(updated.end_date), holidaysCount: computedDates.holidaysCount })
     notifyVacationChanged(req, id, 'updated')
   } catch (error) {
     res.locals.errorCause = error
@@ -1792,7 +1880,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
         req.org ? [original.user_id, originalYear, req.org.org_id] : [original.user_id, originalYear]
       )).rows[0]
       const available = balanceRow ? balanceRow.available_days : 0
-      if (extraDays > available) {
+      if (extraDays > available && !(await allowOverBalance(req))) {
         await client.query('ROLLBACK')
         return res.status(400).json({ error: `Не хватает дней в балансе: новый период длиннее текущего на ${extraDays} дн., а доступно ${available} дн.` })
       }
@@ -1855,7 +1943,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
 
     res.status(201).json({
       ...newReq,
-      returnDate: addDaysISO(newReq.end_date, 1),
+      returnDate: await nextWorkingDay(newReq.end_date),
       holidaysCount: computedTransferDates.holidaysCount,
     })
     notifyVacationChanged(req, newReq.id, 'transferred')

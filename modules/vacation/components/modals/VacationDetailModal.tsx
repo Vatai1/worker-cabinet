@@ -9,6 +9,7 @@ import { ru } from 'date-fns/locale'
 import { X, UserCheck } from 'lucide-react'
 import { formatDate, personName } from '@/shared/lib/utils'
 import { getVacationExtension } from '@/modules/vacation/lib/holidayExtension'
+import { useReturnToWork } from '@/shared/lib/productionCalendar'
 
 interface VacationDetailModalProps {
   isOpen: boolean
@@ -25,6 +26,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
   useModalOpen(isOpen)
   const [showRejectInput, setShowRejectInput] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
+  const returnToWork = useReturnToWork(request?.endDate)
 
   useEffect(() => {
     if (!isOpen) return
@@ -41,7 +43,8 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
 
   const vacationTypeInfo = VACATION_TYPES[request.vacationType]
   const canManage = !!onApprove && !!onReject
-  const { holidaysCount, returnDate } = getVacationExtension(request.startDate, request.endDate, request.duration)
+  const { holidaysCount, returnDate: nextCalendarDay } = getVacationExtension(request.startDate, request.endDate, request.duration)
+  const returnDate = returnToWork ?? nextCalendarDay
 
   const handleApprove = async () => {
     if (onApprove) {

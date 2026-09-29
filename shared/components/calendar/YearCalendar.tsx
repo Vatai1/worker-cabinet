@@ -300,11 +300,10 @@ export function YearCalendar({
                 const isSelected = isDateInSelection(day)
                 const isHovered = !isSelected && isDateInHoverRange(day)
                 const dateStr = format(day, 'yyyy-MM-dd')
-                const productionDay = productionDays && productionDays.size > 0 ? productionDays.get(dateStr) : undefined
-                const holiday = productionDays && productionDays.size > 0
-                  ? productionDay?.kind === 'holiday' || productionDay?.kind === 'transfer'
-                  : isPublicHoliday(day)
-                const weekend = isWeekendDay(day) && productionDay?.kind !== 'shortened'
+                const hasProductionCalendar = !!productionDays && productionDays.size > 0
+                const productionDay = hasProductionCalendar ? productionDays.get(dateStr) : undefined
+                const holiday = hasProductionCalendar ? productionDay?.kind === 'holiday' : isPublicHoliday(day)
+                const weekend = (isWeekendDay(day) && productionDay?.kind !== 'shortened') || productionDay?.kind === 'transfer'
                 const hasVacation = vacations.length > 0
                 const visibleVacations = vacations.slice(0, 3)
                 const remainingCount = vacations.length > 3 ? vacations.length - 3 : 0
@@ -316,14 +315,15 @@ export function YearCalendar({
                 const isHoveringCell = hoverDate === dateStr
 
                 let stateClass = 'text-foreground'
+                const holidayText = 'text-red-600 dark:text-red-400'
                 if (isMineDay) {
-                  stateClass = 'font-bold'
+                  stateClass = holiday ? `font-bold ${holidayText}` : 'font-bold'
                 } else if (hasVacation) {
-                  stateClass = 'text-foreground font-semibold'
-                } else if (holiday) {
-                  stateClass = 'bg-muted text-muted-foreground'
+                  stateClass = holiday ? `font-semibold ${holidayText}` : 'text-foreground font-semibold'
                 } else if (weekend) {
-                  stateClass = 'text-muted-foreground'
+                  stateClass = holiday ? 'bg-muted text-red-600 dark:text-red-400' : 'bg-muted text-muted-foreground'
+                } else if (holiday) {
+                  stateClass = 'text-red-600 dark:text-red-400'
                 }
 
                 let vacationStyle: { backgroundColor?: string; backgroundImage?: string } | undefined
@@ -453,6 +453,10 @@ export function YearCalendar({
                <div className="flex items-center gap-2">
                  <div className="w-6 h-6 rounded border bg-muted" />
                  <span>Выходной</span>
+               </div>
+               <div className="flex items-center gap-2">
+                 <div className="w-6 h-6 rounded border flex items-center justify-center text-[11px] font-medium text-red-600 dark:text-red-400">23</div>
+                 <span>Праздник</span>
                </div>
                <div className="flex items-center gap-2">
                  <div className="flex gap-1">

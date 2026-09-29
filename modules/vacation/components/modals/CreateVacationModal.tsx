@@ -1,4 +1,6 @@
-﻿import { useState, useEffect } from 'react'
+﻿import { useVacationDuration, useReturnToWork, pluralDays } from '@/shared/lib/productionCalendar'
+import { useAllowOverBalance } from '@/modules/vacation/store/vacationSettingsStore'
+import { useState, useEffect } from 'react'
 import { RestrictionWarnings } from '@/modules/vacation/components/RestrictionWarnings'
 import { createPortal } from 'react-dom'
 import { VacationType, VACATION_TYPES } from '@/shared/types'
@@ -68,6 +70,9 @@ export function CreateVacationModal({
   showSubstitutes = false,
 }: CreateVacationModalProps) {
   useModalOpen(isOpen)
+  const vacationDuration = useVacationDuration(startDate, endDate)
+  const returnDate = useReturnToWork(endDate)
+  const allowOverBalance = useAllowOverBalance()
   const user = useAuthStore(s => s.user)
   const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
   const [hasTravel, setHasTravel] = useState(false)
@@ -137,7 +142,7 @@ export function CreateVacationModal({
 
   const start = new Date(startDate)
   const end = new Date(endDate)
-  const duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  const duration = vacationDuration.countedDays
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -247,8 +252,18 @@ export function CreateVacationModal({
               <span className="font-semibold">{format(start, 'dd.MM.yyyy', { locale: ru })}</span>
               <span>—</span>
               <span className="font-semibold">{format(end, 'dd.MM.yyyy', { locale: ru })}</span>
-              <span className="text-muted-foreground">({duration} {duration === 1 ? 'день' : duration >= 2 && duration <= 4 ? 'дня' : 'дней'})</span>
+              <span className="text-muted-foreground">({duration} {pluralDays(duration)})</span>
             </div>
+            {vacationDuration.holidays > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Праздничные дни не входят в отпуск: {vacationDuration.holidays} из {vacationDuration.calendarDays} календарных
+              </p>
+            )}
+            {returnDate && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Выход на работу: <span className="font-medium text-foreground">{format(new Date(`${returnDate}T12:00:00`), 'dd.MM.yyyy', { locale: ru })}</span>
+              </p>
+            )}
           </div>
 
           <div>
@@ -491,7 +506,7 @@ export function CreateVacationModal({
             }`}>
               <div className="text-sm">
                 <div className="font-medium mb-1">
-                  {hasEnoughDays ? '✅ Достаточно дней' : '⚠️ Недостаточно дней'}
+                  {hasEnoughDays ? '✅ Достаточно дней' : allowOverBalance ? '⚠️ Недостаточно дней — отпуск будет оформлен сверх баланса' : '⚠️ Недостаточно дней'}
                 </div>
                 <div className="opacity-70">
                   Требуется: {requiredDays} дней
@@ -523,7 +538,7 @@ export function CreateVacationModal({
               type="submit"
               disabled={
                 loading ||
-                (countsInCounter && !hasEnoughDays) ||
+                (countsInCounter && !hasEnoughDays && !allowOverBalance) ||
                 (hasTravel && !canUseTravel) ||
                 (vacationType === VacationType.EDUCATIONAL && !referenceFile)
               }

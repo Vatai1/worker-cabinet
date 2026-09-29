@@ -29,7 +29,11 @@ export function CalendarLegendSwatches() {
       </div>
       <div className="flex items-center gap-2">
         <div className="h-5 w-5 rounded border border-border bg-muted" />
-        <span className="text-muted-foreground">Выходной / праздник</span>
+        <span className="text-muted-foreground">Выходной</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="h-5 w-5 rounded border border-border flex items-center justify-center text-[10px] font-medium text-red-600 dark:text-red-400">23</div>
+        <span className="text-muted-foreground">Праздник</span>
       </div>
     </div>
   )

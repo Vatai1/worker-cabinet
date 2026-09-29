@@ -1,3 +1,5 @@
+import { useVacationDuration, useReturnToWork, pluralDays } from '@/shared/lib/productionCalendar'
+import { useAllowOverBalance } from '@/modules/vacation/store/vacationSettingsStore'
 import { useState, useEffect, useRef } from 'react'
 import { RestrictionWarnings } from '@/modules/vacation/components/RestrictionWarnings'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
@@ -134,14 +136,11 @@ export function CreateVacationFormModal({
     }
   }, [startDate, endDate, userId, onCheckRestrictions, lastCheckedDates])
 
-  if (!isOpen) return null
+  const vacationDuration = useVacationDuration(startDate, endDate)
+  const returnDate = useReturnToWork(endDate)
+  const allowOverBalance = useAllowOverBalance()
 
-  const calculateDuration = () => {
-    if (!startDate || !endDate) return 0
-    const start = new Date(startDate)
-    const end = new Date(endDate)
-    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-  }
+  if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -193,7 +192,7 @@ export function CreateVacationFormModal({
 
   const vacationTypeInfo = VACATION_TYPES[vacationType]
   const countsInCounter = vacationTypeInfo?.countedInCounter
-  const duration = calculateDuration()
+  const duration = vacationDuration.countedDays
   const requiredDays = countsInCounter ? duration : 0
   const hasEnoughDays = !countsInCounter || (balance?.availableDays || 0) >= requiredDays
   const canUseTravel = balance?.travelAvailable && hasTravel
@@ -265,9 +264,15 @@ export function CreateVacationFormModal({
             </div>
           </div>
 
-          {duration > 0 && (
-            <div className="text-sm text-muted-foreground">
-              Продолжительность: {duration} {duration === 1 ? 'день' : duration >= 2 && duration <= 4 ? 'дня' : 'дней'}
+          {vacationDuration.calendarDays > 0 && (
+            <div className="space-y-0.5 text-sm text-muted-foreground">
+              <div>Продолжительность: {duration} {pluralDays(duration)}</div>
+              {vacationDuration.holidays > 0 && (
+                <div className="text-xs">Праздничные дни не входят в отпуск: {vacationDuration.holidays} из {vacationDuration.calendarDays} календарных</div>
+              )}
+              {returnDate && (
+                <div className="text-xs">Выход на работу: <span className="font-medium text-foreground">{returnDate.split('-').reverse().join('.')}</span></div>
+              )}
             </div>
           )}
 
@@ -531,7 +536,7 @@ export function CreateVacationFormModal({
             }`}>
               <div className="text-sm">
                 <div className="font-medium mb-1">
-                  {hasEnoughDays ? '✅ Достаточно дней' : '⚠️ Недостаточно дней'}
+                  {hasEnoughDays ? '✅ Достаточно дней' : allowOverBalance ? '⚠️ Недостаточно дней — отпуск будет оформлен сверх баланса' : '⚠️ Недостаточно дней'}
                 </div>
                 <div className="text-muted-foreground">
                   Требуется: {requiredDays} дней
@@ -573,7 +578,7 @@ export function CreateVacationFormModal({
                 loading ||
                 !startDate ||
                 !endDate ||
-                (countsInCounter && !hasEnoughDays) ||
+                (countsInCounter && !hasEnoughDays && !allowOverBalance) ||
                 (hasTravel && !canUseTravel) ||
                 (vacationType === VacationType.EDUCATIONAL && !referenceFile && !initial?.referenceDocument)
               }

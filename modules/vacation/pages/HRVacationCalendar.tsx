@@ -7,6 +7,7 @@ import { CalendarLegendSwatches } from '@/shared/components/calendar/CalendarLeg
 import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
 import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
+import { VacationLimitSettingCard } from '@/modules/vacation/components/VacationLimitSettingCard'
 import { VacationDayRulesCard } from '@/modules/vacation/components/VacationDayRulesCard'
 import { VacationAccessCard } from '@/modules/vacation/components/VacationAccessCard'
 import { HRVacationRestrictions } from '@/modules/vacation/pages/HRVacationRestrictions'
@@ -275,7 +276,12 @@ export function HRVacationCalendar() {
         ))}
       </div>
 
-      {activeTab === 'days' && <VacationDayRulesCard />}
+      {activeTab === 'days' && (
+        <div className="space-y-4">
+          <VacationLimitSettingCard />
+          <VacationDayRulesCard />
+        </div>
+      )}
       {activeTab === 'access' && <VacationAccessCard />}
       {activeTab === 'restrictions' && <HRVacationRestrictions />}
 

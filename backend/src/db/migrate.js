@@ -1895,6 +1895,7 @@ async function runMigrations() {
     await migrateCalendarHolidays(db)
     await migrateInstructionVideos(db)
     await migrateMembershipDepartmentSync(db)
+    await migrateVacationSettings(db)
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
@@ -2222,5 +2223,22 @@ async function migrateMembershipDepartmentSync(db) {
     if (synced.rowCount > 0) console.log(`  ✓ user_organizations.department_id synced for ${synced.rowCount} memberships`)
   } catch (e) {
     console.log('  - membership department sync:', e.message)
+  }
+}
+
+async function migrateVacationSettings(db) {
+  console.log('Checking vacation_settings table...')
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS vacation_settings (
+        organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+        allow_over_balance BOOLEAN NOT NULL DEFAULT false,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )
+    `)
+    console.log('  ✓ vacation_settings ready')
+  } catch (e) {
+    console.log('  - vacation_settings:', e.message)
   }
 }

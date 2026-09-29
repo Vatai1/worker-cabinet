@@ -5,6 +5,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { formatDate } from '@/shared/lib/utils'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import type { VacationRequest } from '@/shared/types'
+import { useAllowOverBalance } from '@/modules/vacation/store/vacationSettingsStore'
 
 const daysInclusive = (startDate: string, endDate: string) =>
   Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1
@@ -25,6 +26,7 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [availableDays, setAvailableDays] = useState<number | null>(null)
+  const allowOverBalance = useAllowOverBalance()
 
   useEffect(() => {
     if (!isOpen || !request) return
@@ -76,7 +78,7 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
       newErrors.newEndDate = 'Перенос возможен только в пределах того же года'
     }
 
-    if (newStartDate && newEndDate && end >= start && availableDays !== null) {
+    if (newStartDate && newEndDate && end >= start && availableDays !== null && !allowOverBalance) {
       const extraDays = daysInclusive(newStartDate, newEndDate) - request.duration
       if (extraDays > availableDays) {
         newErrors.newEndDate = `Не хватает дней в балансе: новый период длиннее текущего на ${extraDays} дн., а доступно ${availableDays} дн.`
