@@ -9,6 +9,64 @@ import { notify } from '../config/notifications.js'
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
 
+const MAX_ACTIONS = 100
+
+function parseActions(raw, max = MAX_ACTIONS) {
+  try {
+    const list = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!Array.isArray(list)) return null
+    return JSON.stringify(list.slice(-max).map((a) => ({
+      t: String(a?.t ?? '').slice(0, 40),
+      type: String(a?.type ?? '').slice(0, 20),
+      text: String(a?.text ?? '').slice(0, 500),
+      path: String(a?.path ?? '').slice(0, 300),
+    })))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * @swagger
+ * /bug-reports/client-error:
+ *   post:
+ *     tags: [BugReports]
+ *     summary: Ошибка JavaScript из браузера
+ *     description: 'Пишется в журнал ошибок (error_log) с module=frontend и последними действиями пользователя (actions, до 30)'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [message]
+ *             properties:
+ *               message: { type: string }
+ *               stack: { type: string }
+ *               path: { type: string }
+ *               actions: { type: array, items: { type: object } }
+ *     responses:
+ *       204: { description: Записано }
+ */
+router.post('/client-error', authenticateToken, asyncHandler(async (req, res) => {
+  const { message, stack, path } = req.body || {}
+  if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Укажите message' })
+  await query(
+    `INSERT INTO error_log (message, stack, path, method, status_code, user_id, user_email, ip, module, actions)
+     VALUES ($1, $2, $3, NULL, NULL, $4, $5, $6, 'frontend', $7)`,
+    [
+      message.slice(0, 2000),
+      typeof stack === 'string' ? stack.slice(0, 5000) : null,
+      typeof path === 'string' ? path.slice(0, 500) : null,
+      req.user.id,
+      req.user.email || null,
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
+      parseActions(req.body.actions, 30),
+    ]
+  )
+  res.status(204).end()
+}))
+
 router.post('/', authenticateToken, upload.single('screenshot'), asyncHandler(async (req, res) => {
   const { title, description, page_url, browser_info } = req.body
   if (!title?.trim()) return res.status(400).json({ error: 'Укажите заголовок' })
@@ -20,9 +78,9 @@ router.post('/', authenticateToken, upload.single('screenshot'), asyncHandler(as
   }
 
   const result = await query(
-    `INSERT INTO bug_reports (user_id, title, description, screenshot_s3_key, page_url, browser_info)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [req.user.id, title.trim(), description || null, s3Key, page_url || null, browser_info || null]
+    `INSERT INTO bug_reports (user_id, title, description, screenshot_s3_key, page_url, browser_info, actions)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [req.user.id, title.trim(), description || null, s3Key, page_url || null, browser_info || null, parseActions(req.body.actions)]
   )
 
   const report = result.rows[0]

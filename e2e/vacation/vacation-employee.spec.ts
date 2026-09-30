@@ -41,8 +41,12 @@ async function expand(page: Page, r: { s: string; e: string }) {
   return c
 }
 
+let overBalanceWasOn = false
+
 test.beforeAll(async () => {
   await world.init()
+  overBalanceWasOn = (await world.ok<{ allowOverBalance: boolean }>('GET', '/vacation/settings')).allowOverBalance
+  if (overBalanceWasOn) await world.ok('PUT', '/vacation/settings', { allowOverBalance: false })
   await world.ensureDepartment('dept', DEPT)
   await world.ensureDepartment('other', OTHER_DEPT)
   await world.ensureUser('emp', { lastName: 'Отпускников', firstName: 'Тимур', role: 'employee', department: 'dept' })
@@ -54,6 +58,7 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
+  if (overBalanceWasOn) await world.ok('PUT', '/vacation/settings', { allowOverBalance: true })
   await world.teardown()
 })
 

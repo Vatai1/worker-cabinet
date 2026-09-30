@@ -11,7 +11,7 @@ import { uploadStreamToS3, deleteFromS3, getPresignedUrl } from '../config/s3.js
 const router = Router()
 
 const AUDIENCES = ['all', 'manager']
-const PLACEMENTS = ['vacation-create', 'vacation-transfer', 'vacation-approve', 'vacation-restrictions']
+const PLACEMENTS = ['vacation-create', 'vacation-transfer', 'vacation-approve', 'vacation-restrictions', 'day-off-take', 'day-off-grant']
 const VIDEO_MIMES = { 'video/mp4': 'mp4', 'video/webm': 'webm' }
 const POSTER_MIMES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024
@@ -198,7 +198,7 @@ router.get('/admin', authenticateToken, authorizeGlobalRoles('superadmin'), asyn
  *               title: { type: string }
  *               description: { type: string }
  *               audience: { type: string, enum: [all, manager] }
- *               placement: { type: string, enum: [vacation-create, vacation-transfer, vacation-approve, vacation-restrictions] }
+ *               placement: { type: string, enum: [vacation-create, vacation-transfer, vacation-approve, vacation-restrictions, day-off-take, day-off-grant] }
  *               sortOrder: { type: integer }
  *               isActive: { type: boolean }
  *               video: { type: string, format: binary, description: 'MP4 или WebM, до 500 МБ' }

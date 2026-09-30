@@ -21,6 +21,7 @@ import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { cn, getErrorMessage, personName } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
+import { LeaveAdjustmentsSection } from '@/modules/vacation/components/LeaveAdjustmentsSection'
 
 interface EmployeeTag {
   id: number
@@ -617,6 +618,17 @@ function EmployeeSettingsModal({
                 : `Использовано: ${usedDays ?? '—'} · Зарезервировано: ${reservedDays ?? '—'} · Доступно: ${availableDays ?? '—'}`}
             </p>
           </section>
+
+          {currentOrgId && (
+            <LeaveAdjustmentsSection
+              userId={employee.id}
+              year={balanceYear}
+              onVacationAdjusted={(days) => {
+                setTotalDays((t) => String(Number(t) + days))
+                setAvailableDays((a) => (a ?? 0) + days)
+              }}
+            />
+          )}
 
           {/* Account (admin only) */}
           {adminMode && (

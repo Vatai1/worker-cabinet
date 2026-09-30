@@ -40,11 +40,14 @@ import {
   Zap, Briefcase, Plane,
   Pencil, Save, Bot, Package,
   Palette, Tag, LogIn, Network,
-  Bug, FlaskConical, Film,
+  Bug, FlaskConical, Film, Radio,
 } from 'lucide-react'
+import { OnlineUsersTab } from '@/core/admin/components/OnlineUsersTab'
+import { TelemetryActions } from '@/shared/components/TelemetryActions'
+import type { TelemetryAction } from '@/shared/lib/telemetry'
 import type { AdminRole, AdminPermission, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
 
-type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports' | 'test-data' | 'instructions'
+type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'online' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports' | 'test-data' | 'instructions'
 
 interface TabItem {
   id: TabId
@@ -90,6 +93,7 @@ const TAB_GROUPS: TabGroup[] = [
   {
     label: 'Безопасность и контроль',
     tabs: [
+      { id: 'online', name: 'Сейчас на сайте', icon: Radio, description: 'Кто онлайн, отошёл, когда заходил', color: 'from-emerald-500 to-green-600' },
       { id: 'security', name: 'Безопасность', icon: ShieldCheck, description: 'Блокировки, попытки входа', color: 'from-red-500 to-rose-600' },
       { id: 'audit', name: 'Аудит', icon: Activity, description: 'Лог действий', color: 'from-indigo-500 to-blue-600' },
       { id: 'errors', name: 'Ошибки', icon: AlertCircle, description: 'Лог ошибок системы', color: 'from-orange-500 to-red-600' },
@@ -368,6 +372,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
         {activeTab === 'audit' && <AuditTab />}
         {activeTab === 'health' && <HealthTab />}
         {activeTab === 'errors' && <ErrorsTab />}
+        {activeTab === 'online' && <OnlineUsersTab />}
         {activeTab === 'security' && <SecurityTab />}
         {activeTab === 'organizations' && <OrganizationsTab />}
         {activeTab === 'global-hierarchy' && <GlobalHierarchy fullscreen onClose={closeHierarchy} />}
@@ -1466,7 +1471,7 @@ function HealthTab() {
 // ===================== ERRORS TAB =====================
 
 function ErrorsTab() {
-  const [errors, setErrors] = useState<{ id: number; message: string; stack: string | null; path: string | null; method: string | null; status_code: number; user_email: string | null; ip: string | null; module: string | null; created_at: string }[]>([])
+  const [errors, setErrors] = useState<{ id: number; message: string; stack: string | null; path: string | null; method: string | null; status_code: number | null; user_email: string | null; ip: string | null; module: string | null; actions: TelemetryAction[] | null; created_at: string }[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
@@ -1561,7 +1566,7 @@ function ErrorsTab() {
                   <div key={err.id} className={cn('p-4 rounded-xl border transition-colors cursor-pointer', expandedId === err.id ? 'border-border bg-muted/10' : 'border-border/30 hover:border-border/60')} onClick={() => setExpandedId(expandedId === err.id ? null : err.id)}>
                     <div className="flex items-start gap-3">
                       <Badge className={cn('text-[10px] shrink-0', statusColor(err.status_code || 500))}>
-                        {err.status_code || 500}
+                        {err.module === 'frontend' ? 'JS' : err.status_code || 500}
                       </Badge>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{err.message}</p>
@@ -1577,6 +1582,12 @@ function ErrorsTab() {
                           <pre className="mt-3 p-3 rounded-lg bg-muted/30 text-xs font-mono overflow-x-auto whitespace-pre-wrap text-muted-foreground max-h-64 overflow-y-auto">
                             {err.stack}
                           </pre>
+                        )}
+                        {expandedId === err.id && err.actions && err.actions.length > 0 && (
+                          <div className="mt-3 space-y-1">
+                            <p className="text-xs text-muted-foreground">Действия пользователя перед ошибкой</p>
+                            <TelemetryActions actions={err.actions} />
+                          </div>
                         )}
                       </div>
                     </div>

@@ -25,12 +25,15 @@ export function getNotificationUrl(type, data, userId) {
       return `/vacation?tab=history&requestId=${requestId}`
     }
 
-    case 'bug_report_new':
-    case 'bug_report_update': {
+    case 'bug_report_new': {
       const reportId = str(d.reportId)
       if (!reportId) return null
       return `/admin/global?tab=bug-reports&reportId=${reportId}`
     }
+
+    case 'bug_report_update':
+    case 'bug_report_reply':
+      return '/notifications'
 
     case 'document_assigned': {
       const documentId = str(d.documentId)

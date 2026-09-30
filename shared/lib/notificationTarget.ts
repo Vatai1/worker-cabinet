@@ -37,8 +37,7 @@ export function getNotificationTarget(
       return { path: `/vacation?tab=history&requestId=${requestId}` }
     }
 
-    case 'bug_report_new':
-    case 'bug_report_update': {
+    case 'bug_report_new': {
       const reportId = str(data.reportId)
       if (!reportId) return null
       return { path: `/admin/global?tab=bug-reports&reportId=${reportId}` }

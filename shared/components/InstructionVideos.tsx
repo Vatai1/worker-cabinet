@@ -4,7 +4,7 @@ import { Play, PlayCircle } from 'lucide-react'
 import { apiGet } from '@/shared/lib/apiClient'
 import { cn } from '@/shared/lib/utils'
 
-export type InstructionPlacement = 'vacation-create' | 'vacation-transfer' | 'vacation-approve' | 'vacation-restrictions'
+export type InstructionPlacement = 'vacation-create' | 'vacation-transfer' | 'vacation-approve' | 'vacation-restrictions' | 'day-off-take' | 'day-off-grant'
 export type InstructionAudience = 'all' | 'manager'
 
 export const INSTRUCTION_PLACEMENTS: Array<{ value: InstructionPlacement; label: string }> = [
@@ -12,6 +12,8 @@ export const INSTRUCTION_PLACEMENTS: Array<{ value: InstructionPlacement; label:
   { value: 'vacation-transfer', label: 'Отпуск → Перенос отпуска' },
   { value: 'vacation-approve', label: 'Отпуск → Согласование заявки' },
   { value: 'vacation-restrictions', label: 'Отпуск → Пересечения отпусков' },
+  { value: 'day-off-take', label: 'Отпуск → Как взять отгул' },
+  { value: 'day-off-grant', label: 'Отпуск → Начисление отгулов' },
 ]
 
 export const INSTRUCTION_AUDIENCES: Array<{ value: InstructionAudience; label: string }> = [

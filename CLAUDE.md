@@ -195,7 +195,7 @@ On creation (`POST /api/timesheet`), entries are auto-filled for the entire mont
 
 Bulk update via `PUT /api/timesheet/:id/entries` (upsert by `timesheet_id + employee_id + date`). Export endpoints: `GET /api/timesheet/:id/export/excel` (ExcelJS) and `/export/pdf` (PDFKit, landscape A4).
 
-Manager access is scoped to their department (`getManagerDepartmentId` checks `departments.manager_id` then `users.department_id`). HR/admin see all departments.
+A user can manage several departments (`departments.manager_id`, no uniqueness). Manager access is scoped to all of them (`getManagerDepartments` checks `departments.manager_id` then `users.department_id`); `GET /api/timesheet/my-departments` feeds the department switcher in `ManagerTimesheet`, and `POST /api/timesheet` without `department_id` returns 400 when there is more than one. HR/admin see all departments.
 
 Frontend: `modules/timesheet/pages/ManagerTimesheet.tsx` for manager, `shared/components/timesheet/TimesheetGrid.tsx` for the editable grid. Attendance codes and colors defined in `@/shared/lib/timesheetCodes`.
 
@@ -206,6 +206,14 @@ React Flow (`@xyflow/react`) canvas. Lazy-loaded via `React.lazy`. Nodes: `depar
 
 ### Production Calendar (производственный календарь)
 Data lives in `backend/src/db/productionCalendar.js` (per year, source consultant.ru) and is upserted into `calendar_holidays (day, year, description, kind)` by `migrate.js`. `kind`: `holiday` — non-working holiday per ТК РФ ст. 112 (including ones falling on weekends), `transfer` — transferred day off, `shortened` — shortened working day (incl. working Saturdays). Vacation duration subtracts only `holiday` days (ст. 120); transferred days off are part of the vacation. `GET /api/vacation/production-calendar?year=` feeds `YearCalendar` (falls back to hardcoded ст. 112 dates when a year is not loaded). To add a year, append it to `PRODUCTION_CALENDAR`.
+
+### Day-offs (отгулы) and leave adjustments
+HR/admin grant or deduct days via `POST /api/vacation/adjustments` (`leave_adjustments`: `kind` `vacation` | `day_off`, signed `days`, mandatory `comment`). `vacation` adds to `vacation_balances.total_days` for `year`; `day_off` is a separate counter: available = granted − approved − on_approval `day_off` requests (`dayOffBalance()` in `vacation.js`). Vacation type `day_off` («Отгул»): counted in working days, ignores the department vacation block and the 14-day notice (frontend opens the create modal in day-off-only mode), never touches the annual balance (guards in create/edit/approve/reject/cancel), cannot be transferred, fills timesheet with `НВ`. Day-offs are not tied to a year. Managers can grant/see adjustments only for subordinates (`adjustmentScopeUserIds`: users of departments they manage + descendants, and users whose `manager_id` is them); hr/admin see the whole org. Managers may grant only `day_off`. UI: HR → Отпуск → «Отгулы» tab and the same `LeaveAdjustmentsPanel` on `/vacation?tab=adjustments` for managers — day-offs only (grant form for several employees, employees table, history — all with filters; `GET /api/vacation/adjustments/all?kind=day_off` returns `scope`, `people`, `employees`, `items`); extra vacation days are granted only in the HR employee modal, HR employee modal → «Начисление отгулов и дней отпуска» (`LeaveAdjustmentsSection`), `/vacation` → «Отгулы» card for every role (always shown; «Взять отгул» opens `CreateVacationFormModal` preset to `day_off`). Day-off requests go through exactly the same approval as vacations (same `approver_id` resolution and hierarchy settings).
+
+### Presence + Telemetry
+Presence rides on the existing notification WebSocket (`backend/src/config/ws.js`): the client (`useNotificationWs`) sends `{event:'activity'}` at most once a minute on user input; `getPresence()` derives `online` (activity < 5 min) / `away` (tab open, idle) and everything else is `offline` with `users.last_seen_at`. Admin tab «Сейчас на сайте» (`core/admin/components/OnlineUsersTab.tsx`, `GET /api/admin/online`, polls 30 s).
+
+`shared/lib/telemetry.ts` (installed in `main.tsx`) keeps the last 100 user actions in memory: clicks, field changes with values (passwords/hidden/cc fields skipped), navigation, non-GET and failed requests. They are attached to bug reports (`bug_reports.actions`); uncaught JS errors and ErrorBoundary crashes go to `POST /api/bug-reports/client-error` → `error_log` with `module = 'frontend'` and the last 30 actions (same message deduped for 5 min).
 
 ### AI Assistant
 Backend proxy to OpenAI-compatible API. Config stored in `system_settings` table (4 keys). Admin UI exists in AdminPanel. Frontend: `modules/assistant/`.

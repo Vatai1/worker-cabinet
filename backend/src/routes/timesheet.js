@@ -16,6 +16,7 @@ const VACATION_TYPE_TO_CODE = {
   veteran: 'ОТ',
   unpaid: 'ОС',
   educational: 'ДО',
+  day_off: 'НВ',
 }
 
 router.use(authenticateToken)
@@ -74,27 +75,28 @@ router.post('/auto-create', authorizeRoles('admin', 'hr'), async (req, res) => {
   }
 })
 
-async function getManagerDepartmentId(userId, req) {
+async function getManagerDepartments(userId, req) {
   const { text, values } = orgScopedQuery(
-    `SELECT id FROM departments WHERE manager_id = $1 LIMIT 1`,
+    `SELECT id, name FROM departments WHERE manager_id = $1 ORDER BY name`,
     [userId], req
   )
   const byManagerId = await query(text, values)
-  if (byManagerId.rows.length > 0) return byManagerId.rows[0].id
+  if (byManagerId.rows.length > 0) return byManagerId.rows
 
   const byDeptId = await query(
-    `SELECT department_id FROM users WHERE id = $1 AND role = 'manager' AND department_id IS NOT NULL LIMIT 1`,
+    `SELECT d.id, d.name FROM users u JOIN departments d ON d.id = u.department_id WHERE u.id = $1 AND u.role = 'manager'`,
     [userId]
   )
-  if (byDeptId.rows.length > 0) return byDeptId.rows[0].department_id
+  return byDeptId.rows
+}
 
-  return null
+async function getManagerDepartmentIds(userId, req) {
+  return (await getManagerDepartments(userId, req)).map((d) => d.id)
 }
 
 async function canAccessDepartment(user, departmentId, req) {
   if (['hr', 'admin'].includes(user.role)) return true
-  const managedDeptId = await getManagerDepartmentId(user.id, req)
-  return managedDeptId !== null && managedDeptId === departmentId
+  return (await getManagerDepartmentIds(user.id, req)).includes(Number(departmentId))
 }
 
 async function canAccessTimesheet(user, timesheetId, req) {
@@ -103,6 +105,27 @@ async function canAccessTimesheet(user, timesheetId, req) {
   if (result.rows.length === 0) return false
   return canAccessDepartment(user, result.rows[0].department_id, req)
 }
+
+/**
+ * @swagger
+ * /timesheet/my-departments:
+ *   get:
+ *     tags: [Timesheet]
+ *     summary: Отделы, табели которых ведёт текущий руководитель
+ *     description: 'Все отделы, где пользователь указан руководителем (их может быть несколько); если таких нет — отдел самого руководителя. Для hr/admin — пустой список (им доступны все отделы).'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: '[{ id, name }]' }
+ */
+router.get('/my-departments', async (req, res) => {
+  try {
+    if (['hr', 'admin'].includes(req.user.role)) return res.json([])
+    res.json(await getManagerDepartments(req.user.id, req))
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить отделы' })
+  }
+})
 
 /**
  * @swagger
@@ -141,12 +164,12 @@ router.get('/', async (req, res) => {
       const result = await query(sql, params)
       rows = result.rows
     } else {
-      const deptId = await getManagerDepartmentId(req.user.id, req)
-      if (!deptId) {
+      const deptIds = await getManagerDepartmentIds(req.user.id, req)
+      if (deptIds.length === 0) {
         rows = []
       } else {
-        let sql = `SELECT t.*, d.name as department_name FROM timesheets t JOIN departments d ON t.department_id = d.id WHERE t.department_id = $1 `
-        const params = [deptId]
+        let sql = `SELECT t.*, d.name as department_name FROM timesheets t JOIN departments d ON t.department_id = d.id WHERE t.department_id = ANY($1::int[]) `
+        const params = [deptIds]
         if (req.org) {
           sql += `AND t.organization_id = $${params.length + 1} `
           params.push(req.org.org_id)
@@ -196,11 +219,14 @@ router.post('/', async (req, res) => {
   let { department_id, year, month } = req.body
 
   if (!department_id && req.user.role === 'manager') {
-    const deptId = await getManagerDepartmentId(req.user.id, req)
-    if (!deptId) {
+    const deptIds = await getManagerDepartmentIds(req.user.id, req)
+    if (deptIds.length === 0) {
       return res.status(400).json({ error: 'Вы не являетесь руководителем ни одного отдела' })
     }
-    department_id = deptId
+    if (deptIds.length > 1) {
+      return res.status(400).json({ error: 'Вы руководите несколькими отделами — укажите отдел' })
+    }
+    department_id = deptIds[0]
   }
 
   if (!department_id || !year || !month) {
@@ -437,7 +463,7 @@ router.put('/:id/entries', async (req, res) => {
     const rangeStart = `${timesheet.year}-${mm}-01`
     const rangeEnd = `${timesheet.year}-${mm}-${String(daysInTs).padStart(2, '0')}`
     const today = toLocalDateStr(new Date())
-    const vacationCodes = ['ОТ', 'ОС', 'ДО']
+    const vacationCodes = ['ОТ', 'ОС', 'ДО', 'НВ']
 
     const employeeIds = [...new Set(entries.map(e => e.employee_id))]
     const dates = [...new Set(entries.map(e => e.date))]

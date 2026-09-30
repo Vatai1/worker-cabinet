@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach, after } from 'node:test'
+import { describe, it, before, beforeEach, afterEach, after } from 'node:test'
 import assert from 'node:assert'
 import bcrypt from 'bcryptjs'
 import PizZip from 'pizzip'
@@ -162,7 +162,15 @@ async function anonymousCall(method, path, body) {
 }
 
 describe('Модуль отпусков — user stories', () => {
-  after(() => pool.end())
+  let overBalanceWasOn = false
+  before(async () => {
+    overBalanceWasOn = (await query('SELECT allow_over_balance FROM vacation_settings WHERE organization_id = 1')).rows[0]?.allow_over_balance === true
+    await query('UPDATE vacation_settings SET allow_over_balance = false WHERE organization_id = 1')
+  })
+  after(async () => {
+    if (overBalanceWasOn) await query('UPDATE vacation_settings SET allow_over_balance = true WHERE organization_id = 1')
+    await pool.end()
+  })
 
   describe('US-1. Работник подаёт заявку на отпуск', () => {
     let deptId, mgr, emp, emp2, sub

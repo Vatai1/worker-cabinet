@@ -37,8 +37,10 @@ import { getCookie, setCookie } from '@/shared/lib/cookies'
 import {
   ChevronLeft, ChevronRight, ChevronDown, FileText, Clock, CheckCircle2, CheckCircle,
   UserCheck, Search, RotateCcw, XCircle, PieChart,
-  Calendar as CalendarIcon, Lightbulb, HelpCircle, AlertTriangle, Plane, Pencil,
+  Calendar as CalendarIcon, Lightbulb, HelpCircle, AlertTriangle, Plane, Pencil, Coffee,
 } from 'lucide-react'
+import { useLeaveAdjustments, DAY_OFF_HINT } from '@/modules/vacation/lib/dayOffs'
+import { LeaveAdjustmentsPanel } from '@/modules/vacation/components/LeaveAdjustmentsPanel'
 import { CreateVacationFormModal } from '@/modules/vacation/components/modals/CreateVacationFormModal'
 import { PageBanner } from '@/shared/components/PageBanner'
 
@@ -51,7 +53,7 @@ const REQUEST_STATUS_OPTIONS = [
 
 const EMPTY_REQUEST_FILTERS: { departmentIds: string[]; statuses: string[]; vacationTypes: string[]; tagId: string } = { departmentIds: [], statuses: [], vacationTypes: [], tagId: '' }
 
-type VacationTab = 'mine' | 'approvals' | 'restrictions' | 'requests' | 'history'
+type VacationTab = 'mine' | 'approvals' | 'restrictions' | 'adjustments' | 'requests' | 'history'
 type CalendarScope = 'mine' | 'team'
 
 const parseUrlList = (value: string | null) => (value ? value.split(',').filter(Boolean) : [])
@@ -126,6 +128,9 @@ export function Vacation() {
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<VacationValidationError[]>([])
   const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
   const [vacationBlocked, setVacationBlocked] = useState(false)
+  const [dayOffOnly, setDayOffOnly] = useState(false)
+  const [showDayOffForm, setShowDayOffForm] = useState(false)
+  const { dayOffs, items: leaveAdjustments, reload: reloadDayOffs } = useLeaveAdjustments()
   const [dateErrorMessage, setDateErrorMessage] = useState<string | null>(null)
   const [year, setYear] = useState(initialUrlState.year)
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
@@ -146,7 +151,7 @@ export function Vacation() {
     const params = new URLSearchParams(location.search)
     const tab = params.get('tab')
     const requestId = params.get('requestId')
-    if (tab === 'mine' || tab === 'approvals' || tab === 'restrictions' || tab === 'requests' || tab === 'history') {
+    if (tab === 'mine' || tab === 'approvals' || tab === 'restrictions' || tab === 'adjustments' || tab === 'requests' || tab === 'history') {
       setActiveTab(tab)
     }
     if (requestId) {
@@ -305,6 +310,7 @@ export function Vacation() {
     fetchUserRequests(user.id)
     fetchAllRequests(reqFilters.tagId ? { tagId: reqFilters.tagId } : undefined)
     fetchConnectionRequests()
+    reloadDayOffs()
 
     if (reqFilters.departmentIds.length > 0) {
       const tagFilter = reqFilters.tagId ? { tagId: reqFilters.tagId } : undefined
@@ -519,7 +525,9 @@ export function Vacation() {
 
     if (startDate) {
       const validationError = validateVacationStartDate(startDate)
-      if (validationError) {
+      const canTakeDayOff = startDate >= format(new Date(), 'yyyy-MM-dd') && (dayOffs?.available ?? 0) > 0
+      setDayOffOnly(!!validationError && canTakeDayOff)
+      if (validationError && !canTakeDayOff) {
         setDateErrorMessage(validationError)
         setSelectedStartDate(null)
         setSelectedEndDate(null)
@@ -568,6 +576,43 @@ export function Vacation() {
       fetchUserRequests(user.id)
       reloadRequests()
       fetchBalance(user.id, year).then(setBalance)
+    } catch (err) {
+      setDateErrorMessage(getErrorMessage(err))
+    }
+  }
+
+  const handleCreateDayOff = async (data: {
+    startDate: string
+    endDate: string
+    vacationType: VacationType
+    hasTravel: boolean
+    travelDestination?: string
+    travelChildren?: Array<{ fullName: string; birthDate: string }>
+    comment: string
+    substitute_ids?: number[]
+  }) => {
+    if (!user) return
+    try {
+      const created = await useVacationStore.getState().createRequest(user.id, {
+        startDate: data.startDate,
+        endDate: data.endDate,
+        vacationType: data.vacationType,
+        comment: data.comment,
+        hasTravel: data.hasTravel,
+        travelDestination: data.travelDestination,
+        travelChildren: data.travelChildren,
+        substitute_ids: data.substitute_ids,
+      })
+      if (!created) {
+        setDateErrorMessage(useVacationStore.getState().error || 'Не удалось оформить отгул')
+        return
+      }
+      setShowDayOffForm(false)
+      fetchUserRequests(user.id)
+      reloadRequests()
+      reloadDayOffs()
+      fetchBalance(user.id, year).then(setBalance)
+      toast.success(data.vacationType === VacationType.DAY_OFF ? 'Отгул отправлен на согласование' : 'Заявка отправлена на согласование')
     } catch (err) {
       setDateErrorMessage(getErrorMessage(err))
     }
@@ -839,6 +884,7 @@ export function Vacation() {
     { id: 'mine', label: 'Отпуск' },
     ...(canApprove ? [{ id: 'approvals' as VacationTab, label: 'Согласование', badge: pendingApprovals.length }] : []),
     ...(isManager ? [{ id: 'restrictions' as VacationTab, label: 'Пересечения' }] : []),
+    ...(isManager ? [{ id: 'adjustments' as VacationTab, label: 'Отгулы' }] : []),
     { id: 'requests', label: 'Заявления' },
     { id: 'history', label: 'История' },
   ]
@@ -992,6 +1038,8 @@ export function Vacation() {
           restrictionWarnings={restrictionWarningsCalendar}
           onCheckRestrictions={handleCheckRestrictionsCalendar}
           showSubstitutes
+          dayOffsAvailable={dayOffs?.available ?? 0}
+          dayOffOnly={dayOffOnly}
         />
       )}
 
@@ -1149,6 +1197,71 @@ export function Vacation() {
               </div>
 
 
+            </div>
+          )}
+
+          {dayOffs && (
+            <div data-testid="day-offs-card" className="rounded-2xl border border-border bg-card p-[22px] shadow-sm">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                  <Coffee className="h-[18px] w-[18px]" />
+                </div>
+                <h2 className="text-[16.5px] font-bold text-foreground">Отгулы</h2>
+                <span className="group relative inline-flex">
+                  <HelpCircle
+                    tabIndex={0}
+                    aria-label={DAY_OFF_HINT}
+                    className="h-4 w-4 cursor-help text-muted-foreground/70 outline-none hover:text-foreground focus:text-foreground"
+                  />
+                  <span
+                    role="tooltip"
+                    className="pointer-events-none invisible absolute left-0 top-full z-20 mt-1.5 w-72 rounded-lg border border-border bg-popover px-2.5 py-2 text-xs text-popover-foreground opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+                  >
+                    {DAY_OFF_HINT}
+                  </span>
+                </span>
+              </div>
+              <div className="grid grid-cols-3">
+                <div className="px-[26px] text-center">
+                  <div data-testid="day-offs-available" className="text-[36px] font-extrabold leading-[1.1] text-teal-600 dark:text-teal-400">{dayOffs.available}</div>
+                  <div className="mt-[3px] text-[13px] font-medium text-muted-foreground">Доступно</div>
+                </div>
+                <div className="border-l border-border px-[26px] text-center">
+                  <div className="text-[36px] font-extrabold leading-[1.1] text-foreground">{dayOffs.pending}</div>
+                  <div className="mt-[3px] text-[13px] font-medium text-muted-foreground">На согласовании</div>
+                </div>
+                <div className="border-l border-border px-[26px] text-center">
+                  <div className="text-[36px] font-extrabold leading-[1.1] text-amber-600 dark:text-amber-400">{dayOffs.used}</div>
+                  <div className="mt-[3px] text-[13px] font-medium text-muted-foreground">Использовано</div>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  {dayOffs.available > 0
+                    ? 'Отгул можно оформить кнопкой или выделив даты в календаре и выбрав тип «Отгул». Согласование — как у отпуска.'
+                    : 'Доступных отгулов нет — их начисляет HR или ваш руководитель, например за работу в выходной.'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setShowIntroModal(true)}>Как это работает</Button>
+                  <Button size="sm" onClick={() => setShowDayOffForm(true)} disabled={dayOffs.available <= 0}>
+                    <Coffee className="mr-1.5 h-4 w-4" /> Взять отгул
+                  </Button>
+                </div>
+              </div>
+              {leaveAdjustments.length > 0 && (
+                <ul className="mt-3 space-y-1 border-t border-border pt-3 text-sm">
+                  {leaveAdjustments.slice(0, 5).map((a) => (
+                    <li key={a.id} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className={cn('font-semibold tabular-nums', a.days > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive')}>
+                        {a.days > 0 ? '+' : ''}{a.days}
+                      </span>
+                      <span className="text-muted-foreground">{a.kind === 'day_off' ? 'отгул' : `дн. отпуска за ${a.year}`}</span>
+                      <span className="min-w-0 flex-1">{a.comment}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleDateString('ru-RU')}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
@@ -1420,6 +1533,7 @@ export function Vacation() {
       )}
 
       {activeTab === 'restrictions' && isManager && <VacationRestrictions />}
+      {activeTab === 'adjustments' && isManager && <LeaveAdjustmentsPanel />}
 
       {activeTab === 'approvals' && canApprove && (
         <Card className="overflow-hidden p-0">
@@ -1619,10 +1733,26 @@ export function Vacation() {
         />
       )}
 
+      {showDayOffForm && (
+        <CreateVacationFormModal
+          isOpen
+          mode="create"
+          initial={{ startDate: '', endDate: '', vacationType: VacationType.DAY_OFF, hasTravel: false }}
+          dayOffsAvailable={dayOffs?.available ?? 0}
+          balance={balance ?? undefined}
+          onClose={() => setShowDayOffForm(false)}
+          onSubmit={handleCreateDayOff}
+          loading={loading}
+          userId={user?.id}
+          showSubstitutes
+        />
+      )}
+
       {editingRequest && (
         <CreateVacationFormModal
           key={editingRequest.id}
           isOpen
+          dayOffsAvailable={(dayOffs?.available ?? 0) + (editingRequest.vacationType === VacationType.DAY_OFF ? editingRequest.duration : 0)}
           mode="edit"
           initial={{
             startDate: editingRequest.startDate.slice(0, 10),

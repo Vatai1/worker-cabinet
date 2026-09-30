@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   X, Plane, ChevronDown, FilePlus2, UserCheck2, ArrowLeftRight,
-  CalendarDays, ShieldAlert, FileText, History,
+  CalendarDays, ShieldAlert, FileText, History, Coffee, Gift,
 } from 'lucide-react'
 import { Card } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
@@ -128,6 +128,20 @@ export function VacationIntroModal({ open, onClose, isManager, isAdminOrSuperAdm
     { title: 'Отправьте заявку', text: 'она получает статус «На согласовании» и попадает в очередь к вашему руководителю' },
   ]
 
+  const dayOffTakeSteps: Step[] = [
+    { title: 'Откройте карточку «Отгулы» на вкладке «Отпуск»', text: 'там видно, сколько отгулов доступно, сколько на согласовании и кто и за что их начислил' },
+    { title: 'Нажмите «Взять отгул»', text: 'или выделите даты в календаре и выберите тип «Отгул» — отгул можно взять даже когда подача заявок на отпуск закрыта' },
+    { title: 'Укажите даты и при необходимости комментарий', text: 'отгулы считаются в рабочих днях: выходные и праздники внутри периода не списываются' },
+    { title: 'Отправьте заявку', text: 'согласование такое же, как у отпуска; дни отпуска при этом не расходуются' },
+  ]
+
+  const dayOffGrantSteps: Step[] = [
+    { title: 'Откройте вкладку «Отгулы»', text: isAdminOrSuperAdmin ? 'на странице «Отпуск» или в HR-панели → Отпуск; HR и админ начисляют любому сотруднику' : 'на странице «Отпуск»; руководитель начисляет только своим подчинённым' },
+    { title: 'Отметьте сотрудников и укажите количество', text: 'можно выбрать сразу нескольких; отрицательное число списывает отгулы' },
+    { title: 'Напишите, за что начисляете', text: 'например «За работу в выходной 12.10» — комментарий увидит сотрудник' },
+    { title: 'Нажмите «Начислить»', text: 'остатки видны в таблице «Сотрудники с отгулами», все начисления — в «Истории отгулов»' },
+  ]
+
   const approveSteps: Step[] = [
     { title: 'Заявка появляется на вкладке «Согласование»', text: isManager ? 'у руководителя отдела; HR и админ видят заявки по всей организации' : 'у вашего руководителя отдела' },
     { title: 'Руководитель открывает карточку заявки', text: 'видит период, тип отпуска и может одобрить или отклонить её с указанием причины' },
@@ -191,6 +205,18 @@ export function VacationIntroModal({ open, onClose, isManager, isAdminOrSuperAdm
             {videoFor('vacation-create')}
             <Timeline steps={createSteps} accent="primary" />
           </Section>
+
+          <Section id="day-off-take" icon={Coffee} title="Как взять отгул" accent="primary" open={openSections.has('day-off-take')} onToggle={toggleSection}>
+            {videoFor('day-off-take')}
+            <Timeline steps={dayOffTakeSteps} accent="primary" />
+          </Section>
+
+          {isManager && (
+            <Section id="day-off-grant" icon={Gift} title="Начисление отгулов" accent="violet" open={openSections.has('day-off-grant')} onToggle={toggleSection}>
+              {videoFor('day-off-grant')}
+              <Timeline steps={dayOffGrantSteps} accent="violet" />
+            </Section>
+          )}
 
           <Section id="approve" icon={UserCheck2} title="Согласование заявки" accent="amber" open={openSections.has('approve')} onToggle={toggleSection}>
             {isManager && videoFor('vacation-approve')}

@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom'
 import type { VacationRequest } from '@/shared/types'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
-import { VACATION_TYPES } from '@/shared/types'
+import { VACATION_TYPES, VacationType } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -329,7 +329,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
                 >
                   Закрыть
                 </Button>
-                {!canManage && request.status === 'approved' && onTransfer && (
+                {!canManage && request.status === 'approved' && onTransfer && request.vacationType !== VacationType.DAY_OFF && (
                   <Button
                     onClick={() => {
                       onTransfer(request)

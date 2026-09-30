@@ -31,6 +31,18 @@ export function ManagerTimesheet() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [departments, setDepartments] = useState<{ id: number; name: string }[] | null>(null)
+  const [departmentId, setDepartmentId] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/timesheet/my-departments`, { headers: getAuthHeaders() })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { id: number; name: string }[]) => {
+        setDepartments(list)
+        setDepartmentId(list[0]?.id ?? null)
+      })
+      .catch(() => setDepartments([]))
+  }, [])
 
   async function loadTimesheet() {
     setLoading(true)
@@ -39,7 +51,7 @@ export function ManagerTimesheet() {
       const res = await fetch(`${API_BASE_URL}/timesheet`, { headers: getAuthHeaders() })
       if (!res.ok) throw new Error('Ошибка загрузки')
       const list: Timesheet[] = await res.json()
-      const found = list.find(t => t.year === year && t.month === month) ?? null
+      const found = list.find(t => t.year === year && t.month === month && (departmentId === null || t.department_id === departmentId)) ?? null
 
       if (found) {
         setTimesheet(found)
@@ -57,14 +69,14 @@ export function ManagerTimesheet() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadTimesheet() }, [year, month])
+  useEffect(() => { if (departments !== null) loadTimesheet() }, [year, month, departmentId, departments])
 
   async function handleCreate() {
     try {
       const res = await fetch(`${API_BASE_URL}/timesheet`, {
         method: 'POST',
         headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ year, month }),
+        body: JSON.stringify({ year, month, ...(departmentId !== null ? { department_id: departmentId } : {}) }),
       })
       if (!res.ok) {
         const d = await res.json()
@@ -128,6 +140,18 @@ export function ManagerTimesheet() {
         meta={timesheetData?.employees && <BannerPill icon={Users}>{timesheetData.employees.length} работников</BannerPill>}
         extra={
           <div className="flex flex-wrap items-center gap-2">
+            {departments && departments.length > 1 && (
+              <select
+                value={departmentId ?? ''}
+                onChange={e => setDepartmentId(Number(e.target.value))}
+                aria-label="Отдел"
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+              >
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            )}
             <select
               value={month}
               onChange={e => setMonth(Number(e.target.value))}

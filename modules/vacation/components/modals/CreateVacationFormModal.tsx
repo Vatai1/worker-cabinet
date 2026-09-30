@@ -39,6 +39,7 @@ interface CreateVacationFormModalProps {
   userId?: string
   onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
   showSubstitutes?: boolean
+  dayOffsAvailable?: number
   mode?: 'create' | 'edit'
   initial?: {
     startDate: string
@@ -63,6 +64,7 @@ export function CreateVacationFormModal({
   userId,
   onCheckRestrictions,
   showSubstitutes = false,
+  dayOffsAvailable = 0,
   mode = 'create',
   initial,
 }: CreateVacationFormModalProps) {
@@ -182,7 +184,7 @@ export function CreateVacationFormModal({
       startDate,
       endDate,
       vacationType,
-      hasTravel,
+      hasTravel: hasTravel && !isDayOff,
       travelDestination: hasTravel ? travelDestination.trim() || undefined : undefined,
       travelChildren: hasTravel ? travelChildren : [],
       comment,
@@ -193,9 +195,12 @@ export function CreateVacationFormModal({
 
   const vacationTypeInfo = VACATION_TYPES[vacationType]
   const countsInCounter = vacationTypeInfo?.countedInCounter
-  const duration = vacationDuration.countedDays
-  const requiredDays = countsInCounter ? duration : 0
-  const hasEnoughDays = !countsInCounter || (balance?.availableDays || 0) >= requiredDays
+  const isDayOff = vacationType === VacationType.DAY_OFF
+  const duration = isDayOff ? vacationDuration.workingDays : vacationDuration.countedDays
+  const requiredDays = countsInCounter || isDayOff ? duration : 0
+  const hasEnoughDays = isDayOff
+    ? duration > 0 && dayOffsAvailable >= duration
+    : !countsInCounter || (balance?.availableDays || 0) >= requiredDays
   const canUseTravel = balance?.travelAvailable && hasTravel
 
   const handleReset = () => {
@@ -216,7 +221,7 @@ export function CreateVacationFormModal({
             <div className="p-2 rounded-xl bg-primary/10">
               <FileText className="h-5 w-5 text-primary" />
             </div>
-            <h2 className="text-xl font-bold">{isEdit ? 'Изменить заявку на отпуск' : 'Создать заявку на отпуск'}</h2>
+            <h2 className="text-xl font-bold">{isDayOff ? (isEdit ? 'Изменить отгул' : 'Оформить отгул') : isEdit ? 'Изменить заявку на отпуск' : 'Создать заявку на отпуск'}</h2>
           </div>
           <button
             onClick={onClose}
@@ -288,7 +293,7 @@ export function CreateVacationFormModal({
               className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               disabled={loading}
             >
-              {Object.values(VacationType).map((type) => {
+              {Object.values(VacationType).filter((t) => t !== VacationType.DAY_OFF || isDayOff || dayOffsAvailable > 0).map((type) => {
                 const info = VACATION_TYPES[type]
                 return (
                   <option key={type} value={type}>
@@ -297,11 +302,12 @@ export function CreateVacationFormModal({
                 )
               })}
             </select>
-            {vacationTypeInfo && (
+            {vacationTypeInfo?.description && (
               <p className="text-xs text-muted-foreground mt-1">{vacationTypeInfo.description}</p>
             )}
           </div>
 
+          {!isDayOff && (<>
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -395,6 +401,7 @@ export function CreateVacationFormModal({
               </div>
               </div>
             )}
+          </>)}
 
           <div>
             <label htmlFor="comment" className="block text-sm font-medium text-muted-foreground mb-1.5">
@@ -417,7 +424,7 @@ export function CreateVacationFormModal({
                 Замещающие <span className="text-muted-foreground">(необязательно)</span>
               </label>
               <p className="text-xs text-muted-foreground mb-2">
-                Выберите работников, которые будут замещать вас на время отпуска. Им будут перенаправлены заявки на согласование.
+                Выберите работников, которые будут замещать вас на время отпуска.
               </p>
               <input
                 type="text"
@@ -529,7 +536,7 @@ export function CreateVacationFormModal({
             </div>
           )}
 
-          {countsInCounter && duration > 0 && (
+          {(countsInCounter || isDayOff) && duration > 0 && (
             <div className={`p-3 rounded-lg ${
               hasEnoughDays
                 ? 'bg-success/10 dark:bg-success/25 border border-success/30 dark:border-success/60 text-success dark:text-success-foreground'
@@ -537,12 +544,16 @@ export function CreateVacationFormModal({
             }`}>
               <div className="text-sm">
                 <div className="font-medium mb-1">
-                  {hasEnoughDays ? '✅ Достаточно дней' : allowOverBalance ? '⚠️ Недостаточно дней — отпуск будет оформлен сверх баланса' : '⚠️ Недостаточно дней'}
+                  {isDayOff
+                    ? (hasEnoughDays ? '✅ Достаточно отгулов' : '⚠️ Недостаточно отгулов')
+                    : hasEnoughDays ? '✅ Достаточно дней' : allowOverBalance ? '⚠️ Недостаточно дней — отпуск будет оформлен сверх баланса' : '⚠️ Недостаточно дней'}
                 </div>
                 <div className="text-muted-foreground">
-                  Требуется: {requiredDays} дней
+                  Требуется: {requiredDays} {isDayOff ? 'раб. дн.' : 'дней'}
                 </div>
-                {balance && (
+                {isDayOff ? (
+                  <div className="text-muted-foreground">Доступно отгулов: {dayOffsAvailable}</div>
+                ) : balance && (
                   <div className="text-muted-foreground">
                     Доступно: {balance.availableDays} дней
                   </div>
@@ -579,6 +590,7 @@ export function CreateVacationFormModal({
                 loading ||
                 !startDate ||
                 !endDate ||
+                (isDayOff && !hasEnoughDays) ||
                 (countsInCounter && !hasEnoughDays && !allowOverBalance) ||
                 (hasTravel && !canUseTravel) ||
                 (vacationType === VacationType.EDUCATIONAL && !referenceFile && !initial?.referenceDocument)

@@ -52,25 +52,23 @@ export function useVacationDuration(start?: string | null, end?: string | null) 
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(s) && /^\d{4}-\d{2}-\d{2}$/.test(e) && s <= e
   const startYear = valid ? Number(s.slice(0, 4)) : 0
   const endYear = valid ? Number(e.slice(0, 4)) : 0
-  const [holidays, setHolidays] = useState<Set<string>>(new Set())
+  const [calendars, setCalendars] = useState<Map<number, Map<string, ProductionDay>>>(new Map())
 
   useEffect(() => {
     if (!valid) return
     let active = true
     const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i)
     Promise.all(years.map(loadYear)).then((maps) => {
-      if (!active) return
-      const set = new Set<string>()
-      for (const map of maps) for (const d of map.values()) if (d.kind === 'holiday') set.add(d.day)
-      setHolidays(set)
+      if (active) setCalendars(new Map(years.map((y, i) => [y, maps[i]])))
     })
     return () => { active = false }
   }, [valid, startYear, endYear])
 
-  if (!valid) return { calendarDays: 0, holidays: 0, countedDays: 0 }
+  if (!valid) return { calendarDays: 0, holidays: 0, countedDays: 0, workingDays: 0 }
   const days = isoDays(s, e)
-  const holidayCount = days.filter((d) => holidays.has(d)).length
-  return { calendarDays: days.length, holidays: holidayCount, countedDays: days.length - holidayCount }
+  const holidayCount = days.filter((d) => calendars.get(Number(d.slice(0, 4)))?.get(d)?.kind === 'holiday').length
+  const workingDays = days.filter((d) => !isNonWorking(d, calendars)).length
+  return { calendarDays: days.length, holidays: holidayCount, countedDays: days.length - holidayCount, workingDays }
 }
 
 export function pluralDays(n: number) {

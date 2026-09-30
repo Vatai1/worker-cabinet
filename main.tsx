@@ -3,8 +3,10 @@ import './index.css'
 import '@xyflow/react/dist/style.css'
 import App from './App'
 import { initTheme } from '@/shared/theme/themeStore'
+import { installTelemetry } from '@/shared/lib/telemetry'
 
 initTheme()
+installTelemetry()
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {})

@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { TelemetryActions } from '@/shared/components/TelemetryActions'
+import type { TelemetryAction } from '@/shared/lib/telemetry'
 import { useLocation } from 'react-router-dom'
 import { ChevronDown, ChevronUp, Trash2, Loader2, Search, Send } from 'lucide-react'
 import { toast } from 'sonner'
@@ -16,6 +18,7 @@ interface BugReport {
   screenshot_s3_key: string | null
   page_url: string | null
   browser_info: string | null
+  actions: TelemetryAction[] | null
   status: string
   priority: string
   admin_comment: string | null
@@ -250,6 +253,13 @@ export function AdminBugReports() {
                       <div>
                         <div className="text-xs text-muted-foreground mb-1">Скриншот</div>
                         <img src={screenshotUrl} alt="Скриншот" className="max-w-full rounded-lg border border-border" />
+                      </div>
+                    )}
+
+                    {report.actions && report.actions.length > 0 && (
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Действия перед отправкой ({report.actions.length})</div>
+                        <TelemetryActions actions={report.actions} />
                       </div>
                     )}
 

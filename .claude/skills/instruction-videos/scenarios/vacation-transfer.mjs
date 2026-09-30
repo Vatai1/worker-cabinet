@@ -1,0 +1,82 @@
+import path from 'node:path'
+import { startRecording } from '../lib.mjs'
+
+const r = await startRecording('vacation-transfer', 'ivanov@example.com')
+const { page, pause, caption, moveTo, clickOn, typeInto, reveal, open } = r
+
+await open('/vacation')
+await page.waitForSelector('[data-testid="month-card"]')
+await caption('Как перенести отпуск', 'Инструкция для сотрудника: заявка на перенос и скачивание заявления')
+await pause(3400)
+
+await caption('Перенести можно только согласованный отпуск', 'Быстрый способ — правой кнопкой по дню отпуска в календаре → «Перенести»')
+await pause(3800)
+
+await caption('Шаг 1. Откройте вкладку «Заявления»')
+await clickOn(page.getByRole('button', { name: 'Заявления', exact: true }))
+await pause(1300)
+await caption('Шаг 2. Выберите «Заявление на перенос»')
+await clickOn(page.getByRole('button', { name: /Заявление на перенос/ }))
+await page.getByRole('heading', { name: 'Заявление на перенос' }).waitFor()
+await page.waitForLoadState('networkidle')
+await pause(1500)
+
+await caption('Шаг 3. Нажмите «Добавить перенос»')
+await clickOn(page.getByRole('button', { name: 'Добавить перенос' }))
+await pause(1200)
+
+await caption('Шаг 4. Выберите отпуск, который хотите перенести', 'Ниже появятся его даты и ваш баланс дней')
+const select = page.locator('select').first()
+await moveTo(select)
+await pause(700)
+await select.selectOption('331')
+await pause(2800)
+
+await caption('Шаг 5. Укажите новую дату начала и количество дней', 'Отпуск можно удлинить или сократить — главное, чтобы хватило дней в балансе')
+const startInput = page.locator('input[type="date"]').first()
+await clickOn(startInput)
+await startInput.fill('2026-11-02')
+await pause(900)
+const daysInput = page.getByPlaceholder('14')
+await clickOn(daysInput)
+await daysInput.fill('')
+await daysInput.pressSequentially('10', { delay: 150 })
+await pause(1200)
+await moveTo(page.getByText(/увеличив на/))
+await pause(3200)
+
+await caption('Причину переноса можно указать, но это необязательно')
+await typeInto(page.getByPlaceholder('Причина переноса'), 'Семейные обстоятельства')
+await pause(1200)
+await caption('Если нужна оплата проезда — отметьте «С проездом»', 'Город и детей заполняют так же, как в заявке на отпуск')
+await moveTo(page.getByText('С проездом к месту проведения отпуска'))
+await pause(3200)
+
+await caption('Шаг 6. Нажмите «Подать на согласование»', 'Перенос уйдёт руководителю')
+await clickOn(page.getByRole('button', { name: 'Подать на согласование' }))
+await page.getByText('Перенос отправлен на согласование').waitFor({ timeout: 10000 })
+await page.waitForLoadState('networkidle')
+await pause(1500)
+const pendingRow = page.locator('label', { hasText: '02.11.2026' }).first()
+await reveal(pendingRow)
+await caption('Перенос появился в списке со статусом «На согласовании»')
+await moveTo(pendingRow)
+await pause(3500)
+
+await caption('Скачивание заявления на перенос', 'Скачать заявление можно, когда руководитель согласовал перенос')
+const approvedRow = page.locator('label', { hasText: '21.12.2026' }).first()
+await moveTo(approvedRow)
+await pause(3000)
+await caption('Шаг 7. Отметьте согласованный перенос')
+await clickOn(approvedRow.locator('input[type="checkbox"]'))
+await pause(1500)
+await caption('Шаг 8. Нажмите «Создать заявление»', 'Файл Word скачается автоматически')
+const downloadPromise = page.waitForEvent('download')
+await clickOn(page.getByRole('button', { name: 'Создать заявление' }))
+const download = await downloadPromise
+await download.saveAs(path.join(r.outDir, 'zayavlenie-perenos.docx'))
+await pause(1500)
+await caption('Готово! Заявление на перенос скачано', 'Распечатайте, подпишите и передайте в отдел кадров')
+await pause(4000)
+
+console.log(JSON.stringify(await r.finish()))

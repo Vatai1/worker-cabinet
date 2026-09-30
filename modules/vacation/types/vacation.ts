@@ -14,6 +14,7 @@ export enum VacationType {
   CHILD_CARE = 'child_care',
   ADDITIONAL = 'additional',
   VETERAN = 'veteran',
+  DAY_OFF = 'day_off',
 }
 
 interface VacationTypeInfo {
@@ -64,6 +65,12 @@ export const VACATION_TYPES: Record<VacationType, VacationTypeInfo> = {
     id: 7,
     name: 'Ветеранский',
     description: 'Для участников боевых действий',
+    countedInCounter: false,
+  },
+  [VacationType.DAY_OFF]: {
+    id: 8,
+    name: 'Отгул',
+    description: '',
     countedInCounter: false,
   },
 }

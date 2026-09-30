@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { reportClientError } from '@/shared/lib/telemetry'
 
 interface Props {
   children: ReactNode
@@ -19,6 +20,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error) {
+    reportClientError(error.message, error.stack)
   }
 
   handleReset = () => {

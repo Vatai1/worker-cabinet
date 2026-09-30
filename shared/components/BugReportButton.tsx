@@ -7,6 +7,8 @@ import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { cn } from '@/shared/lib/utils'
+import { getActions, type TelemetryAction } from '@/shared/lib/telemetry'
+import { TelemetryActions } from '@/shared/components/TelemetryActions'
 import { useThemeStore } from '@/shared/theme/themeStore'
 
 export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) {
@@ -18,6 +20,8 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [capturing, setCapturing] = useState(false)
+  const [actions, setActions] = useState<TelemetryAction[]>([])
+  const [showActions, setShowActions] = useState(false)
 
   const canvasToJpegBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> => {
     const w = canvas.width
@@ -126,6 +130,8 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   }
 
   const handleClick = async () => {
+    setActions(getActions())
+    setShowActions(false)
     setCapturing(true)
     applyShot(await captureDom())
     setCapturing(false)
@@ -141,6 +147,7 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
       formData.append('description', description)
       formData.append('page_url', window.location.href)
       formData.append('browser_info', navigator.userAgent)
+      formData.append('actions', JSON.stringify(actions))
       if (screenshotBlob) formData.append('screenshot', screenshotBlob, 'screenshot.jpg')
 
       const res = await fetch(`${API_BASE_URL}/bug-reports`, {
@@ -235,6 +242,19 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
                   className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
+
+              {actions.length > 0 && (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowActions((v) => !v)}
+                    className="text-left text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                  >
+                    Будут приложены ваши последние действия на сайте ({actions.length}) — {showActions ? 'скрыть' : 'показать'}
+                  </button>
+                  {showActions && <TelemetryActions actions={actions} className="max-h-40" />}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1.5">

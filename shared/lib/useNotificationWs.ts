@@ -5,6 +5,8 @@ import { tryRefresh } from '@/shared/lib/apiClient'
 const WS_UNAUTHORIZED = 4001
 const BASE_RECONNECT_MS = 5000
 const MAX_RECONNECT_MS = 60000
+const ACTIVITY_THROTTLE_MS = 60000
+const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mousemove'] as const
 
 interface WsMessage {
   event: string
@@ -19,6 +21,16 @@ export function useNotificationWs(onUnreadCount: (count: number) => void) {
   const attemptsRef = useRef(0)
   const authRetriedRef = useRef(false)
   const stoppedRef = useRef(false)
+  const activitySentRef = useRef(0)
+
+  const sendActivity = useCallback(() => {
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN || document.visibilityState === 'hidden') return
+    const now = Date.now()
+    if (now - activitySentRef.current < ACTIVITY_THROTTLE_MS) return
+    activitySentRef.current = now
+    ws.send(JSON.stringify({ event: 'activity' }))
+  }, [])
 
   const connect = useCallback(() => {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -36,6 +48,8 @@ export function useNotificationWs(onUnreadCount: (count: number) => void) {
     ws.onopen = () => {
       attemptsRef.current = 0
       authRetriedRef.current = false
+      activitySentRef.current = 0
+      sendActivity()
     }
 
     ws.onmessage = (event) => {
@@ -70,12 +84,16 @@ export function useNotificationWs(onUnreadCount: (count: number) => void) {
     ws.onerror = () => {
       ws.close()
     }
-  }, [])
+  }, [sendActivity])
 
   useEffect(() => {
     stoppedRef.current = false
     connect()
+    for (const evt of ACTIVITY_EVENTS) window.addEventListener(evt, sendActivity, { passive: true })
+    document.addEventListener('visibilitychange', sendActivity)
     return () => {
+      for (const evt of ACTIVITY_EVENTS) window.removeEventListener(evt, sendActivity)
+      document.removeEventListener('visibilitychange', sendActivity)
       stoppedRef.current = true
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
       if (wsRef.current) {
@@ -83,5 +101,5 @@ export function useNotificationWs(onUnreadCount: (count: number) => void) {
         wsRef.current.close()
       }
     }
-  }, [connect])
+  }, [connect, sendActivity])
 }

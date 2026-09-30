@@ -70,7 +70,7 @@ const options = {
         },
         VacationType: {
           type: 'string',
-          enum: ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran'],
+          enum: ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran', 'day_off'],
         },
         VacationRequest: {
           type: 'object',

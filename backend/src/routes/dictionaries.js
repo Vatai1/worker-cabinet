@@ -200,16 +200,6 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
   )
   if (existing.rows.length > 0) throw new ConflictError('Отдел с таким названием уже существует')
 
-  if (manager_id) {
-    const alreadyManager = await query(
-      ...orgScopedQuery('SELECT d.id, d.name FROM departments d WHERE d.manager_id = $1', [manager_id], req)
-    )
-    if (alreadyManager.rows.length > 0) {
-      const dept = alreadyManager.rows[0]
-      throw new ConflictError(`Этот работник уже является руководителем отдела «${dept.name}»`)
-    }
-  }
-
   await validateDepartmentParent(parent_id ?? null, null, orgId, req)
 
   const result = await query(
@@ -261,14 +251,6 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
 
   const duplicate = await query(...orgScopedQuery('SELECT id FROM departments WHERE name = $1 AND id != $2', [name.trim(), id], req))
   if (duplicate.rows.length > 0) throw new ConflictError('Отдел с таким названием уже существует')
-
-  if (manager_id) {
-    const alreadyManager = await query(...orgScopedQuery('SELECT d.id, d.name FROM departments d WHERE d.manager_id = $1 AND d.id != $2', [manager_id, id], req))
-    if (alreadyManager.rows.length > 0) {
-      const dept = alreadyManager.rows[0]
-      throw new ConflictError(`Этот работник уже является руководителем отдела «${dept.name}»`)
-    }
-  }
 
   const nextParentId = parent_id === undefined ? current.parent_id : (parent_id ?? null)
   if (nextParentId !== current.parent_id) {

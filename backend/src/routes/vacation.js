@@ -11,10 +11,12 @@ import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 import { resolveVacationDays, applyRuleToExistingBalances } from '../lib/vacationDays.js'
 import { getVisibleColleagueIds } from '../lib/colleagues.js'
+import { hasFullDepartmentAccess, managedDepartmentIds } from '../lib/departmentScope.js'
 
 const router = express.Router()
 
-const VALID_VACATION_TYPES = ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran']
+const VALID_VACATION_TYPES = ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran', 'day_off']
+const DAY_OFF = 'day_off'
 const MAX_HOLIDAYS_PER_VACATION = 5
 
 class VacationValidationError extends Error {}
@@ -45,27 +47,72 @@ function todayISO() {
 
 const LAW_HOLIDAYS = ['01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08', '02-23', '03-08', '05-01', '05-09', '06-12', '11-04']
 
+async function nonWorkingChecker(from, to) {
+  const rows = (await query('SELECT day, kind FROM calendar_holidays WHERE day BETWEEN $1 AND $2', [from, to])).rows
+  const byDay = new Map(rows.map((r) => [r.day, r.kind]))
+  const years = []
+  for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) years.push(y)
+  const loadedYears = new Set((await query('SELECT DISTINCT year FROM calendar_holidays WHERE year = ANY($1)', [years])).rows.map((r) => r.year))
+  return (day) => {
+    const weekday = parseISODate(day).getUTCDay()
+    const weekend = weekday === 0 || weekday === 6
+    if (!loadedYears.has(Number(day.slice(0, 4)))) return weekend || LAW_HOLIDAYS.includes(day.slice(5))
+    const kind = byDay.get(day)
+    return kind === 'holiday' || kind === 'transfer' || (weekend && kind !== 'shortened')
+  }
+}
+
 async function nextWorkingDay(endDate) {
   const end = String(endDate).slice(0, 10)
-  const until = addDaysISO(end, 60)
-  const rows = (await query('SELECT day, kind, year FROM calendar_holidays WHERE day > $1 AND day <= $2', [end, until])).rows
-  const byDay = new Map(rows.map((r) => [r.day, r.kind]))
-  const loadedYears = new Set((await query('SELECT DISTINCT year FROM calendar_holidays WHERE year = ANY($1)', [[Number(end.slice(0, 4)), Number(end.slice(0, 4)) + 1]])).rows.map((r) => r.year))
+  const isNonWorking = await nonWorkingChecker(addDaysISO(end, 1), addDaysISO(end, 60))
   let day = end
   for (let i = 0; i < 60; i++) {
     day = addDaysISO(day, 1)
-    const weekday = parseISODate(day).getUTCDay()
-    const weekend = weekday === 0 || weekday === 6
-    let nonWorking
-    if (loadedYears.has(Number(day.slice(0, 4)))) {
-      const kind = byDay.get(day)
-      nonWorking = kind === 'holiday' || kind === 'transfer' || (weekend && kind !== 'shortened')
-    } else {
-      nonWorking = weekend || LAW_HOLIDAYS.includes(day.slice(5))
-    }
-    if (!nonWorking) return day
+    if (!isNonWorking(day)) return day
   }
   return addDaysISO(end, 1)
+}
+
+async function workingDaysBetween(startDate, endDate) {
+  const start = String(startDate).slice(0, 10)
+  const end = String(endDate).slice(0, 10)
+  const isNonWorking = await nonWorkingChecker(start, end)
+  const days = []
+  for (let day = start; day <= end; day = addDaysISO(day, 1)) {
+    if (!isNonWorking(day)) days.push(day)
+  }
+  return days
+}
+
+async function isDayOffRequest(db, request) {
+  const row = (await db.query('SELECT code FROM vacation_types WHERE id = $1', [request.vacation_type_id])).rows[0]
+  return row?.code === DAY_OFF
+}
+
+async function adjustmentScopeUserIds(req) {
+  if (hasFullDepartmentAccess(req)) return null
+  const deptIds = [...await managedDepartmentIds(req.user.id, currentOrgId(req))]
+  const result = await query(
+    'SELECT id FROM users WHERE (department_id = ANY($1::int[]) OR manager_id = $2) AND id <> $2',
+    [deptIds, req.user.id]
+  )
+  return result.rows.map((r) => r.id)
+}
+
+async function dayOffBalance(db, userId, orgId, excludeRequestId = null) {
+  const row = (await db.query(
+    `SELECT
+       COALESCE((SELECT SUM(days) FROM leave_adjustments WHERE user_id = $1 AND organization_id = $2 AND kind = 'day_off'), 0)::int AS granted,
+       COALESCE(SUM(vr.duration) FILTER (WHERE rs.code = 'approved'), 0)::int AS used,
+       COALESCE(SUM(vr.duration) FILTER (WHERE rs.code = 'on_approval'), 0)::int AS pending
+     FROM vacation_requests vr
+     JOIN request_statuses rs ON rs.id = vr.status_id
+     JOIN vacation_types vt ON vt.id = vr.vacation_type_id
+     WHERE vr.user_id = $1 AND vr.organization_id = $2 AND vt.code = 'day_off'
+       AND rs.code IN ('approved', 'on_approval') AND vr.id IS DISTINCT FROM $3::int`,
+    [userId, orgId, excludeRequestId]
+  )).rows[0]
+  return { ...row, available: row.granted - row.used - row.pending }
 }
 
 async function allowOverBalance(req) {
@@ -252,15 +299,17 @@ async function vacationDatesByMonth(startDate, endDate) {
   return byMonth
 }
 
-async function fillVacationTimesheetEntries(client, userId, startDate, endDate, req) {
+async function fillVacationTimesheetEntries(client, userId, startDate, endDate, req, dayOff = false) {
   const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
   const deptId = deptResult.rows[0]?.department_id
   if (!deptId) return
+  const code = dayOff ? 'НВ' : 'ОТ'
   const holidaysResult = await client.query("SELECT day FROM calendar_holidays WHERE day BETWEEN $1 AND $2 AND kind = 'holiday'", [startDate, endDate])
   const holidaySet = new Set(holidaysResult.rows.map((r) => r.day))
+  const workingSet = dayOff ? new Set(await workingDaysBetween(startDate, endDate)) : null
   const byMonth = await vacationDatesByMonth(startDate, endDate)
   for (const { year, month, dates: allDates } of Object.values(byMonth)) {
-    const dates = allDates.filter((d) => !holidaySet.has(d))
+    const dates = allDates.filter((d) => (workingSet ? workingSet.has(d) : !holidaySet.has(d)))
     if (dates.length === 0) continue
     const tsOrgClause = req.org ? ' AND organization_id = $4' : ''
     const tsResult = await client.query(
@@ -271,11 +320,11 @@ async function fillVacationTimesheetEntries(client, userId, startDate, endDate, 
     const tsId = tsResult.rows[0].id
     const orgCol = req.org ? ', organization_id' : ''
     const orgParam = req.org ? `, $${dates.length + 3}` : ''
-    const placeholders = dates.map((_, i) => `($1, $2, $${i + 3}, 'ОТ'${orgParam})`).join(', ')
+    const placeholders = dates.map((_, i) => `($1, $2, $${i + 3}, '${code}'${orgParam})`).join(', ')
     await client.query(
       `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code${orgCol})
        VALUES ${placeholders}
-       ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE SET code = 'ОТ'`,
+       ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE SET code = '${code}'`,
       req.org ? [tsId, userId, ...dates, req.org.org_id] : [tsId, userId, ...dates]
     )
   }
@@ -1068,6 +1117,214 @@ router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin
 
 /**
  * @swagger
+ * /vacation/adjustments:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Начисления дней отпуска и отгулов работнику, остаток отгулов
+ *     description: 'Себе — любой работник; другим — hr/admin, руководитель — своим подчинённым. dayOffs — { granted, used, pending, available } по отгулам (не зависят от баланса отпуска и блокировки подачи заявок); items — история начислений обоих видов.'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: userId, in: query, schema: { type: integer }, description: 'По умолчанию — текущий пользователь' }
+ *     responses:
+ *       200: { description: '{ dayOffs, items: [{ id, kind, year, days, comment, created_at, created_by_name }] }' }
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Начислить или списать дни отпуска или отгулы
+ *     description: 'kind=vacation — меняет total_days баланса за year (если баланса на этот год ещё нет, он создаётся по правилам дней отпуска); kind=day_off — отдельный счётчик отгулов. days может быть отрицательным (списание), но остаток не уходит в минус. Комментарий обязателен. hr/admin — любому работнику организации, manager — только отгулы и только подчинённым (403 иначе).'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, kind, days, comment]
+ *             properties:
+ *               userId: { type: integer }
+ *               kind: { type: string, enum: [vacation, day_off] }
+ *               days: { type: integer }
+ *               comment: { type: string }
+ *               year: { type: integer, description: 'Только для kind=vacation, по умолчанию текущий' }
+ *     responses:
+ *       201: { description: Начисление создано }
+ *       400: { description: Ошибка валидации или остаток уйдёт в минус }
+ *       403: { description: Нет прав }
+ */
+/**
+ * @swagger
+ * /vacation/adjustments/all:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Начисления — все по организации (hr/admin) или по своим подчинённым (manager)
+ *     description: 'Руководитель видит только подчинённых: работников своих отделов и нижестоящих, а также тех, у кого он руководитель в иерархии. people — кому можно начислять; employees — работники, у которых есть начисления: отгулы (granted/used/pending/available, без привязки к году) и сумма начисленных дней отпуска; items — история начислений (до 500 последних).'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: kind, in: query, schema: { type: string, enum: [vacation, day_off] }, description: 'Только начисления этого вида' }
+ *     responses:
+ *       200: { description: '{ employees, items }' }
+ */
+router.get('/adjustments/all', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  const orgId = currentOrgId(req)
+  if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
+  const kind = ['vacation', 'day_off'].includes(req.query.kind) ? req.query.kind : null
+  try {
+    const scope = await adjustmentScopeUserIds(req)
+    const people = await query(
+      `SELECT u.id, CONCAT_WS(' ', u.last_name, u.first_name, NULLIF(u.middle_name, '')) AS name, u.position, d.name AS department
+       FROM users u
+       JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $1 AND uo.is_active = true
+       LEFT JOIN departments d ON d.id = u.department_id
+       WHERE u.status <> 'inactive' AND ($2::int[] IS NULL OR u.id = ANY($2::int[])) ${excludeTest(req, 'u')}
+       ORDER BY u.last_name, u.first_name`,
+      [orgId, scope]
+    )
+    const employees = await query(
+      `WITH adj AS (
+         SELECT user_id,
+                COALESCE(SUM(days) FILTER (WHERE kind = 'day_off'), 0)::int AS day_off_granted,
+                COALESCE(SUM(days) FILTER (WHERE kind = 'vacation'), 0)::int AS vacation_granted,
+                MAX(created_at) AS last_at
+         FROM leave_adjustments WHERE organization_id = $1 AND ($2::int[] IS NULL OR user_id = ANY($2::int[])) AND ($3::text IS NULL OR kind = $3) GROUP BY user_id
+       ), taken AS (
+         SELECT vr.user_id,
+                COALESCE(SUM(vr.duration) FILTER (WHERE rs.code = 'approved'), 0)::int AS used,
+                COALESCE(SUM(vr.duration) FILTER (WHERE rs.code = 'on_approval'), 0)::int AS pending
+         FROM vacation_requests vr
+         JOIN request_statuses rs ON rs.id = vr.status_id
+         JOIN vacation_types vt ON vt.id = vr.vacation_type_id
+         WHERE vr.organization_id = $1 AND vt.code = 'day_off' AND rs.code IN ('approved', 'on_approval')
+         GROUP BY vr.user_id
+       )
+       SELECT u.id, CONCAT_WS(' ', u.last_name, u.first_name, NULLIF(u.middle_name, '')) AS name, u.position, d.name AS department,
+              adj.day_off_granted, adj.vacation_granted, adj.last_at,
+              COALESCE(t.used, 0) AS day_off_used, COALESCE(t.pending, 0) AS day_off_pending,
+              adj.day_off_granted - COALESCE(t.used, 0) - COALESCE(t.pending, 0) AS day_off_available
+       FROM adj
+       JOIN users u ON u.id = adj.user_id
+       LEFT JOIN departments d ON d.id = u.department_id
+       LEFT JOIN taken t ON t.user_id = adj.user_id
+       ORDER BY adj.last_at DESC`,
+      [orgId, scope, kind]
+    )
+    const items = await query(
+      `SELECT la.id, la.user_id, la.kind, la.year, la.days, la.comment, la.created_at,
+              CONCAT_WS(' ', u.last_name, u.first_name, NULLIF(u.middle_name, '')) AS user_name,
+              d.name AS department,
+              NULLIF(TRIM(CONCAT_WS(' ', cb.last_name, cb.first_name)), '') AS created_by_name
+       FROM leave_adjustments la
+       JOIN users u ON u.id = la.user_id
+       LEFT JOIN departments d ON d.id = u.department_id
+       LEFT JOIN users cb ON cb.id = la.created_by
+       WHERE la.organization_id = $1 AND ($2::int[] IS NULL OR la.user_id = ANY($2::int[])) AND ($3::text IS NULL OR la.kind = $3)
+       ORDER BY la.created_at DESC
+       LIMIT 500`,
+      [orgId, scope, kind]
+    )
+    res.json({ scope: scope === null ? 'all' : 'subordinates', people: people.rows, employees: employees.rows, items: items.rows })
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить начисления' })
+  }
+})
+
+router.get('/adjustments', authenticateToken, async (req, res) => {
+  const userId = req.query.userId ? parseInt(req.query.userId) : req.user.id
+  if (Number.isNaN(userId)) return res.status(400).json({ error: 'Некорректный userId' })
+  const orgId = currentOrgId(req)
+  if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
+  try {
+    if (userId !== req.user.id) {
+      const scope = await adjustmentScopeUserIds(req)
+      if (scope !== null && !scope.includes(userId)) return res.status(403).json({ error: 'Доступ запрещён' })
+    }
+    const items = await query(
+      `SELECT la.id, la.kind, la.year, la.days, la.comment, la.created_at,
+              NULLIF(TRIM(CONCAT_WS(' ', u.last_name, u.first_name)), '') AS created_by_name
+       FROM leave_adjustments la
+       LEFT JOIN users u ON u.id = la.created_by
+       WHERE la.user_id = $1 AND la.organization_id = $2
+       ORDER BY la.created_at DESC`,
+      [userId, orgId]
+    )
+    res.json({ dayOffs: await dayOffBalance({ query }, userId, orgId), items: items.rows })
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить начисления' })
+  }
+})
+
+router.post('/adjustments', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+  const userId = parseInt(req.body.userId)
+  const days = Number(req.body.days)
+  const kind = req.body.kind
+  const comment = typeof req.body.comment === 'string' ? req.body.comment.trim() : ''
+  const year = req.body.year ? parseInt(req.body.year) : new Date().getFullYear()
+  if (Number.isNaN(userId)) return res.status(400).json({ error: 'Не указан работник' })
+  if (!['vacation', 'day_off'].includes(kind)) return res.status(400).json({ error: 'Укажите, что начисляется: отпуск или отгулы' })
+  if (!Number.isInteger(days) || days === 0 || Math.abs(days) > 365) return res.status(400).json({ error: 'Количество дней — целое число от -365 до 365, не ноль' })
+  if (!comment) return res.status(400).json({ error: 'Укажите комментарий — за что начисляются дни' })
+  if (kind === 'vacation' && Number.isNaN(year)) return res.status(400).json({ error: 'Некорректный год' })
+  const orgId = currentOrgId(req)
+  if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
+  const scope = await adjustmentScopeUserIds(req)
+  if (scope !== null && !scope.includes(userId)) return res.status(403).json({ error: 'Начислять можно только своим подчинённым' })
+  if (scope !== null && kind !== 'day_off') return res.status(403).json({ error: 'Руководитель может начислять только отгулы' })
+
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+    const member = await client.query('SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2', [userId, orgId])
+    if (member.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Работник не найден в организации' })
+    }
+    await client.query('SELECT pg_advisory_xact_lock($1)', [userId])
+
+    if (kind === 'vacation') {
+      await client.query(
+        `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days, year, organization_id)
+         VALUES ($1, $2, 0, 0, $3, $4)
+         ON CONFLICT (user_id, organization_id, year) DO NOTHING`,
+        [userId, await resolveVacationDays(userId, orgId), year, orgId]
+      )
+      const balance = (await client.query(
+        'SELECT available_days FROM vacation_balances WHERE user_id = $1 AND organization_id = $2 AND year = $3 FOR UPDATE',
+        [userId, orgId, year]
+      )).rows[0]
+      if (balance.available_days + days < 0) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: `Нельзя списать больше доступного: доступно ${balance.available_days} дн.` })
+      }
+      await client.query(
+        'UPDATE vacation_balances SET total_days = total_days + $1, updated_at = NOW() WHERE user_id = $2 AND organization_id = $3 AND year = $4',
+        [days, userId, orgId, year]
+      )
+    } else {
+      const dayOffs = await dayOffBalance(client, userId, orgId)
+      if (dayOffs.available + days < 0) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: `Нельзя списать больше доступного: доступно отгулов ${dayOffs.available}` })
+      }
+    }
+
+    const inserted = await client.query(
+      `INSERT INTO leave_adjustments (user_id, organization_id, kind, year, days, comment, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [userId, orgId, kind, kind === 'vacation' ? year : null, days, comment, req.user.id]
+    )
+    await client.query('COMMIT')
+    res.status(201).json({ ...inserted.rows[0], dayOffs: await dayOffBalance({ query }, userId, orgId) })
+  } catch (error) {
+    await client.query('ROLLBACK')
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось начислить дни' })
+  } finally {
+    client.release()
+  }
+})
+
+/**
+ * @swagger
  * /vacation/requests:
  *   post:
  *     tags: [Vacation]
@@ -1108,13 +1365,14 @@ router.post('/requests', authenticateToken, async (req, res) => {
   try {
     const { startDate, endDate, vacationType, comment, hasTravel, travelDestination, travelChildren, referenceDocument, substitute_ids } = req.body
     const userId = req.user.id
+    const isDayOff = vacationType === DAY_OFF
 
     const { text: blockText, values: blockValues } = orgScopedQuery(
       `SELECT d.vacation_requests_blocked FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
       [userId], req
     )
     const blockCheck = await query(blockText, blockValues)
-    if (blockCheck.rows.length > 0 && blockCheck.rows[0].vacation_requests_blocked) {
+    if (!isDayOff && blockCheck.rows.length > 0 && blockCheck.rows[0].vacation_requests_blocked) {
       return res.status(403).json({ error: 'Подача заявок на отпуск для вашего отдела временно заблокирована HR' })
     }
 
@@ -1160,7 +1418,9 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     let computedDates
     try {
-      computedDates = await computeVacationDates(formatDate(start), formatDate(end))
+      computedDates = isDayOff
+        ? { endDate: formatDate(end), countedDays: (await workingDaysBetween(formatDate(start), formatDate(end))).length, holidaysCount: 0 }
+        : await computeVacationDates(formatDate(start), formatDate(end))
     } catch (err) {
       res.locals.errorCause = err
       await client.query('ROLLBACK')
@@ -1173,6 +1433,23 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const computedEndDate = computedDates.endDate
     const requestYear = start.getFullYear()
 
+    if (isDayOff) {
+      if (finalDuration === 0) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'В выбранном периоде нет рабочих дней' })
+      }
+      await client.query(
+        "INSERT INTO vacation_types (code, name, organization_id) VALUES ('day_off', 'Отгул', $1) ON CONFLICT (code, organization_id) DO NOTHING",
+        [currentOrgId(req)]
+      )
+      await client.query('SELECT pg_advisory_xact_lock($1)', [userId])
+      const dayOffs = await dayOffBalance(client, userId, currentOrgId(req))
+      if (dayOffs.available < finalDuration) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'Недостаточно отгулов', available: dayOffs.available, required: finalDuration })
+      }
+    }
+
     const { text: balText, values: balValues } = orgScopedQuery(
       'SELECT * FROM vacation_balances WHERE user_id = $1 AND year = $2',
       [userId, requestYear], req
@@ -1180,7 +1457,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const balanceResult = await client.query(balText, balValues)
 
     const balance = balanceResult.rows[0]
-    if ((!balance || balance.available_days < finalDuration) && !(await allowOverBalance(req))) {
+    if (!isDayOff && (!balance || balance.available_days < finalDuration) && !(await allowOverBalance(req))) {
       await client.query('ROLLBACK')
       return res.status(400).json({
         error: 'Недостаточно дней на балансе',
@@ -1269,13 +1546,15 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     const request = result.rows[0]
 
-    const { text: rbText, values: rbValues } = orgScopedQuery(
-      `UPDATE vacation_balances
-       SET reserved_days = reserved_days + $1
-       WHERE user_id = $2 AND year = $3`,
-      [finalDuration, userId, requestYear], req
-    )
-    await client.query(rbText, rbValues)
+    if (!isDayOff) {
+      const { text: rbText, values: rbValues } = orgScopedQuery(
+        `UPDATE vacation_balances
+         SET reserved_days = reserved_days + $1
+         WHERE user_id = $2 AND year = $3`,
+        [finalDuration, userId, requestYear], req
+      )
+      await client.query(rbText, rbValues)
+    }
 
     await client.query(
       `INSERT INTO vacation_request_status_history
@@ -1284,7 +1563,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
       [request.id, userId, currentOrgId(req)]
     )
 
-    await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req)
+    await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req, isDayOff)
 
     if (Array.isArray(substitute_ids) && substitute_ids.length > 0) {
       for (const subId of substitute_ids) {
@@ -1417,9 +1696,13 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Можно редактировать только заявки на согласовании' })
     }
 
+    const wasDayOff = await isDayOffRequest(client, request)
+    const nowDayOff = vacationType === DAY_OFF
     let computedDates
     try {
-      computedDates = await computeVacationDates(startDate, endDate)
+      computedDates = nowDayOff
+        ? { endDate, countedDays: (await workingDaysBetween(startDate, endDate)).length }
+        : await computeVacationDates(startDate, endDate)
     } catch (err) {
       res.locals.errorCause = err
       await client.query('ROLLBACK')
@@ -1441,10 +1724,23 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
       [userId, newYear], req
     )
     const balance = (await client.query(balText, balValues)).rows[0]
-    const availableForEdit = (balance?.available_days ?? 0) + (newYear === oldYear ? request.duration : 0)
-    if ((!balance || availableForEdit < newDuration) && !(await allowOverBalance(req))) {
-      await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'Недостаточно дней на балансе', available: availableForEdit, required: newDuration })
+    if (nowDayOff) {
+      if (newDuration === 0) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'В выбранном периоде нет рабочих дней' })
+      }
+      await client.query('SELECT pg_advisory_xact_lock($1)', [userId])
+      const dayOffs = await dayOffBalance(client, userId, currentOrgId(req), Number(id))
+      if (dayOffs.available < newDuration) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'Недостаточно отгулов', available: dayOffs.available, required: newDuration })
+      }
+    } else {
+      const availableForEdit = (balance?.available_days ?? 0) + (newYear === oldYear && !wasDayOff ? request.duration : 0)
+      if ((!balance || availableForEdit < newDuration) && !(await allowOverBalance(req))) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'Недостаточно дней на балансе', available: availableForEdit, required: newDuration })
+      }
     }
 
     if (hasTravel) {
@@ -1488,16 +1784,20 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Пересечение с существующей заявкой' })
     }
 
-    const { text: relText, values: relValues } = orgScopedQuery(
-      'UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
-      [request.duration, userId, oldYear], req
-    )
-    await client.query(relText, relValues)
-    const { text: resText, values: resValues } = orgScopedQuery(
-      'UPDATE vacation_balances SET reserved_days = reserved_days + $1 WHERE user_id = $2 AND year = $3',
-      [newDuration, userId, newYear], req
-    )
-    await client.query(resText, resValues)
+    if (!wasDayOff) {
+      const { text: relText, values: relValues } = orgScopedQuery(
+        'UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
+        [request.duration, userId, oldYear], req
+      )
+      await client.query(relText, relValues)
+    }
+    if (!nowDayOff) {
+      const { text: resText, values: resValues } = orgScopedQuery(
+        'UPDATE vacation_balances SET reserved_days = reserved_days + $1 WHERE user_id = $2 AND year = $3',
+        [newDuration, userId, newYear], req
+      )
+      await client.query(resText, resValues)
+    }
 
     const children = hasTravel && Array.isArray(travelChildren) ? travelChildren : []
     const typeOrg = req.org ? ' AND organization_id = $13' : ''
@@ -1518,7 +1818,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     const updated = result.rows[0]
 
     await clearVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req)
-    await fillVacationTimesheetEntries(client, userId, updated.start_date, updated.end_date, req)
+    await fillVacationTimesheetEntries(client, userId, updated.start_date, updated.end_date, req, nowDayOff)
 
     let addedSubs = []
     let removedSubs = []
@@ -1587,9 +1887,11 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
     }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
-    const { text: appBalText, values: appBalValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1), used_days = used_days + $1 WHERE user_id = $2 AND year = $3',
-      [request.rows[0].duration, request.rows[0].user_id, origYear], req)
-    await client.query(appBalText, appBalValues)
+    if (!(await isDayOffRequest(client, request.rows[0]))) {
+      const { text: appBalText, values: appBalValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1), used_days = used_days + $1 WHERE user_id = $2 AND year = $3',
+        [request.rows[0].duration, request.rows[0].user_id, origYear], req)
+      await client.query(appBalText, appBalValues)
+    }
 
     if (request.rows[0].has_travel) {
       const { text: appTrvText, values: appTrvValues } = orgScopedQuery(
@@ -1657,9 +1959,11 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
     }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
-    const { text: rejBalText, values: rejBalValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
-      [request.rows[0].duration, request.rows[0].user_id, origYear], req)
-    await client.query(rejBalText, rejBalValues)
+    if (!(await isDayOffRequest(client, request.rows[0]))) {
+      const { text: rejBalText, values: rejBalValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
+        [request.rows[0].duration, request.rows[0].user_id, origYear], req)
+      await client.query(rejBalText, rejBalValues)
+    }
 
     if (request.rows[0].has_travel) {
       const { text: rejTrvText, values: rejTrvValues } = orgScopedQuery(
@@ -1723,11 +2027,12 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     if (!['on_approval', 'approved'].includes(request.rows[0].status)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Нельзя отменить эту заявку' }) }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
-    if (request.rows[0].status === 'approved') {
+    const cancelledDayOff = await isDayOffRequest(client, request.rows[0])
+    if (!cancelledDayOff && request.rows[0].status === 'approved') {
       const { text: cnlUseText, values: cnlUseValues } = orgScopedQuery('UPDATE vacation_balances SET used_days = GREATEST(0, used_days - $1) WHERE user_id = $2 AND year = $3',
         [request.rows[0].duration, request.rows[0].user_id, origYear], req)
       await client.query(cnlUseText, cnlUseValues)
-    } else {
+    } else if (!cancelledDayOff) {
       const { text: cnlResText, values: cnlResValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
         [request.rows[0].duration, request.rows[0].user_id, origYear], req)
       await client.query(cnlResText, cnlResValues)
@@ -1860,6 +2165,11 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     if (original.status !== 'approved') {
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Можно переносить только согласованные заявки' })
+    }
+
+    if (await isDayOffRequest(client, original)) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Отгул нельзя перенести — отмените его и оформите новый' })
     }
 
     const originalYear = Number(String(original.start_date).slice(0, 4))

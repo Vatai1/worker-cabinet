@@ -10,7 +10,7 @@ import { requireRealSuperadmin, excludeTest, TEST_DEPT_NAME, TEST_USERS, TEST_US
 import { personName } from '../utils/personName.js'
 import { syncMembershipDepartment } from '../lib/departmentMembers.js'
 import { revokeAllUserSessions } from '../lib/sessionTokens.js'
-import { getActiveWsCount } from '../config/ws.js'
+import { getActiveWsCount, getPresence } from '../config/ws.js'
 import { createRequire } from 'module'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -998,13 +998,54 @@ router.get('/error-log', asyncHandler(async (req, res) => {
   const total = parseInt(countResult.rows[0].total)
 
   const result = await query(`
-    SELECT id, message, stack, path, method, status_code, user_id, user_email, ip, module, created_at
+    SELECT id, message, stack, path, method, status_code, user_id, user_email, ip, module, actions, created_at
     FROM error_log
     ORDER BY created_at DESC
     LIMIT $1 OFFSET $2
   `, [parseInt(limit), offset])
 
   res.json({ errors: result.rows, total, page: parseInt(page), limit: parseInt(limit) })
+}))
+
+/**
+ * @swagger
+ * /admin/online:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Кто сейчас на сайте
+ *     description: 'Сотрудники текущей организации (в глобальном режиме — все) со статусом online (активность за последние 5 минут), away (вкладка открыта, активности нет) или offline; since — с какого времени открыта вкладка, lastSeenAt — последний визит. Порядок: online, away, offline по свежести визита.'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: '{ users: [{ id, name, position, department, avatar, status, since, lastSeenAt }] }'
+ */
+router.get('/online', asyncHandler(async (req, res) => {
+  const values = req.org ? [req.org.org_id] : []
+  const orgJoin = req.org ? 'JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $1 AND uo.is_active = true' : ''
+  const result = await query(
+    `SELECT u.id, u.first_name, u.last_name, u.middle_name, u.position, u.avatar, u.last_seen_at, d.name AS department
+     FROM users u ${orgJoin}
+     LEFT JOIN departments d ON d.id = u.department_id
+     WHERE u.status <> 'inactive' ${excludeTest(req, 'u')}`,
+    values
+  )
+  const presence = getPresence()
+  const rank = { online: 0, away: 1, offline: 2 }
+  const users = result.rows.map((u) => {
+    const p = presence.get(u.id)
+    return {
+      id: u.id,
+      name: personName(u),
+      position: u.position,
+      department: u.department,
+      avatar: u.avatar,
+      status: p?.status ?? 'offline',
+      since: p?.since ?? null,
+      lastSeenAt: p?.lastActivityAt ?? u.last_seen_at,
+    }
+  })
+  users.sort((a, b) => rank[a.status] - rank[b.status] || String(b.lastSeenAt ?? '').localeCompare(String(a.lastSeenAt ?? '')))
+  res.json({ users })
 }))
 
 // ===================== SECURITY =====================

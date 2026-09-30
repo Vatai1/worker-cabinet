@@ -1498,6 +1498,8 @@ async function runMigrations() {
     await db.query('CREATE INDEX IF NOT EXISTS idx_error_log_created ON error_log(created_at)').catch(() => {})
     await db.query('CREATE INDEX IF NOT EXISTS idx_error_log_status ON error_log(status_code)').catch(() => {})
     await db.query(`ALTER TABLE error_log ADD COLUMN IF NOT EXISTS module VARCHAR(50)`).catch(() => {})
+    await db.query('ALTER TABLE error_log ADD COLUMN IF NOT EXISTS actions JSONB').catch(() => {})
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ').catch(() => {})
     console.log('  ✓ error_log')
 
     await db.query(`
@@ -1628,6 +1630,7 @@ async function runMigrations() {
     `).catch(e => console.log('  - bug_reports:', e.message))
     console.log('  ✓ bug_reports')
     await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS user_reply TEXT').catch(() => {})
+    await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS actions JSONB').catch(() => {})
     await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS user_reply_at TIMESTAMPTZ').catch(() => {})
     await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS user_reply_by INTEGER REFERENCES users(id) ON DELETE SET NULL').catch(() => {})
 
@@ -1896,6 +1899,7 @@ async function runMigrations() {
     await migrateInstructionVideos(db)
     await migrateMembershipDepartmentSync(db)
     await migrateVacationSettings(db)
+    await migrateDayOffs(db)
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
@@ -2224,6 +2228,29 @@ async function migrateMembershipDepartmentSync(db) {
   } catch (e) {
     console.log('  - membership department sync:', e.message)
   }
+}
+
+async function migrateDayOffs(db) {
+  await db.query(`
+    INSERT INTO vacation_types (code, name, organization_id)
+    SELECT 'day_off', 'Отгул', o.id FROM organizations o
+    ON CONFLICT (code, organization_id) DO NOTHING
+  `)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS leave_adjustments (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      kind VARCHAR(20) NOT NULL CHECK (kind IN ('vacation', 'day_off')),
+      year INTEGER,
+      days INTEGER NOT NULL CHECK (days <> 0),
+      comment TEXT NOT NULL,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `)
+  await db.query('CREATE INDEX IF NOT EXISTS idx_leave_adjustments_user ON leave_adjustments (user_id, organization_id, kind)')
+  console.log('  ✓ day_off type + leave_adjustments')
 }
 
 async function migrateVacationSettings(db) {

@@ -1,5 +1,6 @@
 ﻿import { useVacationDuration, useReturnToWork, pluralDays } from '@/shared/lib/productionCalendar'
 import { useAllowOverBalance } from '@/modules/vacation/store/vacationSettingsStore'
+import { DAY_OFF_HINT } from '@/modules/vacation/lib/dayOffs'
 import { useState, useEffect } from 'react'
 import { RestrictionWarnings } from '@/modules/vacation/components/RestrictionWarnings'
 import { createPortal } from 'react-dom'
@@ -54,6 +55,8 @@ interface CreateVacationModalProps {
   }>
   onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
   showSubstitutes?: boolean
+  dayOffsAvailable?: number
+  dayOffOnly?: boolean
 }
 
 export function CreateVacationModal({
@@ -68,13 +71,15 @@ export function CreateVacationModal({
   restrictionWarnings = [],
   onCheckRestrictions,
   showSubstitutes = false,
+  dayOffsAvailable = 0,
+  dayOffOnly = false,
 }: CreateVacationModalProps) {
   useModalOpen(isOpen)
   const vacationDuration = useVacationDuration(startDate, endDate)
   const returnDate = useReturnToWork(endDate)
   const allowOverBalance = useAllowOverBalance()
   const user = useAuthStore(s => s.user)
-  const [vacationType, setVacationType] = useState<VacationType>(VacationType.ANNUAL_PAID)
+  const [vacationType, setVacationType] = useState<VacationType>(dayOffOnly ? VacationType.DAY_OFF : VacationType.ANNUAL_PAID)
   const [hasTravel, setHasTravel] = useState(false)
   const [travelDestination, setTravelDestination] = useState('')
   const [travelChildren, setTravelChildren] = useState<Array<{ fullName: string; birthDate: string }>>([])
@@ -142,13 +147,18 @@ export function CreateVacationModal({
 
   const start = new Date(startDate)
   const end = new Date(endDate)
-  const duration = vacationDuration.countedDays
+  const isDayOff = vacationType === VacationType.DAY_OFF
+  const duration = isDayOff ? vacationDuration.workingDays : vacationDuration.countedDays
+  const hasEnoughDayOffs = duration > 0 && dayOffsAvailable >= duration
+  const typeOptions = dayOffOnly
+    ? [VacationType.DAY_OFF]
+    : Object.values(VacationType).filter((t) => t !== VacationType.DAY_OFF || dayOffsAvailable > 0)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setTravelError(null)
 
-    if (hasTravel) {
+    if (hasTravel && !isDayOff) {
       if (!travelDestination.trim()) {
         setTravelError('Укажите город проезда')
         return
@@ -174,7 +184,7 @@ export function CreateVacationModal({
 
     onSubmit({
       vacationType,
-      hasTravel,
+      hasTravel: hasTravel && !isDayOff,
       travelDestination: hasTravel ? travelDestination.trim() || undefined : undefined,
       travelChildren: hasTravel ? travelChildren : [],
       comment,
@@ -239,22 +249,30 @@ export function CreateVacationModal({
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
       <div className="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 animate-scale-in max-h-[85vh] overflow-hidden flex flex-col">
         <div className="p-6 border-b shrink-0">
-          <h2 className="text-xl font-semibold">Создать заявку на отпуск</h2>
+          <h2 className="text-xl font-semibold">{isDayOff ? 'Оформить отгул' : 'Создать заявку на отпуск'}</h2>
+          {dayOffOnly && (
+            <p className="mt-1 text-xs text-muted-foreground">Подача заявок на отпуск на эти даты сейчас недоступна, но отгул оформить можно.</p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="p-6 space-y-4 overflow-y-auto scrollbar-thin overscroll-contain">
           <div>
             <label className="block text-sm font-medium text-muted-foreground mb-1">
-              Период отпуска
+              {isDayOff ? 'Период отгула' : 'Период отпуска'}
             </label>
             <div className="flex items-center gap-2 text-sm text-foreground">
               <span className="font-semibold">{format(start, 'dd.MM.yyyy', { locale: ru })}</span>
               <span>—</span>
               <span className="font-semibold">{format(end, 'dd.MM.yyyy', { locale: ru })}</span>
-              <span className="text-muted-foreground">({duration} {pluralDays(duration)})</span>
+              <span className="text-muted-foreground">({duration} {isDayOff ? 'раб. ' : ''}{pluralDays(duration)})</span>
             </div>
-            {vacationDuration.holidays > 0 && (
+            {isDayOff && duration !== vacationDuration.calendarDays && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Отгул считается в рабочих днях: {duration} из {vacationDuration.calendarDays} календарных
+              </p>
+            )}
+            {!isDayOff && vacationDuration.holidays > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Праздничные дни не входят в отпуск: {vacationDuration.holidays} из {vacationDuration.calendarDays} календарных
               </p>
@@ -277,7 +295,7 @@ export function CreateVacationModal({
               className="w-full border border-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
               disabled={loading}
             >
-              {Object.values(VacationType).map((type) => {
+              {typeOptions.map((type) => {
                 const info = VACATION_TYPES[type]
                 return (
                   <option key={type} value={type}>
@@ -286,11 +304,12 @@ export function CreateVacationModal({
                 )
               })}
             </select>
-            {vacationTypeInfo && (
+            {vacationTypeInfo?.description && (
               <p className="text-xs text-muted-foreground mt-1">{vacationTypeInfo.description}</p>
             )}
           </div>
 
+          {!isDayOff && (
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -388,6 +407,7 @@ export function CreateVacationModal({
               )}
             </div>
           </div>
+          )}
 
           <div>
             <label htmlFor="comment" className="block text-sm font-medium text-muted-foreground mb-1">
@@ -520,7 +540,21 @@ export function CreateVacationModal({
             </div>
           )}
 
-          <RestrictionWarnings warnings={restrictionWarnings} />
+          {isDayOff && (
+            <div className={`p-3 rounded-lg text-sm ${
+              hasEnoughDayOffs
+                ? 'bg-success/10 dark:bg-success/25 border border-success/30 dark:border-success/60 text-success dark:text-success-foreground'
+                : 'bg-destructive/10 dark:bg-destructive/25 border border-destructive/30 dark:border-destructive/60 text-destructive dark:text-destructive-foreground'
+            }`}>
+              <div className="font-medium mb-1">
+                {duration === 0 ? '⚠️ В выбранном периоде нет рабочих дней' : hasEnoughDayOffs ? '✅ Достаточно отгулов' : '⚠️ Недостаточно отгулов'}
+              </div>
+              <div className="opacity-70">Требуется: {duration} · Доступно отгулов: {dayOffsAvailable}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{DAY_OFF_HINT}</div>
+            </div>
+          )}
+
+          {!isDayOff && <RestrictionWarnings warnings={restrictionWarnings} />}
 
           </div>
           <div className="px-6 py-4 border-t shrink-0">
@@ -538,8 +572,9 @@ export function CreateVacationModal({
               type="submit"
               disabled={
                 loading ||
+                (isDayOff && !hasEnoughDayOffs) ||
                 (countsInCounter && !hasEnoughDays && !allowOverBalance) ||
-                (hasTravel && !canUseTravel) ||
+                (!isDayOff && hasTravel && !canUseTravel) ||
                 (vacationType === VacationType.EDUCATIONAL && !referenceFile)
               }
               className="flex-1"

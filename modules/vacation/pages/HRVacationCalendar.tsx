@@ -10,6 +10,7 @@ import { VacationDetailModal } from '@/modules/vacation/components/modals/Vacati
 import { VacationLimitSettingCard } from '@/modules/vacation/components/VacationLimitSettingCard'
 import { VacationDayRulesCard } from '@/modules/vacation/components/VacationDayRulesCard'
 import { VacationAccessCard } from '@/modules/vacation/components/VacationAccessCard'
+import { LeaveAdjustmentsPanel } from '@/modules/vacation/components/LeaveAdjustmentsPanel'
 import { HRVacationRestrictions } from '@/modules/vacation/pages/HRVacationRestrictions'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { useVacationStore } from '@/modules/vacation/store/vacationStore'
@@ -104,7 +105,7 @@ export function HRVacationCalendar() {
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [detailRequest, setDetailRequest] = useState<VacationRequest | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
-  const [activeTab, setActiveTab] = useState<'calendar' | 'days' | 'access' | 'restrictions'>('calendar')
+  const [activeTab, setActiveTab] = useState<'calendar' | 'days' | 'adjustments' | 'access' | 'restrictions'>('calendar')
 
   const PER_PAGE = 15
 
@@ -259,6 +260,7 @@ export function HRVacationCalendar() {
         {([
           { id: 'calendar', label: 'Календарь' },
           { id: 'days', label: 'Дни отпуска' },
+          { id: 'adjustments', label: 'Отгулы' },
           { id: 'access', label: 'Доступ' },
           { id: 'restrictions', label: 'Пересечения' },
         ] as const).map((tab) => (
@@ -282,6 +284,7 @@ export function HRVacationCalendar() {
           <VacationDayRulesCard />
         </div>
       )}
+      {activeTab === 'adjustments' && <LeaveAdjustmentsPanel />}
       {activeTab === 'access' && <VacationAccessCard />}
       {activeTab === 'restrictions' && <HRVacationRestrictions />}
 

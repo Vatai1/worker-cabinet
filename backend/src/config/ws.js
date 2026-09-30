@@ -6,6 +6,16 @@ import keycloakConfig from './keycloak.js'
 import { verifyKeycloakToken } from '../middleware/auth.js'
 
 const clients = new Map()
+const AWAY_AFTER_MS = 5 * 60 * 1000
+const LAST_SEEN_THROTTLE_MS = 60 * 1000
+const lastSeenWrites = new Map()
+
+function touchLastSeen(userId, force = false) {
+  const now = Date.now()
+  if (!force && now - (lastSeenWrites.get(userId) || 0) < LAST_SEEN_THROTTLE_MS) return
+  lastSeenWrites.set(userId, now)
+  query('UPDATE users SET last_seen_at = NOW() WHERE id = $1', [userId]).catch(() => {})
+}
 
 let wss = null
 
@@ -46,6 +56,7 @@ export function initWsServer(server) {
   wss = new WebSocketServer({
     server,
     path: '/ws',
+    maxPayload: 4096,
     verifyClient: (info) => {
       const origin = info.req.headers.origin
       if (!origin || allowedOrigins.includes(origin)) return true
@@ -60,6 +71,18 @@ export function initWsServer(server) {
   })
 
   wss.on('connection', async (ws, req) => {
+    ws.connectedAt = Date.now()
+    ws.lastActivityAt = 0
+    ws.on('message', (raw) => {
+      try {
+        if (JSON.parse(raw.toString())?.event !== 'activity') return
+      } catch {
+        return
+      }
+      ws.lastActivityAt = Date.now()
+      if (ws.userId) touchLastSeen(ws.userId)
+    })
+
     const user = await authenticateUser(req)
     if (!user) {
       ws.close(4001, 'Unauthorized')
@@ -69,6 +92,8 @@ export function initWsServer(server) {
     const userId = user.id
     if (!clients.has(userId)) clients.set(userId, new Set())
     clients.get(userId).add(ws)
+    ws.userId = userId
+    touchLastSeen(userId, true)
 
     ws.orgIds = new Set()
     try {
@@ -77,6 +102,7 @@ export function initWsServer(server) {
     } catch {}
 
     ws.on('close', () => {
+      touchLastSeen(userId, true)
       const userClients = clients.get(userId)
       if (userClients) {
         userClients.delete(ws)
@@ -94,6 +120,25 @@ export function initWsServer(server) {
   })
 
   console.log('[WS] WebSocket server initialized on /ws')
+}
+
+export function getPresence() {
+  const now = Date.now()
+  const presence = new Map()
+  for (const [userId, sockets] of clients) {
+    let since = Infinity
+    let lastActivityAt = 0
+    for (const ws of sockets) {
+      since = Math.min(since, ws.connectedAt ?? now)
+      lastActivityAt = Math.max(lastActivityAt, ws.lastActivityAt ?? 0)
+    }
+    presence.set(userId, {
+      status: now - lastActivityAt < AWAY_AFTER_MS ? 'online' : 'away',
+      since: new Date(since).toISOString(),
+      lastActivityAt: lastActivityAt ? new Date(lastActivityAt).toISOString() : null,
+    })
+  }
+  return presence
 }
 
 export function getActiveWsCount() {
