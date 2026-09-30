@@ -234,6 +234,7 @@ const childSeesParentVacations = (n) => `EXISTS (
 
 const userParentSeesChildVacations = (n) => `vr.user_id IN (SELECT id FROM users WHERE manager_id = $${n} AND vac_parent_sees_child)`
 
+const sameDepartmentPending = (n) => `(rs.code = 'on_approval' AND u.department_id = (SELECT department_id FROM users WHERE id = $${n}))`
 const userChildSeesParentVacations = (n) => `(vr.user_id = (SELECT manager_id FROM users WHERE id = $${n}) AND (SELECT vac_child_sees_parent FROM users WHERE id = $${n}) AND rs.code = 'approved')`
 
 const substExistsClause = (n) => `EXISTS (
@@ -552,7 +553,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
       params.push(userId)
     } else if (departmentId) {
       if (user.role === 'employee') {
-        whereClause += ` AND ((u.department_id = $${params.length + 1} AND rs.code = $${params.length + 2}) OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 3} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 3)} OR ${userParentSeesChildVacations(params.length + 3)} OR ${userChildSeesParentVacations(params.length + 3)})`
+        whereClause += ` AND ((u.department_id = $${params.length + 1} AND (rs.code = $${params.length + 2} OR (rs.code = 'on_approval' AND u.department_id = (SELECT department_id FROM users WHERE id = $${params.length + 3})))) OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 3} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 3)} OR ${userParentSeesChildVacations(params.length + 3)} OR ${userChildSeesParentVacations(params.length + 3)})`
         params.push(departmentId, 'approved', user.id)
       } else {
         whereClause += ' AND u.department_id = $' + (params.length + 1)
@@ -561,10 +562,10 @@ router.get('/requests', authenticateToken, async (req, res) => {
     } else {
       const substExists = ` OR ${substExistsClause(params.length + 1)}`
       if (user.role === 'employee') {
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)}${substExists})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR ${sameDepartmentPending(params.length + 1)} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)}${substExists})`
         params.push(user.id)
       } else if (user.role === 'manager') {
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userParentSeesChildVacations(params.length + 1)}${substExists})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR ${sameDepartmentPending(params.length + 1)} OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userParentSeesChildVacations(params.length + 1)}${substExists})`
         params.push(user.id)
       }
     }
