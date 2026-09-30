@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { Fragment, useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry, apiGet, apiPost, apiDelete } from '@/shared/lib/apiClient'
@@ -43,6 +43,7 @@ import {
   Bug, FlaskConical, Film, Radio,
 } from 'lucide-react'
 import { OnlineUsersTab } from '@/core/admin/components/OnlineUsersTab'
+import { useAuthStore } from '@/core/auth/store/authStore'
 import { TelemetryActions } from '@/shared/components/TelemetryActions'
 import type { TelemetryAction } from '@/shared/lib/telemetry'
 import type { AdminRole, AdminPermission, SystemSetting, AuditLogEntry } from '@/core/admin/types/admin'
@@ -56,6 +57,17 @@ interface TabItem {
   description: string
   color: string
   module?: string
+}
+
+const TAB_PERMISSIONS: Partial<Record<TabId, string>> = {
+  roles: 'admin:roles',
+  'role-mappings': 'admin:roles',
+  settings: 'admin:settings',
+  modules: 'admin:settings',
+  audit: 'admin:audit',
+  errors: 'admin:errors',
+  online: 'admin:online',
+  'bug-reports': 'bug_reports:manage',
 }
 
 interface TabGroup {
@@ -111,6 +123,15 @@ const TAB_GROUPS: TabGroup[] = [
   },
 ]
 
+const FULL_ACCESS_ROLE_NAMES = ['admin', 'superadmin']
+const MATRIX_ROLE_ORDER = ['employee', 'manager', 'director', 'hr', 'onboarding', 'admin', 'superadmin']
+const PERMISSION_GROUP_LABELS: Record<string, string> = {
+  users: 'Сотрудники',
+  hr: 'HR-панель',
+  departments: 'Отделы и учреждение',
+  admin: 'Администрирование',
+}
+
 const ROLE_LABELS: Record<string, string> = {
   employee: 'Работник',
   manager: 'Руководитель',
@@ -118,6 +139,7 @@ const ROLE_LABELS: Record<string, string> = {
   admin: 'Администратор',
   director: 'Директор',
   onboarding: 'Онбординг',
+  superadmin: 'Суперадмин',
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -309,6 +331,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
       .catch(() => {})
   }, [])
 
+  const permissions = useAuthStore((s) => s.permissions)
   const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'global-hierarchy', 'bug-reports', 'test-data', 'instructions']
 
   const filteredGroups = TAB_GROUPS
@@ -316,6 +339,8 @@ export function AdminPanel({ mode = 'global' }: Props) {
       ...group,
       tabs: group.tabs.filter((tab) => {
         if (!isGlobalMode && HIDDEN_FOR_ORG_ADMIN.includes(tab.id)) return false
+        const permission = TAB_PERMISSIONS[tab.id]
+        if (permission && !permissions.includes(permission)) return false
         return !tab.module || isModuleEnabled(tab.module)
       }),
     }))
@@ -428,8 +453,35 @@ function RolesTab() {
     return m?.locked === true || m?.category === 'core' || m?.category === 'general'
   }
   const moduleName = (code: string) => {
+    if (PERMISSION_GROUP_LABELS[code]) return PERMISSION_GROUP_LABELS[code]
     const m = modMap.get(code)
     return m?.name ? `Модуль "${m.name}"` : code.charAt(0).toUpperCase() + code.slice(1)
+  }
+  const matrixRoles = [...roles].sort((a, b) => {
+    const rank = (r: AdminRole) => (FULL_ACCESS_ROLE_NAMES.includes(r.name) ? 2 : r.is_system ? 0 : 1)
+    return rank(a) - rank(b) || (MATRIX_ROLE_ORDER.indexOf(a.name) + 1 || 99) - (MATRIX_ROLE_ORDER.indexOf(b.name) + 1 || 99)
+  })
+
+  const toggleMatrixCell = async (role: AdminRole, permissionId: number) => {
+    const current = role.permissions.map((p) => p.id)
+    const next = current.includes(permissionId) ? current.filter((id) => id !== permissionId) : [...current, permissionId]
+    setRoles((prev) => prev.map((r) => (r.id === role.id
+      ? { ...r, permissions: permissions.filter((p) => next.includes(p.id)) }
+      : r)))
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/admin/roles/${role.id}`, {
+        method: 'PUT', headers: getAuthHeadersWithContentType(),
+        body: JSON.stringify({ permissionIds: next }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Не удалось сохранить права')
+        fetchData()
+      }
+    } catch (err) {
+      setError(getErrorMessage(err))
+      fetchData()
+    }
   }
   const modules = [...new Set(permissions.map((p) => p.module))].sort((a, b) => {
     const aCore = isCoreMod(a) ? 0 : 1
@@ -510,8 +562,11 @@ function RolesTab() {
             </div>
           )}
 
+          {FULL_ACCESS_ROLE_NAMES.includes(editingRole.name) && (
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">У этой роли всегда полный доступ — галочки на её права не влияют.</p>
+          )}
           <div className="flex gap-2 mb-4">
-            <Button onClick={savePermissions}><Check className="h-4 w-4 mr-1" /> Сохранить</Button>
+            <Button onClick={savePermissions} disabled={FULL_ACCESS_ROLE_NAMES.includes(editingRole.name)}><Check className="h-4 w-4 mr-1" /> Сохранить</Button>
             <Button variant="outline" onClick={() => setEditingRole(null)}>Отмена</Button>
           </div>
 
@@ -587,6 +642,62 @@ function RolesTab() {
             <Button variant="outline" onClick={() => { setShowCreate(false); setNewName(''); setNewDesc('') }}>Отмена</Button>
           </div>
         )}
+
+        <div data-testid="permissions-matrix" className="overflow-x-auto rounded-xl border border-border/60">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr>
+                <th className="sticky left-0 z-10 min-w-[16rem] bg-muted/40 px-3 py-2 text-left font-medium">Право</th>
+                {matrixRoles.map((role) => (
+                  <th key={role.id} className="px-2 py-2 text-center text-xs font-medium whitespace-nowrap">
+                    {ROLE_LABELS[role.name] || role.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {modules.map((mod) => (
+                <Fragment key={mod}>
+                  <tr className="bg-muted/20">
+                    <td colSpan={matrixRoles.length + 1} className="sticky left-0 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {moduleName(mod)}
+                    </td>
+                  </tr>
+                  {permissions.filter((p) => p.module === mod).map((perm) => (
+                    <tr key={perm.id} className="border-t border-border/40">
+                      <td className="sticky left-0 z-10 min-w-[16rem] bg-card px-3 py-2">{perm.name}</td>
+                      {matrixRoles.map((role) => {
+                        const locked = FULL_ACCESS_ROLE_NAMES.includes(role.name)
+                        const checked = locked || role.permissions.some((p) => p.id === perm.id)
+                        return (
+                          <td key={role.id} className="px-2 py-2 text-center">
+                            <button
+                              type="button"
+                              role="checkbox"
+                              aria-checked={checked}
+                              aria-label={`${perm.name} — ${ROLE_LABELS[role.name] || role.name}`}
+                              disabled={locked}
+                              title={locked ? 'У этой роли всегда полный доступ' : undefined}
+                              onClick={() => toggleMatrixCell(role, perm.id)}
+                              className={cn(
+                                'inline-flex h-[18px] w-[18px] items-center justify-center rounded-md border-2 transition-colors',
+                                checked ? 'border-primary bg-primary' : 'border-muted-foreground/25 hover:border-muted-foreground/40',
+                                locked && 'opacity-50 cursor-not-allowed',
+                              )}
+                            >
+                              {checked && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />}
+                            </button>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-muted-foreground">Изменения применяются сразу. Разграничение по данным (например, руководитель работает только со своим отделом) остаётся прежним. Администратор и суперадмин всегда имеют полный доступ.</p>
 
         <div className="space-y-3">
           {roles.map((role) => (

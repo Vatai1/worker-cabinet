@@ -6,6 +6,7 @@ import {
   Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Tag, Send,
   HelpCircle,
 } from 'lucide-react'
+import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { getCookie, setCookie } from '@/shared/lib/cookies'
 import { HRPanelIntroModal } from '@/shared/components/HRPanelIntroModal'
@@ -36,6 +37,7 @@ interface TabItem {
   description: string
   module: string | null
   color: string
+  permission: string
 }
 
 interface TabGroup {
@@ -45,24 +47,24 @@ interface TabGroup {
 
 const TAB_GROUPS: TabGroup[] = [
   { label: 'Управление персоналом', tabs: [
-    { id: 'surveys', name: 'Опросы', icon: ClipboardList, description: 'Создание и управление опросами', module: 'surveys', color: 'from-violet-500 to-purple-600' },
-    { id: 'mailing', name: 'Рассылка', icon: Send, description: 'Массовая рассылка информации', module: 'mailing', color: 'from-fuchsia-500 to-pink-600' },
-    { id: 'onboarding', name: 'Онбординг', icon: UserPlus, description: 'Шаблоны и адаптация', module: 'onboarding', color: 'from-emerald-500 to-teal-600' },
-    { id: 'timesheet', name: 'Табель', icon: Calendar, description: 'Учёт рабочего времени', module: 'timesheet', color: 'from-cyan-500 to-blue-600' },
+    { id: 'surveys', name: 'Опросы', icon: ClipboardList, description: 'Создание и управление опросами', module: 'surveys', color: 'from-violet-500 to-purple-600', permission: 'surveys:manage' },
+    { id: 'mailing', name: 'Рассылка', icon: Send, description: 'Массовая рассылка информации', module: 'mailing', color: 'from-fuchsia-500 to-pink-600', permission: 'mailing:manage' },
+    { id: 'onboarding', name: 'Онбординг', icon: UserPlus, description: 'Шаблоны и адаптация', module: 'onboarding', color: 'from-emerald-500 to-teal-600', permission: 'onboarding:manage' },
+    { id: 'timesheet', name: 'Табель', icon: Calendar, description: 'Учёт рабочего времени', module: 'timesheet', color: 'from-cyan-500 to-blue-600', permission: 'timesheet:manage' },
   ]},
   { label: 'Отпуска и структура', tabs: [
-    { id: 'vacation', name: 'Отпуск', icon: Plane, description: 'Календарь отпусков, дни, доступ, пересечения', module: 'vacation', color: 'from-orange-500 to-amber-600' },
+    { id: 'vacation', name: 'Отпуск', icon: Plane, description: 'Календарь отпусков, дни, доступ, пересечения', module: 'vacation', color: 'from-orange-500 to-amber-600', permission: 'hr:access' },
   ]},
   { label: 'Документы', tabs: [
-    { id: 'doc-templates', name: 'Шаблоны документов', icon: FileText, description: 'Шаблоны документов организации', module: 'documents', color: 'from-pink-500 to-rose-600' },
+    { id: 'doc-templates', name: 'Шаблоны документов', icon: FileText, description: 'Шаблоны документов организации', module: 'documents', color: 'from-pink-500 to-rose-600', permission: 'documents:templates' },
   ]},
   { label: 'Справочники', tabs: [
-    { id: 'hr_employees', name: 'Сотрудники', icon: Users, description: 'Справочник сотрудников', module: null, color: 'from-blue-500 to-indigo-600' },
-    { id: 'institution', name: 'Учреждение', icon: Building2, description: 'Информация и руководитель', module: 'dictionaries', color: 'from-indigo-500 to-blue-600' },
-    { id: 'hr_departments', name: 'Отделы', icon: Building2, description: 'Структура организации', module: null, color: 'from-blue-500 to-indigo-600' },
-    { id: 'hr_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', module: 'dictionaries', color: 'from-violet-500 to-purple-600' },
-    { id: 'hr_vacation_types', name: 'Типы отпусков', icon: Plane, description: 'Типы отпусков', module: 'vacation', color: 'from-amber-500 to-orange-600' },
-    { id: 'hr_skills', name: 'Теги', icon: Tag, description: 'Каталог тегов', module: 'skills', color: 'from-emerald-500 to-teal-600' },
+    { id: 'hr_employees', name: 'Сотрудники', icon: Users, description: 'Справочник сотрудников', module: null, color: 'from-blue-500 to-indigo-600', permission: 'users:edit' },
+    { id: 'institution', name: 'Учреждение', icon: Building2, description: 'Информация и руководитель', module: 'dictionaries', color: 'from-indigo-500 to-blue-600', permission: 'organization:members' },
+    { id: 'hr_departments', name: 'Отделы', icon: Building2, description: 'Структура организации', module: null, color: 'from-blue-500 to-indigo-600', permission: 'departments:manage' },
+    { id: 'hr_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', module: 'dictionaries', color: 'from-violet-500 to-purple-600', permission: 'dictionaries:manage' },
+    { id: 'hr_vacation_types', name: 'Типы отпусков', icon: Plane, description: 'Типы отпусков', module: 'vacation', color: 'from-amber-500 to-orange-600', permission: 'dictionaries:manage' },
+    { id: 'hr_skills', name: 'Теги', icon: Tag, description: 'Каталог тегов', module: 'skills', color: 'from-emerald-500 to-teal-600', permission: 'dictionaries:manage' },
   ]},
 ]
 
@@ -72,12 +74,13 @@ export function HRPanel() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const isModuleEnabled = useModulesStore((s) => s.isModuleEnabled)
+  const permissions = useAuthStore((s) => s.permissions)
 
   const filteredGroups = useMemo(() =>
     TAB_GROUPS
-      .map((group) => ({ ...group, tabs: group.tabs.filter((tab) => tab.module === null || isModuleEnabled(tab.module)) }))
+      .map((group) => ({ ...group, tabs: group.tabs.filter((tab) => (tab.module === null || isModuleEnabled(tab.module)) && permissions.includes(tab.permission)) }))
       .filter((group) => group.tabs.length > 0),
-    [isModuleEnabled]
+    [isModuleEnabled, permissions]
   )
 
   const allTabs = filteredGroups.flatMap((g) => g.tabs)

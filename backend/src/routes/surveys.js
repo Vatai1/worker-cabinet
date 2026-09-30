@@ -1,6 +1,6 @@
 import express from 'express'
 import { query, getClient } from '../config/database.js'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 import {
   isUserInTarget,
   publishSurvey,
@@ -8,6 +8,7 @@ import {
 } from '../services/surveyService.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
+import { requirePermission } from '../lib/permissions.js'
 
 const router = express.Router()
 
@@ -29,7 +30,7 @@ const router = express.Router()
  *               items: { $ref: '#/components/schemas/Survey' }
  */
 // GET /api/surveys — list all (HR/admin)
-router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('surveys:manage'), async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1)
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 100))
@@ -128,7 +129,7 @@ router.get('/my', authenticateToken, async (req, res) => {
  *         description: Опрос с вопросами
  */
 // GET /api/surveys/:id — get survey with questions (HR/admin)
-router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('surveys:manage'), async (req, res) => {
   try {
     const surveyQuery = orgScopedQuery('SELECT * FROM surveys WHERE id = $1', [req.params.id], req)
     const survey = await query(surveyQuery.text, surveyQuery.values)
@@ -181,7 +182,7 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
  *         description: Опрос создан
  */
 // POST /api/surveys — create draft (HR/admin)
-router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('surveys:manage'), async (req, res) => {
   const client = await getClient()
   try {
     const { title, description, targetType, targetIds, deadline, anonymous, questions } = req.body
@@ -260,7 +261,7 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
  *         description: Опрос обновлён
  */
 // PUT /api/surveys/:id — update draft (HR/admin)
-router.put('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('surveys:manage'), async (req, res) => {
   const client = await getClient()
   try {
     const { title, description, targetType, targetIds, deadline, anonymous, questions } = req.body
@@ -329,7 +330,7 @@ router.put('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
  *         description: Опрос удалён
  */
 // DELETE /api/surveys/:id (HR/admin)
-router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('surveys:manage'), async (req, res) => {
   try {
     const delQuery = orgScopedQuery('DELETE FROM surveys WHERE id = $1', [req.params.id], req)
     await query(delQuery.text, delQuery.values)
@@ -359,7 +360,7 @@ router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (r
  *         description: Опрос опубликован
  */
 // POST /api/surveys/:id/publish (HR/admin)
-router.post('/:id/publish', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.post('/:id/publish', authenticateToken, requirePermission('surveys:manage'), async (req, res) => {
   try {
     const survey = await publishSurvey(req.params.id, req.user.id)
     res.json(survey)
@@ -388,7 +389,7 @@ router.post('/:id/publish', authenticateToken, authorizeRoles('hr', 'admin'), as
  *         description: Опрос закрыт
  */
 // POST /api/surveys/:id/close (HR/admin)
-router.post('/:id/close', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.post('/:id/close', authenticateToken, requirePermission('surveys:manage'), async (req, res) => {
   try {
     const closeQuery = orgScopedQuery("UPDATE surveys SET status = 'closed' WHERE id = $1 RETURNING *", [req.params.id], req)
     const result = await query(closeQuery.text, closeQuery.values)
@@ -568,7 +569,7 @@ router.post('/:id/respond', authenticateToken, async (req, res) => {
  *         description: Аналитика опроса
  */
 // GET /api/surveys/:id/analytics (HR/admin)
-router.get('/:id/analytics', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.get('/:id/analytics', authenticateToken, requirePermission('surveys:manage'), async (req, res) => {
   try {
     const analytics = await getSurveyAnalytics(req.params.id)
     res.json(analytics)

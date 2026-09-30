@@ -5,6 +5,7 @@ import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 import { vacationStatusBatch } from '../lib/vacationDays.js'
 import { canEditDepartmentHierarchy, hasFullDepartmentAccess, managedDepartmentIds } from '../lib/departmentScope.js'
+import { requirePermission } from '../lib/permissions.js'
 
 const router = express.Router()
 
@@ -627,7 +628,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.put('/', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), async (req, res) => {
+router.put('/', authenticateToken, requirePermission('hierarchy:manage'), async (req, res) => {
   const { nodes, edges, viewport, orgPositions, baseVersion } = req.body
   if (!nodes || !edges) {
     return res.status(400).json({ error: 'Поля nodes и edges обязательны' })

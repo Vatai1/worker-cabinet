@@ -1,6 +1,6 @@
 import express from 'express'
 import { query } from '../config/database.js'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError } from '../middleware/errors.js'
 import { uploadAvatar } from '../middleware/upload.js'
 import { uploadToS3, getS3FileUrl, deleteFromS3, S3_ENDPOINT, S3_BUCKET, S3_PUBLIC_URL } from '../config/s3.js'
@@ -11,6 +11,7 @@ import { syncMembershipDepartment } from '../lib/departmentMembers.js'
 import { revokeAllUserSessions } from '../lib/sessionTokens.js'
 import { phrasePrefixPattern, wordPrefixPatterns } from '../lib/wordSearch.js'
 import { setKcUserEnabled, updateKcUserRole } from '../config/keycloak.js'
+import { requirePermission } from '../lib/permissions.js'
 
 const ELEVATED_ROLES = ['admin', 'superadmin', 'director']
 
@@ -365,7 +366,7 @@ router.get('/search', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', 'admin'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('users:view'), async (req, res) => {
   try {
     const { departmentId } = req.query
     
@@ -434,7 +435,7 @@ router.get('/', authenticateToken, authorizeRoles('employee', 'manager', 'hr', '
  *       200:
  *         description: Список ролей (id, name)
  */
-router.get('/system-roles', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.get('/system-roles', authenticateToken, requirePermission('users:edit'), async (req, res) => {
   try {
     const result = await query('SELECT id, name FROM roles ORDER BY name')
     res.json(result.rows)
@@ -466,7 +467,7 @@ router.get('/system-roles', authenticateToken, authorizeRoles('hr', 'admin'), as
  *       200:
  *         description: Статусы обновлены
  */
-router.put('/bulk-status', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.put('/bulk-status', authenticateToken, requirePermission('users:edit'), async (req, res) => {
   try {
     const { userIds, status } = req.body
     if (!Array.isArray(userIds) || userIds.length === 0) {
@@ -517,7 +518,7 @@ router.put('/bulk-status', authenticateToken, authorizeRoles('hr', 'admin'), asy
  *       200:
  *         description: Роли обновлены
  */
-router.put('/bulk-role', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.put('/bulk-role', authenticateToken, requirePermission('users:manage_roles'), async (req, res) => {
   try {
     const { userIds, role } = req.body
     if (!Array.isArray(userIds) || userIds.length === 0) {
@@ -575,7 +576,7 @@ router.put('/bulk-role', authenticateToken, authorizeRoles('hr', 'admin'), async
  *       200:
  *         description: Должности обновлены
  */
-router.put('/bulk-position', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.put('/bulk-position', authenticateToken, requirePermission('users:edit'), asyncHandler(async (req, res) => {
   const { userIds, position } = req.body
   const ids = Array.isArray(userIds) ? [...new Set(userIds.map(Number).filter(Number.isInteger))] : []
   if (ids.length === 0) throw new ValidationError('Выберите хотя бы одного пользователя')
@@ -961,7 +962,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.patch('/:id/primary-org', authenticateToken, authorizeRoles('admin', 'hr'), async (req, res) => {
+router.patch('/:id/primary-org', authenticateToken, requirePermission('users:edit'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id)
     const orgId = parseInt(req.body.orgId)

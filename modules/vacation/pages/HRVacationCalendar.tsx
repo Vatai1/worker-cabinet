@@ -17,6 +17,8 @@ import { useVacationStore } from '@/modules/vacation/store/vacationStore'
 import { useWsStore } from '@/shared/store/wsStore'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { cn, personName } from '@/shared/lib/utils'
+import { useCan } from '@/shared/lib/permissions'
+import { useModulesStore } from '@/shared/store/modulesStore'
 import {
   Plane, Calendar, Search, ChevronLeft, ChevronRight, Loader2,
   RotateCcw,
@@ -106,6 +108,10 @@ export function HRVacationCalendar() {
   const [detailRequest, setDetailRequest] = useState<VacationRequest | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [activeTab, setActiveTab] = useState<'calendar' | 'days' | 'adjustments' | 'access' | 'restrictions'>('calendar')
+  const canManageVacation = useCan('vacation:manage')
+  const canManageRestrictions = useCan('vacation:restrictions')
+  const dayOffsEnabled = useModulesStore((s) => s.isModuleEnabled('day_offs'))
+  const canGrantDayOffs = useCan('day_off:grant') && dayOffsEnabled
 
   const PER_PAGE = 15
 
@@ -258,12 +264,12 @@ export function HRVacationCalendar() {
       {/* ── Табы ── */}
       <div className="flex flex-wrap gap-1.5 border-b border-border pb-3">
         {([
-          { id: 'calendar', label: 'Календарь' },
-          { id: 'days', label: 'Дни отпуска' },
-          { id: 'adjustments', label: 'Отгулы' },
-          { id: 'access', label: 'Доступ' },
-          { id: 'restrictions', label: 'Пересечения' },
-        ] as const).map((tab) => (
+          { id: 'calendar', label: 'Календарь', allowed: true },
+          { id: 'days', label: 'Дни отпуска', allowed: canManageVacation },
+          { id: 'adjustments', label: 'Отгулы', allowed: canGrantDayOffs },
+          { id: 'access', label: 'Доступ', allowed: canManageVacation },
+          { id: 'restrictions', label: 'Пересечения', allowed: canManageRestrictions },
+        ] as const).filter((tab) => tab.allowed !== false).map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -278,15 +284,15 @@ export function HRVacationCalendar() {
         ))}
       </div>
 
-      {activeTab === 'days' && (
+      {activeTab === 'days' && canManageVacation && (
         <div className="space-y-4">
           <VacationLimitSettingCard />
           <VacationDayRulesCard />
         </div>
       )}
-      {activeTab === 'adjustments' && <LeaveAdjustmentsPanel />}
-      {activeTab === 'access' && <VacationAccessCard />}
-      {activeTab === 'restrictions' && <HRVacationRestrictions />}
+      {activeTab === 'adjustments' && canGrantDayOffs && <LeaveAdjustmentsPanel />}
+      {activeTab === 'access' && canManageVacation && <VacationAccessCard />}
+      {activeTab === 'restrictions' && canManageRestrictions && <HRVacationRestrictions />}
 
       {activeTab === 'calendar' && (
       <>

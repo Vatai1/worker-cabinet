@@ -38,3 +38,11 @@ export function hasOrgRole(...roles: string[]): boolean {
 }
 
 export const hasAnyRoleSync = hasAnyRole
+
+export function can(code: string): boolean {
+  return useAuthStore.getState().permissions.includes(code)
+}
+
+export function useCan(code: string): boolean {
+  return useAuthStore((s) => s.permissions.includes(code))
+}

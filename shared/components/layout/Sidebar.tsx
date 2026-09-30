@@ -30,8 +30,9 @@ export interface NavItem {
   name: string
   href?: string
   icon: React.ComponentType<{ className?: string }>
-  children?: { name: string; href: string; module?: string }[]
+  children?: { name: string; href: string; module?: string; permission?: string }[]
   module?: string
+  permission?: string
   section?: string
   superAdminOnly?: boolean
   orgAdminOnly?: boolean
@@ -64,7 +65,7 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Ассистент', href: '/assistant', icon: Bot, module: 'assistant', section: 'Основное' },
   { name: 'Профиль', href: userId ? `/employees/${userId}` : '/profile', icon: User, section: 'Основное' },
   { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
-  { name: 'Табель', href: '/leader/timesheet', icon: Calendar, module: 'timesheet', section: 'Управление' },
+  { name: 'Табель', href: '/leader/timesheet', icon: Calendar, module: 'timesheet', section: 'Управление', permission: 'timesheet:view' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Управление' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Работа' },
   { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
@@ -75,19 +76,19 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
 ]
 
 const getHRSectionItems = (): NavItem[] => [
-  { name: 'Опросы', href: '/hr?tab=surveys', icon: ClipboardList, module: 'surveys', section: 'HR' },
-  { name: 'Рассылка', href: '/hr?tab=mailing', icon: Send, module: 'mailing', section: 'HR' },
-  { name: 'Онбординг', href: '/hr?tab=onboarding', icon: UserPlus, module: 'onboarding', section: 'HR' },
-  { name: 'Табель', href: '/hr?tab=timesheet', icon: Calendar, module: 'timesheet', section: 'HR' },
-  { name: 'Отпуск', href: '/hr?tab=vacation', icon: Plane, module: 'vacation', section: 'HR' },
-  { name: 'Шаблоны документов', href: '/hr?tab=doc-templates', icon: FileText, module: 'documents', section: 'HR' },
-  { name: 'Справочники', icon: Boxes, section: 'HR', children: [
-    { name: 'Сотрудники', href: '/hr?tab=hr_employees' },
-    { name: 'Учреждение', href: '/hr?tab=institution', module: 'dictionaries' },
-    { name: 'Отделы', href: '/hr?tab=hr_departments' },
-    { name: 'Должности', href: '/hr?tab=hr_positions', module: 'dictionaries' },
-    { name: 'Типы отпусков', href: '/hr?tab=hr_vacation_types', module: 'vacation' },
-    { name: 'Теги', href: '/hr?tab=hr_skills', module: 'skills' },
+  { name: 'Опросы', href: '/hr?tab=surveys', icon: ClipboardList, module: 'surveys', section: 'HR', permission: 'surveys:manage' },
+  { name: 'Рассылка', href: '/hr?tab=mailing', icon: Send, module: 'mailing', section: 'HR', permission: 'mailing:manage' },
+  { name: 'Онбординг', href: '/hr?tab=onboarding', icon: UserPlus, module: 'onboarding', section: 'HR', permission: 'onboarding:manage' },
+  { name: 'Табель', href: '/hr?tab=timesheet', icon: Calendar, module: 'timesheet', section: 'HR', permission: 'timesheet:manage' },
+  { name: 'Отпуск', href: '/hr?tab=vacation', icon: Plane, module: 'vacation', section: 'HR', permission: 'hr:access' },
+  { name: 'Шаблоны документов', href: '/hr?tab=doc-templates', icon: FileText, module: 'documents', section: 'HR', permission: 'documents:templates' },
+  { name: 'Справочники', icon: Boxes, section: 'HR', permission: 'hr:access', children: [
+    { name: 'Сотрудники', href: '/hr?tab=hr_employees', permission: 'users:edit' },
+    { name: 'Учреждение', href: '/hr?tab=institution', module: 'dictionaries', permission: 'organization:members' },
+    { name: 'Отделы', href: '/hr?tab=hr_departments', permission: 'departments:manage' },
+    { name: 'Должности', href: '/hr?tab=hr_positions', module: 'dictionaries', permission: 'dictionaries:manage' },
+    { name: 'Типы отпусков', href: '/hr?tab=hr_vacation_types', module: 'vacation', permission: 'dictionaries:manage' },
+    { name: 'Теги', href: '/hr?tab=hr_skills', module: 'skills', permission: 'dictionaries:manage' },
   ]},
 ]
 
@@ -116,21 +117,21 @@ const ORG_HIDDEN_ITEM_NAMES = new Set([
 const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg: boolean): NavItem[] => {
   const items: NavItem[] = [
     { name: 'Роли и доступ', icon: Key, section, children: [
-      { name: 'Роли и доступы', href: `${basePath}?tab=roles` },
-      { name: 'Роли по должности', href: `${basePath}?tab=role-mappings` },
+      { name: 'Роли и доступы', href: `${basePath}?tab=roles`, permission: 'admin:roles' },
+      { name: 'Роли по должности', href: `${basePath}?tab=role-mappings`, permission: 'admin:roles' },
     ]},
     { name: 'Организация', icon: Building2, section, children: [
       { name: 'Отделы', href: `${basePath}?tab=departments` },
       { name: 'Учреждения', href: `${basePath}?tab=organizations` },
       { name: 'Иерархия', href: `${basePath}?tab=global-hierarchy` },
     ]},
-    { name: 'Модули', href: `${basePath}?tab=modules`, icon: Boxes, section },
-    { name: 'Настройки системы', href: `${basePath}?tab=settings`, icon: Settings2, section },
+    { name: 'Модули', href: `${basePath}?tab=modules`, icon: Boxes, section, permission: 'admin:settings' },
+    { name: 'Настройки системы', href: `${basePath}?tab=settings`, icon: Settings2, section, permission: 'admin:settings' },
     { name: 'Безопасность', href: `${basePath}?tab=security`, icon: ShieldCheck, section },
     { name: 'Диагностика', icon: Activity, section, children: [
-      { name: 'Аудит', href: `${basePath}?tab=audit` },
-      { name: 'Ошибки', href: `${basePath}?tab=errors` },
-      { name: 'Баг-репорты', href: `${basePath}?tab=bug-reports` },
+      { name: 'Аудит', href: `${basePath}?tab=audit`, permission: 'admin:audit' },
+      { name: 'Ошибки', href: `${basePath}?tab=errors`, permission: 'admin:errors' },
+      { name: 'Баг-репорты', href: `${basePath}?tab=bug-reports`, permission: 'bug_reports:manage' },
       { name: 'Система', href: `${basePath}?tab=health` },
       { name: 'Тестовые данные', href: `${basePath}?tab=test-data` },
     ]},
@@ -178,20 +179,37 @@ const roleLabels: Record<string, string> = {
   superadmin: 'Супер-админ',
 }
 
+function withGrantedSections(nav: NavItem[], has: (code: string) => boolean): NavItem[] {
+  const result = [...nav]
+  const hasHref = (href: string) => result.some((i) => i.href === href)
+  if (has('timesheet:view') && !has('timesheet:manage') && !hasHref('/leader/timesheet')) {
+    result.push({ name: 'Табель', href: '/leader/timesheet', icon: Calendar, module: 'timesheet', section: 'Управление', permission: 'timesheet:view' })
+  }
+  if (has('hr:access') && !result.some((i) => i.section === 'HR')) result.push(...getHRSectionItems())
+  if (has('admin:access') && !result.some((i) => i.section === 'Настройки организации')) {
+    result.push(...getAdminSettingsItems('/admin/org', 'Настройки организации', true))
+  }
+  return result
+}
+
 export function useNavigation(): NavItem[] {
   const { user } = useAuthStore()
+  const permissions = useAuthStore((s) => s.permissions)
   const { isModuleEnabled, modulesLoaded } = useModulesStore()
   const isSuper = isSuperAdmin()
   const isAdminRole = hasAnyRole('admin')
 
   return useMemo(() => {
-    const rawNavigation =
+    const has = (code: string) => permissions.includes(code)
+    const rawNavigation = withGrantedSections(
       user?.role === 'onboarding' ? getOnboardingNavigation() :
       isSuper ? getAdminNavigation(user?.id, true) :
       isAdminRole ? getAdminNavigation(user?.id, false) :
       hasAnyRole('hr') ? getHRNavigation(user?.id) :
       user?.role === 'manager' || hasAnyRole('manager') ? getManagerNavigation(user?.id) :
-      getEmployeeNavigation(user?.id)
+      getEmployeeNavigation(user?.id),
+      has,
+    )
 
     return (!modulesLoaded ? [] : rawNavigation)
       .filter((item) => {
@@ -200,14 +218,16 @@ export function useNavigation(): NavItem[] {
         return true
       })
       .filter((item) => !item.module || isModuleEnabled(item.module))
+      .filter((item) => !item.permission || has(item.permission))
       .map((item) => {
         if (!item.children) return item
-        const filteredChildren = item.children.filter((child) => !child.module || isModuleEnabled(child.module))
+        const filteredChildren = item.children.filter((child) =>
+          (!child.module || isModuleEnabled(child.module)) && (!child.permission || has(child.permission)))
         if (filteredChildren.length === 0) return null
         return { ...item, children: filteredChildren }
       })
       .filter(Boolean) as NavItem[]
-  }, [modulesLoaded, isSuper, isAdminRole, isModuleEnabled, user?.role, user?.id])
+  }, [modulesLoaded, isSuper, isAdminRole, isModuleEnabled, user?.role, user?.id, permissions])
 }
 
 export function Sidebar() {

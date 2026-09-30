@@ -1,10 +1,11 @@
 import express from 'express'
 import multer from 'multer'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler } from '../middleware/errors.js'
 import { query } from '../config/database.js'
 import { uploadToS3, deleteFromS3, getPresignedUrl } from '../config/s3.js'
 import { notify } from '../config/notifications.js'
+import { requirePermission } from '../lib/permissions.js'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
@@ -99,7 +100,7 @@ router.post('/', authenticateToken, upload.single('screenshot'), asyncHandler(as
   res.status(201).json(report)
 }))
 
-router.get('/', authenticateToken, authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.get('/', authenticateToken, requirePermission('bug_reports:manage'), asyncHandler(async (req, res) => {
   const { status, priority, search } = req.query
   const page = Math.max(1, parseInt(req.query.page) || 1)
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20))
@@ -141,13 +142,13 @@ router.get('/', authenticateToken, authorizeRoles('admin', 'superadmin'), asyncH
   })
 }))
 
-router.get('/stats', authenticateToken, authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.get('/stats', authenticateToken, requirePermission('bug_reports:manage'), asyncHandler(async (req, res) => {
   const byStatus = await query(`SELECT status, COUNT(*)::int as count FROM bug_reports GROUP BY status`)
   const byPriority = await query(`SELECT priority, COUNT(*)::int as count FROM bug_reports GROUP BY priority`)
   res.json({ byStatus: byStatus.rows, byPriority: byPriority.rows })
 }))
 
-router.patch('/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.patch('/:id', authenticateToken, requirePermission('bug_reports:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { status, priority, admin_comment, user_reply } = req.body
 
@@ -205,7 +206,7 @@ router.patch('/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), a
   })
 }))
 
-router.delete('/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('bug_reports:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const result = await query('SELECT screenshot_s3_key FROM bug_reports WHERE id = $1', [id])
   if (result.rows.length === 0) return res.status(404).json({ error: 'Баг-репорт не найден' })
@@ -216,7 +217,7 @@ router.delete('/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), 
   res.json({ deleted: true })
 }))
 
-router.get('/:id/screenshot', authenticateToken, authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.get('/:id/screenshot', authenticateToken, requirePermission('bug_reports:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const result = await query('SELECT screenshot_s3_key FROM bug_reports WHERE id = $1', [id])
   if (result.rows.length === 0 || !result.rows[0].screenshot_s3_key) {

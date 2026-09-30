@@ -24,6 +24,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   previewRole: null,
   viewOnly: false,
   realUserName: null,
+  permissions: [],
   loading: true,
   checkAuth: async () => {
     try {
@@ -34,7 +35,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
       if (!response.ok) {
         deleteCookie('auth_token')
-        set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null, viewOnly: false, realUserName: null })
+        set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null, viewOnly: false, realUserName: null, permissions: [] })
         return
       }
 
@@ -66,13 +67,14 @@ export const useAuthStore = create<AuthStore>()((set) => ({
         previewRole: data.previewRole ?? null,
         viewOnly: !!data.viewOnly,
         realUserName: data.realUserName ?? null,
+        permissions: Array.isArray(data.permissions) ? data.permissions : [],
         loading: false,
       })
       useModulesStore.getState().fetchModules()
       useOrgStore.getState().fetchOrgs()
     } catch (error) {
       deleteCookie('auth_token')
-      set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null, viewOnly: false, realUserName: null })
+      set({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null, viewOnly: false, realUserName: null, permissions: [] })
     }
   },
   login: async (email: string, password: string) => {
@@ -115,6 +117,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
     })
     useModulesStore.getState().fetchModules()
     useOrgStore.getState().fetchOrgs()
+    useAuthStore.getState().checkAuth()
   },
   logout: async () => {
     set({
@@ -126,6 +129,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
       previewRole: null,
       viewOnly: false,
       realUserName: null,
+      permissions: [],
     })
     deleteCookie('auth_token')
     try {
@@ -164,10 +168,16 @@ setSessionExpiredHandler(async () => {
     })
     if (res.status !== 401) return
     deleteCookie('auth_token')
-    useAuthStore.setState({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null, viewOnly: false, realUserName: null })
+    useAuthStore.setState({ isAuthenticated: false, user: null, loading: false, isImpersonated: false, isTestUser: false, realUserId: null, previewRole: null, viewOnly: false, realUserName: null, permissions: [] })
   } catch {
     return
   } finally {
     verifyingSession = false
   }
 })
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('org-changed', () => {
+    if (useAuthStore.getState().isAuthenticated) useAuthStore.getState().checkAuth()
+  })
+}

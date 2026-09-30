@@ -455,33 +455,3 @@ export const authorizeOrgRoles = (...roles) => {
     return res.status(403).json({ error: 'Недостаточно прав для этого действия' })
   }
 }
-
-export const requirePermission = (permissionCode) => {
-  return async (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized' })
-    }
-
-    if (req.user.role === 'superadmin') return next()
-    if (req.user.role === 'admin') return next()
-
-    try {
-      const effectiveRole = req.org?.org_role || req.user.role
-      const result = await query(
-        `SELECT 1 FROM role_permissions rp
-         JOIN roles r ON rp.role_id = r.id
-         JOIN permissions p ON rp.permission_id = p.id
-         WHERE r.name = $1 AND p.code = $2`,
-        [effectiveRole, permissionCode]
-      )
-
-      if (result.rows.length === 0) {
-        return res.status(403).json({ error: 'Недостаточно прав для этого действия' })
-      }
-
-      next()
-    } catch (err) {
-      return res.status(500).json({ error: 'Ошибка проверки прав доступа' })
-    }
-  }
-}

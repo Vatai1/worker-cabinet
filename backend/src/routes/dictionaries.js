@@ -1,12 +1,13 @@
 import express from 'express'
 import jwt from 'jsonwebtoken'
 import { query, getClient } from '../config/database.js'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError, ConflictError } from '../middleware/errors.js'
 import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { departmentMembers, moveUsersToDepartment } from '../lib/departmentMembers.js'
 import multer from 'multer'
+import { requirePermission } from '../lib/permissions.js'
 
 async function validateOnlyOfficeUrl(url) {
   try {
@@ -68,7 +69,7 @@ const router = express.Router()
  *               type: array
  *               items: { $ref: '#/components/schemas/Department' }
  */
-router.get('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/departments', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   let sql = `
     SELECT d.id, d.name, d.manager_id, d.description, d.vacation_requests_blocked,
             d.parent_id, p.name AS parent_name,
@@ -188,7 +189,7 @@ async function validateDepartmentParent(parentId, deptId, orgId, req) {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.post('/departments', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   const { name, manager_id, description, parent_id } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
 
@@ -240,7 +241,7 @@ router.post('/departments', authenticateToken, authorizeRoles('hr', 'admin'), as
  */
 const VISIBILITY_FLAGS = ['vac_parent_sees_child', 'vac_child_sees_parent', 'vac_parent_approves', 'emp_parent_sees_child', 'emp_child_sees_parent']
 
-router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.put('/departments/:id', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id, 10)
   const { name, manager_id, description, parent_id } = req.body
   if (!name?.trim()) throw new ValidationError('Название отдела обязательно')
@@ -290,14 +291,14 @@ router.put('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'),
   }
 }))
 
-router.get('/departments/:id/members', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/departments/:id/members', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id, 10)
   const existing = await query(...orgScopedQuery('SELECT id FROM departments WHERE id = $1', [Number.isNaN(id) ? 0 : id], req))
   if (existing.rows.length === 0) throw new NotFoundError('Отдел не найден')
   res.json(await departmentMembers(null, id))
 }))
 
-router.post('/departments/:id/members', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.post('/departments/:id/members', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id, 10)
   const userIds = Array.isArray(req.body.userIds) ? [...new Set(req.body.userIds.map(Number).filter(Number.isInteger))] : []
   if (userIds.length === 0) throw new ValidationError('Не выбраны работники')
@@ -355,7 +356,7 @@ const shortPersonName = (u) => {
 const listPreview = (items, limit = 5) =>
   items.length > limit ? `${items.slice(0, limit).join(', ')} и ещё ${items.length - limit}` : items.join(', ')
 
-router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.delete('/departments/:id', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id, 10)
   if (Number.isNaN(id)) throw new NotFoundError('Отдел не найден')
 
@@ -415,7 +416,7 @@ router.delete('/departments/:id', authenticateToken, authorizeRoles('hr', 'admin
  *       200:
  *         description: Список тегов
  */
-router.get('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/skills', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const result = await query(
     ...orgScopedQuery(
       `SELECT sd.id, sd.name, sd.created_at,
@@ -450,7 +451,7 @@ router.get('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHan
  *       201:
  *         description: Тег создан
  */
-router.post('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.post('/skills', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const { name } = req.body
   if (!name?.trim()) throw new ValidationError('Название тега обязательно')
 
@@ -490,7 +491,7 @@ router.post('/skills', authenticateToken, authorizeRoles('hr', 'admin'), asyncHa
  *       200:
  *         description: Тег обновлён
  */
-router.put('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.put('/skills/:id', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { name } = req.body
   if (!name?.trim()) throw new ValidationError('Название тега обязательно')
@@ -524,7 +525,7 @@ router.put('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyn
  *       200:
  *         description: Тег удалён
  */
-router.delete('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.delete('/skills/:id', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
   const existing = await query(...orgScopedQuery('SELECT id FROM skills_dictionary WHERE id = $1', [id], req))
@@ -565,7 +566,7 @@ router.delete('/skills/:id', authenticateToken, authorizeRoles('hr', 'admin'), a
  *       200:
  *         description: Тег назначен работникам
  */
-router.post('/skills/:id/assign', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.post('/skills/:id/assign', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { userIds } = req.body
   const ids = Array.isArray(userIds) ? userIds.map(Number).filter((n) => Number.isInteger(n)) : []
@@ -596,7 +597,7 @@ router.post('/skills/:id/assign', authenticateToken, authorizeRoles('hr', 'admin
  *       200:
  *         description: Список типов отпусков
  */
-router.get('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/vacation-types', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const result = await query(
     ...orgScopedQuery(
       `SELECT vt.id, vt.code, vt.name,
@@ -632,7 +633,7 @@ router.get('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'), 
  *       201:
  *         description: Тип отпуска создан
  */
-router.post('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.post('/vacation-types', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const { code, name } = req.body
   if (!code?.trim()) throw new ValidationError('Код типа отпуска обязателен')
   if (!name?.trim()) throw new ValidationError('Название типа отпуска обязательно')
@@ -677,7 +678,7 @@ router.post('/vacation-types', authenticateToken, authorizeRoles('hr', 'admin'),
  *       200:
  *         description: Тип отпуска обновлён
  */
-router.put('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.put('/vacation-types/:id', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { code, name } = req.body
   if (!code?.trim()) throw new ValidationError('Код типа отпуска обязателен')
@@ -715,7 +716,7 @@ router.put('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'admin
  *       200:
  *         description: Тип отпуска удалён
  */
-router.delete('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.delete('/vacation-types/:id', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
   const existing = await query(...orgScopedQuery('SELECT id FROM vacation_types WHERE id = $1', [id], req))
@@ -742,7 +743,7 @@ router.delete('/vacation-types/:id', authenticateToken, authorizeRoles('hr', 'ad
  *       200:
  *         description: Список должностей
  */
-router.get('/positions', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/positions', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT DISTINCT position as name, COUNT(*) as employee_count
      FROM users
@@ -753,7 +754,7 @@ router.get('/positions', authenticateToken, authorizeRoles('hr', 'admin'), async
   res.json(result.rows)
 }))
 
-router.put('/positions/rename', authenticateToken, authorizeRoles('admin'), asyncHandler(async (req, res) => {
+router.put('/positions/rename', authenticateToken, requirePermission('dictionaries:positions'), asyncHandler(async (req, res) => {
   const { oldName, newName } = req.body
   if (!oldName?.trim() || !newName?.trim()) throw new ValidationError('Названия обязательны')
   if (oldName.trim() === newName.trim()) throw new ValidationError('Названия совпадают')
@@ -764,7 +765,7 @@ router.put('/positions/rename', authenticateToken, authorizeRoles('admin'), asyn
   res.json({ success: true, updated: result.rowCount })
 }))
 
-router.delete('/positions/:name', authenticateToken, authorizeRoles('admin'), asyncHandler(async (req, res) => {
+router.delete('/positions/:name', authenticateToken, requirePermission('dictionaries:positions'), asyncHandler(async (req, res) => {
   const name = decodeURIComponent(req.params.name)
   await query('UPDATE users SET position = NULL WHERE position = $1', [name])
   res.json({ success: true })
@@ -816,7 +817,7 @@ router.get('/doc-templates', authenticateToken, asyncHandler(async (req, res) =>
  *       201:
  *         description: Шаблон создан
  */
-router.post('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), uploadDocTemplate.single('file'), asyncHandler(async (req, res) => {
+router.post('/doc-templates', authenticateToken, requirePermission('documents:templates'), uploadDocTemplate.single('file'), asyncHandler(async (req, res) => {
   const { name, description, purpose } = req.body
   if (!name?.trim()) throw new ValidationError('Название шаблона обязательно')
 
@@ -872,7 +873,7 @@ router.post('/doc-templates', authenticateToken, authorizeRoles('hr', 'admin'), 
  *       200:
  *         description: Шаблон обновлён
  */
-router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), uploadDocTemplate.single('file'), asyncHandler(async (req, res) => {
+router.put('/doc-templates/:id', authenticateToken, requirePermission('documents:templates'), uploadDocTemplate.single('file'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { name, description, purpose } = req.body
   if (!name?.trim()) throw new ValidationError('Название шаблона обязательно')
@@ -924,7 +925,7 @@ router.put('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'
  *       200:
  *         description: Шаблон удалён
  */
-router.delete('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.delete('/doc-templates/:id', authenticateToken, requirePermission('documents:templates'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
   const { text: dText, values: dVals } = orgScopedQuery('SELECT id, file_key FROM document_templates WHERE id = $1', [id], req)
@@ -964,7 +965,7 @@ router.delete('/doc-templates/:id', authenticateToken, authorizeRoles('hr', 'adm
  *       404:
  *         description: Шаблон или файл не найден
  */
-router.get('/doc-templates/:id/file', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/doc-templates/:id/file', authenticateToken, requirePermission('documents:templates'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
   const { text: fText, values: fVals } = orgScopedQuery('SELECT name, file_key, mime_type FROM document_templates WHERE id = $1', [id], req)
@@ -1028,7 +1029,7 @@ function getMimeTypeFromExtension(fileName) {
  *       200:
  *         description: Токен и публичный URL
  */
-router.get('/doc-templates/:id/preview-token', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/doc-templates/:id/preview-token', authenticateToken, requirePermission('documents:templates'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { text: ptText, values: ptVals } = orgScopedQuery('SELECT id FROM document_templates WHERE id = $1', [id], req)
   const tmpl = await query(ptText, ptVals)
@@ -1127,7 +1128,7 @@ router.get('/doc-templates/:id/public/:token', asyncHandler(async (req, res) => 
  *       404:
  *         description: Шаблон не найден
  */
-router.post('/doc-templates/:id/save-from-url', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.post('/doc-templates/:id/save-from-url', authenticateToken, requirePermission('documents:templates'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { url, fileType } = req.body
 
@@ -1247,7 +1248,7 @@ router.post('/doc-templates/:id/callback', authenticateToken, asyncHandler(async
  *       200:
  *         description: Список руководителей
  */
-router.get('/managers', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/managers', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT id, first_name, last_name, middle_name, position
      FROM users

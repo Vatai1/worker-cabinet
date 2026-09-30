@@ -32,7 +32,7 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
-import { hasAnyRole } from '@/shared/lib/permissions'
+import { hasAnyRole, useCan } from '@/shared/lib/permissions'
 import { getCookie, setCookie } from '@/shared/lib/cookies'
 import {
   ChevronLeft, ChevronRight, ChevronDown, FileText, Clock, CheckCircle2, CheckCircle,
@@ -130,7 +130,14 @@ export function Vacation() {
   const [vacationBlocked, setVacationBlocked] = useState(false)
   const [dayOffOnly, setDayOffOnly] = useState(false)
   const [showDayOffForm, setShowDayOffForm] = useState(false)
-  const { dayOffs, items: leaveAdjustments, reload: reloadDayOffs } = useLeaveAdjustments()
+  const { dayOffs: rawDayOffs, items: leaveAdjustments, reload: reloadDayOffs } = useLeaveAdjustments()
+  const dayOffsEnabled = useModulesStore((s) => s.isModuleEnabled('day_offs'))
+  const mayTakeDayOffs = useCan('day_off:take')
+  const mayGrantDayOffs = useCan('day_off:grant')
+  const canTakeDayOffs = mayTakeDayOffs && dayOffsEnabled
+  const canGrantDayOffs = mayGrantDayOffs && dayOffsEnabled
+  const canManageRestrictions = useCan('vacation:restrictions')
+  const dayOffs = canTakeDayOffs ? rawDayOffs : null
   const [dateErrorMessage, setDateErrorMessage] = useState<string | null>(null)
   const [year, setYear] = useState(initialUrlState.year)
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
@@ -883,8 +890,8 @@ export function Vacation() {
   const tabs: Array<{ id: VacationTab; label: string; badge?: number }> = [
     { id: 'mine', label: 'Отпуск' },
     ...(canApprove ? [{ id: 'approvals' as VacationTab, label: 'Согласование', badge: pendingApprovals.length }] : []),
-    ...(isManager ? [{ id: 'restrictions' as VacationTab, label: 'Пересечения' }] : []),
-    ...(isManager ? [{ id: 'adjustments' as VacationTab, label: 'Отгулы' }] : []),
+    ...(canManageRestrictions ? [{ id: 'restrictions' as VacationTab, label: 'Пересечения' }] : []),
+    ...(canGrantDayOffs ? [{ id: 'adjustments' as VacationTab, label: 'Отгулы' }] : []),
     { id: 'requests', label: 'Заявления' },
     { id: 'history', label: 'История' },
   ]
@@ -1532,8 +1539,8 @@ export function Vacation() {
         </div>
       )}
 
-      {activeTab === 'restrictions' && isManager && <VacationRestrictions />}
-      {activeTab === 'adjustments' && isManager && <LeaveAdjustmentsPanel />}
+      {activeTab === 'restrictions' && canManageRestrictions && <VacationRestrictions />}
+      {activeTab === 'adjustments' && canGrantDayOffs && <LeaveAdjustmentsPanel />}
 
       {activeTab === 'approvals' && canApprove && (
         <Card className="overflow-hidden p-0">

@@ -2,13 +2,14 @@ import express from 'express'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { query, getClient } from '../config/database.js'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
 import { uploadToS3, getFromS3, getPresignedUrl } from '../config/s3.js'
 import { notifyBatch } from '../config/notifications.js'
 import multer from 'multer'
+import { requirePermission } from '../lib/permissions.js'
 
 const router = express.Router()
 
@@ -61,7 +62,7 @@ function getPublicApiUrl() {
  *                 size:
  *                   type: integer
  */
-router.post('/upload', authenticateToken, authorizeRoles('hr', 'admin'), uploadImage.single('file'), asyncHandler(async (req, res) => {
+router.post('/upload', authenticateToken, requirePermission('mailing:manage'), uploadImage.single('file'), asyncHandler(async (req, res) => {
   if (!req.file) throw new ValidationError('Файл не загружен')
 
   const ext = req.file.originalname?.split('.').pop() || 'bin'
@@ -128,7 +129,7 @@ router.post('/upload', authenticateToken, authorizeRoles('hr', 'admin'), uploadI
  *       201:
  *         description: Рассылка создана
  */
-router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.post('/', authenticateToken, requirePermission('mailing:manage'), asyncHandler(async (req, res) => {
   const { title, message, images = [], channel, recipients = {} } = req.body
 
   if (!title?.trim()) throw new ValidationError('Заголовок обязателен')
@@ -213,7 +214,7 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(
  *       200:
  *         description: Массив рассылок
  */
-router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/', authenticateToken, requirePermission('mailing:manage'), asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT mc.id, mc.title, mc.channel, mc.recipient_count, mc.created_at,
             u.first_name, u.last_name, u.middle_name
@@ -247,7 +248,7 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(a
  *       404:
  *         description: Рассылка не найдена
  */
-router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), asyncHandler(async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('mailing:manage'), asyncHandler(async (req, res) => {
   const campaignResult = await query(
     `SELECT mc.*,
             u.first_name as creator_first_name, u.last_name as creator_last_name

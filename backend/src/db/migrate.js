@@ -1,6 +1,7 @@
 import pg from 'pg'
 import dotenv from 'dotenv'
 import { PRODUCTION_CALENDAR } from './productionCalendar.js'
+import { FULL_ACCESS_ROLES, PERMISSIONS, PERMISSION_CODES } from '../lib/permissionCatalog.js'
 
 dotenv.config()
 
@@ -1330,54 +1331,6 @@ async function runMigrations() {
     `)
     console.log('  ✓ permissions')
 
-    const perms = [
-      { code: 'users:view', name: 'Просмотр пользователей', module: 'users' },
-      { code: 'users:create', name: 'Создание пользователей', module: 'users' },
-      { code: 'users:edit', name: 'Редактирование пользователей', module: 'users' },
-      { code: 'users:delete', name: 'Удаление пользователей', module: 'users' },
-      { code: 'users:manage_roles', name: 'Управление ролями', module: 'users' },
-      { code: 'users:reset_password', name: 'Сброс пароля', module: 'users' },
-      { code: 'vacation:view', name: 'Просмотр отпусков', module: 'vacation' },
-      { code: 'vacation:create', name: 'Создание заявлений на отпуск', module: 'vacation' },
-      { code: 'vacation:approve', name: 'Согласование отпусков', module: 'vacation' },
-      { code: 'vacation:manage', name: 'Управление отпусками', module: 'vacation' },
-      { code: 'projects:view', name: 'Просмотр проектов', module: 'projects' },
-      { code: 'projects:create', name: 'Создание проектов', module: 'projects' },
-      { code: 'projects:edit', name: 'Редактирование проектов', module: 'projects' },
-      { code: 'projects:delete', name: 'Удаление проектов', module: 'projects' },
-      { code: 'projects:manage', name: 'Полное управление проектами', module: 'projects' },
-      { code: 'surveys:view', name: 'Просмотр опросов', module: 'surveys' },
-      { code: 'surveys:create', name: 'Создание опросов', module: 'surveys' },
-      { code: 'surveys:manage', name: 'Управление опросами', module: 'surveys' },
-      { code: 'departments:view', name: 'Просмотр отделов', module: 'departments' },
-      { code: 'departments:create', name: 'Создание отделов', module: 'departments' },
-      { code: 'departments:edit', name: 'Редактирование отделов', module: 'departments' },
-      { code: 'departments:delete', name: 'Удаление отделов', module: 'departments' },
-      { code: 'departments:manage', name: 'Полное управление отделами', module: 'departments' },
-      { code: 'documents:view', name: 'Просмотр документов', module: 'documents' },
-      { code: 'documents:create', name: 'Создание документов', module: 'documents' },
-      { code: 'documents:manage', name: 'Управление документами', module: 'documents' },
-      { code: 'dictionaries:view', name: 'Просмотр справочников', module: 'dictionaries' },
-      { code: 'dictionaries:manage', name: 'Управление справочниками', module: 'dictionaries' },
-      { code: 'hierarchy:view', name: 'Просмотр иерархии', module: 'hierarchy' },
-      { code: 'hierarchy:manage', name: 'Управление иерархией', module: 'hierarchy' },
-      { code: 'timesheet:view', name: 'Просмотр табелей', module: 'timesheet' },
-      { code: 'timesheet:manage', name: 'Управление табелями', module: 'timesheet' },
-      { code: 'onboarding:view', name: 'Просмотр онбординга', module: 'onboarding' },
-      { code: 'onboarding:manage', name: 'Управление онбордингом', module: 'onboarding' },
-      { code: 'calendar:view', name: 'Просмотр календаря', module: 'calendar' },
-      { code: 'admin:access', name: 'Доступ к админ-панели', module: 'admin' },
-      { code: 'admin:roles', name: 'Управление ролями и доступами', module: 'admin' },
-      { code: 'admin:settings', name: 'Системные настройки', module: 'admin' },
-      { code: 'admin:audit', name: 'Просмотр логов аудита', module: 'admin' },
-    ]
-    for (const p of perms) {
-      await db.query(
-        `INSERT INTO permissions (code, name, module) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING`,
-        [p.code, p.name, p.module]
-      )
-    }
-    console.log('  ✓ permissions seeded')
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS role_permissions (
@@ -1388,30 +1341,6 @@ async function runMigrations() {
     `)
     console.log('  ✓ role_permissions')
 
-    const rolePermMap = {
-      superadmin: perms.map(p => p.code),
-      admin: perms.map(p => p.code),
-      hr: perms.map(p => p.code).filter(c => !c.startsWith('admin:') && !c.startsWith('users:delete')),
-      director: ['users:view', 'vacation:view', 'vacation:create', 'vacation:approve', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'timesheet:manage', 'calendar:view', 'documents:view'],
-      manager: ['users:view', 'vacation:view', 'vacation:create', 'vacation:approve', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'timesheet:manage', 'calendar:view', 'documents:view'],
-      employee: ['users:view', 'vacation:view', 'vacation:create', 'projects:view', 'surveys:view', 'departments:view', 'timesheet:view', 'calendar:view', 'documents:view'],
-      onboarding: ['onboarding:view', 'users:view', 'departments:view'],
-    }
-
-    for (const [roleName, permCodes] of Object.entries(rolePermMap)) {
-      const roleRes = await db.query('SELECT id FROM roles WHERE name = $1', [roleName])
-      if (roleRes.rows.length === 0) continue
-      const roleId = roleRes.rows[0].id
-      for (const code of permCodes) {
-        const permRes = await db.query('SELECT id FROM permissions WHERE code = $1', [code])
-        if (permRes.rows.length === 0) continue
-        await db.query(
-          `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [roleId, permRes.rows[0].id]
-        )
-      }
-    }
-    console.log('  ✓ role_permissions seeded')
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS audit_log (
@@ -1588,6 +1517,7 @@ async function runMigrations() {
       { code: 'assistant', name: 'AI Ассистент', description: 'Кадровый AI-ассистент для ответов на вопросы работников', icon: 'Bot', route: '/assistant', sort: 15, category: 'general' },
       { code: 'appearance', name: 'Внешний вид', description: 'Тема оформления системы', icon: 'Palette', route: null, sort: 3, category: 'core' },
       { code: 'mailing', name: 'Рассылки', description: 'Рассылка информации работникам', icon: 'Send', route: '/hr/mailing', sort: 25, category: 'hr' },
+      { code: 'day_offs', name: 'Отгулы', description: 'Начисление и оформление отгулов', icon: 'Coffee', route: null, sort: 12, category: 'hr' },
     ]
     for (const m of defaultModules) {
       await db.query(
@@ -1900,6 +1830,7 @@ async function runMigrations() {
     await migrateMembershipDepartmentSync(db)
     await migrateVacationSettings(db)
     await migrateDayOffs(db)
+    await migratePermissionsMatrix(db)
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
@@ -2228,6 +2159,43 @@ async function migrateMembershipDepartmentSync(db) {
   } catch (e) {
     console.log('  - membership department sync:', e.message)
   }
+}
+
+async function migratePermissionsMatrix(db) {
+  const MATRIX_VERSION = '2'
+  for (const p of PERMISSIONS) {
+    const inserted = await db.query(
+      `INSERT INTO permissions (code, name, module) VALUES ($1, $2, $3)
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, module = EXCLUDED.module
+       RETURNING (xmax = 0) AS created`,
+      [p.code, p.name, p.module]
+    )
+    if (inserted.rows[0].created) await grantDefaults(db, p)
+  }
+  await db.query('DELETE FROM permissions WHERE code <> ALL($1)', [PERMISSION_CODES])
+
+  const applied = (await db.query("SELECT value FROM system_settings WHERE key = 'permissions_matrix_version'")).rows[0]?.value
+  if (applied !== MATRIX_VERSION) {
+    await db.query("DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE is_system)")
+    for (const p of PERMISSIONS) await grantDefaults(db, p)
+    await db.query(
+      `INSERT INTO system_settings (key, value, description) VALUES ('permissions_matrix_version', $1, 'Версия матрицы прав по умолчанию')
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [MATRIX_VERSION]
+    )
+    console.log('  ✓ permissions matrix reset to defaults (v' + MATRIX_VERSION + ')')
+  }
+  console.log('  ✓ permissions matrix')
+}
+
+async function grantDefaults(db, permission) {
+  await db.query(
+    `INSERT INTO role_permissions (role_id, permission_id)
+     SELECT r.id, p.id FROM roles r, permissions p
+     WHERE r.name = ANY($1) AND p.code = $2
+     ON CONFLICT DO NOTHING`,
+    [[...permission.defaults, ...FULL_ACCESS_ROLES], permission.code]
+  )
 }
 
 async function migrateDayOffs(db) {

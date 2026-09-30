@@ -16,6 +16,10 @@ describe('Admin API', () => {
   })
 
   describe('Roles & Permissions', () => {
+    after(async () => {
+      await query("DELETE FROM roles WHERE NOT is_system AND (name LIKE 'test_role_%' OR name LIKE 'updated_role_%')")
+    })
+
     it('GET /admin/roles returns roles list', async () => {
       const res = await fetch(`${BASE}/admin/roles`, { headers: headers(adminToken) })
       assert.strictEqual(res.status, 200)

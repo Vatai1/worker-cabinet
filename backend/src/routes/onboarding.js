@@ -2,12 +2,13 @@ import express from 'express'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { query, getClient } from '../config/database.js'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 import { uploadTemplate as uploadTemplateMiddleware } from '../middleware/upload.js'
 import { excludeTest } from '../utils/testScope.js'
 import { uploadToS3, getS3FileUrl, deleteFromS3, getPresignedUrl, getFromS3 } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { resolveVacationDays } from '../lib/vacationDays.js'
+import { requirePermission } from '../lib/permissions.js'
 
 const router = express.Router()
 
@@ -32,7 +33,7 @@ const router = express.Router()
  *       200:
  *         description: Список шаблонов
  */
-router.get('/templates', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.get('/templates', authenticateToken, requirePermission('onboarding:manage'), async (req, res) => {
   try {
     const { department_id, position } = req.query
     let sql = `
@@ -91,7 +92,7 @@ router.get('/templates', authenticateToken, authorizeRoles('hr', 'admin'), async
  *       201:
  *         description: Шаблон создан
  */
-router.post('/templates', authenticateToken, authorizeRoles('hr', 'admin'), uploadTemplateMiddleware.single('file'), async (req, res) => {
+router.post('/templates', authenticateToken, requirePermission('onboarding:manage'), uploadTemplateMiddleware.single('file'), async (req, res) => {
   try {
     const { title, content_text, department_id, position } = req.body
     if (!title || !title.trim()) {
@@ -167,7 +168,7 @@ router.post('/templates', authenticateToken, authorizeRoles('hr', 'admin'), uplo
  *       200:
  *         description: Шаблон обновлён
  */
-router.put('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), uploadTemplateMiddleware.single('file'), async (req, res) => {
+router.put('/templates/:id', authenticateToken, requirePermission('onboarding:manage'), uploadTemplateMiddleware.single('file'), async (req, res) => {
   try {
     const { id } = req.params
     const { title, content_text, department_id, position } = req.body
@@ -233,7 +234,7 @@ router.put('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), u
  *       200:
  *         description: Шаблон удалён
  */
-router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.delete('/templates/:id', authenticateToken, requirePermission('onboarding:manage'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -280,7 +281,7 @@ router.delete('/templates/:id', authenticateToken, authorizeRoles('hr', 'admin')
  *         description: Данные адаптации
  */
 // GET /me — MUST precede /:id
-router.get('/me', authenticateToken, authorizeRoles('onboarding'), async (req, res) => {
+router.get('/me', authenticateToken, requirePermission('onboarding:pass'), async (req, res) => {
   try {
     const onbQuery = orgScopedQuery(
       `SELECT eo.*, u.first_name, u.last_name, u.position
@@ -520,7 +521,7 @@ router.get('/documents/:id/file', async (req, res) => {
  *       200:
  *         description: Документ подтверждён
  */
-router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('onboarding'), async (req, res) => {
+router.post('/me/documents/:id/acknowledge', authenticateToken, requirePermission('onboarding:pass'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -596,7 +597,7 @@ router.post('/me/documents/:id/acknowledge', authenticateToken, authorizeRoles('
  *       200:
  *         description: Список адаптаций
  */
-router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.get('/', authenticateToken, requirePermission('onboarding:manage'), async (req, res) => {
   try {
     const listParams = []
     let subqOrgFilter = ''
@@ -658,7 +659,7 @@ router.get('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, re
  *       201:
  *         description: Адаптация создана
  */
-router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('onboarding:manage'), async (req, res) => {
   try {
     const { first_name, last_name, email, password, department_id, position, template_ids } = req.body
 
@@ -750,7 +751,7 @@ router.post('/', authenticateToken, authorizeRoles('hr', 'admin'), async (req, r
  *       200:
  *         description: Данные адаптации
  */
-router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.get('/:id', authenticateToken, requirePermission('onboarding:manage'), async (req, res) => {
   try {
     const { id } = req.params
     let selSql = `SELECT
@@ -844,7 +845,7 @@ router.get('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req,
  *       200:
  *         description: Адаптация удалена, роль сброшена на employee
  */
-router.delete('/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('onboarding:manage'), async (req, res) => {
   try {
     const { id } = req.params
     const selQuery = orgScopedQuery('SELECT user_id FROM employee_onboarding WHERE id = $1', [id], req)

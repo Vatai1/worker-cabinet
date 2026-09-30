@@ -20,7 +20,9 @@ let canvasSnapshot: Awaited<ReturnType<World['hierarchySnapshot']>> | null = nul
 const R1 = { s: iso(workdayOffset(40)), e: iso(workdayOffset(40) + 2) }
 const R2 = { s: iso(workdayOffset(55)), e: iso(workdayOffset(55) + 2) }
 const R3 = { s: iso(workdayOffset(70)), e: iso(workdayOffset(70) + 2) }
-const R4 = { s: iso(workdayOffset(90)), e: iso(workdayOffset(90) + 2) }
+const R4_START = workdayOffset(90)
+const R4_CROSSES_YEAR = iso(R4_START).slice(0, 4) !== iso(R4_START + 2).slice(0, 4)
+const R4 = R4_CROSSES_YEAR ? { s: iso(R4_START - 5), e: iso(R4_START - 3) } : { s: iso(R4_START), e: iso(R4_START + 2) }
 
 test.beforeAll(async () => {
   await world.init()
@@ -196,7 +198,7 @@ test.describe('Настройки отпусков через иерархию',
   test('запрет подачи заявок в настройках отдела: сотрудник не может оформить отпуск, после снятия — может', async ({ page }) => {
     await world.setDepartment('child', { vacation_requests_blocked: true })
     await world.loginPage(page, 'emp')
-    await openVacationPage(page)
+    await openVacationPage(page, `/vacation?year=${R4.s.slice(0, 4)}`)
     await expect(page.getByText(BLOCKED_TEXT).first()).toBeVisible({ timeout: 15000 })
     await monthCard(page, monthName(R4.s)).locator('[data-date-cell]').nth(dayOfMonth(R4.s) - 1).click()
     await expect(page.getByRole('heading', { name: 'Не удалось оформить заявку' })).toBeVisible({ timeout: 15000 })

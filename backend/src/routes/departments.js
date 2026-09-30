@@ -1,8 +1,9 @@
 import express from 'express'
 import { query } from '../config/database.js'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
+import { requirePermission } from '../lib/permissions.js'
 
 const router = express.Router()
 
@@ -174,7 +175,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
  *       200:
  *         description: Статус обновлён
  */
-router.patch('/vacation-block-all', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.patch('/vacation-block-all', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   try {
     const { blocked } = req.body
 
@@ -224,7 +225,7 @@ router.patch('/vacation-block-all', authenticateToken, authorizeRoles('hr', 'adm
  *       200:
  *         description: Статус обновлён
  */
-router.patch('/:id/vacation-block', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.patch('/:id/vacation-block', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   try {
     const { id } = req.params
     const { blocked } = req.body

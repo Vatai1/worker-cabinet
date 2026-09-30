@@ -10,6 +10,7 @@ import { personName } from '../utils/personName.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
 import { getAuthSettings } from '../config/authSettings.js'
 import { signAccessToken, createSession, findActiveSessionByToken, isRecentlyRotatedToken, rotateSession, revokeSessionByToken } from '../lib/sessionTokens.js'
+import { permissionsFor } from '../lib/permissions.js'
 
 const router = express.Router()
 
@@ -472,6 +473,7 @@ router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
     previewRole: req.previewRole || null,
     realUserId: req.realUser?.id ?? null,
     realUserName: req.realUser ? personName(req.realUser) : null,
+    permissions: [...await permissionsFor(req.previewRole ? { role: req.previewRole } : req.user, req.previewRole ? null : req.org)],
   })
 }))
 

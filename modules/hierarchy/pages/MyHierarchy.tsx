@@ -19,7 +19,7 @@ import { HierarchyTagsToggle } from '@/modules/hierarchy/components/HierarchyTag
 import { useUIStore } from '@/shared/store/uiStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
-import { hasAnyRole } from '@/shared/lib/permissions'
+import { useCan } from '@/shared/lib/permissions'
 import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -37,7 +37,8 @@ export function MyHierarchy() {
   const [reloadKey, setReloadKey] = useState(0)
   const currentOrgId = useOrgStore((s) => s.currentOrgId)
   const hierarchyEnabled = useModulesStore((s) => s.isModuleEnabled)('hierarchy')
-  const canEdit = hierarchyEnabled && currentOrgId != null && hasAnyRole('hr', 'admin')
+  const mayManageHierarchy = useCan('hierarchy:manage')
+  const canEdit = hierarchyEnabled && currentOrgId != null && mayManageHierarchy
   const [myDepartments, setMyDepartments] = useState<Array<{ id: number; name: string }>>([])
   const [deptMenuOpen, setDeptMenuOpen] = useState(false)
   const [schemeDept, setSchemeDept] = useState<{ id: number; name: string; fromCanvas?: boolean } | null>(null)

@@ -4,7 +4,7 @@ import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { useSessionActivity } from '@/core/auth/hooks/useSessionActivity'
-import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
+import { isSuperAdmin, useCan } from '@/shared/lib/permissions'
 import { Login } from '@/core/auth/pages/Login'
 import { Layout } from '@/shared/components/layout/Layout'
 import { Dashboard } from '@/shared/pages/Dashboard'
@@ -74,25 +74,27 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function HRRoute({ children }: { children: React.ReactNode }) {
   const loading = useAuthStore((state) => state.loading)
+  const allowed = useCan('hr:access')
   if (loading) return <PageLoader />
-  if (!hasAnyRole('hr', 'admin'))
+  if (!allowed)
     return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
 function ManagerRoute({ children }: { children: React.ReactNode }) {
   const loading = useAuthStore((state) => state.loading)
+  const allowed = useCan('timesheet:view')
   if (loading) return <PageLoader />
-  if (!hasAnyRole('manager'))
+  if (!allowed)
     return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
 function OnboardingRoute({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((state) => state.user)
   const loading = useAuthStore((state) => state.loading)
+  const allowed = useCan('onboarding:pass')
   if (loading) return <PageLoader />
-  if (user?.role !== 'onboarding') return <Navigate to="/dashboard" replace />
+  if (!allowed) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -106,8 +108,9 @@ function BlockOnboardingRoute({ children }: { children: React.ReactNode }) {
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const loading = useAuthStore((state) => state.loading)
+  const allowed = useCan('admin:access')
   if (loading) return <PageLoader />
-  if (!hasAnyRole('admin')) return <Navigate to="/dashboard" replace />
+  if (!allowed) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 

@@ -9,6 +9,8 @@ import { Button } from '@/shared/components/ui/Button'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { InstructionVideoPlayer, useInstructionVideos, type InstructionPlacement } from '@/shared/components/InstructionVideos'
 import { cn } from '@/shared/lib/utils'
+import { useCan } from '@/shared/lib/permissions'
+import { useModulesStore } from '@/shared/store/modulesStore'
 
 interface VacationIntroModalProps {
   open: boolean
@@ -95,6 +97,11 @@ export function VacationIntroModal({ open, onClose, isManager, isAdminOrSuperAdm
   useModalOpen(open)
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set(['create']))
   const videos = useInstructionVideos()
+  const dayOffsEnabled = useModulesStore((s) => s.isModuleEnabled('day_offs'))
+  const mayTakeDayOffs = useCan('day_off:take')
+  const mayGrantDayOffs = useCan('day_off:grant')
+  const showDayOffTake = dayOffsEnabled && mayTakeDayOffs
+  const showDayOffGrant = dayOffsEnabled && mayGrantDayOffs
   const videoFor = (placement: InstructionPlacement) => {
     const video = videos.find((v) => v.placement === placement)
     return video ? <InstructionVideoPlayer key={video.id} video={video} className="mb-4" /> : null
@@ -206,12 +213,14 @@ export function VacationIntroModal({ open, onClose, isManager, isAdminOrSuperAdm
             <Timeline steps={createSteps} accent="primary" />
           </Section>
 
+          {showDayOffTake && (
           <Section id="day-off-take" icon={Coffee} title="Как взять отгул" accent="primary" open={openSections.has('day-off-take')} onToggle={toggleSection}>
             {videoFor('day-off-take')}
             <Timeline steps={dayOffTakeSteps} accent="primary" />
           </Section>
+          )}
 
-          {isManager && (
+          {showDayOffGrant && (
             <Section id="day-off-grant" icon={Gift} title="Начисление отгулов" accent="violet" open={openSections.has('day-off-grant')} onToggle={toggleSection}>
               {videoFor('day-off-grant')}
               <Timeline steps={dayOffGrantSteps} accent="violet" />

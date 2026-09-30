@@ -54,6 +54,7 @@ export interface AuthState {
   realUserName?: string | null
   viewOnly?: boolean
   previewRole?: UserRole | null
+  permissions: string[]
 }
 
 export * from '@/modules/vacation/types/vacation'

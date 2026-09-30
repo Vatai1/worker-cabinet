@@ -1,7 +1,7 @@
 import express from 'express'
 import { randomUUID } from 'node:crypto'
 import { query, getClient } from '../config/database.js'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 import { getFromS3 } from '../config/s3.js'
 import { notify } from '../config/notifications.js'
 import { broadcastToOrg } from '../config/ws.js'
@@ -12,6 +12,7 @@ import { excludeTest } from '../utils/testScope.js'
 import { resolveVacationDays, applyRuleToExistingBalances } from '../lib/vacationDays.js'
 import { getVisibleColleagueIds } from '../lib/colleagues.js'
 import { hasFullDepartmentAccess, managedDepartmentIds } from '../lib/departmentScope.js'
+import { requirePermission, hasPermission, isModuleEnabledForOrg } from '../lib/permissions.js'
 
 const router = express.Router()
 
@@ -97,6 +98,17 @@ async function adjustmentScopeUserIds(req) {
     [deptIds, req.user.id]
   )
   return result.rows.map((r) => r.id)
+}
+
+async function dayOffAccessError(req) {
+  if (!(await isModuleEnabledForOrg('day_offs', currentOrgId(req)))) return 'Отгулы отключены в вашей организации'
+  if (!(await hasPermission(req, 'day_off:take'))) return 'У вас нет права оформлять отгулы'
+  return null
+}
+
+const requireDayOffsModule = async (req, res, next) => {
+  if (await isModuleEnabledForOrg('day_offs', currentOrgId(req))) return next()
+  res.status(403).json({ error: 'Отгулы отключены в вашей организации' })
 }
 
 async function dayOffBalance(db, userId, orgId, excludeRequestId = null) {
@@ -429,7 +441,7 @@ router.get('/settings', authenticateToken, async (req, res) => {
   }
 })
 
-router.put('/settings', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.put('/settings', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   const orgId = currentOrgId(req)
   if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
   if (typeof req.body?.allowOverBalance !== 'boolean') return res.status(400).json({ error: 'Укажите allowOverBalance' })
@@ -1076,7 +1088,7 @@ router.get('/balances', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.patch('/balances/:userId', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   try {
     const userId = parseInt(req.params.userId)
     const parsedYear = parseInt(req.body.year)
@@ -1164,7 +1176,7 @@ router.patch('/balances/:userId', authenticateToken, authorizeRoles('hr', 'admin
  *     responses:
  *       200: { description: '{ employees, items }' }
  */
-router.get('/adjustments/all', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.get('/adjustments/all', authenticateToken, requirePermission('day_off:grant'), requireDayOffsModule, async (req, res) => {
   const orgId = currentOrgId(req)
   if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
   const kind = ['vacation', 'day_off'].includes(req.query.kind) ? req.query.kind : null
@@ -1254,7 +1266,7 @@ router.get('/adjustments', authenticateToken, async (req, res) => {
   }
 })
 
-router.post('/adjustments', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.post('/adjustments', authenticateToken, async (req, res) => {
   const userId = parseInt(req.body.userId)
   const days = Number(req.body.days)
   const kind = req.body.kind
@@ -1267,9 +1279,13 @@ router.post('/adjustments', authenticateToken, authorizeRoles('manager', 'hr', '
   if (kind === 'vacation' && Number.isNaN(year)) return res.status(400).json({ error: 'Некорректный год' })
   const orgId = currentOrgId(req)
   if (!orgId) return res.status(400).json({ error: 'Не выбрана организация' })
+  if (kind === 'vacation' && !(await hasPermission(req, 'vacation:manage'))) return res.status(403).json({ error: 'Недостаточно прав для начисления дней отпуска' })
+  if (kind === 'day_off') {
+    if (!(await hasPermission(req, 'day_off:grant'))) return res.status(403).json({ error: 'Недостаточно прав для начисления отгулов' })
+    if (!(await isModuleEnabledForOrg('day_offs', orgId))) return res.status(403).json({ error: 'Отгулы отключены в вашей организации' })
+  }
   const scope = await adjustmentScopeUserIds(req)
   if (scope !== null && !scope.includes(userId)) return res.status(403).json({ error: 'Начислять можно только своим подчинённым' })
-  if (scope !== null && kind !== 'day_off') return res.status(403).json({ error: 'Руководитель может начислять только отгулы' })
 
   const client = await getClient()
   try {
@@ -1435,6 +1451,11 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const requestYear = start.getFullYear()
 
     if (isDayOff) {
+      const accessError = await dayOffAccessError(req)
+      if (accessError) {
+        await client.query('ROLLBACK')
+        return res.status(403).json({ error: accessError })
+      }
       if (finalDuration === 0) {
         await client.query('ROLLBACK')
         return res.status(400).json({ error: 'В выбранном периоде нет рабочих дней' })
@@ -1726,6 +1747,11 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     )
     const balance = (await client.query(balText, balValues)).rows[0]
     if (nowDayOff) {
+      const accessError = !wasDayOff ? await dayOffAccessError(req) : null
+      if (accessError) {
+        await client.query('ROLLBACK')
+        return res.status(403).json({ error: accessError })
+      }
       if (newDuration === 0) {
         await client.query('ROLLBACK')
         return res.status(400).json({ error: 'В выбранном периоде нет рабочих дней' })
@@ -3206,7 +3232,7 @@ function touchesScope(memberIds, scopeIds) {
  *       200:
  *         description: 'Список работников с тегами: id, firstName, lastName, middleName, position, departmentId, departmentName, tags'
  */
-router.get('/restrictions/scope-employees', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.get('/restrictions/scope-employees', authenticateToken, requirePermission('vacation:restrictions'), async (req, res) => {
   try {
     const scopeIds = await getRestrictionScopeUserIds(req)
     if (scopeIds !== null && scopeIds.length === 0) return res.json([])
@@ -3724,7 +3750,7 @@ function mapRestrictionRow(r, userRow) {
   }
 }
 
-router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.post('/restrictions', authenticateToken, requirePermission('vacation:restrictions'), async (req, res) => {
   try {
     const { departmentId, type, employeeIds: rawEmployeeIds, tagIds: rawTagIds, maxConcurrent, description } = req.body
     const createdBy = req.user.id
@@ -3792,7 +3818,7 @@ router.post('/restrictions', authenticateToken, authorizeRoles('manager', 'hr', 
  *       200:
  *         description: Ограничение обновлено
  */
-router.put('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.put('/restrictions/:id', authenticateToken, requirePermission('vacation:restrictions'), async (req, res) => {
   try {
     const { id } = req.params
     const { departmentId, type, employeeIds: rawEmployeeIds, tagIds: rawTagIds, maxConcurrent, description } = req.body
@@ -3861,7 +3887,7 @@ router.put('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr
  *       200:
  *         description: Ограничение удалено
  */
-router.delete('/restrictions/:id', authenticateToken, authorizeRoles('manager', 'hr', 'admin'), async (req, res) => {
+router.delete('/restrictions/:id', authenticateToken, requirePermission('vacation:restrictions'), async (req, res) => {
   try {
     const { id } = req.params
     if (!isRestrictionAdmin(req)) {
@@ -4193,7 +4219,7 @@ router.delete('/requests/:id/substitutes/:userId', authenticateToken, async (req
  *       200:
  *         description: Настройки дней отпуска
  */
-router.get('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.get('/day-rules', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   try {
     const orgId = currentOrgId(req)
     const result = await query(
@@ -4251,7 +4277,7 @@ router.get('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
  *       200:
  *         description: Настройка сохранена
  */
-router.put('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.put('/day-rules', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   try {
     const { position, userId, positions, userIds, groupId, days } = req.body
     const parsedDays = parseInt(days)
@@ -4422,7 +4448,7 @@ router.put('/day-rules', authenticateToken, authorizeRoles('hr', 'admin'), async
  *       200:
  *         description: Правило обновлено
  */
-router.put('/day-rules/members', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.put('/day-rules/members', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   try {
     const { groupId, ruleId, kind, positions, userIds, days } = req.body
     const parsedDays = parseInt(days)
@@ -4508,7 +4534,7 @@ router.put('/day-rules/members', authenticateToken, authorizeRoles('hr', 'admin'
  *       200:
  *         description: Правило удалено
  */
-router.delete('/day-rules/group/:groupId', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.delete('/day-rules/group/:groupId', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   try {
     const orgId = currentOrgId(req)
     const result = await query(
@@ -4540,7 +4566,7 @@ router.delete('/day-rules/group/:groupId', authenticateToken, authorizeRoles('hr
  *       200:
  *         description: Настройка удалена
  */
-router.delete('/day-rules/:id', authenticateToken, authorizeRoles('hr', 'admin'), async (req, res) => {
+router.delete('/day-rules/:id', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   try {
     const orgId = currentOrgId(req)
     const result = await query(

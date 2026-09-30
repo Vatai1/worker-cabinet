@@ -2,7 +2,7 @@ import { updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, 
 import keycloakConfig from '../config/keycloak.js'
 import express from 'express'
 import bcrypt from 'bcryptjs'
-import { authenticateToken, authorizeRoles, authorizeGlobalRoles } from '../middleware/auth.js'
+import { authenticateToken, authorizeGlobalRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '../middleware/errors.js'
 import { query, getClient } from '../config/database.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
@@ -14,6 +14,7 @@ import { getActiveWsCount, getPresence } from '../config/ws.js'
 import { createRequire } from 'module'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { requirePermission, invalidatePermissionCache } from '../lib/permissions.js'
 
 const require = createRequire(import.meta.url)
 const pkg = require('../../package.json')
@@ -27,7 +28,7 @@ const router = express.Router()
 const VALID_MAPPING_ROLES = ['employee', 'manager', 'hr', 'admin']
 
 router.use(authenticateToken)
-router.use(authorizeRoles('admin'))
+router.use(requirePermission('admin:access'))
 
 async function logAudit(userId, userName, action, entityType, entityId, details, ipAddress, realUserId = null) {
   try {
@@ -58,7 +59,7 @@ async function logAudit(userId, userName, action, entityType, entityId, details,
  *       200:
  *         description: Список ролей
  */
-router.get('/roles', asyncHandler(async (req, res) => {
+router.get('/roles', requirePermission('admin:roles'), asyncHandler(async (req, res) => {
   const rolesResult = await query(`
     SELECT r.id, r.name, r.description, r.is_system, r.color, r.created_at,
       COALESCE(json_agg(json_build_object('id', p.id, 'code', p.code, 'name', p.name, 'module', p.module))
@@ -94,7 +95,7 @@ router.get('/roles', asyncHandler(async (req, res) => {
  *       201:
  *         description: Роль создана
  */
-router.post('/roles', asyncHandler(async (req, res) => {
+router.post('/roles', requirePermission('admin:roles'), asyncHandler(async (req, res) => {
   const { name, description, color, permissionIds } = req.body
   if (!name?.trim()) throw new ValidationError('Название роли обязательно')
 
@@ -119,6 +120,7 @@ router.post('/roles', asyncHandler(async (req, res) => {
     }
 
     await client.query('COMMIT')
+    invalidatePermissionCache()
     await logAudit(req.user.id, personName(req.user), 'role_create', 'role', String(role.id), { name: role.name }, req.ip, req.realUser?.id ?? null)
     res.status(201).json(role)
   } catch (error) {
@@ -153,7 +155,7 @@ router.post('/roles', asyncHandler(async (req, res) => {
  *       200:
  *         description: Роль обновлена
  */
-router.put('/roles/:id', asyncHandler(async (req, res) => {
+router.put('/roles/:id', requirePermission('admin:roles'), asyncHandler(async (req, res) => {
   const { id } = req.params
   const { name, description, color, permissionIds } = req.body
 
@@ -198,6 +200,7 @@ router.put('/roles/:id', asyncHandler(async (req, res) => {
     }
 
     await client.query('COMMIT')
+    invalidatePermissionCache()
     await logAudit(req.user.id, personName(req.user), 'role_update', 'role', id, { name: name || existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
     res.json({ success: true })
   } catch (error) {
@@ -221,7 +224,7 @@ router.put('/roles/:id', asyncHandler(async (req, res) => {
  *       200:
  *         description: Роль удалена
  */
-router.delete('/roles/:id', asyncHandler(async (req, res) => {
+router.delete('/roles/:id', requirePermission('admin:roles'), asyncHandler(async (req, res) => {
   const { id } = req.params
 
   const existing = await query('SELECT * FROM roles WHERE id = $1', [id])
@@ -234,6 +237,7 @@ router.delete('/roles/:id', asyncHandler(async (req, res) => {
   }
 
   await query('DELETE FROM roles WHERE id = $1', [id])
+  invalidatePermissionCache()
   await deleteKcRole(existing.rows[0].name).catch(() => {})
   await logAudit(req.user.id, personName(req.user), 'role_delete', 'role', id, { name: existing.rows[0].name }, req.ip, req.realUser?.id ?? null)
   res.json({ success: true })
@@ -252,7 +256,7 @@ router.delete('/roles/:id', asyncHandler(async (req, res) => {
  *       200:
  *         description: Список пермишенов
  */
-router.get('/permissions', asyncHandler(async (req, res) => {
+router.get('/permissions', requirePermission('admin:roles'), asyncHandler(async (req, res) => {
   const result = await query('SELECT id, code, name, module, description FROM permissions ORDER BY module, code')
   res.json(result.rows)
 }))
@@ -578,7 +582,7 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
  *       200:
  *         description: Системные настройки
  */
-router.get('/settings', asyncHandler(async (req, res) => {
+router.get('/settings', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
   const globalRes = await query('SELECT key, value, description, updated_at FROM system_settings WHERE organization_id IS NULL ORDER BY key')
   let merged = {}
   for (const row of globalRes.rows) {
@@ -618,7 +622,7 @@ router.get('/settings', asyncHandler(async (req, res) => {
  *       200:
  *         description: Настройки обновлены
  */
-router.put('/settings', asyncHandler(async (req, res) => {
+router.put('/settings', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
   const { settings } = req.body
   if (!Array.isArray(settings)) throw new ValidationError('Ожидается массив настроек')
 
@@ -665,7 +669,7 @@ router.put('/settings', asyncHandler(async (req, res) => {
  *       200:
  *         description: Лог аудита
  */
-router.get('/audit-log', asyncHandler(async (req, res) => {
+router.get('/audit-log', requirePermission('admin:audit'), asyncHandler(async (req, res) => {
   const { action, userId, entityType, dateFrom, dateTo, page = '1', limit = '50' } = req.query
   const offset = (parseInt(page) - 1) * parseInt(limit)
 
@@ -990,7 +994,7 @@ function formatUptime(seconds) {
  *       200:
  *         description: 'Лог ошибок (включает поле module — модуль из пути запроса)'
  */
-router.get('/error-log', asyncHandler(async (req, res) => {
+router.get('/error-log', requirePermission('admin:errors'), asyncHandler(async (req, res) => {
   const { page = '1', limit = '50' } = req.query
   const offset = (parseInt(page) - 1) * parseInt(limit)
 
@@ -1019,7 +1023,7 @@ router.get('/error-log', asyncHandler(async (req, res) => {
  *       200:
  *         description: '{ users: [{ id, name, position, department, avatar, status, since, lastSeenAt }] }'
  */
-router.get('/online', asyncHandler(async (req, res) => {
+router.get('/online', requirePermission('admin:online'), asyncHandler(async (req, res) => {
   const values = req.org ? [req.org.org_id] : []
   const orgJoin = req.org ? 'JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $1 AND uo.is_active = true' : ''
   const result = await query(
@@ -1886,7 +1890,7 @@ router.put('/modules/:id/toggle', authorizeGlobalRoles('superadmin'), asyncHandl
  *       403:
  *         description: Нет прав
  */
-router.put('/modules/:code/org-toggle', authorizeRoles('admin'), asyncHandler(async (req, res) => {
+router.put('/modules/:code/org-toggle', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
   const { code } = req.params
   const { enable } = req.body
   if (!req.org) throw new ValidationError('Не выбрано учреждение')
@@ -2052,7 +2056,7 @@ router.patch('/modules/:id/settings', asyncHandler(async (req, res) => {
   }
 }))
 
-router.put('/modules/:code/override', authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
+router.put('/modules/:code/override', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
   const { code } = req.params
   const { name } = req.body
   if (!req.org) throw new ForbiddenError()
@@ -2066,7 +2070,7 @@ router.put('/modules/:code/override', authorizeRoles('admin', 'hr'), asyncHandle
   res.json({ success: true })
 }))
 
-router.delete('/modules/:code/override', authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
+router.delete('/modules/:code/override', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
   const { code } = req.params
   if (!req.org) throw new ForbiddenError()
   await query('DELETE FROM module_overrides WHERE org_id = $1 AND module_code = $2', [req.org.org_id, code])
@@ -2239,7 +2243,7 @@ router.post('/assistant/models/pull', asyncHandler(async (req, res) => {
  *                   created_at: { type: string, format: date-time }
  *                   updated_at: { type: string, format: date-time }
  */
-router.get('/role-mappings', authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.get('/role-mappings', requirePermission('admin:roles'), asyncHandler(async (req, res) => {
   const result = await query(
     'SELECT * FROM role_mapping_rules WHERE is_active = true ORDER BY position_pattern, org_role'
   )
@@ -2269,7 +2273,7 @@ router.get('/role-mappings', authorizeRoles('admin', 'superadmin'), asyncHandler
  *       400:
  *         description: Ошибка валидации
  */
-router.post('/role-mappings', authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.post('/role-mappings', requirePermission('admin:roles'), asyncHandler(async (req, res) => {
   const { position_pattern, org_role } = req.body
   if (!position_pattern?.trim()) throw new ValidationError('Должность (шаблон) обязательна')
   if (!VALID_MAPPING_ROLES.includes(org_role)) throw new ValidationError('Недопустимая роль')
@@ -2305,7 +2309,7 @@ router.post('/role-mappings', authorizeRoles('admin', 'superadmin'), asyncHandle
  *       404:
  *         description: Правило не найдено
  */
-router.put('/role-mappings/:id', authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.put('/role-mappings/:id', requirePermission('admin:roles'), asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id)
   if (Number.isNaN(id)) throw new ValidationError('Некорректный идентификатор правила')
   const { position_pattern, org_role, is_active } = req.body
@@ -2352,7 +2356,7 @@ router.put('/role-mappings/:id', authorizeRoles('admin', 'superadmin'), asyncHan
  *       404:
  *         description: Правило не найдено
  */
-router.delete('/role-mappings/:id', authorizeRoles('admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.delete('/role-mappings/:id', requirePermission('admin:roles'), asyncHandler(async (req, res) => {
   const id = parseInt(req.params.id)
   if (Number.isNaN(id)) throw new ValidationError('Некорректный идентификатор правила')
   const result = await query('DELETE FROM role_mapping_rules WHERE id = $1 RETURNING id', [id])
@@ -2466,6 +2470,7 @@ router.post('/test-data', requireRealSuperadmin, asyncHandler(async (req, res) =
     }
 
     await client.query('COMMIT')
+    invalidatePermissionCache()
     res.status(201).json(await getTestDataState(req))
   } catch (e) {
     await client.query('ROLLBACK')

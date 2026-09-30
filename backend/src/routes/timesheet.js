@@ -2,11 +2,12 @@ import express from 'express'
 import ExcelJS from 'exceljs'
 import PDFDocument from 'pdfkit'
 import { query, getClient } from '../config/database.js'
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest } from '../utils/testScope.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
 import { getTimesheetExportData } from '../lib/timesheetExport.js'
+import { requirePermission, hasPermission } from '../lib/permissions.js'
 
 const router = express.Router()
 
@@ -20,9 +21,9 @@ const VACATION_TYPE_TO_CODE = {
 }
 
 router.use(authenticateToken)
-router.use(authorizeRoles('manager', 'hr', 'admin'))
+router.use(requirePermission('timesheet:view'))
 
-router.post('/auto-create', authorizeRoles('admin', 'hr'), async (req, res) => {
+router.post('/auto-create', requirePermission('timesheet:manage'), async (req, res) => {
   const { year, month } = req.body
   const now = new Date()
   const y = year || now.getFullYear()
@@ -95,7 +96,7 @@ async function getManagerDepartmentIds(userId, req) {
 }
 
 async function canAccessDepartment(user, departmentId, req) {
-  if (['hr', 'admin'].includes(user.role)) return true
+  if (await hasPermission(req, 'timesheet:manage')) return true
   return (await getManagerDepartmentIds(user.id, req)).includes(Number(departmentId))
 }
 
@@ -119,7 +120,7 @@ async function canAccessTimesheet(user, timesheetId, req) {
  */
 router.get('/my-departments', async (req, res) => {
   try {
-    if (['hr', 'admin'].includes(req.user.role)) return res.json([])
+    if (await hasPermission(req, 'timesheet:manage')) return res.json([])
     res.json(await getManagerDepartments(req.user.id, req))
   } catch (error) {
     res.locals.errorCause = error
@@ -152,7 +153,7 @@ router.get('/', async (req, res) => {
     const offset = (page - 1) * limit
 
     let rows
-    if (['hr', 'admin'].includes(req.user.role)) {
+    if (await hasPermission(req, 'timesheet:manage')) {
       let sql = `SELECT t.*, d.name as department_name FROM timesheets t JOIN departments d ON t.department_id = d.id `
       const params = []
       if (req.org) {
@@ -218,7 +219,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   let { department_id, year, month } = req.body
 
-  if (!department_id && req.user.role === 'manager') {
+  if (!department_id && !(await hasPermission(req, 'timesheet:manage'))) {
     const deptIds = await getManagerDepartmentIds(req.user.id, req)
     if (deptIds.length === 0) {
       return res.status(400).json({ error: 'Вы не являетесь руководителем ни одного отдела' })
@@ -575,10 +576,10 @@ router.put('/:id/status', async (req, res) => {
     }
 
     const current = timesheet.status
-    const isHR = ['hr', 'admin'].includes(req.user.role)
+    const isHR = await hasPermission(req, 'timesheet:manage')
 
     const allowed =
-      (req.user.role === 'manager' && current === 'draft' && status === 'submitted') ||
+      (!isHR && current === 'draft' && status === 'submitted') ||
       (isHR && current === 'submitted' && status === 'approved') ||
       (isHR && current === 'approved' && status === 'submitted')
 

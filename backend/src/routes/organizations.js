@@ -1,8 +1,9 @@
 import { Router } from 'express'
 import { query, getClient } from '../config/database.js'
-import { authenticateToken, authorizeRoles, authorizeGlobalRoles } from '../middleware/auth.js'
+import { authenticateToken, authorizeGlobalRoles } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError, ConflictError, ForbiddenError } from '../middleware/errors.js'
 import { grantManagerRole, revokeManagerRoleIfUnused } from '../lib/managerRole.js'
+import { requirePermission } from '../lib/permissions.js'
 
 const router = Router()
 
@@ -104,7 +105,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
  *               type: array
  *               items: { $ref: '#/components/schemas/Organization' }
  */
-router.get('/tree', authenticateToken, authorizeRoles('hr', 'admin', 'superadmin'), asyncHandler(async (req, res) => {
+router.get('/tree', authenticateToken, requirePermission('organization:members'), asyncHandler(async (req, res) => {
   const result = await query(`
     SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
            o.is_active, o.created_at, o.head_id, o.parent_id,
@@ -384,7 +385,7 @@ router.get('/:id/members', authenticateToken, asyncHandler(async (req, res) => {
  *       409:
  *         description: Уже состоит в организации
  */
-router.post('/:id/members', authenticateToken, authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
+router.post('/:id/members', authenticateToken, requirePermission('organization:members'), asyncHandler(async (req, res) => {
   const orgId = parseInt(req.params.id)
   const { email, org_role, department_id } = req.body
 
@@ -454,7 +455,7 @@ router.post('/:id/members', authenticateToken, authorizeRoles('admin', 'hr'), as
  *       409:
  *         description: Нельзя удалить последнего администратора
  */
-router.put('/:id/members/:userId', authenticateToken, authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
+router.put('/:id/members/:userId', authenticateToken, requirePermission('organization:members'), asyncHandler(async (req, res) => {
   const orgId = parseInt(req.params.id)
   const userId = parseInt(req.params.userId)
   const { org_role, department_id, is_active } = req.body
@@ -538,7 +539,7 @@ router.put('/:id/members/:userId', authenticateToken, authorizeRoles('admin', 'h
  *       409:
  *         description: Нельзя удалить последнего администратора
  */
-router.delete('/:id/members/:userId', authenticateToken, authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
+router.delete('/:id/members/:userId', authenticateToken, requirePermission('organization:members'), asyncHandler(async (req, res) => {
   const orgId = parseInt(req.params.id)
   const userId = parseInt(req.params.userId)
 
@@ -606,7 +607,7 @@ router.get('/current', authenticateToken, asyncHandler(async (req, res) => {
  *       200:
  *         description: Список кандидатов
  */
-router.get('/:id/candidates', authenticateToken, authorizeRoles('admin', 'hr'), asyncHandler(async (req, res) => {
+router.get('/:id/candidates', authenticateToken, requirePermission('organization:members'), asyncHandler(async (req, res) => {
   const orgId = parseInt(req.params.id)
   const hasAccess = await checkOrgAccess(req, orgId)
   if (!hasAccess) throw new ForbiddenError()
