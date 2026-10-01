@@ -4,7 +4,7 @@ import { query } from '../config/database.js'
 import { authLimiter } from '../middleware/rateLimiter.js'
 import { validateLogin, validateRegister, sanitizeInput } from '../middleware/validation.js'
 import { asyncHandler, ValidationError, UnauthorizedError, ForbiddenError } from '../middleware/errors.js'
-import { authenticateToken, logScopes, verifyKeycloakToken, findOrCreateUser, ACCOUNT_DISABLED_MESSAGE } from '../middleware/auth.js'
+import { authenticateToken, logScopes, verifyKeycloakToken, findOrCreateUser, keycloakOrgSource, ACCOUNT_DISABLED_MESSAGE } from '../middleware/auth.js'
 import { isRealSuperadmin, signValue, testCookieOptions, TEST_PREVIEW_ROLES, getTestDataState } from '../utils/testScope.js'
 import { personName } from '../utils/personName.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
@@ -35,7 +35,7 @@ async function keycloakLoginDetails(kcPayload, userId, existedBefore) {
       userCreated: !existedBefore,
       organizations: orgs.rows.map((o) => ({ slug: o.slug, name: o.name, role: o.org_role })),
       department: dept.rows[0]?.name ?? null,
-      groupsReceived: Array.isArray(kcPayload.groups),
+      orgSource: keycloakOrgSource(kcPayload).source,
     },
   }
 }

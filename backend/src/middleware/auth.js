@@ -104,60 +104,58 @@ function mapRealmRoleToOrgRole(realmRoles) {
   return 'employee'
 }
 
-async function syncUserOrganizations(userId, kcPayload) {
-  const groups = kcPayload.groups || []
-  const realmRoles = kcPayload.realm_access?.roles || []
-  const orgSlugs = groups
-    .map(g => g.replace(/^\//, '').replace(/^org-/, '').toLowerCase())
+async function findOrCreateOrganization({ name, slug }) {
+  const norm = (expr) => `btrim(regexp_replace(lower(regexp_replace(${expr}, '[«»"''“”]', '', 'g')), '\\s+', ' ', 'g'))`
+  const found = await query(
+    `SELECT id FROM organizations
+     WHERE slug = $1 OR ($2::text IS NOT NULL AND ${norm('name')} = ${norm('$2')})
+     ORDER BY (slug = $1) DESC, id LIMIT 1`,
+    [slug, name || null]
+  )
+  if (found.rows.length) return found.rows[0].id
+  const created = await query(
+    `INSERT INTO organizations (name, slug, is_active) VALUES ($1, $2, true)
+     ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug RETURNING id`,
+    [name || slug.charAt(0).toUpperCase() + slug.slice(1), slug]
+  )
+  console.log('[KC] auto-created organization:', name || slug)
+  return created.rows[0].id
+}
+
+export function keycloakOrgSource(kcPayload) {
+  const groups = (kcPayload.groups || [])
+    .map(g => String(g).replace(/^\//, '').replace(/^org-/, '').toLowerCase())
     .filter(g => g && !g.startsWith('default-roles'))
+  if (groups.length) return { source: 'groups', orgs: groups.map(slug => ({ slug })) }
+  const company = String(kcPayload.company || '').replace(/\s+/g, ' ').trim()
+  if (company) return { source: 'company', orgs: [{ name: company, slug: company.toLowerCase().replace(/[«»"'“”]/g, '').trim().replace(/\s+/g, '-').slice(0, 100) }] }
+  return { source: 'default', orgs: [] }
+}
+
+async function syncUserOrganizations(userId, kcPayload) {
+  const realmRoles = kcPayload.realm_access?.roles || []
+  const { orgs } = keycloakOrgSource(kcPayload)
 
   const existing = await query('SELECT COUNT(*)::int AS cnt FROM user_organizations WHERE user_id = $1', [userId])
   const isFirstOrgEntry = existing.rows[0].cnt === 0
 
-  let firstOrgId = 1
-  const joinedOrgIds = []
+  const joinedOrgIds = orgs.length ? [] : [1]
+  for (const org of orgs) joinedOrgIds.push(await findOrCreateOrganization(org))
+  const firstOrgId = joinedOrgIds[0]
 
-  if (orgSlugs.length === 0) {
+  for (const orgId of joinedOrgIds) {
     await query(
       `INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
-       VALUES ($1, 1, $2, true)
+       VALUES ($1, $2, $3, true)
        ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true`,
-      [userId, mapRealmRoleToOrgRole(realmRoles)]
+      [userId, orgId, mapRealmRoleToOrgRole(realmRoles)]
     )
-    joinedOrgIds.push(1)
-  } else {
-    for (const slug of orgSlugs) {
-      let orgResult = await query('SELECT id FROM organizations WHERE slug = $1', [slug])
-      if (orgResult.rows.length === 0) {
-        orgResult = await query(
-          'INSERT INTO organizations (name, slug, is_active) VALUES ($1, $2, true) RETURNING id',
-          [slug.charAt(0).toUpperCase() + slug.slice(1), slug]
-        )
-        console.log('[KC] auto-created organization:', slug)
-      }
-      const orgId = orgResult.rows[0].id
-      if (slug === orgSlugs[0]) firstOrgId = orgId
-      joinedOrgIds.push(orgId)
-      const orgRole = mapRealmRoleToOrgRole(realmRoles)
-      await query(
-        `INSERT INTO user_organizations (user_id, org_id, org_role, is_active)
-         VALUES ($1, $2, $3, true)
-         ON CONFLICT (user_id, org_id) DO UPDATE SET is_active = true`,
-        [userId, orgId, orgRole]
-      )
-    }
-
-    const orgIds = (await query(
-      'SELECT id FROM organizations WHERE slug = ANY($1)', [orgSlugs]
-    )).rows.map(r => r.id)
-
-    if (orgIds.length > 0) {
-      await query(
-        `UPDATE user_organizations SET is_active = false
-         WHERE user_id = $1 AND org_id NOT IN (SELECT unnest($2::int[]))`,
-        [userId, orgIds]
-      )
-    }
+  }
+  if (orgs.length) {
+    await query(
+      'UPDATE user_organizations SET is_active = false WHERE user_id = $1 AND NOT (org_id = ANY($2::int[]))',
+      [userId, joinedOrgIds]
+    )
   }
 
   if (isFirstOrgEntry) {

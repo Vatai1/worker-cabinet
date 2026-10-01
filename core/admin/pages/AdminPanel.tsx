@@ -310,6 +310,7 @@ function AuditDetails({ details }: { details: Record<string, unknown> }) {
       organizations?: { slug: string; name: string; role: string }[]
       department?: string | null
       groupsReceived?: boolean
+      orgSource?: 'groups' | 'company' | 'default'
     }
     const claims = (details.keycloak ?? {}) as Record<string, unknown>
     const formatClaim = (v: unknown) => (typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v))
@@ -322,8 +323,11 @@ function AuditDetails({ details }: { details: Record<string, unknown> }) {
             <span key={o.slug} className="rounded bg-muted/60 px-2 py-0.5">{o.name} · {ROLE_LABELS[o.role] || o.role}</span>
           ))}
           {applied.department && <span className="rounded bg-muted/60 px-2 py-0.5">Отдел: {applied.department}</span>}
-          {applied.groupsReceived === false && (
-            <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">группы не пришли — организация по умолчанию</span>
+          {applied.orgSource === 'company' && (
+            <span className="rounded bg-muted/60 px-2 py-0.5 text-muted-foreground">организация из company</span>
+          )}
+          {(applied.orgSource === 'default' || (!applied.orgSource && applied.groupsReceived === false)) && (
+            <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{applied.orgSource ? 'ни groups, ни company не пришли' : 'группы не пришли'} — организация по умолчанию</span>
           )}
         </div>
         <details className="text-xs">
