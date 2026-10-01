@@ -178,19 +178,19 @@ router.post('/', authenticateToken, requirePermission('mailing:manage'), asyncHa
     )
     const campaign = campaignResult.rows[0]
 
-    for (const userId of recipientUserIds) {
-      await client.query(
-        `INSERT INTO mailing_campaign_recipients (campaign_id, user_id, organization_id) VALUES ($1, $2, $3)`,
-        [campaign.id, userId, currentOrgId(req)]
-      )
-    }
+    await client.query(
+      `INSERT INTO mailing_campaign_recipients (campaign_id, user_id, organization_id)
+       SELECT $1, u, $3 FROM unnest($2::int[]) AS u`,
+      [campaign.id, recipientUserIds, currentOrgId(req)]
+    )
 
-    if (channel === 'email' || channel === 'both') {
-      await notifyBatch({ userIds: recipientUserIds, type: 'mailing', channel: 'email', data: { title, message, imageUrls } })
-    }
-    if (channel === 'site' || channel === 'both') {
-      await notifyBatch({ userIds: recipientUserIds, type: 'mailing', channel: 'site', data: { title, message, imageUrls } })
-    }
+    await notifyBatch({
+      userIds: recipientUserIds,
+      type: 'mailing',
+      channel: channel === 'site' ? 'site' : 'email',
+      data: { title, message, imageUrls },
+      db: client,
+    })
 
     await client.query('COMMIT')
     res.status(201).json({ campaign, recipientsCount: recipientUserIds.length })

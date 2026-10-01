@@ -141,6 +141,10 @@ export function getPresence() {
   return presence
 }
 
+export function isUserConnected(userId) {
+  return (clients.get(userId)?.size ?? 0) > 0
+}
+
 export function getActiveWsCount() {
   let count = 0
   for (const set of clients.values()) count += set.size

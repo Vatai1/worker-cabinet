@@ -34,7 +34,7 @@ cp .env.backend.example .env
 nano .env
 ```
 
-Обязательно заполнить: `DB_PASSWORD`, `JWT_SECRET`, `S3_SECRET_KEY`, `ONLYOFFICE_JWT_SECRET`, `RABBITMQ_PASSWORD`, `NOTIFICATION_SECRET`
+Обязательно заполнить: `DB_PASSWORD`, `JWT_SECRET`, `S3_SECRET_KEY`, `ONLYOFFICE_JWT_SECRET`, `MAIL_HOST`, `MAIL_USER`, `MAIL_PASSWORD`
 
 ### 4. Сборка образов
 
@@ -86,7 +86,7 @@ docker compose -f docker-compose.prod.yml logs -f backend
 ## Два сервера
 
 - **Сервер 1 (APP)** — nginx + frontend, порт 80
-- **Сервер 2 (BACKEND)** — backend API + PostgreSQL + MinIO + OnlyOffice + RabbitMQ + notification-service + Hermes
+- **Сервер 2 (BACKEND)** — backend API + воркер уведомлений + PostgreSQL + MinIO + OnlyOffice + Hermes
 
 Используется:
 
@@ -103,8 +103,7 @@ docker compose -f docker-compose.prod.yml logs -f backend
 │  nginx → /      (static)  │       │  PostgreSQL (:5432)             │
 │                           │       │  MinIO (:9000/:9001)            │
 │  docker-compose.app.yml   │       │  OnlyOffice + Redis            │
-│  deploy-app.sh            │       │  RabbitMQ (:5672)               │
-│                           │       │  notification-service (:5001)   │
+│  deploy-app.sh            │       │                           │       │  notification-worker            │
 └───────────────────────────┘       │  Hermes Agent (:8642 local)      │
       Локальная сеть                │  SearXNG (:8888 local)           │
                                     │  docker-compose.backend.yml     │
@@ -177,7 +176,7 @@ nano .env
 | `JWT_SECRET`             | секрет подписи JWT                            |
 | `S3_SECRET_KEY`          | секретный ключ MinIO                           |
 | `ONLYOFFICE_JWT_SECRET` | секрет OnlyOffice JWT                           |
-| `RABBITMQ_PASSWORD`      | пароль RabbitMQ                                |
+| `MAIL_HOST`/`MAIL_USER`/`MAIL_PASSWORD` | SMTP для писем (Яндекс 360: smtp.yandex.ru, 465, пароль приложения) |
 | `NOTIFICATION_SECRET`   | секрет уведомлений                             |
 
 Keycloak (если используется):
@@ -287,9 +286,6 @@ chmod +x deploy-app.sh
 | 5432  | PostgreSQL           | закрыть   |
 | 9000  | MinIO S3 API         | закрыть   |
 | 9001  | MinIO Console        | закрыть   |
-| 5672  | RabbitMQ             | закрыть   |
-| 15672 | RabbitMQ Management  | закрыть   |
-| 5001  | Notification service | закрыть   |
 | 8642  | Hermes Agent         | localhost |
 | 8888  | SearXNG              | localhost |
 
@@ -329,7 +325,7 @@ npm run docker:build
 
 ### Политика безопасности
 
-- PostgreSQL, MinIO, RabbitMQ — закрыть порты извне
+- PostgreSQL, MinIO — закрыть порты извне
 - Все секреты (`DB_PASSWORD`, `JWT_SECRET` и т.д.) — сильные, уникальные, не в git
 - Hermes Agent и SearXNG — биндятся на `127.0.0.1`
 - OnlyOffice — за reverse proxy, JWT включён

@@ -160,59 +160,6 @@ services:
     networks:
       - worker-cabinet-network
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: worker-cabinet-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: worker_cabinet
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD required}
-    ports:
-      - "127.0.0.1:5672:5672"
-      - "127.0.0.1:15672:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
-    networks:
-      - worker-cabinet-network
-
-  notification-service:
-    build:
-      context: ./notification-service
-      dockerfile: Dockerfile
-    container_name: worker-cabinet-notifications
-    environment:
-      PORT: 5001
-      NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: worker_cabinet
-      DB_USER: postgres
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
-      RABBITMQ_URL: amqp://worker_cabinet:***@rabbitmq:5672
-      MAIL_HOST: ${MAIL_HOST:-smtp.example.com}
-      MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_SECURE: ${MAIL_SECURE:-false}
-      MAIL_USER: ${MAIL_USER:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
-      NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:?NOTIFICATION_SECRET required}
-    ports:
-      - "127.0.0.1:5001:5001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - worker-cabinet-network
-
   mini-agent:
     image: vatai12/worker-cabinet-mini-agent:latest
     container_name: worker-cabinet-mini-agent
@@ -227,7 +174,6 @@ services:
     networks:
       - worker-cabinet-network
 
-
 volumes:
   keycloak_db_data:
   postgres_data:
@@ -235,7 +181,6 @@ volumes:
   onlyoffice_data:
   onlyoffice_logs:
   onlyoffice_lib:
-  rabbitmq_data:
   ollama_data:
 
 networks:

@@ -1,4 +1,4 @@
-import { query } from '../config/database.js'
+import { query, inTransaction } from '../config/database.js'
 import { notifyBatch } from '../config/notifications.js'
 
 // Check if a user is in a survey's target audience
@@ -36,27 +36,22 @@ export async function countTargetUsers(survey) {
 
 // Publish survey: set status
 export async function publishSurvey(surveyId, publisherUserId) {
-  const result = await query(
-    "UPDATE surveys SET status = 'active' WHERE id = $1 AND status = 'draft' RETURNING *",
-    [surveyId]
-  )
-  if (!result.rows.length) throw new Error('Опрос не найден или уже опубликован')
-  const survey = result.rows[0]
-
-  const userIds = await resolveTargetUserIds(survey, publisherUserId)
-  if (userIds.length > 0) {
-    try {
-      await notifyBatch({
-        userIds,
-        type: 'survey_assigned',
-        data: { title: survey.title, deadline: survey.deadline || null, link: '/surveys' },
-      })
-    } catch (err) {
-      console.warn(`[NOTIFY] survey publish #${survey.id}: ${err.message}`)
-    }
-  }
-
-  return survey
+  return inTransaction(async (client) => {
+    const result = await client.query(
+      "UPDATE surveys SET status = 'active' WHERE id = $1 AND status = 'draft' RETURNING *",
+      [surveyId]
+    )
+    if (!result.rows.length) throw new Error('Опрос не найден или уже опубликован')
+    const survey = result.rows[0]
+    const userIds = await resolveTargetUserIds(survey, publisherUserId)
+    await notifyBatch({
+      userIds,
+      type: 'survey_assigned',
+      data: { title: survey.title, deadline: survey.deadline || null, link: '/surveys' },
+      db: client,
+    })
+    return survey
+  })
 }
 
 // Get analytics for a survey

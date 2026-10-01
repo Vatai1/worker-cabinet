@@ -4,7 +4,8 @@ import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler } from '../middleware/errors.js'
 import { query } from '../config/database.js'
 import { uploadToS3, deleteFromS3, getPresignedUrl } from '../config/s3.js'
-import { notify } from '../config/notifications.js'
+import { notify, notifyBatch } from '../config/notifications.js'
+import { inTransaction } from '../config/database.js'
 import { requirePermission } from '../lib/permissions.js'
 
 const router = express.Router()
@@ -78,24 +79,24 @@ router.post('/', authenticateToken, upload.single('screenshot'), asyncHandler(as
     await uploadToS3(req.file, s3Key)
   }
 
-  const result = await query(
-    `INSERT INTO bug_reports (user_id, title, description, screenshot_s3_key, page_url, browser_info, actions)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [req.user.id, title.trim(), description || null, s3Key, page_url || null, browser_info || null, parseActions(req.body.actions)]
-  )
-
-  const report = result.rows[0]
-  const admins = await query("SELECT id FROM users WHERE role IN ('admin', 'superadmin')")
+  const admins = await query("SELECT id FROM users WHERE role IN ('admin', 'superadmin') AND status <> 'inactive'")
   const reporterName = await query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.id])
   const name = reporterName.rows[0] ? `${reporterName.rows[0].last_name} ${reporterName.rows[0].first_name}` : 'Пользователь'
 
-  for (const admin of admins.rows) {
-    notify({
-      userId: admin.id,
+  const report = await inTransaction(async (client) => {
+    const result = await client.query(
+      `INSERT INTO bug_reports (user_id, title, description, screenshot_s3_key, page_url, browser_info, actions)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [req.user.id, title.trim(), description || null, s3Key, page_url || null, browser_info || null, parseActions(req.body.actions)]
+    )
+    await notifyBatch({
+      userIds: admins.rows.map((a) => a.id),
       type: 'bug_report_new',
-      data: { reportId: report.id, title: title.trim(), author: name, link: '/admin/global' }
-    }).catch(() => {})
-  }
+      data: { reportId: result.rows[0].id, title: title.trim(), author: name, link: '/admin/global' },
+      db: client,
+    })
+    return result.rows[0]
+  })
 
   res.status(201).json(report)
 }))
@@ -172,29 +173,32 @@ router.patch('/:id', authenticateToken, requirePermission('bug_reports:manage'),
     updates.push(`user_reply_by = $${params.length}`)
   }
 
-  if (updates.length > 0) {
-    updates.push('reviewed_at = NOW()')
-    updates.push('reviewed_by = ' + req.user.id)
-    updates.push('updated_at = NOW()')
-    params.push(id)
-    await query(`UPDATE bug_reports SET ${updates.join(', ')} WHERE id = $${params.length}`, params)
-  }
-
   const report = existing.rows[0]
-  if (replyChanged) {
-    notify({
-      userId: report.user_id,
-      type: 'bug_report_reply',
-      data: { reportId: id, title: report.title, subject: `Ответ на баг-репорт: ${report.title}`, message: reply },
-    }).catch(() => {})
-  }
-  if (status && status !== report.status) {
-    notify({
-      userId: report.user_id,
-      type: 'bug_report_update',
-      data: { reportId: id, title: report.title, status, link: '/dashboard' }
-    }).catch(() => {})
-  }
+  await inTransaction(async (client) => {
+    if (updates.length > 0) {
+      updates.push('reviewed_at = NOW()')
+      updates.push('reviewed_by = ' + req.user.id)
+      updates.push('updated_at = NOW()')
+      params.push(id)
+      await client.query(`UPDATE bug_reports SET ${updates.join(', ')} WHERE id = $${params.length}`, params)
+    }
+    if (replyChanged) {
+      await notify({
+        userId: report.user_id,
+        type: 'bug_report_reply',
+        data: { reportId: id, title: report.title, subject: `Ответ на баг-репорт: ${report.title}`, message: reply },
+        db: client,
+      })
+    }
+    if (status && status !== report.status) {
+      await notify({
+        userId: report.user_id,
+        type: 'bug_report_update',
+        data: { reportId: id, title: report.title, status },
+        db: client,
+      })
+    }
+  })
 
   const updated = await query(`SELECT br.*, u.first_name AS reporter_first, u.last_name AS reporter_last, ru.first_name AS reviewer_first, ru.last_name AS reviewer_last, rpu.first_name AS replier_first, rpu.last_name AS replier_last FROM bug_reports br LEFT JOIN users u ON br.user_id = u.id LEFT JOIN users ru ON br.reviewed_by = ru.id LEFT JOIN users rpu ON br.user_reply_by = rpu.id WHERE br.id = $1`, [id])
   const r = updated.rows[0]

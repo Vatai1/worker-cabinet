@@ -72,7 +72,6 @@ npm run lint && npm run typecheck
 │   ├── pages/           # Dashboard, HRPanel
 │   ├── store/           # modulesStore, uiStore, siteSettingsStore, departmentsStore
 │   └── types/           # Global TypeScript interfaces
-├── notification-service/ # Separate Express microservice (RabbitMQ consumer + mailer)
 └── docker/              # Docker configs (Hermes agent, DB init scripts)
 ```
 
@@ -83,7 +82,8 @@ backend/src/
 ├── routes/              # Route handlers (auth, vacation, users, projects, etc.) — 15 groups
 ├── middleware/          # auth.js (JWT), upload.js (multer), errors.js, rateLimiter.js, csrf.js, validation.js
 ├── services/            # Business logic (ewsService.js, surveyService.js)
-├── config/              # database.js (pg Pool), s3.js (MinIO), rabbitmq.js, notifications.js, keycloak.js
+├── config/              # database.js (pg Pool), s3.js (MinIO), notifications.js, keycloak.js
+├── worker.js            # notification delivery worker (separate process: `npm run worker`)
 ├── cron/                # timesheetCron.js (daily timesheet job)
 ├── db/                  # migrate.js, seed.js, create-indexes.js, default-vacation-templates.js
 └── tests/               # Node.js built-in test runner
@@ -210,6 +210,9 @@ Data lives in `backend/src/db/productionCalendar.js` (per year, source consultan
 
 ### Day-offs (отгулы) and leave adjustments
 Optional: module `day_offs` (Модули) turns the whole feature off per org (backend `isModuleEnabledForOrg`), permissions `day_off:take` / `day_off:grant` per role. HR/admin grant or deduct days via `POST /api/vacation/adjustments` (`leave_adjustments`: `kind` `vacation` | `day_off`, signed `days`, mandatory `comment`). `vacation` adds to `vacation_balances.total_days` for `year`; `day_off` is a separate counter: available = granted − approved − on_approval `day_off` requests (`dayOffBalance()` in `vacation.js`). Vacation type `day_off` («Отгул»): counted in working days, ignores the department vacation block and the 14-day notice (frontend opens the create modal in day-off-only mode), never touches the annual balance (guards in create/edit/approve/reject/cancel), cannot be transferred, fills timesheet with `НВ`. Day-offs are not tied to a year. Managers can grant/see adjustments only for subordinates (`adjustmentScopeUserIds`: users of departments they manage + descendants, and users whose `manager_id` is them); hr/admin see the whole org. Managers may grant only `day_off`. UI: HR → Отпуск → «Отгулы» tab and the same `LeaveAdjustmentsPanel` on `/vacation?tab=adjustments` for managers — day-offs only (grant form for several employees, employees table, history — all with filters; `GET /api/vacation/adjustments/all?kind=day_off` returns `scope`, `people`, `employees`, `items`); extra vacation days are granted only in the HR employee modal, HR employee modal → «Начисление отгулов и дней отпуска» (`LeaveAdjustmentsSection`), `/vacation` → «Отгулы» card for every role (always shown; «Взять отгул» opens `CreateVacationFormModal` preset to `day_off`). Day-off requests go through exactly the same approval as vacations (same `approver_id` resolution and hierarchy settings).
+
+### Notifications delivery
+`notify()` / `notifyBatch()` (`backend/src/config/notifications.js`) only insert into `notification_queue` — pass `db: client` to write inside the business transaction (vacation flows, bug reports, mailings, survey publish already do). An `AFTER INSERT` trigger emits `pg_notify('notification_created')` on commit: every web instance re-sends the unread count over WebSocket (`lib/unreadBroadcast.js`, works with several instances), and the worker (`src/worker.js`, compose service `notification-worker`, same image) wakes up. The worker (`lib/notificationDelivery.js`) claims rows with `FOR UPDATE SKIP LOCKED`: email via SMTP (`MAIL_*`, Яндекс 360 — `smtp.yandex.ru:465` + app password, `MAIL_RATE_PER_MINUTE`), retries with backoff 1/5/30/120/360 min, `failed` after `NOTIFY_MAX_ATTEMPTS` (5); push is a separate `push_status`. Templates in `lib/notificationEmail.js` (links built from `APP_URL`/`FRONTEND_URL`). Admin → Система → «Доставка уведомлений» shows queue/failed/oldest and retries failed. No RabbitMQ.
 
 ### Presence + Telemetry
 Presence rides on the existing notification WebSocket (`backend/src/config/ws.js`): the client (`useNotificationWs`) sends `{event:'activity'}` at most once a minute on user input; `getPresence()` derives `online` (activity < 5 min) / `away` (tab open, idle) and everything else is `offline` with `users.last_seen_at`. Admin tab «Сейчас на сайте» (`core/admin/components/OnlineUsersTab.tsx`, `GET /api/admin/online`, polls 30 s).

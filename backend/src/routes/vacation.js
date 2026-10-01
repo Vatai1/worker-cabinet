@@ -260,7 +260,7 @@ const substExistsClause = (n) => `EXISTS (
     AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
 )`
 
-async function notifyVacationCreated(request, employeeId, req) {
+async function notifyVacationCreated(request, employeeId, req, db = { query }) {
   const empName = await getEmpName(employeeId)
   const payload = {
     requestId: request.id,
@@ -274,8 +274,7 @@ async function notifyVacationCreated(request, employeeId, req) {
   if (request.approver_id) {
     const approverIds = await getApproverIds(request.approver_id, req)
     for (const mid of approverIds) {
-      notify({ userId: mid, type: 'vacation_created', data: payload })
-        .catch((err) => console.warn(`[NOTIFY] vacation create #${request.id}: ${err.message}`))
+      await notify({ userId: mid, type: 'vacation_created', data: payload, db })
     }
     return
   }
@@ -287,8 +286,7 @@ async function notifyVacationCreated(request, employeeId, req) {
     req.org ? [req.org.org_id] : []
   )
   for (const row of hrResult.rows) {
-    notify({ userId: row.id, type: 'vacation_created', data: payload })
-      .catch((err) => console.warn(`[NOTIFY] vacation create #${request.id} hr: ${err.message}`))
+    await notify({ userId: row.id, type: 'vacation_created', data: payload, db })
   }
 }
 
@@ -1597,14 +1595,12 @@ router.post('/requests', authenticateToken, async (req, res) => {
       }
     }
 
-    await client.query('COMMIT')
-
-    await notifyVacationCreated(request, userId, req)
+    await notifyVacationCreated(request, userId, req, client)
 
     if (Array.isArray(substitute_ids) && substitute_ids.length > 0) {
       const empName = await getEmpName(userId)
       for (const subId of substitute_ids) {
-        notify({
+        await notify({
           userId: subId,
           type: 'vacation_substitution',
           data: {
@@ -1613,10 +1609,13 @@ router.post('/requests', authenticateToken, async (req, res) => {
             startDate: fmtDate(request.start_date),
             endDate: fmtDate(request.end_date),
             link: '/vacation'
-          }
-        }).catch((err) => console.warn(`[NOTIFY] substitute ${subId}: ${err.message}`))
+          },
+          db: client,
+        })
       }
     }
+
+    await client.query('COMMIT')
 
     res.status(201).json({
       ...request,
@@ -1866,18 +1865,18 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    await client.query('COMMIT')
-
     if (addedSubs.length > 0 || removedSubs.length > 0) {
       const empName = await getEmpName(userId)
       const payload = { requestId: Number(id), employeeName: empName, startDate: fmtDate(updated.start_date), endDate: fmtDate(updated.end_date), link: '/vacation' }
       for (const subId of addedSubs) {
-        notify({ userId: subId, type: 'vacation_substitution', data: payload }).catch((err) => console.warn(`[NOTIFY] substitute ${subId}: ${err.message}`))
+        await notify({ userId: subId, type: 'vacation_substitution', data: payload, db: client })
       }
       for (const subId of removedSubs) {
-        notify({ userId: subId, type: 'vacation_substitution_removed', data: payload }).catch((err) => console.warn(`[NOTIFY] substitute removed ${subId}: ${err.message}`))
+        await notify({ userId: subId, type: 'vacation_substitution_removed', data: payload, db: client })
       }
     }
+
+    await client.query('COMMIT')
 
     const fullResult = await query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
@@ -1941,9 +1940,7 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
       [req.user.id, id], req)
     const result = await client.query(appUpdText, appUpdValues)
 
-    await client.query('COMMIT')
-
-    notify({
+    await notify({
       userId: request.rows[0].user_id,
       type: 'vacation_status_changed',
       data: {
@@ -1954,8 +1951,11 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
         endDate: fmtDate(request.rows[0].end_date),
         comment: null,
         link: '/vacation'
-      }
-    }).catch((err) => console.warn(`[NOTIFY] vacation approve #${id}: ${err.message}`))
+      },
+      db: client,
+    })
+
+    await client.query('COMMIT')
 
     res.json({ ...result.rows[0], status: 'approved' })
     notifyVacationChanged(req, id, 'approved')
@@ -2015,9 +2015,7 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
       [reason, req.user.id, id], req)
     const result = await client.query(rejUpdText, rejUpdValues)
 
-    await client.query('COMMIT')
-
-    notify({
+    await notify({
       userId: request.rows[0].user_id,
       type: 'vacation_status_changed',
       data: {
@@ -2028,8 +2026,11 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
         endDate: fmtDate(request.rows[0].end_date),
         comment: reason,
         link: '/vacation'
-      }
-    }).catch((err) => console.warn(`[NOTIFY] vacation reject #${id}: ${err.message}`))
+      },
+      db: client,
+    })
+
+    await client.query('COMMIT')
 
     res.json({ ...result.rows[0], status: 'rejected' })
     notifyVacationChanged(req, id, 'rejected')
@@ -2263,8 +2264,6 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       }
     }
 
-    await client.query('COMMIT')
-
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name, rs.code as status
        FROM vacation_requests vr
@@ -2276,7 +2275,9 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     )
 
     const newReq = fullResult.rows[0]
-    await notifyVacationCreated(newReq, userId, req)
+    await notifyVacationCreated(newReq, userId, req, client)
+
+    await client.query('COMMIT')
 
     res.status(201).json({
       ...newReq,
@@ -2405,9 +2406,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
     await clearVacationTimesheetEntries(client, originalRequest.user_id, originalRequest.start_date, originalRequest.end_date, req)
     await fillVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date, req)
 
-    await client.query('COMMIT')
-
-    notify({
+    await notify({
       userId: newRequest.user_id,
       type: 'vacation_status_changed',
       data: {
@@ -2418,8 +2417,11 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
         endDate: fmtDate(newRequest.end_date),
         comment: 'Перенос одобрен',
         link: '/vacation'
-      }
-    }).catch((err) => console.warn(`[NOTIFY] vacation transfer approve #${id}: ${err.message}`))
+      },
+      db: client,
+    })
+
+    await client.query('COMMIT')
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
@@ -2550,9 +2552,7 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
       [id, managerId, reason, currentOrgId(req)]
     )
 
-    await client.query('COMMIT')
-
-    notify({
+    await notify({
       userId: newRequest.user_id,
       type: 'vacation_status_changed',
       data: {
@@ -2563,8 +2563,11 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
         endDate: fmtDate(newRequest.end_date),
         comment: reason,
         link: '/vacation'
-      }
-    }).catch((err) => console.warn(`[NOTIFY] vacation transfer reject #${id}: ${err.message}`))
+      },
+      db: client,
+    })
+
+    await client.query('COMMIT')
 
     const fullResult = await client.query(
       `SELECT vr.*, u.first_name, u.last_name, u.middle_name, u.position, u.department_id, d.name as department_name
@@ -4135,23 +4138,34 @@ router.post('/requests/:id/substitutes', authenticateToken, async (req, res) => 
     }
 
     const empName = await getEmpName(vacation.user_id)
-    for (const subId of validIds) {
-      await query(
-        `INSERT INTO vacation_substitutions (vacation_request_id, substitute_user_id, assigned_by, organization_id)
-         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
-        [id, subId, req.user.id, currentOrgId(req)]
-      )
-      notify({
-        userId: subId,
-        type: 'vacation_substitution',
-        data: {
-          requestId: id,
-          employeeName: empName,
-          startDate: fmtDate(vacation.start_date),
-          endDate: fmtDate(vacation.end_date),
-          link: '/vacation'
-        }
-      }).catch((err) => console.warn(`[NOTIFY] substitute add ${subId}: ${err.message}`))
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+      for (const subId of validIds) {
+        await client.query(
+          `INSERT INTO vacation_substitutions (vacation_request_id, substitute_user_id, assigned_by, organization_id)
+           VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+          [id, subId, req.user.id, currentOrgId(req)]
+        )
+        await notify({
+          userId: subId,
+          type: 'vacation_substitution',
+          data: {
+            requestId: id,
+            employeeName: empName,
+            startDate: fmtDate(vacation.start_date),
+            endDate: fmtDate(vacation.end_date),
+            link: '/vacation'
+          },
+          db: client,
+        })
+      }
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
     }
 
     res.status(201).json({ added: validIds.length })
@@ -4191,13 +4205,25 @@ router.delete('/requests/:id/substitutes/:userId', authenticateToken, async (req
       `DELETE FROM vacation_substitutions WHERE vacation_request_id = $1 AND substitute_user_id = $2`,
       [id, subUserId], req
     )
-    await query(delText, delValues)
-
-    notify({
-      userId: subUserId,
-      type: 'vacation_substitution_removed',
-      data: { requestId: id, link: '/vacation' }
-    }).catch((err) => console.warn(`[NOTIFY] substitute remove ${subUserId}: ${err.message}`))
+    const client = await getClient()
+    try {
+      await client.query('BEGIN')
+      const removed = await client.query(delText, delValues)
+      if (removed.rowCount > 0) {
+        await notify({
+          userId: subUserId,
+          type: 'vacation_substitution_removed',
+          data: { requestId: id, link: '/vacation' },
+          db: client,
+        })
+      }
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
 
     res.json({ removed: true })
     notifyVacationChanged(req, id, 'substitutes_changed')

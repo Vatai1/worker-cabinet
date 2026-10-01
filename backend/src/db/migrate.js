@@ -1831,6 +1831,7 @@ async function runMigrations() {
     await migrateVacationSettings(db)
     await migrateDayOffs(db)
     await migratePermissionsMatrix(db)
+    await migrateNotificationDelivery(db)
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
@@ -2159,6 +2160,47 @@ async function migrateMembershipDepartmentSync(db) {
   } catch (e) {
     console.log('  - membership department sync:', e.message)
   }
+}
+
+async function migrateNotificationDelivery(db) {
+  for (const column of [
+    'next_attempt_at TIMESTAMPTZ',
+    'locked_at TIMESTAMPTZ',
+    'push_status VARCHAR(20)',
+    'push_locked_at TIMESTAMPTZ',
+    'push_sent_at TIMESTAMPTZ',
+  ]) {
+    await db.query(`ALTER TABLE notification_queue ADD COLUMN IF NOT EXISTS ${column}`)
+  }
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_notification_queue_email_due ON notification_queue (next_attempt_at, id)
+    WHERE channel = 'email' AND status IN ('pending', 'processing')`)
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_notification_queue_push_due ON notification_queue (id)
+    WHERE push_status IN ('pending', 'processing')`)
+  await db.query(`
+    CREATE OR REPLACE FUNCTION notify_notification_created() RETURNS trigger AS $$
+    BEGIN
+      PERFORM pg_notify('notification_created', json_build_object('id', NEW.id, 'user_id', NEW.user_id)::text);
+      RETURN NEW;
+    END
+    $$ LANGUAGE plpgsql
+  `)
+  await db.query('DROP TRIGGER IF EXISTS trg_notification_created ON notification_queue')
+  await db.query(`CREATE TRIGGER trg_notification_created AFTER INSERT ON notification_queue
+    FOR EACH ROW EXECUTE FUNCTION notify_notification_created()`)
+
+  const applied = (await db.query("SELECT value FROM system_settings WHERE key = 'notification_delivery_version'")).rows[0]?.value
+  if (applied !== '2') {
+    const cancelled = await db.query(
+      `UPDATE notification_queue SET status = 'cancelled', error = 'Не отправлено до перехода на новую доставку', updated_at = NOW()
+       WHERE channel = 'email' AND status IN ('pending', 'processing', 'failed')`
+    )
+    await db.query(
+      `INSERT INTO system_settings (key, value, description) VALUES ('notification_delivery_version', '2', 'Версия доставки уведомлений')
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`
+    )
+    console.log(`  ✓ notification delivery v2: ${cancelled.rowCount} old undelivered emails cancelled`)
+  }
+  console.log('  ✓ notification delivery')
 }
 
 async function migratePermissionsMatrix(db) {

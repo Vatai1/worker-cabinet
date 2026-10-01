@@ -213,10 +213,6 @@ CSRF middleware возвращает 403 без логирования, что �
 
 **Рекомендация**: один запрос с JOIN или CTE.
 
-### 6.4 Нет тестов для notification-service (LOW)
-
-`notification-service/` — отдельный микросервис, но нет тестов.
-
 ### 6.5 `backend/src/db/default-vacation-templates.js` — 343 строки XML в JS (LOW)
 
 XML-шаблоны документов встроены в JS-код. Работает, но сложно поддерживать.

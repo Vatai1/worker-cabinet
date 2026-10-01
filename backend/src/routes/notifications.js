@@ -3,15 +3,10 @@ import { query } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler } from '../middleware/errors.js'
 import { sendToUser } from '../config/ws.js'
+import { getUnreadCount } from '../config/notifications.js'
 
 async function pushUnreadCount(userId) {
-  const result = await query(
-    `SELECT COUNT(*) as count FROM notification_queue
-     WHERE user_id = $1 AND read_at IS NULL AND status IN ('pending', 'processing', 'sent')`,
-    [userId]
-  )
-  const count = parseInt(result.rows[0].count)
-  sendToUser(userId, 'notification', { unreadCount: count }).catch(() => {})
+  sendToUser(userId, 'notification', { unreadCount: await getUnreadCount(userId) }).catch(() => {})
 }
 
 const router = express.Router()
@@ -197,7 +192,7 @@ router.patch('/my/read-all', authenticateToken, asyncHandler(async (req, res) =>
 router.get('/my/unread-count', authenticateToken, asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT COUNT(*) as count FROM notification_queue
-     WHERE user_id = $1 AND read_at IS NULL AND status IN ('pending', 'processing', 'sent')`,
+     WHERE user_id = $1 AND read_at IS NULL`,
     [req.user.id]
   )
   res.json({ count: parseInt(result.rows[0].count) })

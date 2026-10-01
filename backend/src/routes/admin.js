@@ -15,6 +15,7 @@ import { createRequire } from 'module'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { requirePermission, invalidatePermissionCache } from '../lib/permissions.js'
+import { deliveryStats, retryFailedEmails } from '../lib/notificationDelivery.js'
 
 const require = createRequire(import.meta.url)
 const pkg = require('../../package.json')
@@ -902,6 +903,32 @@ router.get('/users/export', asyncHandler(async (req, res) => {
 }))
 
 // ===================== SYSTEM HEALTH =====================
+
+/**
+ * @swagger
+ * /admin/notifications/stats:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Состояние доставки уведомлений
+ *     description: 'email_pending — письма в очереди, email_failed — окончательно не доставленные, email_sent_24h — отправлено за сутки, push_pending — push в очереди, oldest_pending_seconds — возраст самого старого письма в очереди, mail_configured — задан ли SMTP'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Статистика }
+ * /admin/notifications/retry-failed:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Повторить отправку недоставленных писем
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: '{ retried }' }
+ */
+router.get('/notifications/stats', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
+  res.json(await deliveryStats())
+}))
+
+router.post('/notifications/retry-failed', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
+  res.json({ retried: await retryFailedEmails() })
+}))
 
 /**
  * @swagger

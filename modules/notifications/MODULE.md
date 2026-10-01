@@ -41,7 +41,7 @@ modules/notifications/
 ## Особенности
 
 - Уведомления создаются другими модулями через таблицу `notification_queue`
-- Microservice `notification-service` обрабатывает очередь (RabbitMQ)
+- Доставку (почта, push) выполняет воркер `backend/src/worker.js` — отдельный процесс на образе бэкенда; очередь — таблица `notification_queue`
 
 ## Зависимости
 

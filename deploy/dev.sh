@@ -57,9 +57,9 @@ setup_env() {
 }
 
 start_services() {
-    log_info "Запуск сервисов (PostgreSQL, MinIO, OnlyOffice, RabbitMQ, Keycloak)..."
+    log_info "Запуск сервисов (PostgreSQL, MinIO, OnlyOffice, Keycloak)..."
     cd "$PROJECT_DIR"
-    docker compose -f "$COMPOSE_FILE" up -d postgres minio onlyoffice rabbitmq keycloak-db keycloak
+    docker compose -f "$COMPOSE_FILE" up -d postgres minio onlyoffice keycloak-db keycloak
     log_success "Сервисы запущены"
     
     log_info "Ожидание готовности PostgreSQL..."

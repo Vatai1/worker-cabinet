@@ -93,56 +93,6 @@ services:
     networks:
       - worker-cabinet-network
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: worker-cabinet-rabbitmq
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-worker_cabinet}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-changeme}
-      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-worker_cabinet}
-    ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    networks:
-      - worker-cabinet-network
-
-  notification-service:
-    image: ${NOTIFICATION_IMAGE:-vatai12/worker-cabinet-notification:latest}
-    container_name: worker-cabinet-notifications
-    restart: unless-stopped
-    environment:
-      PORT: "5001"
-      NODE_ENV: production
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_NAME: ${DB_NAME:-worker_cabinet}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD}
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-worker_cabinet}:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
-      MAIL_HOST: ${MAIL_HOST:-localhost}
-      MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_USER: ${MAIL_USER}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      MAIL_FROM: ${MAIL_FROM:-noreply@example.com}
-    ports:
-      - "${NOTIFICATION_PORT:-5001}:5001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - worker-cabinet-network
-
   ollama:
     image: ollama/ollama:latest
     container_name: worker-cabinet-ollama
@@ -176,7 +126,7 @@ services:
     image: ${BACKEND_IMAGE:-vatai12/worker-cabinet-backend:latest}
     container_name: worker-cabinet-backend
     restart: unless-stopped
-    environment:
+    environment: &backend-environment
       PORT: "5000"
       NODE_ENV: production
       DB_HOST: postgres
@@ -198,14 +148,13 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
       S3_BUCKET: ${S3_BUCKET:-worker-cabinet}
-      RABBITMQ_URL: amqp://${RABBITMQ_USER:-worker_cabinet}:${RABBITMQ_PASSWORD:-changeme}@rabbitmq:5672
       MAIL_HOST: ${MAIL_HOST:-smtp.example.com}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_SECURE: ${MAIL_SECURE:-false}
       MAIL_USER: ${MAIL_USER:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_RATE_PER_MINUTE: ${MAIL_RATE_PER_MINUTE:-20}
       MAIL_FROM: ${MAIL_FROM:-"Worker Cabinet" <noreply@example.com>}
-      NOTIFICATION_SECRET: ${NOTIFICATION_SECRET:-changeme}
       ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://localhost:8080}
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-changeme}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
@@ -227,13 +176,24 @@ services:
     networks:
       - worker-cabinet-network
 
+  notification-worker:
+    image: ${BACKEND_IMAGE:-vatai12/worker-cabinet-backend:latest}
+    container_name: worker-cabinet-notification-worker
+    restart: unless-stopped
+    command: ["node", "src/worker.js"]
+    environment: *backend-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - worker-cabinet-network
+
 volumes:
   postgres_data:
   minio_data:
   onlyoffice_data:
   onlyoffice_logs:
   onlyoffice_lib:
-  rabbitmq_data:
   ollama_data:
 
 networks:

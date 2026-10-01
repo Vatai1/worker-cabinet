@@ -9,13 +9,17 @@ const { Pool, types } = pg
 // to avoid UTC timezone shift when serializing to JSON
 types.setTypeParser(1082, (val) => val)
 
-export const pool = new Pool({
+export const connectionConfig = {
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+}
+
+export const pool = new Pool({
+  ...connectionConfig,
   max: 20,
   idleTimeoutMillis: 30000,
   allowExitOnIdle: true,
@@ -29,3 +33,18 @@ pool.on('error', (err) => {
 export const query = (text, params) => pool.query(text, params)
 
 export const getClient = () => pool.connect()
+
+export async function inTransaction(fn) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await fn(client)
+    await client.query('COMMIT')
+    return result
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
+}

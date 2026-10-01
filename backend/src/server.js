@@ -35,7 +35,7 @@ import pushRoutes from './routes/push.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { runMigrations } from './db/migrate.js'
 import { errorHandler, errorResponseLogger } from './middleware/errors.js'
-import * as rabbitmq from './config/rabbitmq.js'
+import { startUnreadCountBroadcast } from './lib/unreadBroadcast.js'
 import { initWsServer } from './config/ws.js'
 import { generateCsrfToken, csrfMiddleware } from './middleware/csrf.js'
 import { apiLimiter } from './middleware/rateLimiter.js'
@@ -265,13 +265,5 @@ server.listen(PORT, async () => {
   const { sessionLifetime, refreshLifetime } = await getAuthSettings()
   await syncKcSessionSettings({ sessionLifetimeMinutes: sessionLifetime, refreshLifetimeDays: refreshLifetime })
 
-  if (process.env.RABBITMQ_URL) {
-    try {
-      await rabbitmq.connect()
-    } catch (err) {
-      console.warn(`[RABBITMQ] Connection failed: ${err.message}. Publishing disabled.`)
-    }
-  } else {
-    console.warn('[RABBITMQ] RABBITMQ_URL not set. Publishing disabled.')
-  }
+  startUnreadCountBroadcast()
 })

@@ -120,7 +120,6 @@ Copy-Item .env.example .env
 - docxtemplater (генерация DOCX)
 - ExcelJS + PDFKit (экспорт табелей)
 - EWS/Outlook OAuth2 (интеграция с календарём)
-- RabbitMQ (очередь уведомлений, опционально)
 
 ## Тестовые пользователи
 
@@ -160,7 +159,7 @@ worker-cabinet/
 │       │                     # hierarchy, dictionaries, timesheet, calendar, admin, assistant
 │       ├── middleware/       # JWT auth, multer upload, rate limiter, CSRF, validation
 │       ├── services/         # Бизнес-логика (ewsService, surveyService)
-│       ├── config/           # database.js, s3.js (MinIO), rabbitmq.js, swagger.js
+│       ├── config/           # database.js, s3.js (MinIO), swagger.js
 │       ├── db/               # migrate.js, seed.js, default-vacation-templates.js
 │       ├── tests/            # HTTP-интеграционные тесты (node --test)
 │       ├── cron/             # timesheetCron.js
@@ -194,7 +193,6 @@ worker-cabinet/
 │   ├── pages/                # Dashboard, HRPanel
 │   ├── store/                # Zustand stores (modules, ui, siteSettings)
 │   └── types/                # TypeScript интерфейсы
-├── notification-service/     # Микросервис (RabbitMQ consumer + mailer)
 ├── deploy/                   # Docker Compose, dev/prod скрипты
 └── docker/                   # Docker конфиги (Hermes agent)
 ```

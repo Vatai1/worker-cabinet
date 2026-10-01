@@ -43,6 +43,7 @@ import {
   Bug, FlaskConical, Film, Radio,
 } from 'lucide-react'
 import { OnlineUsersTab } from '@/core/admin/components/OnlineUsersTab'
+import { NotificationDeliveryCard } from '@/core/admin/components/NotificationDeliveryCard'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { TelemetryActions } from '@/shared/components/TelemetryActions'
 import type { TelemetryAction } from '@/shared/lib/telemetry'
@@ -295,6 +296,47 @@ function AuditDetails({ details }: { details: Record<string, unknown> }) {
             )
           })}
         </div>
+      </div>
+    )
+  }
+
+  if (details.method === 'password') {
+    elements.push(<span key="method" className="text-xs text-muted-foreground">Вход по логину и паролю</span>)
+  }
+
+  if (details.method === 'keycloak') {
+    const applied = (details.applied ?? {}) as {
+      userCreated?: boolean
+      organizations?: { slug: string; name: string; role: string }[]
+      department?: string | null
+      groupsReceived?: boolean
+    }
+    const claims = (details.keycloak ?? {}) as Record<string, unknown>
+    const formatClaim = (v: unknown) => (typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v))
+    elements.push(
+      <div key="keycloak" className="w-full space-y-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="rounded bg-blue-100 px-2 py-0.5 font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">Вход через Keycloak</span>
+          {applied.userCreated && <span className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">новый пользователь</span>}
+          {(applied.organizations ?? []).map((o) => (
+            <span key={o.slug} className="rounded bg-muted/60 px-2 py-0.5">{o.name} · {ROLE_LABELS[o.role] || o.role}</span>
+          ))}
+          {applied.department && <span className="rounded bg-muted/60 px-2 py-0.5">Отдел: {applied.department}</span>}
+          {applied.groupsReceived === false && (
+            <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">группы не пришли — организация по умолчанию</span>
+          )}
+        </div>
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Данные из Keycloak ({Object.keys(claims).length})</summary>
+          <div className="mt-1.5 overflow-hidden rounded-lg border border-border/50">
+            {Object.entries(claims).map(([key, value]) => (
+              <div key={key} className="flex gap-3 border-b border-border/30 px-3 py-1.5 last:border-0">
+                <span className="w-44 shrink-0 font-mono text-muted-foreground">{key}</span>
+                <span className="min-w-0 break-all">{formatClaim(value)}</span>
+              </div>
+            ))}
+          </div>
+        </details>
       </div>
     )
   }
@@ -1575,6 +1617,7 @@ function HealthTab() {
           </CardContent>
         </Card>
       </div>
+      <NotificationDeliveryCard />
     </div>
   )
 }

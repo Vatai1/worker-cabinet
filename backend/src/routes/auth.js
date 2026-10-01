@@ -14,6 +14,32 @@ import { permissionsFor } from '../lib/permissions.js'
 
 const router = express.Router()
 
+const TECHNICAL_TOKEN_CLAIMS = new Set([
+  'exp', 'iat', 'nbf', 'auth_time', 'jti', 'iss', 'aud', 'typ', 'azp', 'nonce',
+  'session_state', 'sid', 'acr', 'at_hash', 'c_hash', 'allowed-origins',
+])
+
+async function keycloakLoginDetails(kcPayload, userId, existedBefore) {
+  const claims = Object.fromEntries(Object.entries(kcPayload).filter(([key]) => !TECHNICAL_TOKEN_CLAIMS.has(key)))
+  const orgs = await query(
+    `SELECT o.slug, o.name, uo.org_role FROM user_organizations uo
+     JOIN organizations o ON o.id = uo.org_id
+     WHERE uo.user_id = $1 AND uo.is_active ORDER BY o.id`,
+    [userId]
+  )
+  const dept = await query('SELECT d.name FROM users u LEFT JOIN departments d ON d.id = u.department_id WHERE u.id = $1', [userId])
+  return {
+    method: 'keycloak',
+    keycloak: claims,
+    applied: {
+      userCreated: !existedBefore,
+      organizations: orgs.rows.map((o) => ({ slug: o.slug, name: o.name, role: o.org_role })),
+      department: dept.rows[0]?.name ?? null,
+      groupsReceived: Array.isArray(kcPayload.groups),
+    },
+  }
+}
+
 router.use(sanitizeInput)
 
 router.get('/config', asyncHandler(async (req, res) => {
@@ -63,6 +89,7 @@ router.post('/callback', asyncHandler(async (req, res) => {
   // KC is used here only to establish identity (this one exchange). From this point on,
   // the session is entirely our own: our JWT access token + our own DB-backed refresh token.
   const kcPayload = await verifyKeycloakToken(tokenData.access_token)
+  const existedBefore = (await query('SELECT 1 FROM users WHERE keycloak_guid = $1', [kcPayload.sub])).rows.length > 0
   const user = await findOrCreateUser(kcPayload)
   const statusRow = (await query('SELECT status FROM users WHERE id = $1', [user.id])).rows[0]
   if (statusRow?.status === 'inactive') throw new ForbiddenError(ACCOUNT_DISABLED_MESSAGE)
@@ -78,8 +105,8 @@ router.post('/callback', asyncHandler(async (req, res) => {
   })
 
   await query(
-    `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, ip_address) VALUES ($1, $2, 'login', 'user', $3, $4)`,
-    [user.id, personName(user), String(user.id), getClientIp(req)]
+    `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, ip_address, details) VALUES ($1, $2, 'login', 'user', $3, $4, $5)`,
+    [user.id, personName(user), String(user.id), getClientIp(req), JSON.stringify(await keycloakLoginDetails(kcPayload, user.id, existedBefore))]
   ).catch(() => {})
 
   res.cookie('auth_token', accessToken, { ...cookieOptions(req), maxAge: sessionMs })
@@ -279,8 +306,8 @@ router.post('/login', authLimiter, validateLogin, asyncHandler(async (req, res) 
   })
 
   await query(
-    `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, ip_address) VALUES ($1, $2, 'login', 'user', $3, $4)`,
-    [user.id, personName(user), String(user.id), ip]
+    `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, ip_address, details) VALUES ($1, $2, 'login', 'user', $3, $4, $5)`,
+    [user.id, personName(user), String(user.id), ip, JSON.stringify({ method: 'password' })]
   ).catch(() => {})
 
   let subordinates = []

@@ -1,70 +1,47 @@
 import { query } from './database.js'
-import * as rabbitmq from './rabbitmq.js'
-import { sendToUser } from './ws.js'
-import { sendToUser as sendPushToUser } from '../services/pushService.js'
-import { getNotificationUrl } from './notificationTarget.js'
-import { getPushCopy } from './notificationCopy.js'
 
-async function isModuleEnabled() {
-  const result = await query(
-    "SELECT is_enabled FROM modules WHERE code = 'notifications'"
-  )
+const NO_PUSH_TYPES = ['mailing', 'generic']
+
+async function isModuleEnabled(db) {
+  const result = await db.query("SELECT is_enabled FROM modules WHERE code = 'notifications'")
   return result.rows.length > 0 && result.rows[0].is_enabled
 }
 
-async function getUnreadCount(userId) {
+export async function getUnreadCount(userId) {
   const result = await query(
-    `SELECT COUNT(*) as count FROM notification_queue
-     WHERE user_id = $1 AND read_at IS NULL AND status IN ('pending', 'processing', 'sent')`,
+    'SELECT COUNT(*)::int AS count FROM notification_queue WHERE user_id = $1 AND read_at IS NULL',
     [userId]
   )
-  return parseInt(result.rows[0].count)
+  return result.rows[0].count
 }
 
-export async function notify({ userId, type, data, channel = 'email' }) {
-  const enabled = await isModuleEnabled()
-  if (!enabled) return null
+function deliveryState(type, channel) {
+  return {
+    status: channel === 'email' ? 'pending' : 'sent',
+    pushStatus: NO_PUSH_TYPES.includes(type) ? null : 'pending',
+  }
+}
 
-  const result = await query(
-    `INSERT INTO notification_queue (user_id, type, channel, data, status)
-     VALUES ($1, $2, $3, $4, 'pending')
+export async function notify({ userId, type, data, channel = 'email', db = { query } }) {
+  if (!(await isModuleEnabled(db))) return null
+  const { status, pushStatus } = deliveryState(type, channel)
+  const result = await db.query(
+    `INSERT INTO notification_queue (user_id, type, channel, data, status, push_status)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id`,
-    [userId, type, channel, JSON.stringify(data || {})]
+    [userId, type, channel, JSON.stringify(data || {}), status, pushStatus]
   )
-
-  const notificationId = result.rows[0].id
-
-  try {
-    await rabbitmq.publishNotification({
-      notificationId,
-      userId,
-      type,
-      channel,
-      data,
-    })
-  } catch (err) {
-    console.warn(`[NOTIFY] RabbitMQ publish failed (id=${notificationId}): ${err.message}`)
-  }
-
-  sendToUser(userId, 'notification', { unreadCount: await getUnreadCount(userId) }).catch(() => {})
-
-  if (type !== 'mailing' && type !== 'generic') {
-    const { title, body } = getPushCopy(type, data)
-    const url = getNotificationUrl(type, data, userId)
-    sendPushToUser(userId, { title, body, url }).catch((err) => console.warn(`[PUSH] send failed: ${err.message}`))
-  }
-
-  return notificationId
+  return result.rows[0].id
 }
 
-export async function notifyBatch({ userIds, type, data, channel = 'email' }) {
-  const enabled = await isModuleEnabled()
-  if (!enabled) return []
-
-  const ids = []
-  for (const userId of userIds) {
-    const id = await notify({ userId, type, data, channel })
-    if (id) ids.push(id)
-  }
-  return ids
+export async function notifyBatch({ userIds, type, data, channel = 'email', db = { query } }) {
+  if (userIds.length === 0 || !(await isModuleEnabled(db))) return []
+  const { status, pushStatus } = deliveryState(type, channel)
+  const result = await db.query(
+    `INSERT INTO notification_queue (user_id, type, channel, data, status, push_status)
+     SELECT u, $2, $3, $4, $5, $6 FROM unnest($1::int[]) AS u
+     RETURNING id`,
+    [[...new Set(userIds.map(Number))], type, channel, JSON.stringify(data || {}), status, pushStatus]
+  )
+  return result.rows.map((r) => r.id)
 }

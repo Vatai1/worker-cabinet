@@ -233,7 +233,6 @@ async function installDependencies() {
   log.info('Установка зависимостей...')
   await runCommand('npm', ['install'])
   await runCommand('npm', ['install'], { cwd: join(PROJECT_DIR, 'backend') })
-  await runCommand('npm', ['install'], { cwd: join(PROJECT_DIR, 'notification-service') })
   log.success('Зависимости установлены')
 }
 
