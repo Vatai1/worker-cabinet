@@ -6,8 +6,8 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import {
-  Briefcase, Plane, Tag, Plus, Trash2, Edit3, Check, X,
-  AlertTriangle, Loader2, Users, UserPlus,
+  Briefcase, Plane, Tag, Plus, Trash2, Check, X,
+  AlertTriangle, Loader2, Users, UserPlus, RotateCcw, Settings2,
 } from 'lucide-react'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import {
@@ -43,8 +43,18 @@ const pluralRu = (n: number, one: string, few: string, many: string) => {
   return many
 }
 
+interface TagUser {
+  id: number
+  first_name: string
+  last_name: string
+  middle_name: string | null
+  position: string | null
+  department_name: string | null
+  skills?: string[]
+}
+
 interface DictionariesData {
-  positions: { name: string; count: string }[]
+  positions: { name: string; count: string; genitive: string | null; suggestion: string }[]
   vacationTypes: { id: number; code: string; name: string }[]
   skills: { id: number; name: string }[]
 }
@@ -58,16 +68,10 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   const [newSkill, setNewSkill] = useState('')
   const [newVacationName, setNewVacationName] = useState('')
   const [newVacationCode, setNewVacationCode] = useState('')
-  const [editPositionName, setEditPositionName] = useState<string | null>(null)
-  const [editPositionNewName, setEditPositionNewName] = useState('')
-  const [editSkillId, setEditSkillId] = useState<number | null>(null)
-  const [editSkillName, setEditSkillName] = useState('')
-  const [editVacationId, setEditVacationId] = useState<number | null>(null)
-  const [editVacationName, setEditVacationName] = useState('')
-  const [editVacationCode, setEditVacationCode] = useState('')
+  const [settingsPosition, setSettingsPosition] = useState<DictionariesData['positions'][number] | null>(null)
+  const [editingSkill, setEditingSkill] = useState<DictionariesData['skills'][number] | null>(null)
+  const [editingVacationType, setEditingVacationType] = useState<DictionariesData['vacationTypes'][number] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showPositionUsers, setShowPositionUsers] = useState<string | null>(null)
-  const [assigningTag, setAssigningTag] = useState<{ id: number; name: string } | null>(null)
 
   useEffect(() => { setSearch('') }, [activeDict])
 
@@ -105,26 +109,22 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
-  const updateSkill = async (id: number) => {
-    if (!editSkillName.trim()) return
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/skills/${id}`, {
-        method: 'PUT', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ name: editSkillName.trim() }),
-      })
-      if (res.ok) { setEditSkillId(null); fetchData() }
-      else { const d = await res.json(); setError(d.error) }
-    } catch (err) { setError(getErrorMessage(err)) }
+  const putDictionary = async (path: string, body: object) => {
+    const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/${path}`, {
+      method: 'PUT', headers: getAuthHeadersWithContentType(), body: JSON.stringify(body),
+    })
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Ошибка') }
+    fetchData(true)
   }
 
   const deleteSkill = async (id: number, name: string) => {
     if (!(await confirmDialog({ title: 'Удаление тега', message: `Удалить тег «${name}»? Он пропадёт у всех работников.`, confirmText: 'Удалить', variant: 'danger' }))) return
-    try {
-      await fetchWithRetry(`${API_BASE_URL}/dictionaries/skills/${id}`, {
-        method: 'DELETE', headers: getAuthHeaders(),
-      })
-      fetchData()
-    } catch {}
+    const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/skills/${id}`, {
+      method: 'DELETE', headers: getAuthHeaders(),
+    })
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Ошибка') }
+    setEditingSkill(null)
+    fetchData(true)
   }
 
   const addVacationType = async () => {
@@ -139,18 +139,6 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
-  const updateVacationType = async (id: number) => {
-    if (!editVacationName.trim()) return
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/vacation-types/${id}`, {
-        method: 'PUT', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ name: editVacationName.trim(), code: editVacationCode.trim() }),
-      })
-      if (res.ok) { setEditVacationId(null); fetchData() }
-      else { const d = await res.json(); setError(d.error) }
-    } catch (err) { setError(getErrorMessage(err)) }
-  }
-
   const deleteVacationType = async (id: number, name: string) => {
     if (!(await confirmDialog({ title: 'Удаление типа отпуска', message: `Удалить тип «${name}»?`, confirmText: 'Удалить', variant: 'danger' }))) return
     try {
@@ -161,26 +149,14 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
     } catch {}
   }
 
-  const renamePosition = async (oldName: string) => {
-    if (!editPositionNewName.trim() || editPositionNewName.trim() === oldName) { setEditPositionName(null); return }
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/positions/rename`, {
-        method: 'PUT', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ oldName, newName: editPositionNewName.trim() }),
-      })
-      if (res.ok) { setEditPositionName(null); fetchData() }
-      else { const d = await res.json(); setError(d.error) }
-    } catch (err) { setError(getErrorMessage(err)) }
-  }
-
   const deletePosition = async (name: string) => {
     if (!(await confirmDialog({ title: 'Удаление должности', message: `Удалить должность «${name}»? Она будет очищена в профилях работников.`, confirmText: 'Удалить', variant: 'danger' }))) return
-    try {
-      await fetchWithRetry(`${API_BASE_URL}/dictionaries/positions/${encodeURIComponent(name)}`, {
-        method: 'DELETE', headers: getAuthHeaders(),
-      })
-      fetchData()
-    } catch {}
+    const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/positions/${encodeURIComponent(name)}`, {
+      method: 'DELETE', headers: getAuthHeaders(),
+    })
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Ошибка') }
+    setSettingsPosition(null)
+    fetchData(true)
   }
 
   const q = search.trim().toLowerCase()
@@ -267,38 +243,23 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
                   <FilterHeader label="Должность" sortActive={positionSort.key === 'name'} sortDir={positionSort.dir} onSort={() => positionSort.toggle('name')}
                     filterOptions={filterOptionsOf(data.positions.map(p => p.name))} selected={fPositions} onFilterChange={setFPositions} searchPlaceholder="Поиск должности…" />
                 </th>
+                <th className={TH}>Родительный падеж</th>
                 <th className={cn(TH, 'w-36')}>
                   <FilterHeader label="Работников" sortActive={positionSort.key === 'count'} sortDir={positionSort.dir} onSort={() => positionSort.toggle('count')}
                     filterOptions={COUNT_FILTER_OPTIONS} selected={fPositionCount} onFilterChange={setFPositionCount} />
                 </th>
-                <th className={cn(TH, 'w-24')} />
               </TableHeadRow>
             </thead>
             <tbody>
               {filteredPositions.length === 0 && <TableEmptyRow colSpan={3} icon={Briefcase} title="Должности не найдены" />}
               {positionSort.sorted(filteredPositions, (p, k) => (k === 'count' ? Number(p.count) || 0 : p.name)).map((p) => (
-                <tr key={p.name} onClick={() => editPositionName !== p.name && setShowPositionUsers(p.name)} className={cn(TR, 'group cursor-pointer')}>
-                  {editPositionName === p.name ? (
-                    <td colSpan={3} className={TD} onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center gap-2">
-                        <Input value={editPositionNewName} onChange={e => setEditPositionNewName(e.target.value)} className="h-8 text-[13px]" autoFocus onKeyDown={e => e.key === 'Enter' && renamePosition(p.name)} />
-                        <Button size="sm" variant="outline" onClick={() => renamePosition(p.name)}><Check className="h-3.5 w-3.5" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditPositionName(null)}><X className="h-3.5 w-3.5" /></Button>
-                      </div>
-                    </td>
-                  ) : (
-                    <>
-                      <td className={cn(TD, 'font-medium')}>{p.name}</td>
-                      <td className={TD}><CountBadge count={Number(p.count) || 0} /></td>
-                      <td className={TD}>
-                        <div className="flex justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
-                          <RowAction icon={Users} label="Работники" onClick={() => setShowPositionUsers(p.name)} />
-                          {isAdmin && <RowAction icon={Edit3} label="Переименовать" onClick={() => { setEditPositionName(p.name); setEditPositionNewName(p.name) }} />}
-                          {isAdmin && <RowAction icon={Trash2} label="Удалить" danger onClick={() => deletePosition(p.name)} />}
-                        </div>
-                      </td>
-                    </>
-                  )}
+                <tr key={p.name} onClick={() => setSettingsPosition(p)} className={cn(TR, 'cursor-pointer')}>
+                  <td className={cn(TD, 'font-medium')}>{p.name}</td>
+                  <td className={TD}>
+                    <span className={cn('truncate', !p.genitive && 'text-muted-foreground')}>{p.genitive ?? p.suggestion}</span>
+                    {!p.genitive && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">авто</span>}
+                  </td>
+                  <td className={TD}><CountBadge count={Number(p.count) || 0} /></td>
                 </tr>
               ))}
             </tbody>
@@ -325,28 +286,15 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
             <tbody>
               {filteredVacationTypes.length === 0 && <TableEmptyRow colSpan={3} icon={Plane} title="Ничего не найдено" />}
               {vacationSort.sorted(filteredVacationTypes, (v, k) => (k === 'code' ? v.code : v.name)).map((vt) => (
-                <tr key={vt.id} className={cn(TR, 'group')}>
-                  {editVacationId === vt.id ? (
-                    <td colSpan={3} className={TD}>
-                      <div className="flex items-center gap-2">
-                        <Input value={editVacationName} onChange={e => setEditVacationName(e.target.value)} className="h-8 text-[13px]" autoFocus onKeyDown={e => e.key === 'Enter' && updateVacationType(vt.id)} />
-                        <Input value={editVacationCode} onChange={e => setEditVacationCode(e.target.value)} className="h-8 w-28 text-[13px]" onKeyDown={e => e.key === 'Enter' && updateVacationType(vt.id)} />
-                        <Button size="sm" variant="outline" onClick={() => updateVacationType(vt.id)}><Check className="h-3.5 w-3.5" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditVacationId(null)}><X className="h-3.5 w-3.5" /></Button>
-                      </div>
-                    </td>
-                  ) : (
-                    <>
-                      <td className={cn(TD, 'font-medium')}>{vt.name}</td>
-                      <td className={TD}><span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">{vt.code}</span></td>
-                      <td className={TD}>
-                        <div className="flex justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
-                          <RowAction icon={Edit3} label="Редактировать" onClick={() => { setEditVacationId(vt.id); setEditVacationName(vt.name); setEditVacationCode(vt.code) }} />
-                          <RowAction icon={Trash2} label="Удалить" danger onClick={() => deleteVacationType(vt.id, vt.name)} />
-                        </div>
-                      </td>
-                    </>
-                  )}
+                <tr key={vt.id} onClick={() => setEditingVacationType(vt)} className={cn(TR, 'group cursor-pointer')}>
+                  <td className={cn(TD, 'font-medium')}>{vt.name}</td>
+                  <td className={TD}><span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">{vt.code}</span></td>
+                  <td className={TD}>
+                    <div className="flex justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
+                      <RowAction icon={Settings2} label="Настройки" onClick={() => setEditingVacationType(vt)} />
+                      <RowAction icon={Trash2} label="Удалить" danger onClick={() => deleteVacationType(vt.id, vt.name)} />
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -363,37 +311,17 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
                   <FilterHeader label="Тег" sortActive={skillSort.key === 'name'} sortDir={skillSort.dir} onSort={() => skillSort.toggle('name')}
                     filterOptions={filterOptionsOf(data.skills.map(sk => sk.name))} selected={fSkills} onFilterChange={setFSkills} searchPlaceholder="Поиск тега…" />
                 </th>
-                <th className={cn(TH, 'w-28')} />
               </TableHeadRow>
             </thead>
             <tbody>
-              {filteredSkills.length === 0 && <TableEmptyRow colSpan={2} icon={Tag} title="Ничего не найдено" />}
+              {filteredSkills.length === 0 && <TableEmptyRow colSpan={1} icon={Tag} title="Ничего не найдено" />}
               {skillSort.sorted(filteredSkills, (sk) => sk.name).map((sk) => (
-                <tr key={sk.id} className={cn(TR, 'group')}>
-                  {editSkillId === sk.id ? (
-                    <td colSpan={2} className={TD}>
-                      <div className="flex items-center gap-2">
-                        <Input value={editSkillName} onChange={e => setEditSkillName(e.target.value)} className="h-8 text-[13px]" autoFocus onKeyDown={e => e.key === 'Enter' && updateSkill(sk.id)} />
-                        <Button size="sm" variant="outline" onClick={() => updateSkill(sk.id)}><Check className="h-3.5 w-3.5" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditSkillId(null)}><X className="h-3.5 w-3.5" /></Button>
-                      </div>
-                    </td>
-                  ) : (
-                    <>
-                      <td className={TD}>
-                        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-0.5 text-[12px] font-medium">
-                          <Tag className="h-3 w-3 text-muted-foreground" /> {sk.name}
-                        </span>
-                      </td>
-                      <td className={TD}>
-                        <div className="flex justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
-                          <RowAction icon={UserPlus} label="Назначить работникам" onClick={() => setAssigningTag({ id: sk.id, name: sk.name })} />
-                          <RowAction icon={Edit3} label="Переименовать" onClick={() => { setEditSkillId(sk.id); setEditSkillName(sk.name) }} />
-                          <RowAction icon={Trash2} label="Удалить" danger onClick={() => deleteSkill(sk.id, sk.name)} />
-                        </div>
-                      </td>
-                    </>
-                  )}
+                <tr key={sk.id} onClick={() => setEditingSkill(sk)} className={cn(TR, 'cursor-pointer')}>
+                  <td className={TD}>
+                    <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-0.5 text-[12px] font-medium">
+                      <Tag className="h-3 w-3 text-muted-foreground" /> {sk.name}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -401,22 +329,446 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
         )
       )}
 
-      {showPositionUsers && (
-        <PositionUsersModal position={showPositionUsers} isAdmin={isAdmin} onClose={() => setShowPositionUsers(null)} />
-      )}
-
-      {assigningTag && (
-        <AssignTagModal
-          tag={assigningTag}
-          onClose={() => setAssigningTag(null)}
-          onAssigned={() => fetchData(true)}
+      {editingVacationType && (
+        <DictEditModal
+          icon={Plane}
+          title="Настройки типа отпуска"
+          subtitle={editingVacationType.name}
+          fields={[
+            { id: 'name', label: 'Название', initial: editingVacationType.name },
+            { id: 'code', label: 'Код', initial: editingVacationType.code, mono: true },
+          ]}
+          onSave={async (v) => { await putDictionary(`vacation-types/${editingVacationType.id}`, { name: v.name, code: v.code }); setEditingVacationType(null) }}
+          onClose={() => setEditingVacationType(null)}
         />
       )}
+
+      {editingSkill && (
+        <TagSettingsModal
+          tag={editingSkill}
+          onDelete={() => deleteSkill(editingSkill.id, editingSkill.name)}
+          onClose={() => setEditingSkill(null)}
+          onSaved={() => { setEditingSkill(null); fetchData(true) }}
+        />
+      )}
+
+      {settingsPosition && (
+        <PositionSettingsModal
+          position={settingsPosition}
+          isAdmin={isAdmin}
+          onDelete={() => deletePosition(settingsPosition.name)}
+          onClose={() => setSettingsPosition(null)}
+          onSaved={() => { setSettingsPosition(null); fetchData(true) }}
+        />
+      )}
+
     </TableCard>
   )
 }
 
-function PositionUsersModal({ position, isAdmin, onClose }: { position: string; isAdmin: boolean; onClose: () => void }) {
+function DictEditModal({ icon: Icon, title, subtitle, fields, onSave, onClose }: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  subtitle: string
+  fields: { id: string; label: string; initial: string; mono?: boolean }[]
+  onSave: (values: Record<string, string>) => Promise<void>
+  onClose: () => void
+}) {
+  const [values, setValues] = useState(() => Object.fromEntries(fields.map(f => [f.id, f.initial])))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const trimmed = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim()]))
+  const canSave = fields.every(f => trimmed[f.id]) && fields.some(f => trimmed[f.id] !== f.initial)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !saving) onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose, saving])
+
+  const save = async () => {
+    if (!canSave) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(trimmed)
+    } catch (err) {
+      setError(getErrorMessage(err))
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => !saving && onClose()}>
+      <form
+        className="mx-4 flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-scale-in"
+        onClick={e => e.stopPropagation()}
+        onSubmit={e => { e.preventDefault(); save() }}
+      >
+        <div className="flex items-center justify-between border-b border-border p-5">
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-5 w-5 text-muted-foreground" /> {title}</h3>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>
+          </div>
+          <button type="button" onClick={onClose} disabled={saving} aria-label="Закрыть" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="space-y-4 p-5">
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              {error}
+            </div>
+          )}
+          {fields.map((f, i) => (
+            <div key={f.id} className="space-y-1.5">
+              <label htmlFor={`dict-${f.id}`} className="text-xs font-medium text-muted-foreground">{f.label}</label>
+              <Input
+                id={`dict-${f.id}`}
+                value={values[f.id]}
+                onChange={e => setValues(prev => ({ ...prev, [f.id]: e.target.value }))}
+                className={cn(f.mono && 'font-mono')}
+                autoFocus={i === 0}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-border p-4">
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Отмена</Button>
+          <Button type="submit" disabled={saving || !canSave}>
+            {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
+            Сохранить
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function DictEntityModal({ icon: Icon, title, subtitle, tabs, tab, onTabChange, busy, canSave, onSave, onDelete, onClose, children }: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  subtitle: string
+  tabs: { id: string; label: string; icon: React.ComponentType<{ className?: string }> }[]
+  tab: string
+  onTabChange: (tab: string) => void
+  busy: boolean
+  canSave: boolean
+  onSave: () => void
+  onDelete?: () => void
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !busy) onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose, busy])
+
+  const isSettings = tab === 'settings'
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => !busy && onClose()}>
+      <form
+        className="mx-4 flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-scale-in"
+        onClick={e => e.stopPropagation()}
+        onSubmit={e => { e.preventDefault(); if (isSettings && canSave) onSave() }}
+      >
+        <div className="shrink-0 border-b border-border px-5 pt-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-5 w-5 shrink-0 text-muted-foreground" /> <span className="truncate">{title}</span></h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+            </div>
+            <button type="button" onClick={onClose} disabled={busy} aria-label="Закрыть" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
+          </div>
+          <div className="mt-4 flex gap-4" role="tablist">
+            {tabs.map(({ id, label, icon: TabIcon }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => onTabChange(id)}
+                className={cn(
+                  '-mb-px flex items-center gap-1.5 border-b-2 pb-2.5 text-sm font-medium transition-colors',
+                  tab === id ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <TabIcon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin overscroll-contain p-5">{children}</div>
+        <div className="flex shrink-0 items-center gap-2 border-t border-border p-4">
+          {onDelete && (
+            <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete} disabled={busy}>
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Удалить
+            </Button>
+          )}
+          <div className="ml-auto flex gap-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{isSettings ? 'Отмена' : 'Закрыть'}</Button>
+            {isSettings && (
+              <Button type="submit" disabled={busy || !canSave}>
+                {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
+                Сохранить
+              </Button>
+            )}
+          </div>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function ModalError({ error }: { error: string | null }) {
+  if (!error) return null
+  return (
+    <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      {error}
+    </div>
+  )
+}
+
+function PositionSettingsModal({ position, isAdmin, onDelete, onClose, onSaved }: {
+  position: DictionariesData['positions'][number]
+  isAdmin: boolean
+  onDelete: () => Promise<void>
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const canRename = isAdmin
+  const [tab, setTab] = useState<'settings' | 'users'>('settings')
+  const [name, setName] = useState(position.name)
+  const [genitive, setGenitive] = useState(position.genitive ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const newName = name.trim()
+  const nameChanged = newName !== position.name
+  const genitiveChanged = genitive.trim() !== (position.genitive ?? '')
+  const canSave = !!newName && (nameChanged || genitiveChanged)
+
+  const put = async (path: string, body: object) => {
+    const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/positions/${path}`, {
+      method: 'PUT', headers: getAuthHeadersWithContentType(), body: JSON.stringify(body),
+    })
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Ошибка') }
+  }
+
+  const save = async () => {
+    if (!canSave) return
+    setSaving(true)
+    setError(null)
+    try {
+      if (nameChanged) await put('rename', { oldName: position.name, newName })
+      if (genitiveChanged || (nameChanged && genitive.trim())) await put('genitive', { name: newName, genitive: genitive.trim() })
+      onSaved()
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await onDelete()
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const count = Number(position.count) || 0
+
+  return (
+    <DictEntityModal
+      icon={Briefcase}
+      title={position.name}
+      subtitle={`Должность · ${count} ${pluralRu(count, 'работник', 'работника', 'работников')}`}
+      tabs={[{ id: 'settings', label: 'Настройки', icon: Settings2 }, { id: 'users', label: `Работники (${count})`, icon: Users }]}
+      tab={tab}
+      onTabChange={(t) => setTab(t as typeof tab)}
+      busy={saving}
+      canSave={canSave}
+      onSave={save}
+      onDelete={isAdmin ? remove : undefined}
+      onClose={onClose}
+    >
+      <div className="space-y-4">
+        <ModalError error={error} />
+        {tab === 'users' ? <PositionUsersList position={position.name} isAdmin={isAdmin} /> : <>
+          <div className="space-y-1.5">
+            <label htmlFor="position-name" className="text-xs font-medium text-muted-foreground">Название</label>
+            <Input id="position-name" value={name} onChange={e => setName(e.target.value)} disabled={!canRename} autoFocus={canRename} />
+            {canRename && nameChanged && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">Должность изменится у всех работников ({Number(position.count) || 0}). Проверьте склонение для нового названия.</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="position-genitive" className="text-xs font-medium text-muted-foreground">Родительный падеж (кого? чего?)</label>
+            <div className="flex gap-2">
+              <Input
+                id="position-genitive"
+                value={genitive}
+                onChange={e => setGenitive(e.target.value)}
+                placeholder={position.suggestion}
+                autoFocus={!canRename}
+              />
+              {genitive && (
+                <Button type="button" variant="ghost" size="sm" className="h-10 shrink-0" onClick={() => setGenitive('')} title="Вернуть автоматическое">
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {genitive ? 'Задано вручную.' : <>Сейчас автоматически: «{position.suggestion}».</>} Подставляется в документы как {'{position_gen}'}.
+            </p>
+          </div>
+        </>}
+      </div>
+    </DictEntityModal>
+  )
+}
+
+function TagSettingsModal({ tag, onDelete, onClose, onSaved }: {
+  tag: DictionariesData['skills'][number]
+  onDelete: () => Promise<void>
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [tab, setTab] = useState<'settings' | 'users'>('settings')
+  const [name, setName] = useState(tag.name)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [users, setUsers] = useState<TagUser[] | null>(null)
+  const [assigning, setAssigning] = useState(false)
+  const [removingId, setRemovingId] = useState<number | null>(null)
+
+  const loadUsers = useCallback(() => {
+    fetchWithRetry(`${API_BASE_URL}/users?limit=1000`, { headers: getAuthHeaders() })
+      .then(r => (r.ok ? r.json() : []))
+      .then((data) => setUsers(((data.users || data || []) as TagUser[]).filter(u => u.skills?.includes(tag.name))))
+      .catch(() => setUsers([]))
+  }, [tag.name])
+
+  useEffect(() => { loadUsers() }, [loadUsers])
+
+  const newName = name.trim()
+  const canSave = !!newName && newName !== tag.name
+  const count = users?.length
+
+  const run = async (action: () => Promise<void>) => {
+    setSaving(true)
+    setError(null)
+    try {
+      await action()
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const save = () => run(async () => {
+    const res = await fetchWithRetry(`${API_BASE_URL}/dictionaries/skills/${tag.id}`, {
+      method: 'PUT', headers: getAuthHeadersWithContentType(), body: JSON.stringify({ name: newName }),
+    })
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Ошибка') }
+    onSaved()
+  })
+
+  const removeUser = async (u: TagUser) => {
+    setRemovingId(u.id)
+    setError(null)
+    try {
+      const res = await fetchWithRetry(`${API_BASE_URL}/users/${u.id}/skills`, {
+        method: 'DELETE', headers: getAuthHeadersWithContentType(), body: JSON.stringify({ skill: tag.name }),
+      })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Ошибка') }
+      setUsers(prev => prev?.filter(x => x.id !== u.id) ?? prev)
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
+  return (
+    <>
+      <DictEntityModal
+        icon={Tag}
+        title={tag.name}
+        subtitle={count === undefined ? 'Тег' : `Тег · ${count} ${pluralRu(count, 'работник', 'работника', 'работников')}`}
+        tabs={[{ id: 'settings', label: 'Настройки', icon: Settings2 }, { id: 'users', label: count === undefined ? 'Работники' : `Работники (${count})`, icon: Users }]}
+        tab={tab}
+        onTabChange={(t) => setTab(t as typeof tab)}
+        busy={saving || assigning}
+        canSave={canSave}
+        onSave={save}
+        onDelete={() => run(onDelete)}
+        onClose={onClose}
+      >
+        <div className="space-y-4">
+          <ModalError error={error} />
+          {tab === 'settings' ? (
+            <div className="space-y-1.5">
+              <label htmlFor="tag-name" className="text-xs font-medium text-muted-foreground">Название</label>
+              <Input id="tag-name" value={name} onChange={e => setName(e.target.value)} autoFocus />
+              {canSave && !!count && <p className="text-[11px] text-amber-600 dark:text-amber-400">Тег переименуется у всех работников ({count}).</p>}
+            </div>
+          ) : (
+            <>
+              <Button type="button" size="sm" variant="outline" onClick={() => setAssigning(true)}>
+                <UserPlus className="mr-1.5 h-4 w-4" />
+                Назначить работникам
+              </Button>
+              {users === null ? (
+                <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : users.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+                  <Users className="h-10 w-10 opacity-20" />
+                  <p className="text-sm">Тег пока никому не назначен</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {users.map(u => (
+                    <div key={u.id} className="group flex items-center gap-3 rounded-lg p-2.5 hover:bg-muted/30">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 text-xs font-semibold text-primary">
+                        {u.first_name?.[0]}{u.last_name?.[0]}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{personName(u.last_name, u.first_name, u.middle_name)}</p>
+                        <p className="truncate text-xs text-muted-foreground">{[u.position, u.department_name].filter(Boolean).join(' · ')}</p>
+                      </div>
+                      <Button type="button" size="sm" variant="ghost" title="Снять тег" disabled={removingId === u.id} onClick={() => removeUser(u)} className="opacity-60 group-hover:opacity-100">
+                        {removingId === u.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </DictEntityModal>
+      {assigning && <AssignTagModal tag={tag} onClose={() => setAssigning(false)} onAssigned={loadUsers} />}
+    </>
+  )
+}
+
+function PositionUsersList({ position, isAdmin }: { position: string; isAdmin: boolean }) {
   const [users, setUsers] = useState<{ id: number; first_name: string; last_name: string; middle_name: string | null; email: string; department_name: string | null; role: string; status: string }[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -431,59 +783,38 @@ function PositionUsersModal({ position, isAdmin, onClose }: { position: string; 
       .finally(() => setLoading(false))
   }, [position, isAdmin])
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col overflow-hidden border border-border" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-border shrink-0">
-          <div>
-            <h3 className="font-semibold text-lg flex items-center gap-2"><Briefcase className="h-5 w-5 text-muted-foreground" /> {position}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Работники на этой должности</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-4">
-          {loading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-          ) : users.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
-              <Users className="h-10 w-10 opacity-20" />
-              <p className="text-sm">Нет работников на этой должности</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {users.map(u => {
-                const fullName = personName(u.last_name, u.first_name, u.middle_name)
-                return (
-                  <div key={u.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/30 transition-colors">
-                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
-                      {u.first_name?.[0]}{u.last_name?.[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium truncate">{fullName}</span>
-                        <span className={cn('inline-flex items-center rounded-lg border border-transparent px-2.5 py-0.5 text-[10px] font-medium', STATUS_COLORS[u.status])}>{STATUS_LABELS[u.status]}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                        <span className="truncate">{u.email}</span>
-                        {u.department_name && <span>· {u.department_name}</span>}
-                        <span>· {ROLE_LABELS[u.role] || u.role}</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+  if (users.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
+        <Users className="h-10 w-10 opacity-20" />
+        <p className="text-sm">Нет работников на этой должности</p>
       </div>
+    )
+  }
+  return (
+    <div className="space-y-1">
+      {users.map(u => {
+        const fullName = personName(u.last_name, u.first_name, u.middle_name)
+        return (
+          <div key={u.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/30 transition-colors">
+            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+              {u.first_name?.[0]}{u.last_name?.[0]}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium truncate">{fullName}</span>
+                <span className={cn('inline-flex items-center rounded-lg border border-transparent px-2.5 py-0.5 text-[10px] font-medium', STATUS_COLORS[u.status])}>{STATUS_LABELS[u.status]}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                <span className="truncate">{u.email}</span>
+                {u.department_name && <span>· {u.department_name}</span>}
+                <span>· {ROLE_LABELS[u.role] || u.role}</span>
+              </div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

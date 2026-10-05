@@ -16,6 +16,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { requirePermission, invalidatePermissionCache } from '../lib/permissions.js'
 import { deliveryStats, retryFailedEmails } from '../lib/notificationDelivery.js'
+import { suggestPositionGenitive } from '../lib/nameGenitive.js'
 
 const require = createRequire(import.meta.url)
 const pkg = require('../../package.json')
@@ -1634,12 +1635,13 @@ router.get('/dictionaries', asyncHandler(async (req, res) => {
   const vacationTypesQuery = orgScopedQuery('SELECT id, code, name FROM vacation_types ORDER BY name', [], req)
   const skillsQuery = orgScopedQuery('SELECT id, name FROM skills_dictionary ORDER BY name', [], req)
   const [positions, vacationTypes, skills] = await Promise.all([
-    query('SELECT DISTINCT position as name, COUNT(*) as count FROM users GROUP BY position ORDER BY position'),
+    query(`SELECT p.name, p.count, pg.genitive FROM (SELECT position AS name, COUNT(*) AS count FROM users GROUP BY position) p
+      LEFT JOIN position_genitives pg ON pg.name = p.name ORDER BY p.name`),
     query(vacationTypesQuery.text, vacationTypesQuery.values),
     query(skillsQuery.text, skillsQuery.values),
   ])
 
-  res.json({ positions: positions.rows, vacationTypes: vacationTypes.rows, skills: skills.rows })
+  res.json({ positions: positions.rows.map((p) => ({ ...p, suggestion: suggestPositionGenitive(p.name) })), vacationTypes: vacationTypes.rows, skills: skills.rows })
 }))
 
 /**

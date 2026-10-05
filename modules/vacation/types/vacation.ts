@@ -144,6 +144,7 @@ export interface VacationBalance {
   lastAccrualDate: string
   
   travelAvailable: boolean
+  travelPending?: boolean
   travelNextAvailableDate?: string
   travelAvailableUntil?: string
   travelLastUsedDate?: string

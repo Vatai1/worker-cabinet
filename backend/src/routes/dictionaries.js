@@ -53,6 +53,22 @@ const uploadDocTemplate = multer({
 
 const router = express.Router()
 
+async function savePositionGenitive(body) {
+  const name = String(body?.name ?? '').trim()
+  if (!name) throw new ValidationError('Укажите должность')
+  const genitive = String(body?.genitive ?? '').trim().slice(0, 255)
+  if (genitive) {
+    await query(
+      `INSERT INTO position_genitives (name, genitive, updated_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (name) DO UPDATE SET genitive = EXCLUDED.genitive, updated_at = NOW()`,
+      [name, genitive]
+    )
+  } else {
+    await query('DELETE FROM position_genitives WHERE name = $1', [name])
+  }
+  return { name, genitive: genitive || null, suggestion: suggestPositionGenitive(name) }
+}
+
 /**
  * @swagger
  * /dictionaries/departments:
@@ -750,13 +766,36 @@ router.delete('/vacation-types/:id', authenticateToken, requirePermission('dicti
  */
 router.get('/positions', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const result = await query(
-    `SELECT DISTINCT position as name, COUNT(*)::int as count
-     FROM users
-     WHERE position IS NOT NULL AND position != ''
-     GROUP BY position
-     ORDER BY position`
+    `SELECT p.name, p.count, pg.genitive FROM (
+       SELECT position AS name, COUNT(*)::int AS count
+       FROM users
+       WHERE position IS NOT NULL AND position != ''
+       GROUP BY position
+     ) p LEFT JOIN position_genitives pg ON pg.name = p.name
+     ORDER BY p.name`
   )
-  res.json(result.rows)
+  res.json(result.rows.map((p) => ({ ...p, suggestion: suggestPositionGenitive(p.name) })))
+}))
+
+/**
+ * @swagger
+ * /dictionaries/positions/genitive:
+ *   put:
+ *     tags: [Dictionaries]
+ *     summary: Сохранить должность в родительном падеже из справочника должностей (пустое значение — вернуть автоматическое)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               genitive: { type: string }
+ */
+router.put('/positions/genitive', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
+  res.json(await savePositionGenitive(req.body))
 }))
 
 router.put('/positions/rename', authenticateToken, requirePermission('dictionaries:positions'), asyncHandler(async (req, res) => {
@@ -1329,19 +1368,7 @@ router.put('/declensions/departments/:id', authenticateToken, requirePermission(
  *               genitive: { type: string }
  */
 router.put('/declensions/positions', authenticateToken, requirePermission('documents:templates'), asyncHandler(async (req, res) => {
-  const name = String(req.body?.name ?? '').trim()
-  if (!name) throw new ValidationError('Укажите должность')
-  const genitive = String(req.body?.genitive ?? '').trim().slice(0, 255)
-  if (genitive) {
-    await query(
-      `INSERT INTO position_genitives (name, genitive, updated_at) VALUES ($1, $2, NOW())
-       ON CONFLICT (name) DO UPDATE SET genitive = EXCLUDED.genitive, updated_at = NOW()`,
-      [name, genitive]
-    )
-  } else {
-    await query('DELETE FROM position_genitives WHERE name = $1', [name])
-  }
-  res.json({ name, genitive: genitive || null, suggestion: suggestPositionGenitive(name) })
+  res.json(await savePositionGenitive(req.body))
 }))
 
 /**

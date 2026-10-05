@@ -226,7 +226,7 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
           if (!balance?.travelAvailable) {
             errors.push({
               field: 'travel',
-              message: 'Проезд недоступен',
+              message: balance?.travelPending ? 'Уже есть заявка с проездом на согласовании' : 'Проезд недоступен',
               details: {
                 nextAvailableDate: balance?.travelNextAvailableDate,
               },

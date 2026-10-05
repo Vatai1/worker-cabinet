@@ -197,6 +197,7 @@ export const vacationApi = {
       reservedDays: data.reserved_days ?? 0,
       lastAccrualDate: data.last_accrual_date,
       travelAvailable: data.travel_available ?? false,
+      travelPending: data.travel_pending ?? false,
       travelNextAvailableDate: data.travel_next_available_date,
       travelAvailableUntil: data.travel_available_until,
       hireDate: data.hire_date?.split('T')[0],

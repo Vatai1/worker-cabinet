@@ -29,6 +29,7 @@ interface CreateVacationFormModalProps {
   balance?: {
     availableDays: number
     travelAvailable: boolean
+    travelPending?: boolean
     travelNextAvailableDate?: string
     travelAvailableUntil?: string
   }
@@ -329,7 +330,7 @@ export function CreateVacationFormModal({
                  </p>
                ) : (
                  <p className="text-xs text-destructive mt-1">
-                   Проезд недоступен до {balance?.travelNextAvailableDate ? new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU') : 'неизвестной даты'}
+                   {balance?.travelPending ? 'Проезд уже указан в заявке на согласовании' : `Проезд недоступен до ${balance?.travelNextAvailableDate ? new Date(balance.travelNextAvailableDate).toLocaleDateString('ru-RU') : 'неизвестной даты'}`}
                  </p>
                )}
               </div>

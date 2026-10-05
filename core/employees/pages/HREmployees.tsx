@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import {
   Users, Search, RotateCcw, X, Loader2, ChevronUp, ChevronDown, ArrowUpDown,
   User as UserIcon, Building2, Tag, Wallet, Lock, ShieldCheck, Globe, Unlock, Star, Trash2,
-  ChevronRight,
+  ChevronRight, Plane, Server, KeyRound,
 } from 'lucide-react'
 import { Card } from '@/shared/components/ui/Card'
 import { FilterHeader, TableEmptyRow } from '@/shared/components/ui/DataTable'
@@ -114,6 +114,150 @@ type SortKey = 'name' | 'position' | 'department'
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1]
 
+interface TechnicalInfo {
+  id: number
+  email: string
+  keycloak_guid: string | null
+  created_at: string | null
+  updated_at: string | null
+  last_seen_at: string | null
+  locked_until: string | null
+  failed_login_count: number | null
+  logins_count: number
+  last_login: { at: string; ip: string | null; method: string | null } | null
+  keycloak_login: {
+    at: string
+    claims: Record<string, unknown>
+    applied: { userCreated?: boolean; organizations?: { slug: string; name: string; role: string }[]; department?: string | null; orgSource?: string } | null
+  } | null
+}
+
+type EmployeeModalTab = 'main' | 'vacation' | 'service'
+
+interface TravelState {
+  hire_date: string | null
+  last_used_date: string | null
+  next_available_date: string | null
+  pending: boolean
+}
+
+const addYears = (date: string, years: number) => {
+  const d = new Date(`${date}T00:00:00`)
+  d.setFullYear(d.getFullYear() + years)
+  return d
+}
+
+const formatDay = (d: Date) => d.toLocaleDateString('ru-RU')
+
+function workingYear(hireDate: string | null) {
+  if (!hireDate) return null
+  const today = new Date()
+  let start = new Date(`${hireDate.slice(0, 10)}T00:00:00`)
+  start.setFullYear(today.getFullYear())
+  if (start > today) start.setFullYear(today.getFullYear() - 1)
+  if (start < new Date(`${hireDate.slice(0, 10)}T00:00:00`)) start = new Date(`${hireDate.slice(0, 10)}T00:00:00`)
+  const end = new Date(start)
+  end.setFullYear(end.getFullYear() + 1)
+  end.setDate(end.getDate() - 1)
+  return { start, end }
+}
+
+const EMPLOYEE_MODAL_TABS: { id: EmployeeModalTab; label: string; icon: typeof UserIcon }[] = [
+  { id: 'main', label: 'Основная информация', icon: UserIcon },
+  { id: 'vacation', label: 'Отпуск', icon: Plane },
+  { id: 'service', label: 'Служебная информация', icon: Server },
+]
+
+const LOGIN_METHOD_LABELS: Record<string, string> = { keycloak: 'Keycloak', password: 'пароль' }
+const ORG_SOURCE_LABELS: Record<string, string> = { groups: 'группы Keycloak', company: 'атрибут company', default: 'организация по умолчанию' }
+
+const formatDateTime = (value: string | null | undefined) => (value ? new Date(value).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' }) : '—')
+
+function InfoRow({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
+  return (
+    <div className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-3 px-3 py-2 text-sm">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className={cn('min-w-0 break-all', mono && 'font-mono text-xs')}>{children}</span>
+    </div>
+  )
+}
+
+function TechnicalInfoSection({ userId }: { userId: number }) {
+  const [info, setInfo] = useState<TechnicalInfo | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    apiGet<TechnicalInfo>(`/users/${userId}/technical`).then(setInfo).catch((err) => setError(getErrorMessage(err)))
+  }, [userId])
+
+  if (error) return <p className="text-xs text-destructive">{error}</p>
+  if (!info) return <div className="flex justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+
+  const kc = info.keycloak_login
+  const locked = info.locked_until && new Date(info.locked_until) > new Date()
+  return (
+    <div className="space-y-5">
+      <section>
+        <p className="flex items-center gap-2 text-sm font-semibold mb-3">
+          <Server className="h-4 w-4 text-muted-foreground" /> Учётная запись
+        </p>
+        <div className="divide-y divide-border/60 rounded-xl border border-border/60">
+          <InfoRow label="ID" mono>{info.id}</InfoRow>
+          <InfoRow label="Email" mono>{info.email}</InfoRow>
+          <InfoRow label="Keycloak ID" mono>{info.keycloak_guid || <span className="font-sans text-muted-foreground">не привязан</span>}</InfoRow>
+          <InfoRow label="Создан">{formatDateTime(info.created_at)}</InfoRow>
+          <InfoRow label="Изменён">{formatDateTime(info.updated_at)}</InfoRow>
+          <InfoRow label="Последняя активность">{formatDateTime(info.last_seen_at)}</InfoRow>
+          <InfoRow label="Последний вход">
+            {info.last_login
+              ? <>{formatDateTime(info.last_login.at)} · {LOGIN_METHOD_LABELS[info.last_login.method ?? ''] || info.last_login.method || '—'}{info.last_login.ip && <span className="text-muted-foreground"> · {info.last_login.ip}</span>}</>
+              : '—'}
+          </InfoRow>
+          <InfoRow label="Всего входов">{info.logins_count}</InfoRow>
+          <InfoRow label="Неудачных попыток">
+            {info.failed_login_count ?? 0}
+            {locked && <span className="ml-2 text-destructive">заблокирован до {formatDateTime(info.locked_until)}</span>}
+          </InfoRow>
+        </div>
+      </section>
+
+      <section>
+        <p className="flex items-center gap-2 text-sm font-semibold mb-3">
+          <KeyRound className="h-4 w-4 text-muted-foreground" /> Данные из Keycloak
+        </p>
+        {!kc ? (
+          <p className="rounded-xl border border-dashed border-border/70 px-3 py-4 text-center text-xs text-muted-foreground">Работник ещё не входил через Keycloak</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="divide-y divide-border/60 rounded-xl border border-border/60">
+              <InfoRow label="Последний вход через KC">{formatDateTime(kc.at)}</InfoRow>
+              {kc.applied?.orgSource && <InfoRow label="Организация определена по">{ORG_SOURCE_LABELS[kc.applied.orgSource] || kc.applied.orgSource}</InfoRow>}
+              {kc.applied?.organizations && (
+                <InfoRow label="Организации">
+                  {kc.applied.organizations.length ? kc.applied.organizations.map((o) => `${o.name} (${o.role})`).join(', ') : '—'}
+                </InfoRow>
+              )}
+              {kc.applied && <InfoRow label="Отдел">{kc.applied.department || '—'}</InfoRow>}
+              {kc.applied?.userCreated && <InfoRow label="Создан при входе">да</InfoRow>}
+            </div>
+            <details className="group rounded-xl border border-border/60">
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium [&::-webkit-details-marker]:hidden">
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-90" />
+                Атрибуты токена ({Object.keys(kc.claims).length})
+              </summary>
+              <div className="divide-y divide-border/60 border-t border-border/60">
+                {Object.entries(kc.claims).map(([key, value]) => (
+                  <InfoRow key={key} label={key} mono>{typeof value === 'string' ? value : JSON.stringify(value)}</InfoRow>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
 async function deleteSkillByName(userId: number, skill: string) {
   const response = await fetch(`${API_BASE_URL}/users/${userId}/skills`, {
     method: 'DELETE',
@@ -153,6 +297,7 @@ function EmployeeSettingsModal({
   onUpdated: (id: number, patch: Partial<EmployeeRow>) => void
 }) {
   useModalOpen(true)
+  const [tab, setTab] = useState<EmployeeModalTab>('main')
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -223,6 +368,22 @@ function EmployeeSettingsModal({
   const [reservedDays, setReservedDays] = useState(employee.reserved_days ?? null)
   const [availableDays, setAvailableDays] = useState(employee.available_days ?? null)
   const [balanceLoading, setBalanceLoading] = useState(false)
+
+  // Travel section
+  const [travel, setTravel] = useState<TravelState | null>(null)
+  const [travelLastUsed, setTravelLastUsed] = useState('')
+  const [travelNext, setTravelNext] = useState('')
+
+  useEffect(() => {
+    if (!currentOrgId) return
+    apiGet<TravelState>(`/vacation/travel/${employee.id}`)
+      .then((t) => {
+        setTravel(t)
+        setTravelLastUsed(t.last_used_date?.slice(0, 10) ?? '')
+        setTravelNext(t.next_available_date?.slice(0, 10) ?? '')
+      })
+      .catch(() => setTravel(null))
+  }, [employee.id, currentOrgId])
 
   // Account section (admin only): global status + system role + password reset
   const [status, setStatus] = useState(employee.status)
@@ -299,6 +460,10 @@ function EmployeeSettingsModal({
       toast.error('Некорректное число дней в балансе отпуска')
       return
     }
+    if (travelLastUsed && travelNext && travelNext < travelLastUsed) {
+      toast.error('Дата доступности проезда не может быть раньше последнего использования')
+      return
+    }
     setSavingAll(true)
     try {
       const tasks: Promise<unknown>[] = [
@@ -322,6 +487,13 @@ function EmployeeSettingsModal({
           return
         }
         tasks.push(apiPut(`/users/${employee.id}/name-genitive`, genitive))
+      }
+      const travelChanged = travel && (travelLastUsed !== (travel.last_used_date?.slice(0, 10) ?? '') || travelNext !== (travel.next_available_date?.slice(0, 10) ?? ''))
+      if (travelChanged) {
+        tasks.push(
+          apiPut<TravelState>(`/vacation/travel/${employee.id}`, { last_used_date: travelLastUsed || null, next_available_date: travelNext || null })
+            .then((t) => { setTravel(t); setTravelNext(t.next_available_date?.slice(0, 10) ?? '') }),
+        )
       }
       if (genitiveAction === 'reset') tasks.push(apiPut(`/users/${employee.id}/name-genitive`, { reset: true }))
       if (currentOrgId) {
@@ -512,6 +684,15 @@ function EmployeeSettingsModal({
     }
   }
 
+  const workYear = workingYear(hireDate || null)
+  const travelStatus = !travel
+    ? { label: '', tone: '' }
+    : travel.pending
+      ? { label: 'Заявка на согласовании', tone: 'border-amber-500/30 text-amber-600 dark:text-amber-400' }
+      : travelNext && travelNext <= new Date().toLocaleDateString('sv-SE')
+        ? { label: 'Доступен', tone: 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400' }
+        : { label: travelNext ? `Недоступен до ${formatDay(addYears(travelNext, 0))}` : 'Недоступен', tone: 'border-border text-muted-foreground' }
+
   const availableOrgsToAdd = allOrgs.filter((o) => !memberships.some((m) => m.id === o.id))
 
   return createPortal(
@@ -533,7 +714,27 @@ function EmployeeSettingsModal({
           </button>
         </div>
 
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-5" role="tablist">
+          {EMPLOYEE_MODAL_TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+              className={cn(
+                '-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-2 py-2.5 text-sm font-medium transition-colors',
+                tab === id ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-5 space-y-6">
+          {tab === 'main' && <>
           {/* Profile */}
           <section>
             <p className="flex items-center gap-2 text-sm font-semibold mb-3">
@@ -666,8 +867,11 @@ function EmployeeSettingsModal({
             )}
           </section>
 
+          </>}
+
+          {tab === 'vacation' && <>
           {/* Balance */}
-          <section className="pt-5 border-t border-border">
+          <section>
             <p className="flex items-center gap-2 text-sm font-semibold mb-3">
               <Wallet className="h-4 w-4 text-muted-foreground" /> Баланс отпусков
             </p>
@@ -698,7 +902,42 @@ function EmployeeSettingsModal({
                 ? 'Загрузка…'
                 : `Использовано: ${usedDays ?? '—'} · Зарезервировано: ${reservedDays ?? '—'} · Доступно: ${availableDays ?? '—'}`}
             </p>
+            {workYear && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Текущий рабочий год: {formatDay(workYear.start)} — {formatDay(workYear.end)} (от даты найма)
+              </p>
+            )}
           </section>
+
+          {travel && (
+            <section className="pt-5 border-t border-border">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  <Plane className="h-4 w-4 text-muted-foreground" /> Проезд к месту отпуска
+                </p>
+                <Badge variant="outline" className={cn('text-[11px]', travelStatus.tone)}>{travelStatus.label}</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 mb-2">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Последнее использование</label>
+                  <Input type="date" value={travelLastUsed} onChange={(e) => setTravelLastUsed(e.target.value)} className="h-9 text-sm" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Доступен с</label>
+                  <Input type="date" value={travelNext} onChange={(e) => setTravelNext(e.target.value)} className="h-9 text-sm" />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>{travelNext ? `Период права: ${formatDay(addYears(travelNext, 0))} — ${formatDay(addYears(travelNext, 2))}` : 'Пусто — дата найма + 2 года'}</span>
+                {hireDate && (
+                  <button type="button" className="text-primary hover:underline" onClick={() => { setTravelLastUsed(''); setTravelNext(addYears(hireDate, 2).toLocaleDateString('sv-SE')) }}>
+                    Сбросить к дате найма + 2 года
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">Право на проезд — раз в 2 года. При согласовании заявки с проездом дата доступности сдвигается автоматически.</p>
+            </section>
+          )}
 
           {currentOrgId && (
             <LeaveAdjustmentsSection
@@ -710,6 +949,11 @@ function EmployeeSettingsModal({
               }}
             />
           )}
+
+          </>}
+
+          {tab === 'service' && <>
+          <TechnicalInfoSection userId={employee.id} />
 
           {/* Account (admin only) */}
           {adminMode && (
@@ -827,16 +1071,19 @@ function EmployeeSettingsModal({
               )}
             </section>
           )}
+          </>}
         </div>
 
         <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
           <Button variant="outline" onClick={onClose} disabled={savingAll}>
-            Отмена
+            {tab === 'service' ? 'Закрыть' : 'Отмена'}
           </Button>
-          <Button onClick={saveAll} disabled={savingAll} className="gap-2">
-            {savingAll && <Loader2 className="h-4 w-4 animate-spin" />}
-            Сохранить
-          </Button>
+          {tab !== 'service' && (
+            <Button onClick={saveAll} disabled={savingAll} className="gap-2">
+              {savingAll && <Loader2 className="h-4 w-4 animate-spin" />}
+              Сохранить
+            </Button>
+          )}
         </div>
       </Card>
     </div>,

@@ -851,6 +851,51 @@ router.get('/colleagues', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
+/**
+ * @swagger
+ * /users/{id}/technical:
+ *   get:
+ *     tags: [Users]
+ *     summary: Служебная информация о работнике (учётная запись, Keycloak, последний вход)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: '{ id, email, keycloak_guid, created_at, updated_at, last_seen_at, locked_until, failed_login_count, logins_count, last_login: { at, ip, method } | null, keycloak_login: { at, claims, applied } | null }'
+ */
+router.get('/:id/technical', authenticateToken, requirePermission('users:edit'), asyncHandler(async (req, res) => {
+  const targetId = parseInt(req.params.id, 10)
+  if (!(await checkProfileAccess(req, targetId))) throw new ForbiddenError('Нет доступа к профилю этого работника')
+  const user = (await query(
+    `SELECT id, email, keycloak_guid, created_at, updated_at, last_seen_at, locked_until, failed_login_count
+     FROM users WHERE id = $1`,
+    [targetId]
+  )).rows[0]
+  if (!user) throw new NotFoundError('Работник не найден')
+  const logins = (await query(
+    `SELECT created_at, ip_address, details, COUNT(*) OVER ()::int AS total
+     FROM audit_log WHERE user_id = $1 AND action = 'login'
+     ORDER BY created_at DESC LIMIT 1`,
+    [targetId]
+  )).rows[0]
+  const lastKc = (await query(
+    `SELECT created_at, details FROM audit_log
+     WHERE user_id = $1 AND action = 'login' AND details->>'method' = 'keycloak'
+     ORDER BY created_at DESC LIMIT 1`,
+    [targetId]
+  )).rows[0]
+  res.json({
+    ...user,
+    logins_count: logins?.total ?? 0,
+    last_login: logins ? { at: logins.created_at, ip: logins.ip_address, method: logins.details?.method ?? null } : null,
+    keycloak_login: lastKc ? { at: lastKc.created_at, claims: lastKc.details?.keycloak ?? {}, applied: lastKc.details?.applied ?? null } : null,
+  })
+}))
+
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
