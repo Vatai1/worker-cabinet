@@ -114,6 +114,16 @@ async function deleteTestTemplates() {
   }
 }
 
+let displacedTemplate: { id: number; name: string; description?: string | null } | null = null
+
+async function setTemplatePurpose(template: { id: number; name: string; description?: string | null }, purpose: string) {
+  const res = await api.put(`${API}/dictionaries/doc-templates/${template.id}`, {
+    headers: { ...ORG, Authorization: `Bearer ${admToken}` },
+    multipart: { name: template.name, description: template.description ?? '', purpose },
+  })
+  if (!res.ok()) throw new Error(`не удалось изменить назначение шаблона «${template.name}»: ${res.status()} ${await res.text()}`)
+}
+
 async function cleanupE2EData() {
   await cancelTestVacations()
   await deleteTestRestrictions()
@@ -126,7 +136,12 @@ test.beforeAll(async () => {
   mgrToken = await apiLogin('petrov@example.com')
   admToken = await apiLogin('admin@example.com')
   await cleanupE2EData()
-  await api.post(`${API}/dictionaries/doc-templates`, {
+  const existingTemplates = (await (await api.get(`${API}/dictionaries/doc-templates`, {
+    headers: { ...ORG, Authorization: `Bearer ${admToken}` },
+  })).json()) as Array<{ id: number; name: string; description?: string | null; purpose?: string | null }>
+  displacedTemplate = existingTemplates.find((t) => t.purpose === 'vacation_template') ?? null
+  if (displacedTemplate) await setTemplatePurpose(displacedTemplate, '')
+  const created = await api.post(`${API}/dictionaries/doc-templates`, {
     headers: { ...ORG, Authorization: `Bearer ${admToken}` },
     multipart: {
       name: TEMPLATE_NAME,
@@ -134,6 +149,7 @@ test.beforeAll(async () => {
       file: { name: 'e2e-template.docx', mimeType: DOCX_MIME, buffer: readFileSync(DOCX_PATH) },
     },
   })
+  if (!created.ok()) throw new Error(`шаблон заявления не создан: ${created.status()} ${await created.text()}`)
   const usersRes = await api.get(`${API}/users`, { headers: { ...ORG, Authorization: `Bearer ${admToken}` } })
   const users = (await usersRes.json()) as Array<{ id: number; email: string }>
   petrovId = users.find((u) => u.email === 'petrov@example.com')?.id ?? 0
@@ -175,6 +191,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await cleanupE2EData()
+  if (displacedTemplate) await setTemplatePurpose(displacedTemplate, 'vacation_template')
   await cancelUserVacations(mgrToken, petrovId)
   if (ivanovTotalDays !== null) {
     await api.patch(`${API}/vacation/balances/3`, {
@@ -393,7 +410,14 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
       const download = page.getByRole('button', { name: 'Скачать .docx' })
       await expect(download).toBeEnabled()
       await download.click()
-      await expect(page.getByText('Заявление сформировано')).toBeVisible({ timeout: 15000 })
+      const nameDialog = page.getByRole('dialog', { name: 'Как склоняется ваше ФИО?' })
+      const done = page.getByText('Заявление сформировано')
+      await expect(nameDialog.or(done)).toBeVisible({ timeout: 15000 })
+      if (await nameDialog.isVisible()) {
+        await expect(nameDialog.getByTestId('name-genitive-preview')).toContainText('От')
+        await nameDialog.getByRole('button', { name: 'Сохранить и продолжить' }).click()
+      }
+      await expect(done).toBeVisible({ timeout: 15000 })
     })
   })
 
