@@ -9,21 +9,24 @@ export const PASSWORD = 'password123'
 const CACHE_FILE = join(tmpdir(), 'worker-cabinet-test-tokens.json')
 const CACHE_TTL = 5 * 60 * 1000
 
-export async function tryLogin(email, password = PASSWORD) {
+async function loginRequest(email, password) {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   })
-  if (res.status !== 200) return null
-  const data = await res.json()
-  return data.token
+  return { status: res.status, body: await res.text() }
+}
+
+export async function tryLogin(email, password = PASSWORD) {
+  const { status, body } = await loginRequest(email, password)
+  return status === 200 ? JSON.parse(body).token : null
 }
 
 export async function login(email, password = PASSWORD) {
-  const token = await tryLogin(email, password)
-  assert.ok(token, `Login failed for ${email}`)
-  return token
+  const { status, body } = await loginRequest(email, password)
+  assert.strictEqual(status, 200, `Login failed for ${email}: HTTP ${status} ${body.slice(0, 200)}`)
+  return JSON.parse(body).token
 }
 
 export function headers(token) {
