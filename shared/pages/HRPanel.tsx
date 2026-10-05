@@ -14,14 +14,15 @@ import { PageBanner } from '@/shared/components/PageBanner'
 import { Button } from '@/shared/components/ui/Button'
 
 const HR_PANEL_INTRO_COOKIE = 'hr_panel_intro_seen'
-import { HREmployees } from '@/core/employees/pages/HREmployees'
-import { HRSurveys } from '@/modules/surveys/pages/HRSurveys'
-import { HROnboarding } from '@/modules/onboarding/pages/HROnboarding'
-import { HRVacationCalendar } from '@/modules/vacation/pages/HRVacationCalendar'
-import { DepartmentsTab } from '@/core/admin/pages/DepartmentsTab'
-import { DictionariesTab } from '@/core/admin/pages/DictionariesTab'
-import { HRTimesheet } from '@/modules/timesheet/pages/HRTimesheet'
-import { HRInstitution } from '@/modules/institution/pages/HRInstitution'
+const TAB_FALLBACK = <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+const HREmployees = lazy(() => import('@/core/employees/pages/HREmployees').then(m => ({ default: m.HREmployees })))
+const HRSurveys = lazy(() => import('@/modules/surveys/pages/HRSurveys').then(m => ({ default: m.HRSurveys })))
+const HROnboarding = lazy(() => import('@/modules/onboarding/pages/HROnboarding').then(m => ({ default: m.HROnboarding })))
+const HRVacationCalendar = lazy(() => import('@/modules/vacation/pages/HRVacationCalendar').then(m => ({ default: m.HRVacationCalendar })))
+const DepartmentsTab = lazy(() => import('@/core/admin/pages/DepartmentsTab').then(m => ({ default: m.DepartmentsTab })))
+const DictionariesTab = lazy(() => import('@/core/admin/pages/DictionariesTab').then(m => ({ default: m.DictionariesTab })))
+const HRTimesheet = lazy(() => import('@/modules/timesheet/pages/HRTimesheet').then(m => ({ default: m.HRTimesheet })))
+const HRInstitution = lazy(() => import('@/modules/institution/pages/HRInstitution').then(m => ({ default: m.HRInstitution })))
 const HRDocTemplates = lazy(() => import('@/modules/documents/pages/HRDocTemplates').then(m => ({ default: m.HRDocTemplates })))
 const HRMailing = lazy(() => import('@/modules/mailing/pages/HRMailing').then(m => ({ default: m.HRMailing })))
 const HRPositionsTab = () => <DictionariesTab variant="hr" initialTab="positions" />
@@ -134,14 +135,18 @@ export function HRPanel() {
         </div>
       ) : isFullBleedTab ? (
         <div className="space-y-4 animate-fade-in">
-          {safeActiveTab === 'timesheet' && <HRTimesheet />}
+          {safeActiveTab === 'timesheet' && (
+            <Suspense fallback={TAB_FALLBACK}>
+              <HRTimesheet />
+            </Suspense>
+          )}
           {safeActiveTab === 'doc-templates' && isModuleEnabled('documents') && (
-            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+            <Suspense fallback={TAB_FALLBACK}>
               <HRDocTemplates />
             </Suspense>
           )}
           {safeActiveTab === 'mailing' && isModuleEnabled('mailing') && (
-            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+            <Suspense fallback={TAB_FALLBACK}>
               <HRMailing />
             </Suspense>
           )}
@@ -168,7 +173,9 @@ export function HRPanel() {
                   safeActiveTab === id ? 'block' : 'hidden',
                 )}
               >
-                <Component />
+                <Suspense fallback={TAB_FALLBACK}>
+                  <Component />
+                </Suspense>
               </div>
             )
           ))}
