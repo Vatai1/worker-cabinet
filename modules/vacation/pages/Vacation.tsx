@@ -1817,6 +1817,7 @@ export function Vacation() {
           balance={balance ? {
             ...balance,
             availableDays: balance.availableDays + (editingRequest.startDate.slice(0, 4) === String(year) ? editingRequest.duration : 0),
+            ...(editingRequest.hasTravel && balance.travelPending ? { travelAvailable: true, travelPending: false } : {}),
           } : undefined}
           userId={user?.id}
           restrictionWarnings={restrictionWarningsCalendar}

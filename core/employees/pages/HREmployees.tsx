@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import {
   Users, Search, RotateCcw, X, Loader2, ChevronUp, ChevronDown, ArrowUpDown,
   User as UserIcon, Building2, Tag, Wallet, Lock, ShieldCheck, Globe, Unlock, Star, Trash2,
-  ChevronRight, Plane, Server, KeyRound,
+  ChevronRight, Plane, Server, KeyRound, Download,
 } from 'lucide-react'
 import { Card } from '@/shared/components/ui/Card'
 import { FilterHeader, TableEmptyRow } from '@/shared/components/ui/DataTable'
@@ -19,7 +20,7 @@ import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { apiGet, apiPut, apiPost, apiPatch, apiDelete } from '@/shared/lib/apiClient'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { cn, getErrorMessage, personName } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
@@ -258,6 +259,90 @@ function TechnicalInfoSection({ userId }: { userId: number }) {
   )
 }
 
+function ManagerPicker({ excludeId, value, label, onChange }: {
+  excludeId: number
+  value: string
+  label: string
+  onChange: (id: string, label: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<EmployeeRow[] | null>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({ page: '1', limit: '10' })
+      if (q.trim()) params.set('q', q.trim())
+      apiGet<SearchResponse>(`/users/search?${params}`)
+        .then((res) => setResults(res.data.filter((u) => u.id !== excludeId)))
+        .catch(() => setResults([]))
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [q, open, excludeId])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const pick = (id: string, name: string) => {
+    onChange(id, name)
+    setOpen(false)
+    setQ('')
+  }
+
+  return (
+    <div ref={boxRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-left text-sm"
+      >
+        <span className={cn('truncate', !value && 'text-muted-foreground')}>{value ? label : 'Без руководителя'}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
+          <div className="border-b border-border p-2">
+            <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по ФИО или должности…" className="h-8 text-sm" />
+          </div>
+          <div className="max-h-56 overflow-y-auto scrollbar-thin p-1">
+            {value && (
+              <button type="button" onClick={() => pick('', '')} className="w-full rounded-md px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted">
+                Без руководителя
+              </button>
+            )}
+            {results === null ? (
+              <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+            ) : results.length === 0 ? (
+              <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">Ничего не найдено</p>
+            ) : results.map((u) => {
+              const name = personName(u.last_name, u.first_name, u.middle_name)
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => pick(String(u.id), name)}
+                  className={cn('w-full rounded-md px-2.5 py-1.5 text-left hover:bg-muted', String(u.id) === value && 'bg-primary/10')}
+                >
+                  <p className="truncate text-sm">{name}</p>
+                  {u.position && <p className="truncate text-[11px] text-muted-foreground">{u.position}</p>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 async function deleteSkillByName(userId: number, skill: string) {
   const response = await fetch(`${API_BASE_URL}/users/${userId}/skills`, {
     method: 'DELETE',
@@ -298,14 +383,15 @@ function EmployeeSettingsModal({
 }) {
   useModalOpen(true)
   const [tab, setTab] = useState<EmployeeModalTab>('main')
+  const requestCloseRef = useRef<() => void>(onClose)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') requestCloseRef.current()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [])
 
   // Profile section
   const [firstName, setFirstName] = useState(employee.first_name)
@@ -317,7 +403,7 @@ function EmployeeSettingsModal({
   const [cabinet, setCabinet] = useState(employee.cabinet || '')
   const [hireDate, setHireDate] = useState(employee.hire_date ? employee.hire_date.slice(0, 10) : '')
   const [managerId, setManagerId] = useState(employee.manager_id ? String(employee.manager_id) : '')
-  const [managerCandidates, setManagerCandidates] = useState<EmployeeRow[]>([])
+  const [managerName, setManagerName] = useState(employee.manager_name || '')
   const [genitiveInfo, setGenitiveInfo] = useState<NameGenitiveInfo | null>(null)
   const [genitive, setGenitive] = useState<PersonName | null>(null)
   const [genitiveAction, setGenitiveAction] = useState<'none' | 'save' | 'reset'>('none')
@@ -368,6 +454,7 @@ function EmployeeSettingsModal({
   const [reservedDays, setReservedDays] = useState(employee.reserved_days ?? null)
   const [availableDays, setAvailableDays] = useState(employee.available_days ?? null)
   const [balanceLoading, setBalanceLoading] = useState(false)
+  const [balanceBaseline, setBalanceBaseline] = useState(String(employee.total_days ?? 28))
 
   // Travel section
   const [travel, setTravel] = useState<TravelState | null>(null)
@@ -402,15 +489,9 @@ function EmployeeSettingsModal({
   const [orgBusy, setOrgBusy] = useState(false)
 
   useEffect(() => {
-    apiGet<EmployeeRow[]>('/users/search')
-      .then((rows) => setManagerCandidates(rows.filter((u) => u.id !== employee.id)))
-      .catch(() => setManagerCandidates([]))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
     if (balanceYear === year) {
       setTotalDays(String(employee.total_days ?? 28))
+      setBalanceBaseline(String(employee.total_days ?? 28))
       setUsedDays(employee.used_days ?? null)
       setReservedDays(employee.reserved_days ?? null)
       setAvailableDays(employee.available_days ?? null)
@@ -424,6 +505,7 @@ function EmployeeSettingsModal({
       .then((rows) => {
         const row = rows.find((r) => r.user_id === employee.id)
         setTotalDays(String(row?.total_days ?? 28))
+        setBalanceBaseline(String(row?.total_days ?? 28))
         setUsedDays(row?.used_days ?? null)
         setAvailableDays(row?.available_days ?? null)
         setReservedDays(null)
@@ -454,9 +536,45 @@ function EmployeeSettingsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminMode, isGlobalMode])
 
+  const [baseline, setBaseline] = useState(() => ({
+    firstName: employee.first_name,
+    lastName: employee.last_name,
+    middleName: employee.middle_name || '',
+    position: employee.position || '',
+    phone: employee.phone || '',
+    office: employee.office || '',
+    cabinet: employee.cabinet || '',
+    hireDate: employee.hire_date ? employee.hire_date.slice(0, 10) : '',
+    managerId: employee.manager_id ? String(employee.manager_id) : '',
+    departmentId: employee.department_id ? String(employee.department_id) : '',
+    orgRole: (employee.org_role || 'employee') as string,
+    isActive: employee.org_is_active !== false,
+  }))
+
+  const profileDirty = firstName !== baseline.firstName || lastName !== baseline.lastName || middleName !== baseline.middleName
+    || position !== baseline.position || phone !== baseline.phone || office !== baseline.office || cabinet !== baseline.cabinet
+    || hireDate !== baseline.hireDate || managerId !== baseline.managerId || departmentId !== baseline.departmentId
+  const orgDirty = !!currentOrgId && (orgRole !== baseline.orgRole || departmentId !== baseline.departmentId || isActive !== baseline.isActive)
+  const balanceDirty = !balanceLoading && totalDays !== balanceBaseline
+  const travelDirty = !!travel && (travelLastUsed !== (travel.last_used_date?.slice(0, 10) ?? '') || travelNext !== (travel.next_available_date?.slice(0, 10) ?? ''))
+  const genitiveDirty = genitiveAction !== 'none'
+  const isDirty = profileDirty || orgDirty || balanceDirty || travelDirty || genitiveDirty
+
+  const requestClose = async () => {
+    if (savingAll) return
+    if (isDirty && !(await confirmDialog({
+      title: 'Несохранённые изменения',
+      message: 'В карточке есть несохранённые изменения. Закрыть без сохранения?',
+      confirmText: 'Закрыть',
+      variant: 'danger',
+    }))) return
+    onClose()
+  }
+  requestCloseRef.current = requestClose
+
   const saveAll = async () => {
     const days = Number(totalDays)
-    if (Number.isNaN(days) || days < 0) {
+    if (balanceDirty && (totalDays.trim() === '' || Number.isNaN(days) || days < 0)) {
       toast.error('Некорректное число дней в балансе отпуска')
       return
     }
@@ -464,10 +582,20 @@ function EmployeeSettingsModal({
       toast.error('Дата доступности проезда не может быть раньше последнего использования')
       return
     }
-    setSavingAll(true)
-    try {
-      const tasks: Promise<unknown>[] = [
-        apiPut(`/users/${employee.id}`, {
+    if (genitiveAction === 'save' && genitive && (!genitive.lastName.trim() || !genitive.firstName.trim())) {
+      toast.error('Укажите фамилию и имя в родительном падеже')
+      return
+    }
+    if (!isDirty) {
+      toast('Изменений нет')
+      return
+    }
+
+    const tasks: { label: string; run: () => Promise<unknown>; done: () => void }[] = []
+    if (profileDirty) {
+      tasks.push({
+        label: 'Профиль',
+        run: () => apiPut(`/users/${employee.id}`, {
           first_name: firstName,
           last_name: lastName,
           middle_name: middleName,
@@ -479,58 +607,85 @@ function EmployeeSettingsModal({
           manager_id: managerId ? Number(managerId) : null,
           department_id: departmentId ? Number(departmentId) : null,
         }),
-        apiPatch(`/vacation/balances/${employee.id}`, { year: balanceYear, total_days: days }),
-      ]
-      if (genitiveAction === 'save' && genitive) {
-        if (!genitive.lastName.trim() || !genitive.firstName.trim()) {
-          toast.error('Укажите фамилию и имя в родительном падеже')
-          return
-        }
-        tasks.push(apiPut(`/users/${employee.id}/name-genitive`, genitive))
-      }
-      const travelChanged = travel && (travelLastUsed !== (travel.last_used_date?.slice(0, 10) ?? '') || travelNext !== (travel.next_available_date?.slice(0, 10) ?? ''))
-      if (travelChanged) {
-        tasks.push(
-          apiPut<TravelState>(`/vacation/travel/${employee.id}`, { last_used_date: travelLastUsed || null, next_available_date: travelNext || null })
-            .then((t) => { setTravel(t); setTravelNext(t.next_available_date?.slice(0, 10) ?? '') }),
-        )
-      }
-      if (genitiveAction === 'reset') tasks.push(apiPut(`/users/${employee.id}/name-genitive`, { reset: true }))
-      if (currentOrgId) {
-        tasks.push(apiPut(`/organizations/${currentOrgId}/members/${employee.id}`, {
+        done: () => {
+          setBaseline((b) => ({ ...b, firstName, lastName, middleName, position, phone, office, cabinet, hireDate, managerId, departmentId }))
+          const dept = departments.find((d) => String(d.id) === departmentId)
+          onUpdated(employee.id, {
+            first_name: firstName,
+            last_name: lastName,
+            middle_name: middleName,
+            position,
+            phone,
+            office,
+            cabinet,
+            hire_date: hireDate || null,
+            manager_id: managerId ? Number(managerId) : null,
+            manager_name: managerId ? managerName : null,
+            department_id: departmentId ? Number(departmentId) : null,
+            department_name: dept?.name ?? null,
+          })
+        },
+      })
+    }
+    if (orgDirty) {
+      tasks.push({
+        label: 'Организация',
+        run: () => apiPut(`/organizations/${currentOrgId}/members/${employee.id}`, {
           org_role: orgRole,
           department_id: departmentId ? Number(departmentId) : null,
           is_active: isActive,
-        }))
-      }
-      await Promise.all(tasks)
-      if (genitiveAction !== 'none' && genitiveInfo && genitive) {
-        setGenitiveInfo({ ...genitiveInfo, saved: genitiveAction === 'save', genitive })
-        setGenitiveAction('none')
-      }
-
-      const manager = managerCandidates.find((m) => String(m.id) === managerId)
-      const dept = departments.find((d) => String(d.id) === departmentId)
-      onUpdated(employee.id, {
-        first_name: firstName,
-        last_name: lastName,
-        middle_name: middleName,
-        position,
-        phone,
-        office,
-        cabinet,
-        hire_date: hireDate || null,
-        manager_id: managerId ? Number(managerId) : null,
-        manager_name: manager ? personName(manager.last_name, manager.first_name, manager.middle_name) : null,
-        org_role: orgRole as EmployeeRow['org_role'],
-        department_id: departmentId ? Number(departmentId) : null,
-        department_name: dept?.name ?? null,
-        org_is_active: isActive,
-        ...(balanceYear === year ? { total_days: days, available_days: days - (usedDays ?? 0) - (reservedDays ?? 0) } : {}),
+        }),
+        done: () => {
+          setBaseline((b) => ({ ...b, orgRole, departmentId, isActive }))
+          onUpdated(employee.id, { org_role: orgRole as EmployeeRow['org_role'], org_is_active: isActive })
+        },
       })
-      toast.success('Сохранено')
-    } catch (err) {
-      toast.error(getErrorMessage(err))
+    }
+    if (balanceDirty) {
+      tasks.push({
+        label: 'Баланс отпуска',
+        run: () => apiPatch(`/vacation/balances/${employee.id}`, { year: balanceYear, total_days: days }),
+        done: () => {
+          setBalanceBaseline(totalDays)
+          if (balanceYear === year) onUpdated(employee.id, { total_days: days, available_days: days - (usedDays ?? 0) - (reservedDays ?? 0) })
+        },
+      })
+    }
+    if (travelDirty) {
+      let saved: TravelState | null = null
+      tasks.push({
+        label: 'Проезд',
+        run: async () => { saved = await apiPut<TravelState>(`/vacation/travel/${employee.id}`, { last_used_date: travelLastUsed || null, next_available_date: travelNext || null }) },
+        done: () => {
+          if (!saved) return
+          setTravel(saved)
+          setTravelLastUsed(saved.last_used_date?.slice(0, 10) ?? '')
+          setTravelNext(saved.next_available_date?.slice(0, 10) ?? '')
+        },
+      })
+    }
+    if (genitiveDirty) {
+      tasks.push({
+        label: 'Склонение ФИО',
+        run: () => apiPut(`/users/${employee.id}/name-genitive`, genitiveAction === 'reset' ? { reset: true } : genitive),
+        done: () => {
+          if (genitiveInfo && genitive) setGenitiveInfo({ ...genitiveInfo, saved: genitiveAction === 'save', genitive })
+          setGenitiveAction('none')
+        },
+      })
+    }
+
+    setSavingAll(true)
+    try {
+      const results = await Promise.allSettled(tasks.map((t) => t.run()))
+      const failed: string[] = []
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled') tasks[i].done()
+        else failed.push(`${tasks[i].label}: ${getErrorMessage(r.reason)}`)
+      })
+      if (failed.length === 0) toast.success('Сохранено')
+      else if (failed.length === tasks.length) toast.error(`Не сохранено. ${failed.join('; ')}`, { duration: 10000 })
+      else toast.warning(`Сохранено частично. Не сохранено — ${failed.join('; ')}`, { duration: 10000 })
     } finally {
       setSavingAll(false)
     }
@@ -697,7 +852,7 @@ function EmployeeSettingsModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
-      <div className="fixed inset-0" onClick={onClose} />
+      <div className="fixed inset-0" onClick={requestClose} />
       <Card className="relative flex w-full max-w-2xl max-h-[85vh] flex-col overflow-hidden p-0 shadow-2xl animate-scale-in">
         <div className="flex items-center justify-between border-b border-border px-5 py-4 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -709,7 +864,7 @@ function EmployeeSettingsModal({
               <p className="text-xs text-muted-foreground truncate">{employee.email}</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+          <button type="button" onClick={requestClose} aria-label="Закрыть" className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -793,11 +948,11 @@ function EmployeeSettingsModal({
               </div>
               <div>
                 <label className="mb-1 block text-xs text-muted-foreground">Руководитель</label>
-                <SelectDropdown
-                  options={[{ value: '', label: 'Без руководителя' }, ...managerCandidates.map((m) => ({ value: String(m.id), label: personName(m.last_name, m.first_name, m.middle_name) }))]}
+                <ManagerPicker
+                  excludeId={employee.id}
                   value={managerId}
-                  onChange={setManagerId}
-                  className="w-full min-w-0"
+                  label={managerName}
+                  onChange={(id, name) => { setManagerId(id); setManagerName(name) }}
                 />
               </div>
             </div>
@@ -945,6 +1100,7 @@ function EmployeeSettingsModal({
               year={balanceYear}
               onVacationAdjusted={(days) => {
                 setTotalDays((t) => String(Number(t) + days))
+                setBalanceBaseline((b) => String(Number(b) + days))
                 setAvailableDays((a) => (a ?? 0) + days)
               }}
             />
@@ -1075,11 +1231,12 @@ function EmployeeSettingsModal({
         </div>
 
         <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
-          <Button variant="outline" onClick={onClose} disabled={savingAll}>
+          {isDirty && <span className="mr-auto self-center text-xs text-amber-600 dark:text-amber-400">Есть несохранённые изменения</span>}
+          <Button variant="outline" onClick={requestClose} disabled={savingAll}>
             {tab === 'service' ? 'Закрыть' : 'Отмена'}
           </Button>
           {tab !== 'service' && (
-            <Button onClick={saveAll} disabled={savingAll} className="gap-2">
+            <Button onClick={saveAll} disabled={savingAll || !isDirty} className="gap-2">
               {savingAll && <Loader2 className="h-4 w-4 animate-spin" />}
               Сохранить
             </Button>
@@ -1117,6 +1274,33 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
   const [positions, setPositions] = useState<string[]>([])
 
   const [selected, setSelected] = useState<EmployeeRow | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const linkedEmployeeId = searchParams.get('employee')
+  const [exporting, setExporting] = useState(false)
+
+  const openEmployee = useCallback((row: EmployeeRow | null) => {
+    setSelected(row)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (row) next.set('employee', String(row.id))
+      else next.delete('employee')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+
+  useEffect(() => {
+    if (!linkedEmployeeId || selected?.id === Number(linkedEmployeeId)) return
+    const params = new URLSearchParams({ userId: linkedEmployeeId, year: String(CURRENT_YEAR), page: '1', limit: '1', includeInactive: 'true' })
+    apiGet<SearchResponse>(`/users/search?${params}`)
+      .then((res) => {
+        if (res.data[0]) setSelected(res.data[0])
+        else {
+          toast.error('Сотрудник не найден в этой организации')
+          openEmployee(null)
+        }
+      })
+      .catch(() => {})
+  }, [linkedEmployeeId, currentOrgId, selected?.id, openEmployee])
 
   const [systemRoles, setSystemRoles] = useState<SystemRole[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -1141,8 +1325,7 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
     apiGet<SystemRole[]>('/users/system-roles').then(setSystemRoles).catch(() => setSystemRoles([]))
   }, [])
 
-  const fetchEmployees = () => {
-    setLoading(true)
+  const buildFilterParams = () => {
     const params = new URLSearchParams()
     if (debouncedSearch) params.set('q', debouncedSearch)
     if (filterDepartmentIds.length > 0) params.set('departmentId', filterDepartmentIds.join(','))
@@ -1152,6 +1335,12 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
       params.set('orgIsActive', filterStatuses.map((s) => (s === 'active' ? 'true' : 'false')).join(','))
     }
     params.set('year', String(year))
+    return params
+  }
+
+  const fetchEmployees = () => {
+    setLoading(true)
+    const params = buildFilterParams()
     params.set('page', String(page))
     params.set('limit', String(limit))
     apiGet<SearchResponse>(`/users/search?${params}`)
@@ -1164,6 +1353,29 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
     fetchEmployees()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, filterDepartmentIds, filterTagIds, filterPositions, filterStatuses, year, page, currentOrgId])
+
+  const exportExcel = async () => {
+    setExporting(true)
+    try {
+      const params = buildFilterParams()
+      params.set('format', 'xlsx')
+      const res = await fetch(`${API_BASE_URL}/users/search?${params}`, { headers: getAuthHeaders(), credentials: 'include' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Ошибка' }))
+        throw new Error(data.error || 'Ошибка')
+      }
+      const url = URL.createObjectURL(await res.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Сотрудники ${new Date().toLocaleDateString('ru-RU')}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const resetFilters = () => {
     setSearch('')
@@ -1298,6 +1510,10 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
               Сбросить
             </button>
           )}
+          <Button variant="outline" size="sm" className="h-9" onClick={exportExcel} disabled={exporting || total === 0} title="Выгрузить список с учётом фильтров">
+            {exporting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
+            Excel
+          </Button>
         </div>
         <p className="text-xs text-muted-foreground">Фильтры по должности, отделу, тегам и статусу — в заголовках столбцов таблицы</p>
 
@@ -1444,7 +1660,7 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
                 {sortedRows.map((r) => (
                   <tr
                     key={r.id}
-                    onClick={() => setSelected(r)}
+                    onClick={() => openEmployee(r)}
                     className="cursor-pointer border-b border-border/50 last:border-0 transition-colors hover:bg-muted/30"
                   >
                     <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -1510,7 +1726,7 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
           adminMode={adminMode}
           isGlobalMode={isGlobalMode}
           systemRoles={systemRoles}
-          onClose={() => setSelected(null)}
+          onClose={() => openEmployee(null)}
           onUpdated={handleUpdated}
         />
       )}

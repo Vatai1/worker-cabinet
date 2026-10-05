@@ -2111,10 +2111,15 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
       const { text: appTrvText, values: appTrvValues } = orgScopedQuery(
         `UPDATE vacation_balances
          SET travel_last_used_date = CURRENT_DATE,
-             travel_next_available_date = CURRENT_DATE + INTERVAL '2 years',
+             travel_next_available_date = (
+               SELECT COALESCE(
+                 (u.hire_date + (FLOOR(EXTRACT(YEAR FROM AGE(GREATEST($2::date, u.hire_date), u.hire_date)) / 2) + 1) * INTERVAL '2 years')::date,
+                 (CURRENT_DATE + INTERVAL '2 years')::date
+               ) FROM users u WHERE u.id = $1
+             ),
              travel_available = false
          WHERE user_id = $1`,
-        [request.rows[0].user_id], req
+        [request.rows[0].user_id, request.rows[0].start_date], req
       )
       await client.query(appTrvText, appTrvValues)
     }

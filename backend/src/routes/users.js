@@ -11,7 +11,8 @@ import { syncMembershipDepartment } from '../lib/departmentMembers.js'
 import { revokeAllUserSessions } from '../lib/sessionTokens.js'
 import { phrasePrefixPattern, wordPrefixPatterns } from '../lib/wordSearch.js'
 import { setKcUserEnabled, updateKcUserRole } from '../config/keycloak.js'
-import { requirePermission } from '../lib/permissions.js'
+import { requirePermission, hasPermission } from '../lib/permissions.js'
+import ExcelJS from 'exceljs'
 import { suggestGenitive } from '../lib/nameGenitive.js'
 
 const ELEVATED_ROLES = ['admin', 'superadmin', 'director']
@@ -179,6 +180,13 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  *       - in: query
  *         name: limit
  *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: userId
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: format
+ *         description: 'xlsx — выгрузка в Excel (без page, требует users:edit)'
+ *         schema: { type: string, enum: [xlsx] }
  *     responses:
  *       200:
  *         description: Список пользователей (плоский массив, либо { data, total, page, limit } если передан page)
@@ -188,6 +196,54 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  *               type: array
  *               items: { $ref: '#/components/schemas/User' }
  */
+async function sendEmployeesXlsx(res, rows, withBalance) {
+  const STATUS = { active: 'Активен', inactive: 'Деактивирован', on_leave: 'В отпуске' }
+  const ORG_ROLE = { employee: 'Работник', manager: 'Руководитель', hr: 'HR', admin: 'Администратор' }
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Сотрудники')
+  sheet.columns = [
+    { header: 'ФИО', key: 'name', width: 36 },
+    { header: 'Email', key: 'email', width: 30 },
+    { header: 'Должность', key: 'position', width: 30 },
+    { header: 'Отдел', key: 'department', width: 30 },
+    { header: 'Руководитель', key: 'manager', width: 30 },
+    { header: 'Роль', key: 'role', width: 16 },
+    { header: 'Статус', key: 'status', width: 16 },
+    { header: 'Телефон', key: 'phone', width: 18 },
+    { header: 'Дата найма', key: 'hire', width: 14 },
+    { header: 'Теги', key: 'tags', width: 30 },
+    ...(withBalance ? [
+      { header: 'Дней всего', key: 'total', width: 12 },
+      { header: 'Использовано', key: 'used', width: 14 },
+      { header: 'Доступно', key: 'available', width: 12 },
+    ] : []),
+  ]
+  for (const u of rows) {
+    sheet.addRow({
+      name: [u.last_name, u.first_name, u.middle_name].filter(Boolean).join(' '),
+      email: u.email,
+      position: u.position || '',
+      department: u.department_name || '',
+      manager: u.manager_name || '',
+      role: ORG_ROLE[u.org_role] || u.org_role || '',
+      status: u.org_is_active === false ? 'Отключён в организации' : STATUS[u.status] || u.status,
+      phone: u.phone || '',
+      hire: u.hire_date || '',
+      tags: (u.skills || []).join(', '),
+      total: u.total_days ?? '',
+      used: u.used_days ?? '',
+      available: u.available_days ?? '',
+    })
+  }
+  sheet.getRow(1).font = { bold: true }
+  sheet.views = [{ state: 'frozen', ySplit: 1 }]
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columns.length } }
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  res.setHeader('Content-Disposition', `attachment; filename="employees-${new Date().toISOString().slice(0, 10)}.xlsx"`)
+  await workbook.xlsx.write(res)
+  res.end()
+}
+
 router.get('/search', authenticateToken, async (req, res) => {
   try {
     const { departmentId, q, tagId, orgRole, position, status, orgIsActive, includeInactive, year } = req.query
@@ -291,6 +347,12 @@ router.get('/search', authenticateToken, async (req, res) => {
       params.push(positions)
     }
 
+    const userIdFilter = parseInt(req.query.userId)
+    if (!Number.isNaN(userIdFilter)) {
+      sql += ` AND u.id = $${params.length + 1}`
+      params.push(userIdFilter)
+    }
+
     const statuses = parseList(status)
     if (statuses.length > 0) {
       sql += ` AND u.status::text = ANY($${params.length + 1}::text[])`
@@ -318,6 +380,10 @@ router.get('/search', authenticateToken, async (req, res) => {
     if (page === null) {
       sql += orderBy
       const result = await query(sql, params)
+      if (req.query.format === 'xlsx') {
+        if (!(await hasPermission(req, 'users:edit'))) return res.status(403).json({ error: 'Недостаточно прав для этого действия' })
+        return sendEmployeesXlsx(res, result.rows, !!year)
+      }
       return res.json(result.rows)
     }
 

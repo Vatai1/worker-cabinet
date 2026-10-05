@@ -427,6 +427,16 @@ describe('Модуль отпусков — user stories', () => {
       assert.ok(!after.data.some((r) => r.id === created.data.id))
     })
 
+    it('approve с проездом: следующий проезд — начало следующего двухлетнего периода от даты найма', async () => {
+      const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid', hasTravel: true, travelDestination: 'Южно-Сахалинск' })
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      assert.strictEqual((await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})).status, 200)
+      const row = (await query("SELECT to_char(travel_next_available_date, 'YYYY-MM-DD') AS next, travel_available FROM vacation_balances WHERE user_id = $1 AND organization_id = 1 LIMIT 1", [emp.id])).rows[0]
+      const yearsSinceHire = Number(shift(10).slice(0, 4)) - 2020
+      assert.strictEqual(row.next, `${2020 + (Math.floor(yearsSinceHire / 2) + 1) * 2}-01-01`)
+      assert.strictEqual(row.travel_available, false)
+    })
+
     it('approve: reserved→used, история, уведомление автору', async () => {
       const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid' })
       const res = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})
