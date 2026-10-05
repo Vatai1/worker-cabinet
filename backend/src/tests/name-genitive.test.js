@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
-import { suggestGenitive, genitiveTemplateData, suggestDepartmentGenitive, departmentGenitive } from '../lib/nameGenitive.js'
+import { suggestGenitive, genitiveTemplateData, suggestDepartmentGenitive, departmentGenitive, suggestPositionGenitive, positionGenitive } from '../lib/nameGenitive.js'
 
 const gen = (fio, gender) => {
   const [lastName, firstName, middleName] = fio.split(' ')
@@ -58,11 +58,27 @@ describe('ФИО в родительном падеже', () => {
       'Служба безопасности': 'Службы безопасности',
       'Дежурная часть': 'Дежурной части',
       'Финансово-экономический отдел': 'Финансово-экономического отдела',
-      'IT-отдел': 'IT-отдел',
+      'IT-отдел': 'IT-отдела',
       'HR отдел': 'HR отдела',
       'US9 Другой отдел vac-full': 'US9 Другого отдела vac-full',
     }
     for (const [name, expected] of Object.entries(cases)) assert.strictEqual(suggestDepartmentGenitive(name), expected)
     assert.strictEqual(departmentGenitive({ name: 'Отдел ИТ', name_genitive: 'IT-отдела' }), 'IT-отдела')
+  })
+
+  it('должности', () => {
+    const cases = {
+      'Ведущий специалист': 'Ведущего специалиста',
+      'Главный бухгалтер': 'Главного бухгалтера',
+      'Начальник отдела': 'Начальника отдела',
+      'Руководитель отдела ИТ': 'Руководителя отдела ИТ',
+      'Заместитель начальника управления': 'Заместителя начальника управления',
+      'Senior Backend Developer': 'Senior Backend Developer',
+      'HR-специалист': 'HR-специалиста',
+      'E2E Специалист ВК': 'E2E Специалиста ВК',
+    }
+    for (const [name, expected] of Object.entries(cases)) assert.strictEqual(suggestPositionGenitive(name), expected)
+    assert.strictEqual(positionGenitive('Инженер', 'инженера-программиста'), 'инженера-программиста')
+    assert.strictEqual(positionGenitive('', null), '')
   })
 })

@@ -8,43 +8,62 @@ import { HelpCircle } from 'lucide-react'
 const USED_HINT = 'Дни согласованных отпусков за год, включая ещё не наступившие'
 
 interface DepartmentBalanceTableProps {
-  departmentId: string
+  departmentIds: string[]
+  departmentNames?: Map<string, string>
   year: number
   currentUserId?: string
   tagId?: string
+  search?: string
+  onlyUserIds?: Set<string> | null
+  emptyHint?: string
 }
 
-export function DepartmentBalanceTable({ departmentId, year, currentUserId, tagId }: DepartmentBalanceTableProps) {
-  const [rows, setRows] = useState<DepartmentBalanceEntry[]>([])
+type Row = DepartmentBalanceEntry & { departmentId: string }
+
+export function DepartmentBalanceTable({ departmentIds, departmentNames, year, currentUserId, tagId, search = '', onlyUserIds = null, emptyHint }: DepartmentBalanceTableProps) {
+  const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(false)
+  const idsKey = [...new Set(departmentIds.filter(Boolean))].sort().join(',')
 
   useEffect(() => {
-    if (!departmentId) {
+    const ids = idsKey ? idsKey.split(',') : []
+    if (ids.length === 0) {
       setRows([])
       return
     }
     let cancelled = false
     setLoading(true)
-    vacationApi.getDepartmentBalances(departmentId, year, tagId)
-      .then((data) => { if (!cancelled) setRows(data) })
+    Promise.all(ids.map((id) => vacationApi.getDepartmentBalances(id, year, tagId).then((list) => list.map((r) => ({ ...r, departmentId: id })))))
+      .then((lists) => {
+        if (cancelled) return
+        const byUser = new Map<string, Row>()
+        for (const r of lists.flat()) if (!byUser.has(r.userId)) byUser.set(r.userId, r)
+        setRows([...byUser.values()].sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, 'ru')))
+      })
       .catch(() => { if (!cancelled) setRows([]) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [departmentId, year, tagId])
+  }, [idsKey, year, tagId])
+
+  const q = search.trim().toLowerCase()
+  const visible = rows.filter((r) =>
+    (!q || `${r.lastName} ${r.firstName}`.toLowerCase().includes(q) || `${r.firstName} ${r.lastName}`.toLowerCase().includes(q)) &&
+    (!onlyUserIds || onlyUserIds.has(r.userId)))
+  const showDepartment = idsKey.includes(',')
 
   if (loading) {
     return <div className="py-6 text-center text-sm text-muted-foreground">Загрузка…</div>
   }
 
-  if (rows.length === 0) {
+  if (visible.length === 0) {
     return (
       <div className="py-6 text-center text-sm text-muted-foreground">
-        {tagId ? 'Нет работников отдела с выбранным тегом' : 'Нет данных по отделу'}
+        {emptyHint || (rows.length > 0 || tagId ? 'Нет работников, подходящих под фильтры' : 'Нет данных по отделу')}
       </div>
     )
   }
 
-  const colorMap = buildUserColorMap(rows.map(r => r.userId))
+  const colorMap = buildUserColorMap(visible.map(r => r.userId))
 
   return (
     <div className="max-h-72 overflow-y-auto overflow-x-auto rounded-lg border border-border">
@@ -52,6 +71,7 @@ export function DepartmentBalanceTable({ departmentId, year, currentUserId, tagI
         <thead className="sticky top-0 bg-muted/60">
           <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
             <th className="px-3 py-2 font-medium">ФИО</th>
+            {showDepartment && <th className="px-3 py-2 font-medium">Отдел</th>}
             <th className="px-3 py-2 font-medium text-right">Всего дней</th>
             <th className="px-3 py-2 font-medium text-right">
               <span className="group relative inline-flex items-center justify-end gap-1">
@@ -73,7 +93,7 @@ export function DepartmentBalanceTable({ departmentId, year, currentUserId, tagI
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
+          {visible.map((row) => {
             const isMe = !!currentUserId && row.userId === currentUserId
             return (
               <tr key={row.userId} className={cn('border-t border-border', isMe && 'bg-primary/5 font-medium')}>
@@ -83,6 +103,7 @@ export function DepartmentBalanceTable({ departmentId, year, currentUserId, tagI
                     <span className="truncate">{row.lastName} {row.firstName}</span>
                   </span>
                 </td>
+                {showDepartment && <td className="px-3 py-2 text-muted-foreground">{departmentNames?.get(row.departmentId) ?? '—'}</td>}
                 <td className="px-3 py-2 text-right tabular-nums">{row.totalDays}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{row.usedDays}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{row.availableDays}</td>

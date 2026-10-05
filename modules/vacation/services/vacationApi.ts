@@ -12,7 +12,7 @@
 import { VacationType, VacationRequestStatus } from '@/shared/types'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { fetchWithRetry, ApiError, httpErrorFallback } from '@/shared/lib/apiClient'
-import { getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 
 export { ApiError as VacationApiError }
 
@@ -47,6 +47,7 @@ interface DbVacationRequest {
   rejection_reason?: string | null
   cancellation_reason?: string | null
   reference_document?: string | null
+  reference_document_key?: string | null
   transfer_requested_at?: string | null
   transfer_reason?: string | null
   transferred_from_id?: number | string | null
@@ -122,6 +123,7 @@ const mapDbRequestToApi = (dbRequest: DbVacationRequest): VacationRequest => ({
   rejectionReason: dbRequest.rejection_reason ?? undefined,
   cancellationReason: dbRequest.cancellation_reason ?? undefined,
   referenceDocument: dbRequest.reference_document ?? undefined,
+  hasReferenceFile: !!dbRequest.reference_document_key,
   transferRequestedAt: dbRequest.transfer_requested_at ?? undefined,
   transferReason: dbRequest.transfer_reason ?? undefined,
   transferredFromId: dbRequest.transferred_from_id?.toString(),
@@ -238,7 +240,24 @@ export const vacationApi = {
     return result
   },
 
+  async uploadReferenceDocument(file: File): Promise<{ key: string; name: string }> {
+    const form = new FormData()
+    form.append('file', file)
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/reference-documents`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: form,
+    })
+    return handleResponse(response)
+  },
+
+  async getReferenceDocumentUrl(requestId: string): Promise<{ url: string; name: string }> {
+    const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}/reference-document`, { headers: getAuthHeaders() })
+    return handleResponse(response)
+  },
+
   async createRequest(_userId: string, data: VacationFormData): Promise<VacationRequest> {
+    const referenceDocumentKey = data.referenceFile ? (await vacationApi.uploadReferenceDocument(data.referenceFile)).key : undefined
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
@@ -250,7 +269,8 @@ export const vacationApi = {
         hasTravel: data.hasTravel,
         travelDestination: data.travelDestination,
         travelChildren: data.travelChildren,
-        referenceDocument: data.referenceDocument,
+        referenceDocument: data.referenceFile?.name ?? data.referenceDocument,
+        referenceDocumentKey,
         substitute_ids: data.substitute_ids || [],
       }),
     })
@@ -259,10 +279,12 @@ export const vacationApi = {
   },
 
   async updateRequest(requestId: string, data: Partial<VacationFormData>): Promise<VacationRequest> {
+    const { referenceFile, ...rest } = data
+    const referenceDocumentKey = referenceFile ? (await vacationApi.uploadReferenceDocument(referenceFile)).key : undefined
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/requests/${requestId}`, {
       method: 'PUT',
       headers: getAuthHeadersWithContentType(),
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...rest, referenceDocument: referenceFile?.name ?? rest.referenceDocument, referenceDocumentKey }),
     })
     const dbRequest = await handleResponse(response)
     return mapDbRequestToApi(dbRequest)

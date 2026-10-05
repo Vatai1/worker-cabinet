@@ -6,7 +6,8 @@ import { VACATION_TYPES, VacationType } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { X, UserCheck } from 'lucide-react'
+import { X, UserCheck, FileText } from 'lucide-react'
+import { vacationApi } from '@/modules/vacation/services/vacationApi'
 import { formatDate, personName } from '@/shared/lib/utils'
 import { getVacationExtension } from '@/modules/vacation/lib/holidayExtension'
 import { useReturnToWork } from '@/shared/lib/productionCalendar'
@@ -25,6 +26,17 @@ interface VacationDetailModalProps {
 export function VacationDetailModal({ isOpen, request, onClose, onApprove, onReject, loading, intersectionWarnings = [], onTransfer }: VacationDetailModalProps) {
   useModalOpen(isOpen)
   const [showRejectInput, setShowRejectInput] = useState(false)
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    setReferenceUrl(null)
+    if (!isOpen || !request?.hasReferenceFile) return
+    let cancelled = false
+    vacationApi.getReferenceDocumentUrl(request.id)
+      .then(({ url }) => { if (!cancelled) setReferenceUrl(url) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [isOpen, request?.id, request?.hasReferenceFile])
   const [rejectionReason, setRejectionReason] = useState('')
   const returnToWork = useReturnToWork(request?.endDate)
 
@@ -209,10 +221,23 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
           {request.referenceDocument && (
             <div>
               <div className="text-sm text-muted-foreground mb-1">Справка</div>
-              <div className="text-sm bg-primary/10 rounded-lg p-3">
-                📄 {request.referenceDocument}
-              </div>
-            </div>
+              {referenceUrl ? (
+                <a
+                  href={referenceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex w-full items-center gap-2 rounded-lg bg-primary/10 p-3 text-sm text-primary transition-colors hover:bg-primary/15"
+                >
+                  <FileText className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{request.referenceDocument}</span>
+                  <span className="shrink-0 text-xs">Открыть</span>
+                </a>
+              ) : (
+                <div className="text-sm bg-primary/10 rounded-lg p-3">
+                  📄 {request.referenceDocument}
+                </div>
+              )}
+           </div>
           )}
 
           {request.statusHistory && request.statusHistory.length > 0 && (

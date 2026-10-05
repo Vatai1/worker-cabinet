@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { World, iso, ruDate, workdayOffset, selectRange, openVacationPage, THIS_YEAR, monthCard, monthName, dayOfMonth } from './fixtures'
+import { World, iso, ruDate, workdayOffset, selectRange, openVacationPage, approvalCards, THIS_YEAR, monthCard, monthName, dayOfMonth } from './fixtures'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -93,6 +93,32 @@ test.describe('Отпуск: работник', () => {
     await expect(page.getByRole('button', { name: 'Создать заявку' })).toBeDisabled()
     await page.getByRole('button', { name: 'Отмена', exact: true }).click()
     await expect(page.getByText('Создать заявку на отпуск')).toHaveCount(0)
+  })
+
+  test('учебный отпуск со справкой: файл загружается, руководитель открывает справку из заявки', async ({ page }) => {
+    await world.loginPage(page, 'emp')
+    await openVacationPage(page)
+    await selectRange(page, T_EDU.s, T_EDU.e)
+    await page.locator('#vacationType').selectOption('educational')
+    await page.locator('#referenceFile').setInputFiles({ name: 'справка-вызов.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') })
+    await expect(page.getByText('справка-вызов.pdf')).toBeVisible()
+    const uploaded = page.waitForResponse((r) => r.url().endsWith('/vacation/reference-documents'))
+    const created = page.waitForResponse((r) => r.url().endsWith('/vacation/requests') && r.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Создать заявку' }).click()
+    expect((await uploaded).status()).toBe(201)
+    expect((await created).status()).toBe(201)
+
+    await page.context().clearCookies()
+    await world.loginPage(page, 'mgr')
+    await openVacationPage(page)
+    const cards = await approvalCards(page)
+    const eduCard = cards.filter({ hasText: ruDate(T_EDU.s) }).first()
+    await expect(eduCard).toBeVisible({ timeout: 15000 })
+    await eduCard.getByRole('button').first().click()
+    const modal = page.getByTestId('vacation-detail-modal')
+    const link = modal.getByRole('link', { name: /справка-вызов\.pdf/ })
+    await expect(link).toHaveAttribute('href', /vacation-references\//, { timeout: 15000 })
+    await expect(link).toHaveAttribute('target', '_blank')
   })
 
   test('не хватает дней: предупреждение и неактивная кнопка', async ({ page }) => {

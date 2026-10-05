@@ -38,6 +38,7 @@ interface CreateVacationModalProps {
     travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
     referenceDocument?: string
+    referenceFile?: File
     substitute_ids?: number[]
   }) => void
   loading?: boolean
@@ -189,6 +190,7 @@ export function CreateVacationModal({
       travelChildren: hasTravel ? travelChildren : [],
       comment,
       referenceDocument,
+      referenceFile: referenceFile ?? undefined,
       substitute_ids: showSubstitutes && substituteIds.length > 0 ? substituteIds : undefined,
     })
   }
@@ -489,7 +491,7 @@ export function CreateVacationModal({
                     <input
                       type="file"
                       id="referenceFile"
-                      accept=".pdf,.jpg,.jpeg,.png"
+                      accept=".pdf,.jpg,.jpeg,.png,.docx"
                       onChange={(e) => {
                         const file = e.target.files?.[0]
                         if (file) {
@@ -509,7 +511,7 @@ export function CreateVacationModal({
                     >
                       <Upload className="h-5 w-5 text-muted-foreground" />
                       <span className="text-sm text-muted-foreground">
-                        Загрузите справку (PDF, изображение)
+                        Загрузите справку (PDF, JPEG, PNG или DOCX до 10 МБ)
                       </span>
                     </label>
                   </div>

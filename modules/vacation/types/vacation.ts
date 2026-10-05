@@ -106,6 +106,7 @@ export interface VacationRequest {
   travelChildren?: Array<{ fullName: string; birthDate: string }>
   
   referenceDocument?: string
+  hasReferenceFile?: boolean
   
   transferRequestedAt?: string
   transferReason?: string
@@ -217,6 +218,7 @@ export interface VacationFormData {
   travelDestination?: string
   travelChildren?: Array<{ fullName: string; birthDate: string }>
   referenceDocument?: string
+  referenceFile?: File
   substitute_ids?: number[]
 }
 

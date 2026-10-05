@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import {
-  AlertTriangle, ArrowRightLeft, Ban, Check, Eye, Info, Loader2, Network, Search, Settings2, Trash2, UserPlus, Users, X,
+  AlertTriangle, ArrowRightLeft, Ban, Check, ChevronRight, Eye, Info, Loader2, Network, Search, Settings2, Trash2, UserPlus, Users, X,
 } from 'lucide-react'
 import { apiDelete, apiGet, apiPost, apiPut } from '@/shared/lib/apiClient'
 import { cn, getErrorMessage, personName } from '@/shared/lib/utils'
@@ -29,6 +29,8 @@ export interface Dept {
   emp_parent_sees_child: boolean
   emp_child_sees_parent: boolean
   on_hierarchy: boolean
+  name_genitive?: string | null
+  name_genitive_suggestion?: string
 }
 
 export interface OrgUser {
@@ -109,6 +111,7 @@ export function DepartmentSettings({
 }) {
   const [section, setSection] = useState<Section>('main')
   const [name, setName] = useState(dept.name)
+  const [genitive, setGenitive] = useState(dept.name_genitive || '')
   const [description, setDescription] = useState(dept.description || '')
   const [managerId, setManagerId] = useState<number | null>(dept.manager_id)
   const [managerName, setManagerName] = useState(dept.manager_name || '')
@@ -136,7 +139,9 @@ export function DepartmentSettings({
     ? departments.find((d) => d.id === parentId)?.name
     : dept.parent_user_name
 
-  const dirty = name !== dept.name || description !== (dept.description || '') || managerId !== dept.manager_id ||
+  const genitivePreview = genitive.trim() || (name.trim() === dept.name ? dept.name_genitive_suggestion ?? '' : '')
+
+  const dirty = name !== dept.name || genitive !== (dept.name_genitive || '') || description !== (dept.description || '') || managerId !== dept.manager_id ||
     parentId !== dept.parent_id || blocked !== dept.vacation_requests_blocked ||
     vacParentSeesChild !== dept.vac_parent_sees_child || vacChildSeesParent !== dept.vac_child_sees_parent ||
     vacParentApproves !== dept.vac_parent_approves || empParentSeesChild !== dept.emp_parent_sees_child ||
@@ -149,6 +154,7 @@ export function DepartmentSettings({
     try {
       await apiPut(`/dictionaries/departments/${dept.id}`, {
         name: name.trim(),
+        name_genitive: name.trim() !== dept.name && genitive === (dept.name_genitive || '') ? '' : genitive.trim(),
         description,
         manager_id: managerId,
         parent_id: parentId,
@@ -225,6 +231,40 @@ export function DepartmentSettings({
                 <span className="text-[12.5px] font-semibold text-muted-foreground">Название</span>
                 <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} className={fieldClass} />
               </label>
+
+              <details data-testid="department-genitive" className="group rounded-xl border border-border/60">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+                  <span className="text-[12.5px] font-semibold text-muted-foreground">Отображение в документах</span>
+                  <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">
+                    {genitivePreview ? `сотрудника ${genitivePreview}` : 'определится после сохранения'} · {genitive.trim() ? 'задано вручную' : 'автоматически'}
+                  </span>
+                </summary>
+                <div className="grid gap-3 border-t border-border/60 p-3 sm:grid-cols-[minmax(0,11rem)_1fr]">
+                  <div className="self-start rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-sm leading-relaxed">
+                    <div className="text-muted-foreground">От сотрудника</div>
+                    <div className="break-words">{genitivePreview || <span className="text-muted-foreground">определится после сохранения</span>}</div>
+                  </div>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12px] text-muted-foreground">Родительный падеж (кого? чего?)</span>
+                    <input
+                      value={genitive}
+                      onChange={(e) => setGenitive(e.target.value)}
+                      maxLength={255}
+                      placeholder={name.trim() === dept.name ? dept.name_genitive_suggestion : 'Автоматически по названию'}
+                      className={fieldClass}
+                    />
+                    <span className="text-[11.5px] text-muted-foreground">
+                      {genitive.trim() ? 'Задано вручную — подставляется в шаблоны полем {department_gen}' : 'Пусто — подставляется автоматически'}
+                    </span>
+                    {genitive.trim() && (
+                      <button type="button" onClick={() => setGenitive('')} className="self-start text-[11.5px] text-primary hover:underline">
+                        Вернуть автоматическое
+                      </button>
+                    )}
+                  </label>
+                </div>
+              </details>
 
               <label className="flex flex-col gap-1.5">
                 <span className="text-[12.5px] font-semibold text-muted-foreground">Описание</span>

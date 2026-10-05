@@ -2,7 +2,8 @@ import express from 'express'
 import { randomUUID } from 'node:crypto'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
-import { getFromS3 } from '../config/s3.js'
+import { getFromS3, uploadToS3, getPresignedUrl } from '../config/s3.js'
+import multer from 'multer'
 import { notify } from '../config/notifications.js'
 import { broadcastToOrg } from '../config/ws.js'
 import Docxtemplater from 'docxtemplater'
@@ -13,7 +14,7 @@ import { resolveVacationDays, applyRuleToExistingBalances } from '../lib/vacatio
 import { getVisibleColleagueIds } from '../lib/colleagues.js'
 import { hasFullDepartmentAccess, managedDepartmentIds } from '../lib/departmentScope.js'
 import { requirePermission, hasPermission, isModuleEnabledForOrg } from '../lib/permissions.js'
-import { genitiveTemplateData, departmentGenitive } from '../lib/nameGenitive.js'
+import { genitiveTemplateData, departmentGenitive, positionGenitive } from '../lib/nameGenitive.js'
 
 const router = express.Router()
 
@@ -40,6 +41,27 @@ function addDaysISO(dateStr, days) {
 
 function daysBetweenInclusive(startStr, endStr) {
   return Math.round((parseISODate(endStr) - parseISODate(startStr)) / 86400000) + 1
+}
+
+const REFERENCE_TYPES = {
+  'application/pdf': '.pdf',
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+}
+const referenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(REFERENCE_TYPES[file.mimetype] ? null : Object.assign(new Error('Справка должна быть в формате PDF, JPEG, PNG или DOCX'), { code: 'BAD_TYPE' }), !!REFERENCE_TYPES[file.mimetype]),
+}).single('file')
+
+const referenceKeyPrefix = (userId) => `vacation-references/${userId}/`
+
+function referenceKeyOf(body, userId) {
+  const key = body?.referenceDocumentKey
+  if (key === undefined || key === null || key === '') return { key: null }
+  if (typeof key !== 'string' || !key.startsWith(referenceKeyPrefix(userId)) || key.includes('..')) return { error: 'Некорректный файл справки' }
+  return { key }
 }
 
 function todayISO() {
@@ -1427,7 +1449,12 @@ router.post('/requests', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Неверный тип отпуска' })
     }
 
-    if (vacationType === 'educational' && !referenceDocument) {
+    const reference = referenceKeyOf(req.body, userId)
+    if (reference.error) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: reference.error })
+    }
+    if (vacationType === 'educational' && !reference.key) {
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Для учебного отпуска необходимо приложить справку' })
     }
@@ -1545,8 +1572,8 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     const result = await client.query(
       `INSERT INTO vacation_requests
-        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, travel_children, travel_children_count, reference_document, status_id, organization_id, approver_id)
-        VALUES ($1, $2, $3, $4, (SELECT id FROM vacation_types WHERE code = $5 AND organization_id = $12), $6, $7, $8, $9, $10, $11, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $12, $13)
+        (user_id, start_date, end_date, duration, vacation_type_id, comment, has_travel, travel_destination, travel_children, travel_children_count, reference_document, status_id, organization_id, approver_id, reference_document_key)
+        VALUES ($1, $2, $3, $4, (SELECT id FROM vacation_types WHERE code = $5 AND organization_id = $12), $6, $7, $8, $9, $10, $11, (SELECT id FROM request_statuses WHERE code = 'on_approval'), $12, $13, $14)
         RETURNING *`,
       [
         userId,
@@ -1559,9 +1586,10 @@ router.post('/requests', authenticateToken, async (req, res) => {
         travelDestination || null,
         travelChildrenJson,
         travelChildrenCount,
-        referenceDocument || null,
+        reference.key ? String(referenceDocument || 'Справка').slice(0, 500) : null,
         currentOrgId(req),
-        approverId
+        approverId,
+        reference.key,
       ]
     )
 
@@ -1635,6 +1663,78 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
 /**
  * @swagger
+ * /vacation/reference-documents:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Загрузить справку для заявления (учебный отпуск)
+ *     description: 'PDF, JPEG, PNG или DOCX до 10 МБ. Возвращает key, который передаётся в referenceDocumentKey при создании или изменении заявления'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       201:
+ *         description: '{ key, name }'
+ */
+router.post('/reference-documents', authenticateToken, (req, res, next) => {
+  referenceUpload(req, res, (err) => {
+    if (!err) return next()
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Справка не должна превышать 10 МБ' })
+    return res.status(400).json({ error: err.code === 'BAD_TYPE' ? err.message : 'Не удалось загрузить справку' })
+  })
+}, async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Выберите файл справки' })
+    const key = `${referenceKeyPrefix(req.user.id)}${Date.now()}-${Math.random().toString(36).slice(2, 8)}${REFERENCE_TYPES[req.file.mimetype]}`
+    await uploadToS3(req.file, key)
+    res.status(201).json({ key, name: Buffer.from(req.file.originalname, 'latin1').toString('utf8').slice(0, 255) })
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось загрузить справку' })
+  }
+})
+
+/**
+ * @swagger
+ * /vacation/requests/{id}/reference-document:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Ссылка на справку заявления
+ *     description: 'Доступно автору, согласующему, руководителю отдела и непосредственному руководителю, а также пользователям с правом vacation:manage'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: id, in: path, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: '{ url, name }'
+ */
+router.get('/requests/:id/reference-document', authenticateToken, async (req, res) => {
+  try {
+    const row = (await query(
+      `SELECT vr.user_id, vr.approver_id, vr.reference_document, vr.reference_document_key, u.manager_id, d.manager_id AS department_manager_id
+       FROM vacation_requests vr
+       JOIN users u ON u.id = vr.user_id
+       LEFT JOIN departments d ON d.id = u.department_id
+       WHERE vr.id = $1 AND ($2::int IS NULL OR vr.organization_id = $2)`,
+      [parseInt(req.params.id, 10), currentOrgId(req)]
+    )).rows[0]
+    if (!row || !row.reference_document_key) return res.status(404).json({ error: 'Справка не найдена' })
+    const me = req.user.id
+    const allowed = [row.user_id, row.approver_id, row.manager_id, row.department_manager_id].includes(me) || await hasPermission(req, 'vacation:manage')
+    if (!allowed) return res.status(403).json({ error: 'Нет доступа к справке' })
+    res.json({ url: await getPresignedUrl(row.reference_document_key), name: row.reference_document || 'Справка' })
+  } catch (error) {
+    res.locals.errorCause = error
+    res.status(500).json({ error: 'Не удалось получить справку' })
+  }
+})
+
+/**
+ * @swagger
  * /vacation/requests/{id}:
  *   put:
  *     tags: [Vacation]
@@ -1683,7 +1783,9 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     if (!VALID_VACATION_TYPES.includes(vacationType)) {
       return res.status(400).json({ error: 'Неверный тип отпуска' })
     }
-    if (vacationType === 'educational' && !referenceDocument) {
+    const reference = referenceKeyOf(req.body, req.user.id)
+    if (reference.error) return res.status(400).json({ error: reference.error })
+    if (vacationType === 'educational' && !referenceDocument && !reference.key) {
       return res.status(400).json({ error: 'Для учебного отпуска необходимо приложить справку' })
     }
     if (startDate < todayISO()) {
@@ -1833,13 +1935,15 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
        SET start_date = $1, end_date = $2, duration = $3,
            vacation_type_id = (SELECT id FROM vacation_types WHERE code = $4${typeOrg} LIMIT 1),
            comment = $5, has_travel = $6, travel_destination = $7, travel_children = $8, travel_children_count = $9,
-           reference_document = $10, updated_at = NOW()
+           reference_document = $10, updated_at = NOW(),
+           reference_document_key = COALESCE($${req.org ? 14 : 13}::text, reference_document_key)
        WHERE id = $11 AND user_id = $12
        RETURNING *`,
       [
         startDate, newEndDate, newDuration, vacationType, comment ?? null, !!hasTravel,
         hasTravel ? String(travelDestination).trim() : null, JSON.stringify(children), children.length,
-        referenceDocument || null, id, userId, ...(req.org ? [req.org.org_id] : []),
+        referenceDocument ? String(referenceDocument).slice(0, 500) : null, id, userId, ...(req.org ? [req.org.org_id] : []),
+        reference.key,
       ]
     )
     const updated = result.rows[0]
@@ -2855,9 +2959,9 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
     }
 
     const { text: gaUserText, values: gaUserValues } = req.org
-      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive
+      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id AND d.organization_id = $2 WHERE u.id = $1`, values: [userId, req.org.org_id] }
-      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive
+      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`, values: [userId] }
     const { text: gaTmplText, values: gaTmplValues } = orgScopedQuery(
       `SELECT name, file_key, mime_type FROM document_templates WHERE id = $1 AND purpose = 'vacation_template'`,
@@ -2958,6 +3062,7 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       first_name: u.first_name || '',
       middle_name: u.middle_name || '',
       position: u.position || '',
+      position_gen: positionGenitive(u.position, u.position_genitive),
       department: u.department_name || '',
       department_gen: u.department_name ? departmentGenitive({ name: u.department_name, name_genitive: u.department_name_genitive }) : '',
       year: String(year),
@@ -3030,9 +3135,9 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
     }
 
     const { text: gtUserText, values: gtUserValues } = req.org
-      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive
+      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id AND d.organization_id = $2 WHERE u.id = $1`, values: [userId, req.org.org_id] }
-      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive
+      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`, values: [userId] }
     const { text: gtTmplText, values: gtTmplValues } = orgScopedQuery(
       `SELECT name, file_key FROM document_templates WHERE id = $1 AND purpose = 'vacation_transfer_template'`,
@@ -3107,6 +3212,7 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       first_name: u.first_name || '',
       middle_name: u.middle_name || '',
       position: u.position || '',
+      position_gen: positionGenitive(u.position, u.position_genitive),
       department: u.department_name || '',
       department_gen: u.department_name ? departmentGenitive({ name: u.department_name, name_genitive: u.department_name_genitive }) : '',
       date_today: formatDate(today),

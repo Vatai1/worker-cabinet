@@ -1828,6 +1828,12 @@ async function runMigrations() {
     await migrateNotificationDelivery(db)
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name_genitive JSONB')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS name_genitive TEXT')
+    await db.query('ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS reference_document_key TEXT')
+    await db.query(`CREATE TABLE IF NOT EXISTS position_genitives (
+      name VARCHAR(255) PRIMARY KEY,
+      genitive VARCHAR(255) NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`)
     await db.query("DELETE FROM system_settings WHERE key LIKE 'login_stat%' OR key IN ('login_show_stats', 'company_name')")
 
     console.log('✅ Migrations completed successfully')

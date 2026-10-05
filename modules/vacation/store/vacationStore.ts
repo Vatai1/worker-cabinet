@@ -169,7 +169,7 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
 
       validateRequest: (userId: string, data: VacationFormData) => {
         const errors: VacationValidationError[] = []
-        const { startDate, endDate, vacationType, hasTravel, referenceDocument } = data
+        const { startDate, endDate, vacationType, hasTravel, referenceDocument, referenceFile } = data
         
         const today = new Date()
         today.setHours(0, 0, 0, 0)
@@ -234,7 +234,7 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
           }
         }
         
-        if (vacationType === VacationType.EDUCATIONAL && !referenceDocument) {
+        if (vacationType === VacationType.EDUCATIONAL && !referenceDocument && !referenceFile) {
           errors.push({
             field: 'referenceDocument',
             message: 'Для учебного отпуска необходимо приложить справку',

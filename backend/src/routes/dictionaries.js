@@ -8,7 +8,7 @@ import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { departmentMembers, moveUsersToDepartment } from '../lib/departmentMembers.js'
 import multer from 'multer'
 import { requirePermission, FULL_ACCESS_ROLES } from '../lib/permissions.js'
-import { suggestDepartmentGenitive } from '../lib/nameGenitive.js'
+import { suggestDepartmentGenitive, suggestPositionGenitive } from '../lib/nameGenitive.js'
 
 async function validateOnlyOfficeUrl(url) {
   try {
@@ -72,7 +72,7 @@ const router = express.Router()
  */
 router.get('/departments', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   let sql = `
-    SELECT d.id, d.name, d.manager_id, d.description, d.vacation_requests_blocked,
+    SELECT d.id, d.name, d.name_genitive, d.manager_id, d.description, d.vacation_requests_blocked,
             d.parent_id, p.name AS parent_name,
             d.parent_user_id,
             pu.last_name || ' ' || pu.first_name || COALESCE(' ' || NULLIF(pu.middle_name, ''), '') AS parent_user_name,
@@ -93,7 +93,7 @@ router.get('/departments', authenticateToken, requirePermission('departments:man
   sql += ` ORDER BY d.name`
   const result = await query(sql, params)
   const onCanvas = await hierarchyDepartmentIds(req.org ? currentOrgId(req) : null)
-  res.json(result.rows.map((d) => ({ ...d, on_hierarchy: onCanvas.has(d.id) })))
+  res.json(result.rows.map((d) => ({ ...d, name_genitive_suggestion: suggestDepartmentGenitive(d.name), on_hierarchy: onCanvas.has(d.id) })))
 }))
 
 async function hierarchyDepartmentIds(orgId) {
@@ -181,6 +181,7 @@ async function validateDepartmentParent(parentId, deptId, orgId, req) {
  *               manager_id: { type: integer }
  *               parent_id: { type: integer, nullable: true, description: 'Родительское подразделение той же организации' }
  *               description: { type: string }
+ *               name_genitive: { type: string, description: 'Название в родительном падеже для документов; пустая строка — автоматическое' }
  *     responses:
  *       201:
  *         description: Отдел создан
@@ -267,17 +268,20 @@ router.put('/departments/:id', authenticateToken, requirePermission('departments
   for (const f of VISIBILITY_FLAGS) flags[f] = typeof req.body[f] === 'boolean' ? req.body[f] : current[f]
   const flagsChanged = VISIBILITY_FLAGS.some((f) => flags[f] !== current[f])
   const blocked = typeof req.body.vacation_requests_blocked === 'boolean' ? req.body.vacation_requests_blocked : current.vacation_requests_blocked
+  const nextGenitive = typeof req.body.name_genitive === 'string'
+    ? req.body.name_genitive.trim().slice(0, 255) || null
+    : current.name === name.trim() ? current.name_genitive : null
   const nextDescription = description === undefined ? current.description : (description?.trim() || null)
 
   const client = await getClient()
   try {
     await client.query('BEGIN')
     const { text, values } = orgScopedQuery(
-      `UPDATE departments SET name_genitive = CASE WHEN name = $1 THEN name_genitive END, name = $1, manager_id = $2, description = $3, parent_id = $4, vacation_requests_blocked = $5,
+      `UPDATE departments SET name_genitive = $12, name = $1, manager_id = $2, description = $3, parent_id = $4, vacation_requests_blocked = $5,
          vac_parent_sees_child = $6, vac_child_sees_parent = $7, vac_parent_approves = $8, emp_parent_sees_child = $9, emp_child_sees_parent = $10,
          updated_at = NOW()
-       WHERE id = $11 RETURNING id, name, manager_id, description, parent_id`,
-      [name.trim(), manager_id || null, nextDescription, nextParentId, blocked, ...VISIBILITY_FLAGS.map((f) => flags[f]), id],
+       WHERE id = $11 RETURNING id, name, manager_id, description, parent_id, name_genitive`,
+      [name.trim(), manager_id || null, nextDescription, nextParentId, blocked, ...VISIBILITY_FLAGS.map((f) => flags[f]), id, nextGenitive],
       req
     )
     const result = await client.query(text, values)
@@ -763,12 +767,14 @@ router.put('/positions/rename', authenticateToken, requirePermission('dictionari
     'UPDATE users SET position = $1 WHERE position = $2',
     [newName.trim(), oldName.trim()]
   )
+  await query('DELETE FROM position_genitives WHERE name = $1', [oldName.trim()])
   res.json({ success: true, updated: result.rowCount })
 }))
 
 router.delete('/positions/:name', authenticateToken, requirePermission('dictionaries:positions'), asyncHandler(async (req, res) => {
   const name = decodeURIComponent(req.params.name)
   await query('UPDATE users SET position = NULL WHERE position = $1', [name])
+  await query('DELETE FROM position_genitives WHERE name = $1', [name])
   res.json({ success: true })
 }))
 
@@ -1246,7 +1252,7 @@ router.post('/doc-templates/:id/callback', authenticateToken, asyncHandler(async
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: '{ departments: [{ id, name, organization, genitive (сохранённое или null), suggestion }] } — администратор видит отделы всех организаций, остальные — текущей'
+ *         description: '{ departments: [{ id, name, organization, genitive, suggestion }], positions: [{ name, genitive, suggestion }] } — genitive: сохранённое или null; администратор видит все организации, остальные — текущую'
  */
 router.get('/declensions', authenticateToken, requirePermission('documents:templates'), asyncHandler(async (req, res) => {
   const allOrgs = FULL_ACCESS_ROLES.includes(req.user.role)
@@ -1255,10 +1261,20 @@ router.get('/declensions', authenticateToken, requirePermission('documents:templ
     ${allOrgs || !req.org ? '' : 'WHERE d.organization_id = $1'}
     ORDER BY o.id NULLS LAST, d.name`
   const result = await query(sql, allOrgs || !req.org ? [] : [currentOrgId(req)])
+  const positions = await query(
+    `SELECT p.name, pg.genitive FROM (
+       SELECT DISTINCT u.position AS name FROM users u
+       ${allOrgs || !req.org ? '' : 'JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $1 AND uo.is_active'}
+       WHERE u.position IS NOT NULL AND btrim(u.position) <> ''
+     ) p LEFT JOIN position_genitives pg ON pg.name = p.name
+     ORDER BY p.name`,
+    allOrgs || !req.org ? [] : [currentOrgId(req)]
+  )
   res.json({
     departments: result.rows.map((d) => ({
       id: d.id, name: d.name, organization: d.organization, genitive: d.name_genitive, suggestion: suggestDepartmentGenitive(d.name),
     })),
+    positions: positions.rows.map((p) => ({ name: p.name, genitive: p.genitive, suggestion: suggestPositionGenitive(p.name) })),
   })
 }))
 
@@ -1293,6 +1309,39 @@ router.put('/declensions/departments/:id', authenticateToken, requirePermission(
   const d = result.rows[0]
   const org = await query('SELECT o.name FROM departments d LEFT JOIN organizations o ON o.id = d.organization_id WHERE d.id = $1', [d.id])
   res.json({ id: d.id, name: d.name, organization: org.rows[0]?.name ?? null, genitive: d.name_genitive, suggestion: suggestDepartmentGenitive(d.name) })
+}))
+
+/**
+ * @swagger
+ * /dictionaries/declensions/positions:
+ *   put:
+ *     tags: [Dictionaries]
+ *     summary: Сохранить должность в родительном падеже (пустое значение — вернуть автоматическое)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               genitive: { type: string }
+ */
+router.put('/declensions/positions', authenticateToken, requirePermission('documents:templates'), asyncHandler(async (req, res) => {
+  const name = String(req.body?.name ?? '').trim()
+  if (!name) throw new ValidationError('Укажите должность')
+  const genitive = String(req.body?.genitive ?? '').trim().slice(0, 255)
+  if (genitive) {
+    await query(
+      `INSERT INTO position_genitives (name, genitive, updated_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (name) DO UPDATE SET genitive = EXCLUDED.genitive, updated_at = NOW()`,
+      [name, genitive]
+    )
+  } else {
+    await query('DELETE FROM position_genitives WHERE name = $1', [name])
+  }
+  res.json({ name, genitive: genitive || null, suggestion: suggestPositionGenitive(name) })
 }))
 
 /**

@@ -568,6 +568,8 @@ export function Vacation() {
     travelDestination?: string
     travelChildren?: Array<{ fullName: string; birthDate: string }>
     comment: string
+    referenceDocument?: string
+    referenceFile?: File
     substitute_ids?: number[]
   }) => {
     if (!user || !selectedStartDate || !selectedEndDate) return
@@ -581,6 +583,8 @@ export function Vacation() {
         hasTravel: data.hasTravel,
         travelDestination: data.travelDestination,
         travelChildren: data.travelChildren,
+        referenceDocument: data.referenceDocument,
+        referenceFile: data.referenceFile,
         substitute_ids: data.substitute_ids,
       })
       if (!created) {
@@ -768,6 +772,18 @@ export function Vacation() {
       return true
     })
   }, [departmentRequests, currentUserRequests, calendarDeptRequests, reqFilters, calendarScope])
+
+  const ownDeptId = user?.departmentId ? String(user.departmentId) : ''
+  const balanceTableDeptIds = useMemo(() => {
+    const selected = reqFilters.departmentIds
+    if (!isManager) return selected.length === 0 || selected.includes(ownDeptId) ? [ownDeptId].filter(Boolean) : []
+    return selected.length > 0 ? selected : [ownDeptId].filter(Boolean)
+  }, [reqFilters.departmentIds, isManager, ownDeptId])
+  const departmentNameById = useMemo(() => new Map(departments.map((d) => [String(d.id), d.name])), [departments])
+  const balanceTableUserIds = useMemo(
+    () => (reqFilters.statuses.length > 0 || reqFilters.vacationTypes.length > 0 ? new Set(calendarRequests.map((r) => String(r.userId))) : null),
+    [reqFilters.statuses, reqFilters.vacationTypes, calendarRequests],
+  )
 
   const currentActualYear = new Date().getFullYear()
   const minCalendarYear = currentActualYear - 1
@@ -1298,7 +1314,7 @@ export function Vacation() {
                   onClick={() => setDeptTableExpanded((v) => !v)}
                   className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-1 text-sm font-medium transition-colors hover:bg-muted"
                 >
-                  Работники отдела
+                  {balanceTableDeptIds.length > 1 ? 'Работники отделов' : 'Работники отдела'}
                   <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform duration-200', deptTableExpanded && 'rotate-180')} />
                 </button>
                 <div
@@ -1307,7 +1323,16 @@ export function Vacation() {
                 >
                   <div className="min-h-0 overflow-hidden">
                     <div className="pt-3">
-                      <DepartmentBalanceTable departmentId={user?.departmentId || ''} year={year} currentUserId={user?.id} tagId={reqFilters.tagId || undefined} />
+                      <DepartmentBalanceTable
+                        departmentIds={balanceTableDeptIds}
+                        departmentNames={departmentNameById}
+                        year={year}
+                        currentUserId={user?.id}
+                        tagId={reqFilters.tagId || undefined}
+                        search={debouncedSearch}
+                        onlyUserIds={balanceTableUserIds}
+                        emptyHint={balanceTableDeptIds.length === 0 ? 'Балансы других отделов доступны руководителям и HR' : undefined}
+                      />
                     </div>
                   </div>
                 </div>

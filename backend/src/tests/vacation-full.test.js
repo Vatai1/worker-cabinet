@@ -163,12 +163,18 @@ async function anonymousCall(method, path, body) {
 
 describe('Модуль отпусков — user stories', () => {
   let overBalanceWasOn = false
+  let displacedTemplates = []
   before(async () => {
     overBalanceWasOn = (await query('SELECT allow_over_balance FROM vacation_settings WHERE organization_id = 1')).rows[0]?.allow_over_balance === true
     await query('UPDATE vacation_settings SET allow_over_balance = false WHERE organization_id = 1')
+    displacedTemplates = (await query(
+      `UPDATE document_templates t SET purpose = NULL FROM (SELECT id, purpose FROM document_templates WHERE organization_id = 1 AND purpose IN ('vacation_template', 'vacation_transfer_template') FOR UPDATE) old
+       WHERE t.id = old.id RETURNING t.id, old.purpose`
+    )).rows
   })
   after(async () => {
     if (overBalanceWasOn) await query('UPDATE vacation_settings SET allow_over_balance = true WHERE organization_id = 1')
+    for (const t of displacedTemplates) await query('UPDATE document_templates SET purpose = $2 WHERE id = $1', [t.id, t.purpose])
     await pool.end()
   })
 

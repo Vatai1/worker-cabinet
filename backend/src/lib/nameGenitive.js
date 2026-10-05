@@ -114,11 +114,16 @@ function noun(word, feminine) {
   return word
 }
 
-const keepCase = (original, declined) => original.slice(0, 1) + declined.slice(1)
+const keepCase = (original, declined) => {
+  const lower = original.toLowerCase()
+  let i = 0
+  while (i < lower.length && lower[i] === declined[i]) i++
+  return original.slice(0, i) + declined.slice(i)
+}
 
-export function suggestDepartmentGenitive(name) {
+export function suggestPhraseGenitive(name) {
   const words = String(name || '').trim().split(/\s+/).filter(Boolean)
-  const cyrillic = (w) => /^[а-яё-]+$/i.test(w)
+  const cyrillic = (w) => /[а-яё]$/i.test(w) && /^[a-zа-яё0-9-]+$/i.test(w)
   let i = words.findIndex(cyrillic)
   if (i === -1) return words.join(' ')
   let feminine = false
@@ -131,4 +136,8 @@ export function suggestDepartmentGenitive(name) {
   return words.join(' ')
 }
 
+export const suggestDepartmentGenitive = suggestPhraseGenitive
+export const suggestPositionGenitive = suggestPhraseGenitive
+
 export const departmentGenitive = (d) => d?.name_genitive || suggestDepartmentGenitive(d?.name)
+export const positionGenitive = (position, saved) => (position ? saved || suggestPositionGenitive(position) : '')
