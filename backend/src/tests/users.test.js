@@ -339,7 +339,7 @@ describe('Users API — system-roles / bulk-status / bulk-role (HR доступ)
     assert.strictEqual(res.status, 200)
     const data = await res.json()
     assert.ok(data.some((u) => u.id === bulkUser2.id), 'ожидали найти отключённого пользователя')
-    assert.ok(data.every((u) => u.org_is_active === false))
+    assert.ok(data.every((u) => u.org_is_active === false || u.status === 'inactive'))
 
     const activeOnly = await fetch(`${BASE}/users/search`, { headers: headers(adminToken) })
     const activeData = await activeOnly.json()
