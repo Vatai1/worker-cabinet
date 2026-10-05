@@ -3,7 +3,7 @@ import { Send, Upload, X, Users, Building2, Briefcase, Mail, Globe, Loader2, Che
 import { Card, CardContent } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
-import { ConfirmModal } from '@/shared/components/ConfirmModal'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { apiGet, apiPost } from '@/shared/lib/apiClient'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -164,7 +164,6 @@ export function HRMailing() {
   const [departmentSearch, setDepartmentSearch] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [confirmData, setConfirmData] = useState<{ open: boolean }>({ open: false })
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [campaignsLoading, setCampaignsLoading] = useState(true)
@@ -469,7 +468,7 @@ export function HRMailing() {
           <div className="flex justify-end">
             <Button
               disabled={!title.trim() || !message.trim() || !hasRecipients || sending}
-              onClick={() => setConfirmData({ open: true })}
+              onClick={async () => { if (await confirmDialog({ title: 'Подтверждение рассылки', message: `Отправить «${title}» через ${CHANNEL_LABELS[channel]}? Получателей: ${recipientSummary}`, confirmText: 'Отправить' })) handleSend() }}
             >
               {sending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
               Отправить
@@ -478,14 +477,6 @@ export function HRMailing() {
         </CardContent>
       </Card>
 
-      <ConfirmModal
-        isOpen={confirmData.open}
-        onClose={() => setConfirmData({ open: false })}
-        onConfirm={() => { setConfirmData({ open: false }); handleSend() }}
-        title="Подтверждение рассылки"
-        message={`Отправить «${title}» через ${CHANNEL_LABELS[channel]}? Получателей: ${recipientSummary}`}
-        confirmText="Отправить"
-      />
 
       <div className="space-y-4">
         <h2 className="text-lg font-semibold">История рассылок</h2>

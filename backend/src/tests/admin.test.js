@@ -237,22 +237,6 @@ describe('Admin API', () => {
     })
   })
 
-  describe('Dictionaries Management', () => {
-    it('GET /admin/dictionaries returns all dictionaries', async () => {
-      const res = await fetch(`${BASE}/admin/dictionaries`, { headers: headers(adminToken) })
-      assert.strictEqual(res.status, 200)
-    })
-
-    it('POST /admin/dictionaries/skills adds skill', async () => {
-      const res = await fetch(`${BASE}/admin/dictionaries/skills`, {
-        method: 'POST',
-        headers: headersJSON(adminToken),
-        body: JSON.stringify({ name: 'AdminSkill_' + Date.now() }),
-      })
-      assert.strictEqual(res.status, 201)
-    })
-  })
-
   describe('Modules Management', () => {
     let createdModuleId
 

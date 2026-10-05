@@ -2,7 +2,7 @@
 import { ClipboardList, BarChart2, Share2, PencilLine, X, Play } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
-import { ConfirmModal } from '@/shared/components/ConfirmModal'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { SurveyBuilderModal } from '@/modules/surveys/components/modals/SurveyBuilderModal'
 import { SurveyAnalyticsModal } from '@/modules/surveys/components/modals/SurveyAnalyticsModal'
 import { surveyApi } from '@/modules/surveys/services/surveyApi'
@@ -36,7 +36,6 @@ export function HRSurveys() {
   const [editSurvey, setEditSurvey] = useState<SurveyWithQuestions | null>(null)
   const [analyticsId, setAnalyticsId] = useState<string | null>(null)
   const [analyticsTitle, setAnalyticsTitle] = useState<string | undefined>()
-  const [deleteTarget, setDeleteTarget] = useState<Survey | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => { fetchSurveys() }, [fetchSurveys])
@@ -73,9 +72,9 @@ export function HRSurveys() {
     catch (err: unknown) { setActionError(getErrorMessage(err)) }
   }
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return
-    try { await removeSurvey(deleteTarget.id); setDeleteTarget(null) }
+  const handleDelete = async (survey: Survey) => {
+    if (!(await confirmDialog({ title: 'Удалить опрос', message: `Удалить опрос "${survey.title}"? Все ответы будут удалены.`, confirmText: 'Удалить', variant: 'danger' }))) return
+    try { await removeSurvey(survey.id) }
     catch (err: unknown) { setActionError(getErrorMessage(err)) }
   }
 
@@ -197,7 +196,7 @@ export function HRSurveys() {
                       <Button size="sm" onClick={() => handlePublish(s.id)}>
                         <Play className="h-3 w-3 mr-1" /> Опубликовать
                       </Button>
-                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteTarget(s)}>
+                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(s)}>
                         <X className="h-3 w-3" />
                       </Button>
                     </>
@@ -225,13 +224,6 @@ export function HRSurveys() {
         onClose={() => setAnalyticsId(null)}
         surveyId={analyticsId}
         surveyTitle={analyticsTitle}
-      />
-      <ConfirmModal
-        isOpen={!!deleteTarget}
-        onCancel={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        title="Удалить опрос"
-        message={`Удалить опрос "${deleteTarget?.title}"? Все ответы будут удалены.`}
       />
     </div>
   )

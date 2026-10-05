@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { Card } from '@/shared/components/ui/Card'
 import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
-import { ConfirmModal } from '@/shared/components/ConfirmModal'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { apiGet } from '@/shared/lib/apiClient'
 import { cn, formatDate, getErrorMessage } from '@/shared/lib/utils'
@@ -70,8 +70,6 @@ export function HRVacationRestrictions() {
   const [editingRestriction, setEditingRestriction] = useState<VacationRestriction | null>(null)
   const [form, setForm] = useState<CreateFormState>(EMPTY_FORM)
   const [creating, setCreating] = useState(false)
-  const [deleting, setDeleting] = useState<VacationRestriction | null>(null)
-  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
     apiGet<Department[]>('/dictionaries/departments').then(setDepartments).catch(() => setDepartments([]))
@@ -220,13 +218,11 @@ export function HRVacationRestrictions() {
     }
   }
 
-  const handleDelete = async () => {
-    if (!deleting) return
-    setDeleteLoading(true)
+  const handleDelete = async (rule: VacationRestriction) => {
+    if (!(await confirmDialog({ title: 'Удалить правило', message: `Удалить правило «${rule.description || ruleKind(rule).label}»?`, confirmText: 'Удалить', variant: 'danger' }))) return
     try {
-      await vacationApi.deleteRestriction(deleting.id)
+      await vacationApi.deleteRestriction(rule.id)
       toast.success('Правило удалено')
-      setDeleting(null)
       const data = await vacationApi.getRestrictions({
         departmentId: departmentId || undefined,
         tagId: tagId || undefined,
@@ -235,8 +231,6 @@ export function HRVacationRestrictions() {
       setRules(data)
     } catch (err: unknown) {
       toast.error(getErrorMessage(err))
-    } finally {
-      setDeleteLoading(false)
     }
   }
 
@@ -377,7 +371,7 @@ export function HRVacationRestrictions() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDeleting(rule)}
+                          onClick={() => handleDelete(rule)}
                           className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                           title="Удалить"
                         >
@@ -479,16 +473,6 @@ export function HRVacationRestrictions() {
         document.body,
       )}
 
-      <ConfirmModal
-        isOpen={deleting !== null}
-        onClose={() => setDeleting(null)}
-        onConfirm={handleDelete}
-        title="Удалить правило"
-        message={deleting ? `Удалить правило «${deleting.description || ruleKind(deleting).label}»?` : ''}
-        confirmText="Удалить"
-        danger
-        loading={deleteLoading}
-      />
     </Card>
   )
 }
