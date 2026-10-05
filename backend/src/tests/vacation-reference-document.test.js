@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert'
+import bcrypt from 'bcryptjs'
 import { query } from '../config/database.js'
 import { BASE, login, headers, headersJSON } from './helpers.js'
 
@@ -7,6 +8,7 @@ const PDF = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF')
 const CSRF = { 'X-CSRF-Token': 'dd', Cookie: 'csrf_token=dd' }
 const createdIds = []
 let createdBalanceId = null
+const STRANGER = `stranger@reference-doc-${Date.now()}.test`
 
 async function upload(email, name, type, body) {
   const form = new FormData()
@@ -33,6 +35,12 @@ async function reference(email, id) {
 
 describe('Учебный отпуск: справка', () => {
   before(async () => {
+    const strangerId = (await query(
+      `INSERT INTO users (email, password_hash, first_name, last_name, position, role, hire_date, status)
+       VALUES ($1, $2, 'Пётр', 'Посторонний', 'Специалист', 'employee', '2020-01-01', 'active') RETURNING id`,
+      [STRANGER, await bcrypt.hash('password123', 4)]
+    )).rows[0].id
+    await query("INSERT INTO user_organizations (user_id, org_id, org_role, is_active) VALUES ($1, 1, 'employee', true)", [strangerId])
     const exists = await query("SELECT 1 FROM vacation_balances WHERE user_id = (SELECT id FROM users WHERE email = 'ivanov@example.com') AND year = 2031 AND organization_id = 1")
     if (exists.rows.length === 0) {
       createdBalanceId = (await query(
@@ -46,6 +54,7 @@ describe('Учебный отпуск: справка', () => {
     await query('DELETE FROM notification_queue WHERE (data->>\'requestId\')::text = ANY($1)', [createdIds.map(String)])
     await query('DELETE FROM vacation_requests WHERE id = ANY($1)', [createdIds])
     if (createdBalanceId) await query('DELETE FROM vacation_balances WHERE id = $1', [createdBalanceId])
+    await query('DELETE FROM users WHERE email = $1', [STRANGER])
   })
 
   it('без загруженного файла заявку не создать — одного имени файла недостаточно', async () => {
@@ -61,7 +70,7 @@ describe('Учебный отпуск: справка', () => {
   })
 
   it('чужой файл приложить нельзя', async () => {
-    const foreign = await upload('anna.efimova@example.com', 'spravka.pdf', 'application/pdf', PDF)
+    const foreign = await upload(STRANGER, 'spravka.pdf', 'application/pdf', PDF)
     assert.strictEqual(foreign.status, 201, JSON.stringify(foreign.data))
     const res = await createEducational('ivanov@example.com', { referenceDocument: 'spravka.pdf', referenceDocumentKey: foreign.data.key })
     assert.strictEqual(res.status, 400)
@@ -81,6 +90,6 @@ describe('Учебный отпуск: справка', () => {
     assert.strictEqual(own.data.name, 'Справка-вызов.pdf')
 
     assert.strictEqual((await reference('elena@example.com', created.data.id)).status, 200)
-    assert.strictEqual((await reference('anna.efimova@example.com', created.data.id)).status, 403)
+    assert.strictEqual((await reference(STRANGER, created.data.id)).status, 403)
   })
 })
