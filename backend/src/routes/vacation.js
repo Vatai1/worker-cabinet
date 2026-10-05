@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
+import { getTravelState, assertTravelAllowed } from '../lib/travel.js'
 import { getFromS3, uploadToS3, getPresignedUrl } from '../config/s3.js'
 import multer from 'multer'
 import { notify } from '../config/notifications.js'
@@ -945,80 +946,33 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Доступ запрещён' })
     }
 
-    const result = await query(
-      `SELECT vb.*,
-              u.hire_date,
-              CASE WHEN vb.travel_next_available_date IS NULL THEN u.hire_date + INTERVAL '2 years'
-                   ELSE vb.travel_next_available_date
-              END as effective_travel_next
+    const balanceSql = `SELECT vb.*, u.hire_date
        FROM vacation_balances vb
        LEFT JOIN users u ON u.id = vb.user_id
-       WHERE vb.user_id = $1 AND vb.year = $2${req.org ? ' AND vb.organization_id = $3' : ''}`,
-      req.org ? [userId, targetYear, req.org.org_id] : [userId, targetYear]
-    )
+       WHERE vb.user_id = $1 AND vb.year = $2${req.org ? ' AND vb.organization_id = $3' : ''}`
+    const balanceParams = req.org ? [userId, targetYear, req.org.org_id] : [userId, targetYear]
+    let row = (await query(balanceSql, balanceParams)).rows[0]
 
-    if (result.rows.length === 0) {
+    if (!row) {
       const resolvedDays = await resolveVacationDays(userId, currentOrgId(req))
-      const newBalance = await query(
+      await query(
         `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days, year, organization_id)
          VALUES ($1, $4, 0, 0, $2, $3)
-         ON CONFLICT (user_id, organization_id, year) DO UPDATE SET organization_id = EXCLUDED.organization_id
-         RETURNING *`,
+         ON CONFLICT (user_id, organization_id, year) DO NOTHING`,
         [userId, targetYear, currentOrgId(req), resolvedDays]
       ).catch(() => null)
-      if (newBalance && newBalance.rows.length > 0) {
-        const updtOrgClause = req.org ? ' AND vacation_balances.organization_id = $2' : ''
-        await query(
-          `UPDATE vacation_balances SET travel_next_available_date = users.hire_date + INTERVAL '2 years'
-           FROM users WHERE users.id = vacation_balances.user_id AND vacation_balances.user_id = $1${updtOrgClause}`,
-          req.org ? [userId, req.org.org_id] : [userId]
-        ).catch(() => {})
-        return res.json(newBalance.rows[0])
-      }
-      const fallback = await query(
-        `SELECT vb.*, u.hire_date,
-                CASE WHEN vb.travel_next_available_date IS NULL THEN u.hire_date + INTERVAL '2 years'
-                     ELSE vb.travel_next_available_date
-                END as effective_travel_next
-         FROM vacation_balances vb
-         LEFT JOIN users u ON u.id = vb.user_id
-         WHERE vb.user_id = $1 AND vb.year = $2${req.org ? ' AND vb.organization_id = $3' : ''}`,
-        req.org ? [userId, targetYear, req.org.org_id] : [userId, targetYear]
-      )
-      if (fallback.rows.length > 0) {
-        const row = fallback.rows[0]
-        return res.json({
-          ...row,
-          travel_available: row.effective_travel_next ? new Date() >= new Date(row.effective_travel_next) : false,
-          travel_next_available_date: row.effective_travel_next,
-        })
-      }
-      return res.status(404).json({ error: 'Баланс отпуска не найден' })
+      row = (await query(balanceSql, balanceParams)).rows[0]
+      if (!row) return res.status(404).json({ error: 'Баланс отпуска не найден' })
     }
 
-    const row = result.rows[0]
-    const dateOk = row.effective_travel_next && new Date() >= new Date(row.effective_travel_next)
-
-    const { text: ptText, values: ptValues } = orgScopedQuery(
-      `SELECT 1 FROM vacation_requests vr
-       JOIN request_statuses rs ON rs.id = vr.status_id
-       WHERE vr.user_id = $1 AND vr.has_travel = true AND rs.code IN ('on_approval')
-       LIMIT 1`,
-      [userId], req
-    )
-    const pendingTravel = await query(ptText, ptValues)
-    const travelAvailable = dateOk && pendingTravel.rows.length === 0
-    const travelAvailableUntil = travelAvailable
-      ? new Date(new Date(row.effective_travel_next).getTime() + 2 * 365 * 24 * 60 * 60 * 1000)
-      : null
-    const balance = {
+    const travel = await getTravelState(parseInt(userId), currentOrgId(req))
+    res.json({
       ...row,
-      travel_available: travelAvailable,
-      travel_pending: pendingTravel.rows.length > 0,
-      travel_next_available_date: row.effective_travel_next,
-      travel_available_until: travelAvailableUntil ? travelAvailableUntil.toISOString().split('T')[0] : null,
-    }
-    res.json(balance)
+      travel_available: !!travel?.available,
+      travel_pending: !!travel?.pending,
+      travel_next_available_date: travel?.next_available_date ?? null,
+      travel_available_until: travel?.available ? travel.available_until : null,
+    })
   } catch (error) {
     res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось загрузить баланс отпуска' })
@@ -1111,24 +1065,6 @@ router.get('/balances', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-async function travelState(userId, orgId) {
-  const row = (await query(
-    `SELECT u.hire_date,
-            MAX(vb.travel_last_used_date) AS last_used_date,
-            COALESCE(MAX(vb.travel_next_available_date), u.hire_date + INTERVAL '2 years')::date AS next_available_date,
-            EXISTS (
-              SELECT 1 FROM vacation_requests vr JOIN request_statuses rs ON rs.id = vr.status_id
-              WHERE vr.user_id = u.id AND vr.organization_id = $2 AND vr.has_travel AND rs.code = 'on_approval'
-            ) AS pending
-     FROM users u
-     LEFT JOIN vacation_balances vb ON vb.user_id = u.id AND vb.organization_id = $2
-     WHERE u.id = $1
-     GROUP BY u.id`,
-    [userId, orgId]
-  )).rows[0]
-  return row ?? null
-}
-
 async function requireOrgMember(userId, orgId) {
   if (!orgId) throw new ValidationError('Не выбрана организация')
   const member = await query('SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2', [userId, orgId])
@@ -1140,14 +1076,14 @@ async function requireOrgMember(userId, orgId) {
  * /vacation/travel/{userId}:
  *   get:
  *     tags: [Vacation]
- *     summary: Проезд к месту отпуска работника — даты последнего использования и следующей доступности
+ *     summary: Проезд к месту отпуска — двухлетние периоды от даты найма, использование, доступность
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: '{ hire_date, last_used_date, next_available_date, pending }'
+ *         description: '{ hire_date, periods: [{ index, start, end, eligible, current, used: [{ id, start_date, end_date, destination }] }], pending, override, next_available_date, available_until, available }'
  *   put:
  *     tags: [Vacation]
- *     summary: Изменить даты проезда (next_available_date пустое — дата приёма + 2 года)
+ *     summary: Ручная дата доступности проезда (null — считать по периодам)
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       content:
@@ -1155,41 +1091,23 @@ async function requireOrgMember(userId, orgId) {
  *           schema:
  *             type: object
  *             properties:
- *               last_used_date: { type: string, format: date, nullable: true }
- *               next_available_date: { type: string, format: date, nullable: true }
+ *               available_from: { type: string, format: date, nullable: true }
  */
 router.get('/travel/:userId', authenticateToken, requirePermission('vacation:manage'), asyncHandler(async (req, res) => {
   const userId = parseInt(req.params.userId, 10)
   const orgId = currentOrgId(req)
   await requireOrgMember(userId, orgId)
-  res.json(await travelState(userId, orgId))
+  res.json(await getTravelState(userId, orgId))
 }))
 
 router.put('/travel/:userId', authenticateToken, requirePermission('vacation:manage'), asyncHandler(async (req, res) => {
   const userId = parseInt(req.params.userId, 10)
   const orgId = currentOrgId(req)
   await requireOrgMember(userId, orgId)
-  const isDate = (v) => v === null || v === '' || (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v))
-  const { last_used_date: lastUsed = null, next_available_date: nextAvailable = null } = req.body ?? {}
-  if (!isDate(lastUsed) || !isDate(nextAvailable)) throw new ValidationError('Некорректная дата')
-  if (lastUsed && nextAvailable && nextAvailable < lastUsed) throw new ValidationError('Дата доступности не может быть раньше последнего использования')
-  await query(
-    `INSERT INTO vacation_balances (user_id, organization_id, year, total_days)
-     VALUES ($1, $2, EXTRACT(YEAR FROM CURRENT_DATE)::int, 28)
-     ON CONFLICT (user_id, organization_id, year) DO NOTHING`,
-    [userId, orgId]
-  )
-  await query(
-    `UPDATE vacation_balances vb
-     SET travel_last_used_date = $3::date,
-         travel_next_available_date = COALESCE($4::date, u.hire_date + INTERVAL '2 years'),
-         travel_available = COALESCE($4::date, u.hire_date + INTERVAL '2 years') <= CURRENT_DATE,
-         updated_at = NOW()
-     FROM users u
-     WHERE u.id = vb.user_id AND vb.user_id = $1 AND vb.organization_id = $2`,
-    [userId, orgId, lastUsed || null, nextAvailable || null]
-  )
-  res.json(await travelState(userId, orgId))
+  const value = req.body?.available_from ?? null
+  if (value !== null && value !== '' && !(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value))) throw new ValidationError('Некорректная дата')
+  await query('UPDATE users SET travel_available_from = $2 WHERE id = $1', [userId, value || null])
+  res.json(await getTravelState(userId, orgId))
 }))
 
 router.patch('/balances/:userId', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
@@ -1598,17 +1516,10 @@ router.post('/requests', authenticateToken, async (req, res) => {
     }
 
     if (hasTravel) {
-      const { text: ptText2, values: ptValues2 } = orgScopedQuery(
-        `SELECT 1 FROM vacation_requests vr
-         JOIN request_statuses rs ON rs.id = vr.status_id
-         WHERE vr.user_id = $1 AND vr.has_travel = true AND rs.code IN ('on_approval')
-         LIMIT 1`,
-        [userId], req
-      )
-      const pendingTravel = await client.query(ptText2, ptValues2)
-      if (pendingTravel.rows.length > 0) {
+      const travelCheck = await assertTravelAllowed(userId, currentOrgId(req), { db: client })
+      if (!travelCheck.ok) {
         await client.query('ROLLBACK')
-        return res.status(409).json({ error: 'Уже есть заявка с проездом на согласовании' })
+        return res.status(travelCheck.status).json({ error: travelCheck.error })
       }
       if (!travelDestination || !travelDestination.trim()) {
         await client.query('ROLLBACK')
@@ -1956,16 +1867,10 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     }
 
     if (hasTravel) {
-      const { text: ptText, values: ptValues } = orgScopedQuery(
-        `SELECT 1 FROM vacation_requests vr
-         JOIN request_statuses rs ON rs.id = vr.status_id
-         WHERE vr.user_id = $1 AND vr.id <> $2 AND vr.has_travel = true AND rs.code IN ('on_approval')
-         LIMIT 1`,
-        [userId, id], req
-      )
-      if ((await client.query(ptText, ptValues)).rows.length > 0) {
+      const travelCheck = await assertTravelAllowed(userId, currentOrgId(req), { excludeRequestId: parseInt(id), db: client })
+      if (!travelCheck.ok) {
         await client.query('ROLLBACK')
-        return res.status(409).json({ error: 'Уже есть другая заявка с проездом на согласовании' })
+        return res.status(travelCheck.status).json({ error: travelCheck.error === 'Уже есть заявка с проездом на согласовании' ? 'Уже есть другая заявка с проездом на согласовании' : travelCheck.error })
       }
       if (!travelDestination || !String(travelDestination).trim()) {
         await client.query('ROLLBACK')
@@ -2107,22 +2012,6 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
       await client.query(appBalText, appBalValues)
     }
 
-    if (request.rows[0].has_travel) {
-      const { text: appTrvText, values: appTrvValues } = orgScopedQuery(
-        `UPDATE vacation_balances
-         SET travel_last_used_date = CURRENT_DATE,
-             travel_next_available_date = (
-               SELECT COALESCE(
-                 (u.hire_date + (FLOOR(EXTRACT(YEAR FROM AGE(GREATEST($2::date, u.hire_date), u.hire_date)) / 2) + 1) * INTERVAL '2 years')::date,
-                 (CURRENT_DATE + INTERVAL '2 years')::date
-               ) FROM users u WHERE u.id = $1
-             ),
-             travel_available = false
-         WHERE user_id = $1`,
-        [request.rows[0].user_id, request.rows[0].start_date], req
-      )
-      await client.query(appTrvText, appTrvValues)
-    }
 
     await client.query(
       `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, organization_id) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'approved'), $2, $3)`,
@@ -2185,19 +2074,6 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
       await client.query(rejBalText, rejBalValues)
     }
 
-    if (request.rows[0].has_travel) {
-      const { text: rejTrvText, values: rejTrvValues } = orgScopedQuery(
-        `UPDATE vacation_balances
-         SET travel_available = true,
-             travel_last_used_date = NULL,
-             travel_next_available_date = (
-               SELECT hire_date + INTERVAL '2 years' FROM users WHERE id = $1
-             )
-         WHERE user_id = $1`,
-        [request.rows[0].user_id], req
-      )
-      await client.query(rejTrvText, rejTrvValues)
-    }
 
     await client.query(
       `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, comment, organization_id) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'rejected'), $2, $3, $4)`,
@@ -2270,19 +2146,6 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
       await client.query(cnlResText, cnlResValues)
     }
 
-    if (request.rows[0].has_travel) {
-      const { text: cnlTrvText, values: cnlTrvValues } = orgScopedQuery(
-        `UPDATE vacation_balances
-         SET travel_available = true,
-             travel_last_used_date = NULL,
-             travel_next_available_date = (
-               SELECT hire_date + INTERVAL '2 years' FROM users WHERE id = $1
-             )
-         WHERE user_id = $1`,
-        [request.rows[0].user_id], req
-      )
-      await client.query(cnlTrvText, cnlTrvValues)
-    }
 
     await client.query(
       `INSERT INTO vacation_request_status_history (request_id, status_id, changed_by, organization_id) VALUES ($1, (SELECT id FROM request_statuses WHERE code = 'cancelled_by_employee'), $2, $3)`,
@@ -2359,6 +2222,8 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
           }
         }
       }
+      const travelCheck = await assertTravelAllowed(userId, currentOrgId(req), { excludeRequestId: parseInt(id) })
+      if (!travelCheck.ok) return res.status(travelCheck.status).json({ error: travelCheck.error })
     }
 
     if (newEndDate < newStartDate) {

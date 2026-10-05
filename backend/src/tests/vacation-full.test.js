@@ -427,14 +427,33 @@ describe('Модуль отпусков — user stories', () => {
       assert.ok(!after.data.some((r) => r.id === created.data.id))
     })
 
-    it('approve с проездом: следующий проезд — начало следующего двухлетнего периода от даты найма', async () => {
+    it('approve с проездом: следующий проезд — со следующего двухлетнего периода, второй проезд в периоде сервер не пропускает', async () => {
       const created = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid', hasTravel: true, travelDestination: 'Южно-Сахалинск' })
       assert.strictEqual(created.status, 201, JSON.stringify(created.data))
       assert.strictEqual((await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})).status, 200)
-      const row = (await query("SELECT to_char(travel_next_available_date, 'YYYY-MM-DD') AS next, travel_available FROM vacation_balances WHERE user_id = $1 AND organization_id = 1 LIMIT 1", [emp.id])).rows[0]
-      const yearsSinceHire = Number(shift(10).slice(0, 4)) - 2020
-      assert.strictEqual(row.next, `${2020 + (Math.floor(yearsSinceHire / 2) + 1) * 2}-01-01`)
-      assert.strictEqual(row.travel_available, false)
+      const balance = await call('GET', `/vacation/balance/${emp.id}?year=${yearOf(shift(10))}`, await tokenFor(emp))
+      const k = Math.floor((Number(shift(10).slice(0, 4)) - 2020) / 2)
+      assert.strictEqual(balance.data.travel_next_available_date, `${2020 + (k + 1) * 2}-01-01`)
+      assert.strictEqual(balance.data.travel_available, false)
+      const second = await postVacation(emp, { startDate: shift(30), endDate: shift(32), vacationType: 'annual_paid', hasTravel: true, travelDestination: 'Сочи' })
+      if (Number(shift(30).slice(0, 4)) - 2020 < (k + 1) * 2) {
+        assert.strictEqual(second.status, 400, JSON.stringify(second.data))
+        assert.match(second.data.error, /будет доступен с/)
+      }
+    })
+
+    it('reject заявки с проездом не сбрасывает уже использованный период', async () => {
+      const used = await postVacation(emp, { startDate: shift(10), endDate: shift(14), vacationType: 'annual_paid', hasTravel: true, travelDestination: 'Сочи' })
+      assert.strictEqual((await call('POST', `/vacation/requests/${used.data.id}/approve`, await tokenFor(mgr), {})).status, 200)
+      const before = (await call('GET', `/vacation/balance/${emp.id}?year=${yearOf(shift(10))}`, await tokenFor(emp))).data.travel_next_available_date
+      await query("UPDATE users SET travel_available_from = CURRENT_DATE WHERE id = $1", [emp.id])
+      const pending = await postVacation(emp, { startDate: shift(40), endDate: shift(42), vacationType: 'annual_paid', hasTravel: true, travelDestination: 'Сочи' })
+      assert.strictEqual(pending.status, 201, JSON.stringify(pending.data))
+      await query('UPDATE users SET travel_available_from = NULL WHERE id = $1', [emp.id])
+      assert.strictEqual((await call('POST', `/vacation/requests/${pending.data.id}/reject`, await tokenFor(mgr), { reason: 'нет' })).status, 200)
+      const after = (await call('GET', `/vacation/balance/${emp.id}?year=${yearOf(shift(10))}`, await tokenFor(emp))).data
+      assert.strictEqual(after.travel_next_available_date, before)
+      assert.strictEqual(after.travel_available, false)
     })
 
     it('approve: reserved→used, история, уведомление автору', async () => {

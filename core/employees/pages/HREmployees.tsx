@@ -135,20 +135,27 @@ interface TechnicalInfo {
 
 type EmployeeModalTab = 'main' | 'vacation' | 'service'
 
-interface TravelState {
-  hire_date: string | null
-  last_used_date: string | null
-  next_available_date: string | null
-  pending: boolean
+interface TravelPeriod {
+  index: number
+  start: string
+  end: string
+  eligible_from: string
+  current: boolean
+  used: { id: number; start_date: string; end_date: string; destination: string | null }[]
 }
 
-const addYears = (date: string, years: number) => {
-  const d = new Date(`${date}T00:00:00`)
-  d.setFullYear(d.getFullYear() + years)
-  return d
+interface TravelState {
+  hire_date: string | null
+  periods: TravelPeriod[]
+  pending: { id: number; start_date: string; end_date: string; travel_destination: string | null } | null
+  override: string | null
+  next_available_date: string | null
+  available_until: string | null
+  available: boolean
 }
 
 const formatDay = (d: Date) => d.toLocaleDateString('ru-RU')
+const formatIsoDay = (iso: string | null | undefined) => (iso ? iso.slice(0, 10).split('-').reverse().join('.') : '—')
 
 function workingYear(hireDate: string | null) {
   if (!hireDate) return null
@@ -458,19 +465,19 @@ function EmployeeSettingsModal({
 
   // Travel section
   const [travel, setTravel] = useState<TravelState | null>(null)
-  const [travelLastUsed, setTravelLastUsed] = useState('')
-  const [travelNext, setTravelNext] = useState('')
+  const [travelOverride, setTravelOverride] = useState('')
 
-  useEffect(() => {
+  const loadTravel = useCallback(() => {
     if (!currentOrgId) return
     apiGet<TravelState>(`/vacation/travel/${employee.id}`)
       .then((t) => {
         setTravel(t)
-        setTravelLastUsed(t.last_used_date?.slice(0, 10) ?? '')
-        setTravelNext(t.next_available_date?.slice(0, 10) ?? '')
+        setTravelOverride(t.override ?? '')
       })
       .catch(() => setTravel(null))
   }, [employee.id, currentOrgId])
+
+  useEffect(() => { loadTravel() }, [loadTravel])
 
   // Account section (admin only): global status + system role + password reset
   const [status, setStatus] = useState(employee.status)
@@ -556,7 +563,7 @@ function EmployeeSettingsModal({
     || hireDate !== baseline.hireDate || managerId !== baseline.managerId || departmentId !== baseline.departmentId
   const orgDirty = !!currentOrgId && (orgRole !== baseline.orgRole || departmentId !== baseline.departmentId || isActive !== baseline.isActive)
   const balanceDirty = !balanceLoading && totalDays !== balanceBaseline
-  const travelDirty = !!travel && (travelLastUsed !== (travel.last_used_date?.slice(0, 10) ?? '') || travelNext !== (travel.next_available_date?.slice(0, 10) ?? ''))
+  const travelDirty = !!travel && travelOverride !== (travel.override ?? '')
   const genitiveDirty = genitiveAction !== 'none'
   const isDirty = profileDirty || orgDirty || balanceDirty || travelDirty || genitiveDirty
 
@@ -576,10 +583,6 @@ function EmployeeSettingsModal({
     const days = Number(totalDays)
     if (balanceDirty && (totalDays.trim() === '' || Number.isNaN(days) || days < 0)) {
       toast.error('Некорректное число дней в балансе отпуска')
-      return
-    }
-    if (travelLastUsed && travelNext && travelNext < travelLastUsed) {
-      toast.error('Дата доступности проезда не может быть раньше последнего использования')
       return
     }
     if (genitiveAction === 'save' && genitive && (!genitive.lastName.trim() || !genitive.firstName.trim())) {
@@ -608,6 +611,7 @@ function EmployeeSettingsModal({
           department_id: departmentId ? Number(departmentId) : null,
         }),
         done: () => {
+          if (hireDate !== baseline.hireDate) loadTravel()
           setBaseline((b) => ({ ...b, firstName, lastName, middleName, position, phone, office, cabinet, hireDate, managerId, departmentId }))
           const dept = departments.find((d) => String(d.id) === departmentId)
           onUpdated(employee.id, {
@@ -655,12 +659,11 @@ function EmployeeSettingsModal({
       let saved: TravelState | null = null
       tasks.push({
         label: 'Проезд',
-        run: async () => { saved = await apiPut<TravelState>(`/vacation/travel/${employee.id}`, { last_used_date: travelLastUsed || null, next_available_date: travelNext || null }) },
+        run: async () => { saved = await apiPut<TravelState>(`/vacation/travel/${employee.id}`, { available_from: travelOverride || null }) },
         done: () => {
           if (!saved) return
           setTravel(saved)
-          setTravelLastUsed(saved.last_used_date?.slice(0, 10) ?? '')
-          setTravelNext(saved.next_available_date?.slice(0, 10) ?? '')
+          setTravelOverride(saved.override ?? '')
         },
       })
     }
@@ -844,9 +847,9 @@ function EmployeeSettingsModal({
     ? { label: '', tone: '' }
     : travel.pending
       ? { label: 'Заявка на согласовании', tone: 'border-amber-500/30 text-amber-600 dark:text-amber-400' }
-      : travelNext && travelNext <= new Date().toLocaleDateString('sv-SE')
-        ? { label: 'Доступен', tone: 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400' }
-        : { label: travelNext ? `Недоступен до ${formatDay(addYears(travelNext, 0))}` : 'Недоступен', tone: 'border-border text-muted-foreground' }
+      : travel.available
+        ? { label: `Доступен до ${formatIsoDay(travel.available_until)}`, tone: 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400' }
+        : { label: travel.next_available_date ? `Доступен с ${formatIsoDay(travel.next_available_date)}` : 'Недоступен', tone: 'border-border text-muted-foreground' }
 
   const availableOrgsToAdd = allOrgs.filter((o) => !memberships.some((m) => m.id === o.id))
 
@@ -1072,25 +1075,63 @@ function EmployeeSettingsModal({
                 </p>
                 <Badge variant="outline" className={cn('text-[11px]', travelStatus.tone)}>{travelStatus.label}</Badge>
               </div>
-              <div className="grid grid-cols-2 gap-2.5 mb-2">
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Последнее использование</label>
-                  <Input type="date" value={travelLastUsed} onChange={(e) => setTravelLastUsed(e.target.value)} className="h-9 text-sm" />
+              {travel.pending && (
+                <p className="mb-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  На согласовании заявка с проездом: {formatIsoDay(travel.pending.start_date)} — {formatIsoDay(travel.pending.end_date)}{travel.pending.travel_destination ? `, ${travel.pending.travel_destination}` : ''}
+                </p>
+              )}
+              {travel.periods.length === 0 ? (
+                <p className="mb-3 text-xs text-muted-foreground">Периоды считаются от даты найма — укажите её на вкладке «Основная информация».</p>
+              ) : (
+                <div className="mb-3 overflow-hidden rounded-xl border border-border/60">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40 text-xs text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">Период</th>
+                        <th className="px-3 py-2 text-left font-medium">Проезд</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {travel.periods.map((p) => (
+                        <tr key={p.index} className={cn(p.current && 'bg-primary/5')}>
+                          <td className="whitespace-nowrap px-3 py-2 align-top">
+                            {formatIsoDay(p.start)} — {formatIsoDay(p.end)}
+                            {p.current && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">текущий</span>}
+                          </td>
+                          <td className="px-3 py-2 align-top">
+                            {p.used.length > 0 ? (
+                              p.used.map((u) => (
+                                <p key={u.id} className="text-xs text-emerald-600 dark:text-emerald-400">
+                                  использован: {formatIsoDay(u.start_date)} — {formatIsoDay(u.end_date)}{u.destination ? `, ${u.destination}` : ''}
+                                </p>
+                              ))
+                            ) : p.eligible_from > new Date().toLocaleDateString('sv-SE') ? (
+                              <span className="text-xs text-muted-foreground">право с {formatIsoDay(p.eligible_from)}</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">не использован</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+              )}
+              <div className="flex flex-wrap items-end gap-2.5">
                 <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Доступен с</label>
-                  <Input type="date" value={travelNext} onChange={(e) => setTravelNext(e.target.value)} className="h-9 text-sm" />
+                  <label className="mb-1 block text-xs text-muted-foreground">Доступен с (вручную)</label>
+                  <Input type="date" value={travelOverride} onChange={(e) => setTravelOverride(e.target.value)} className="h-9 w-44 text-sm" />
                 </div>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>{travelNext ? `Период права: ${formatDay(addYears(travelNext, 0))} — ${formatDay(addYears(travelNext, 2))}` : 'Пусто — дата найма + 2 года'}</span>
-                {hireDate && (
-                  <button type="button" className="text-primary hover:underline" onClick={() => { setTravelLastUsed(''); setTravelNext(addYears(hireDate, 2).toLocaleDateString('sv-SE')) }}>
-                    Сбросить к дате найма + 2 года
-                  </button>
+                {travelOverride && (
+                  <Button type="button" variant="ghost" size="sm" className="h-9" onClick={() => setTravelOverride('')}>
+                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                    По периодам
+                  </Button>
                 )}
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">Право на проезд — раз в 2 года. При согласовании заявки с проездом дата доступности сдвигается автоматически.</p>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Право на проезд — один раз в каждом двухлетнем периоде от даты найма; в первом периоде — после 6 месяцев работы (ст. 325 ТК РФ). Проезд считается использованным, когда заявка с проездом согласована; отклонённые и отменённые заявки не учитываются. Ручная дата нужна, например, если проезд использован до подключения системы.
+              </p>
             </section>
           )}
 

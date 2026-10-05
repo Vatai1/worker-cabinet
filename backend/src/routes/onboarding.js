@@ -694,13 +694,6 @@ router.post('/', authenticateToken, requirePermission('onboarding:manage'), asyn
         'INSERT INTO vacation_balances (user_id, total_days, organization_id) VALUES ($1, $2, $3)',
         [userId, resolvedDays, currentOrgId(req)]
       )
-      const vbUpd = orgScopedQuery(
-        `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'
-         FROM users WHERE users.id = vacation_balances.user_id AND travel_next_available_date IS NULL AND users.id = $1`,
-        [userId],
-        req
-      )
-      await client.query(vbUpd.text, vbUpd.values)
 
       const onboardingResult = await client.query(
         `INSERT INTO employee_onboarding (user_id, started_by, organization_id) VALUES ($1, $2, $3) RETURNING id`,

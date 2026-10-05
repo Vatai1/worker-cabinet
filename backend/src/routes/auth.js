@@ -221,10 +221,6 @@ router.post('/register', authLimiter, validateRegister, asyncHandler(async (req,
 
   const user = result.rows[0]
   await query('INSERT INTO vacation_balances (user_id, total_days) VALUES ($1, 28)', [user.id])
-  await query(
-    `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'
-     FROM users WHERE users.id = vacation_balances.user_id AND travel_next_available_date IS NULL`
-  ).catch(() => {})
 
   const { sessionLifetime, sessionMs, refreshLifetime, refreshMs } = await getAuthSettings()
   const token = signAccessToken(user, sessionLifetime)

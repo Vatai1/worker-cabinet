@@ -337,11 +337,6 @@ export async function findOrCreateUser(kcPayload) {
   }
 
   await query('INSERT INTO vacation_balances (user_id, total_days, organization_id) VALUES ($1, 28, $2)', [user.id, firstOrgId]).catch(() => {})
-  await query(
-    `UPDATE vacation_balances SET travel_next_available_date = hire_date + INTERVAL '2 years'
-     FROM users WHERE users.id = vacation_balances.user_id AND vacation_balances.organization_id = $1 AND travel_next_available_date IS NULL`,
-    [firstOrgId]
-  ).catch(() => {})
 
   return user
 }

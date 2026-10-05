@@ -2007,6 +2007,7 @@ async function migrateApprovalHierarchy(db) {
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS vac_child_sees_parent BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_parent_sees_child BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_child_sees_parent BOOLEAN NOT NULL DEFAULT true')
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS travel_available_from DATE')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS vac_parent_approves BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_parent_approves BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS emp_parent_sees_child BOOLEAN NOT NULL DEFAULT false')

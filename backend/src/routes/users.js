@@ -997,9 +997,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         vb.total_days,
         vb.used_days,
         vb.available_days,
-        vb.reserved_days,
-        vb.travel_available,
-        vb.travel_next_available_date
+        vb.reserved_days
       FROM users u
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.is_active = true AND uo.is_primary = true
