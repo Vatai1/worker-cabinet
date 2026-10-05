@@ -12,7 +12,7 @@ import {
   Calendar, Bell, Crown, Bot,
   Send, UserPlus, Network, Briefcase,
   Key, ShieldCheck, Boxes, Settings2,
-  Activity, Palette, Film,
+  Activity, Palette,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -111,7 +111,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
 // показываем их и в разделе «Настройки организации» в сайдбаре.
 const ORG_HIDDEN_ITEM_NAMES = new Set([
   'Роли и доступы', 'Роли по должности', 'Учреждения', 'Иерархия',
-  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система', 'Тестовые данные', 'Инструкции',
+  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система', 'Тестовые данные', 'Видеоинструкции',
 ])
 
 const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg: boolean): NavItem[] => {
@@ -129,6 +129,7 @@ const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg:
     { name: 'Настройки системы', href: `${basePath}?tab=settings`, icon: Settings2, section, permission: 'admin:settings' },
     { name: 'Безопасность', href: `${basePath}?tab=security`, icon: ShieldCheck, section },
     { name: 'Диагностика', icon: Activity, section, children: [
+      { name: 'Сейчас на сайте', href: `${basePath}?tab=online`, permission: 'admin:online' },
       { name: 'Аудит', href: `${basePath}?tab=audit`, permission: 'admin:audit' },
       { name: 'Ошибки', href: `${basePath}?tab=errors`, permission: 'admin:errors' },
       { name: 'Баг-репорты', href: `${basePath}?tab=bug-reports`, permission: 'bug_reports:manage' },
@@ -140,9 +141,9 @@ const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg:
       { name: 'Должности', href: `${basePath}?tab=dict_positions` },
       { name: 'Типы отпусков', href: `${basePath}?tab=dict_vacation`, module: 'vacation' },
       { name: 'Теги', href: `${basePath}?tab=dict_skills`, module: 'skills' },
+      { name: 'Видеоинструкции', href: `${basePath}?tab=instructions` },
     ]},
     { name: 'Темы', href: `${basePath}?tab=appearance`, icon: Palette, section },
-    { name: 'Инструкции', href: `${basePath}?tab=instructions`, icon: Film, section },
   ]
   if (!restrictToOrg) return items
   return items

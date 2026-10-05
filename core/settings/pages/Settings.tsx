@@ -7,6 +7,7 @@ import { Bell, Moon, Sun } from 'lucide-react'
 import { useUIStore } from '@/shared/store/uiStore'
 import { fetchPushConfig, isSubscribed, subscribePush, unsubscribePush } from '@/shared/lib/push'
 import { readLocalPref, writeLocalPref } from '@/shared/lib/localPrefs'
+import { NameGenitiveCard } from '@/shared/components/NameGenitive'
 
 const PUSH_PREF_KEY = 'pushNotifications'
 
@@ -138,6 +139,8 @@ export function Settings() {
             </div>
           </CardContent>
         </Card>
+
+        <NameGenitiveCard />
       </div>
     </div>
   )

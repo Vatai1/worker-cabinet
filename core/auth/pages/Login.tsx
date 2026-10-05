@@ -6,7 +6,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
-import { Logo } from '@/shared/components/brand/Logo'
+import { LoginHero, DEFAULT_LOGIN_TITLE, DEFAULT_LOGIN_SUBTITLE } from '@/core/auth/components/LoginHero'
 import { useSiteSettingsStore } from '@/shared/store/siteSettingsStore'
 import { apiGet, apiPost } from '@/shared/lib/apiClient'
 
@@ -224,8 +224,8 @@ export function Login() {
   }
 
   const showDemo = isDev && (loaded ? settings.login_demo_buttons !== 'false' : true)
-  const title = settings.login_title || 'Личный кабинет работника'
-  const subtitle = settings.login_subtitle || 'Единая платформа для управления персоналом, отпусками и документами'
+  const title = settings.login_title || DEFAULT_LOGIN_TITLE
+  const subtitle = settings.login_subtitle || DEFAULT_LOGIN_SUBTITLE
 
   if (loadingConfig) {
     return (
@@ -249,16 +249,7 @@ export function Login() {
   if (authConfig?.keycloak) {
     return (
       <div className="flex min-h-screen relative overflow-hidden">
-        <div className="hidden lg:flex lg:w-[45%] gradient-primary items-center justify-center p-12 relative">
-          <div className="absolute inset-0 login-grid-bg opacity-30"></div>
-          <div className="absolute top-[20%] left-[10%] w-32 h-32 bg-card/10 rounded-full blur-2xl"></div>
-          <div className="absolute bottom-[25%] right-[15%] w-40 h-40 bg-card/10 rounded-full blur-2xl"></div>
-          <div className="relative z-10 text-white max-w-md">
-            <Logo size="lg" showText={false} variant="dark" className="mb-6" />
-            <h1 className="text-4xl font-extrabold mb-3 leading-tight">{title}</h1>
-            <p className="text-white/70 text-lg leading-relaxed">{subtitle}</p>
-          </div>
-        </div>
+        <LoginHero title={title} subtitle={subtitle} className="hidden lg:flex lg:w-[45%]" />
 
         <div className="flex-1 flex items-center justify-center px-4 py-12 gradient-bg relative overflow-hidden">
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -294,16 +285,7 @@ export function Login() {
 
   return (
     <div className="flex min-h-screen relative overflow-hidden">
-      <div className="hidden lg:flex lg:w-[45%] gradient-primary items-center justify-center p-12 relative">
-        <div className="absolute inset-0 login-grid-bg opacity-30"></div>
-        <div className="absolute top-[20%] left-[10%] w-32 h-32 bg-card/10 rounded-full blur-2xl"></div>
-        <div className="absolute bottom-[25%] right-[15%] w-40 h-40 bg-card/10 rounded-full blur-2xl"></div>
-        <div className="relative z-10 text-white max-w-md">
-          <Logo size="lg" showText={false} variant="dark" className="mb-6" />
-          <h1 className="text-4xl font-extrabold mb-3 leading-tight">{title}</h1>
-          <p className="text-white/70 text-lg leading-relaxed">{subtitle}</p>
-        </div>
-      </div>
+      <LoginHero title={title} subtitle={subtitle} className="hidden lg:flex lg:w-[45%]" />
 
       <div className="flex-1 flex items-center justify-center px-4 py-12 gradient-bg relative overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>

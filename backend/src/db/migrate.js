@@ -1101,12 +1101,13 @@ async function runMigrations() {
       .catch(e => console.log('  - document_templates.purpose:', e.message))
     console.log('  ✓ document_templates.purpose')
 
+    await db.query('DROP INDEX IF EXISTS idx_dt_purpose')
     await db.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_dt_purpose
-      ON document_templates (purpose)
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_dt_org_purpose
+      ON document_templates (organization_id, purpose)
       WHERE purpose IS NOT NULL
-    `).catch(e => console.log('  - idx_dt_purpose:', e.message))
-    console.log('  ✓ idx_dt_purpose')
+    `).catch(e => console.log('  - idx_dt_org_purpose:', e.message))
+    console.log('  ✓ idx_dt_org_purpose')
 
     try {
       await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS description TEXT`)
@@ -1371,20 +1372,12 @@ async function runMigrations() {
     console.log('  ✓ system_settings')
 
     const settings = [
-      { key: 'company_name', value: 'Worker Cabinet', desc: 'Название компании' },
       { key: 'vacation_default_days', value: '28', desc: 'Количество дней отпуска по умолчанию' },
       { key: 'session_duration_days', value: '7', desc: 'Длительность сессии (дни)' },
       { key: 'password_min_length', value: '8', desc: 'Минимальная длина пароля' },
       { key: 'login_title', value: 'Личный кабинет работника', desc: 'Заголовок на странице входа' },
       { key: 'login_subtitle', value: 'Единая платформа для управления персоналом, отпусками и документами', desc: 'Описание на странице входа' },
-      { key: 'login_stat_1_value', value: '24', desc: 'Статистика 1 — значение' },
-      { key: 'login_stat_1_label', value: 'дня отпуска', desc: 'Статистика 1 — подпись' },
-      { key: 'login_stat_2_value', value: '156', desc: 'Статистика 2 — значение' },
-      { key: 'login_stat_2_label', value: 'работников', desc: 'Статистика 2 — подпись' },
-      { key: 'login_stat_3_value', value: '12', desc: 'Статистика 3 — значение' },
-      { key: 'login_stat_3_label', value: 'отделов', desc: 'Статистика 3 — подпись' },
       { key: 'login_demo_buttons', value: 'true', desc: 'Показывать демо-кнопки быстрого входа' },
-      { key: 'login_show_stats', value: 'true', desc: 'Показывать блок статистики на странице входа' },
       { key: 'assistant_api_url', value: '', desc: 'API URL ассистента (OpenAI-совместимый)' },
       { key: 'assistant_api_key', value: '', desc: 'API ключ ассистента' },
       { key: 'assistant_model', value: 'gpt-4o-mini', desc: 'Модель AI ассистента' },
@@ -1561,6 +1554,7 @@ async function runMigrations() {
     console.log('  ✓ bug_reports')
     await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS user_reply TEXT').catch(() => {})
     await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS actions JSONB').catch(() => {})
+    await db.query("ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS image_s3_keys TEXT[] NOT NULL DEFAULT '{}'").catch(() => {})
     await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS user_reply_at TIMESTAMPTZ').catch(() => {})
     await db.query('ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS user_reply_by INTEGER REFERENCES users(id) ON DELETE SET NULL').catch(() => {})
 
@@ -1832,6 +1826,9 @@ async function runMigrations() {
     await migrateDayOffs(db)
     await migratePermissionsMatrix(db)
     await migrateNotificationDelivery(db)
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name_genitive JSONB')
+    await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS name_genitive TEXT')
+    await db.query("DELETE FROM system_settings WHERE key LIKE 'login_stat%' OR key IN ('login_show_stats', 'company_name')")
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')

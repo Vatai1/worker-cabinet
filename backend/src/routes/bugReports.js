@@ -1,7 +1,7 @@
 import express from 'express'
 import multer from 'multer'
 import { authenticateToken } from '../middleware/auth.js'
-import { asyncHandler } from '../middleware/errors.js'
+import { asyncHandler, ValidationError } from '../middleware/errors.js'
 import { query } from '../config/database.js'
 import { uploadToS3, deleteFromS3, getPresignedUrl } from '../config/s3.js'
 import { notify, notifyBatch } from '../config/notifications.js'
@@ -9,7 +9,25 @@ import { inTransaction } from '../config/database.js'
 import { requirePermission } from '../lib/permissions.js'
 
 const router = express.Router()
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
+const MAX_IMAGES = 5
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: MAX_IMAGES + 1 },
+  fileFilter: (req, file, cb) => cb(IMAGE_TYPES.has(file.mimetype) ? null : new ValidationError('Можно прикрепить только изображения PNG, JPEG, GIF или WebP'), IMAGE_TYPES.has(file.mimetype)),
+})
+const uploadFields = upload.fields([{ name: 'screenshot', maxCount: 1 }, { name: 'images', maxCount: MAX_IMAGES }])
+
+function bugReportUpload(req, res, next) {
+  uploadFields(req, res, (err) => {
+    if (!err) return next()
+    if (err.code === 'LIMIT_FILE_SIZE') return next(new ValidationError('Изображение не должно превышать 10 МБ'))
+    if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') return next(new ValidationError(`Можно прикрепить не больше ${MAX_IMAGES} изображений`))
+    next(err instanceof ValidationError ? err : new ValidationError(err.message || 'Не удалось загрузить файл'))
+  })
+}
+
+const s3KeyFor = (userId, file) => `bug-reports/${Date.now()}-${userId}-${Math.random().toString(36).slice(2, 8)}-${file.originalname.replace(/[^a-zA-Z0-9.]/g, '_')}`
 
 const MAX_ACTIONS = 100
 
@@ -69,14 +87,21 @@ router.post('/client-error', authenticateToken, asyncHandler(async (req, res) =>
   res.status(204).end()
 }))
 
-router.post('/', authenticateToken, upload.single('screenshot'), asyncHandler(async (req, res) => {
+router.post('/', authenticateToken, bugReportUpload, asyncHandler(async (req, res) => {
   const { title, description, page_url, browser_info } = req.body
   if (!title?.trim()) return res.status(400).json({ error: 'Укажите заголовок' })
 
+  const screenshot = req.files?.screenshot?.[0]
   let s3Key = null
-  if (req.file) {
-    s3Key = `bug-reports/${Date.now()}-${req.user.id}-${req.file.originalname.replace(/[^a-zA-Z0-9.]/g, '_')}`
-    await uploadToS3(req.file, s3Key)
+  if (screenshot) {
+    s3Key = s3KeyFor(req.user.id, screenshot)
+    await uploadToS3(screenshot, s3Key)
+  }
+  const imageKeys = []
+  for (const file of req.files?.images ?? []) {
+    const key = s3KeyFor(req.user.id, file)
+    await uploadToS3(file, key)
+    imageKeys.push(key)
   }
 
   const admins = await query("SELECT id FROM users WHERE role IN ('admin', 'superadmin') AND status <> 'inactive'")
@@ -85,9 +110,9 @@ router.post('/', authenticateToken, upload.single('screenshot'), asyncHandler(as
 
   const report = await inTransaction(async (client) => {
     const result = await client.query(
-      `INSERT INTO bug_reports (user_id, title, description, screenshot_s3_key, page_url, browser_info, actions)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [req.user.id, title.trim(), description || null, s3Key, page_url || null, browser_info || null, parseActions(req.body.actions)]
+      `INSERT INTO bug_reports (user_id, title, description, screenshot_s3_key, image_s3_keys, page_url, browser_info, actions)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [req.user.id, title.trim(), description || null, s3Key, imageKeys, page_url || null, browser_info || null, parseActions(req.body.actions)]
     )
     await notifyBatch({
       userIds: admins.rows.map((a) => a.id),
@@ -212,10 +237,10 @@ router.patch('/:id', authenticateToken, requirePermission('bug_reports:manage'),
 
 router.delete('/:id', authenticateToken, requirePermission('bug_reports:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
-  const result = await query('SELECT screenshot_s3_key FROM bug_reports WHERE id = $1', [id])
+  const result = await query('SELECT screenshot_s3_key, image_s3_keys FROM bug_reports WHERE id = $1', [id])
   if (result.rows.length === 0) return res.status(404).json({ error: 'Баг-репорт не найден' })
-  if (result.rows[0].screenshot_s3_key) {
-    await deleteFromS3(result.rows[0].screenshot_s3_key).catch(() => {})
+  for (const key of [result.rows[0].screenshot_s3_key, ...(result.rows[0].image_s3_keys ?? [])].filter(Boolean)) {
+    await deleteFromS3(key).catch(() => {})
   }
   await query('DELETE FROM bug_reports WHERE id = $1', [id])
   res.json({ deleted: true })
@@ -223,12 +248,15 @@ router.delete('/:id', authenticateToken, requirePermission('bug_reports:manage')
 
 router.get('/:id/screenshot', authenticateToken, requirePermission('bug_reports:manage'), asyncHandler(async (req, res) => {
   const { id } = req.params
-  const result = await query('SELECT screenshot_s3_key FROM bug_reports WHERE id = $1', [id])
-  if (result.rows.length === 0 || !result.rows[0].screenshot_s3_key) {
+  const result = await query('SELECT screenshot_s3_key, image_s3_keys FROM bug_reports WHERE id = $1', [id])
+  const row = result.rows[0]
+  if (!row || (!row.screenshot_s3_key && !row.image_s3_keys?.length)) {
     return res.status(404).json({ error: 'Скриншот не найден' })
   }
-  const url = await getPresignedUrl(result.rows[0].screenshot_s3_key)
-  res.json({ url })
+  res.json({
+    url: row.screenshot_s3_key ? await getPresignedUrl(row.screenshot_s3_key) : null,
+    images: await Promise.all((row.image_s3_keys ?? []).map((key) => getPresignedUrl(key))),
+  })
 }))
 
 export default router

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import * as rasterizeHTML from 'rasterizehtml'
-import { Bug, X, Loader2, Camera, Trash2, Monitor } from 'lucide-react'
+import { Bug, X, Loader2, Camera, Trash2, Monitor, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/Button'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
@@ -10,6 +10,15 @@ import { cn } from '@/shared/lib/utils'
 import { getActions, type TelemetryAction } from '@/shared/lib/telemetry'
 import { TelemetryActions } from '@/shared/components/TelemetryActions'
 import { useThemeStore } from '@/shared/theme/themeStore'
+
+const MAX_IMAGES = 5
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+
+interface AttachedImage {
+  file: File
+  url: string
+}
 
 export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) {
   const isCrct = useThemeStore((s) => s.activeTheme === 'crct')
@@ -22,6 +31,28 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
   const [capturing, setCapturing] = useState(false)
   const [actions, setActions] = useState<TelemetryAction[]>([])
   const [showActions, setShowActions] = useState(false)
+  const [images, setImages] = useState<AttachedImage[]>([])
+  const [dragging, setDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const addImages = (files: File[]) => {
+    const valid = files.filter((f) => IMAGE_TYPES.includes(f.type))
+    if (valid.length < files.length) toast.error('Можно прикрепить только изображения PNG, JPEG, GIF или WebP')
+    const sized = valid.filter((f) => f.size <= MAX_IMAGE_BYTES)
+    if (sized.length < valid.length) toast.error('Изображение не должно превышать 10 МБ')
+    setImages((prev) => {
+      const room = MAX_IMAGES - prev.length
+      if (sized.length > room) toast.error(`Можно прикрепить не больше ${MAX_IMAGES} изображений`)
+      return [...prev, ...sized.slice(0, Math.max(0, room)).map((file) => ({ file, url: URL.createObjectURL(file) }))]
+    })
+  }
+
+  const removeImage = (index: number) => {
+    setImages((prev) => {
+      URL.revokeObjectURL(prev[index].url)
+      return prev.filter((_, i) => i !== index)
+    })
+  }
 
   const canvasToJpegBlob = (canvas: HTMLCanvasElement): Promise<Blob | null> => {
     const w = canvas.width
@@ -149,17 +180,18 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
       formData.append('browser_info', navigator.userAgent)
       formData.append('actions', JSON.stringify(actions))
       if (screenshotBlob) formData.append('screenshot', screenshotBlob, 'screenshot.jpg')
+      images.forEach(({ file }) => formData.append('images', file, file.name || 'image.png'))
 
       const res = await fetch(`${API_BASE_URL}/bug-reports`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData,
       })
-      if (!res.ok) throw new Error('Ошибка отправки')
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Не удалось отправить баг-репорт')
       toast.success('Баг-репорт отправлен')
       handleClose()
-    } catch {
-      toast.error('Не удалось отправить баг-репорт')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Не удалось отправить баг-репорт')
     } finally {
       setSubmitting(false)
     }
@@ -172,6 +204,8 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
     setDescription('')
     setScreenshotBlob(null)
     setScreenshotUrl(null)
+    images.forEach((img) => URL.revokeObjectURL(img.url))
+    setImages([])
   }
 
   useEffect(() => {
@@ -179,8 +213,18 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handleClose()
     }
+    const onPaste = (e: ClipboardEvent) => {
+      const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'))
+      if (files.length === 0) return
+      e.preventDefault()
+      addImages(files)
+    }
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    window.addEventListener('paste', onPaste)
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('paste', onPaste)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
@@ -208,7 +252,27 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
 
       {phase === 'open' && createPortal(
         <div data-bug-report-modal className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
-          <div className="bg-card rounded-xl shadow-2xl w-full max-w-lg mx-4 animate-scale-in max-h-[85vh] flex flex-col overflow-hidden">
+          <div
+            className={cn('relative bg-card rounded-xl shadow-2xl w-full max-w-lg mx-4 animate-scale-in max-h-[85vh] flex flex-col overflow-hidden', dragging && 'ring-2 ring-primary')}
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes('Files')) return
+              e.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragging(false)
+              addImages(Array.from(e.dataTransfer.files))
+            }}
+          >
+            {dragging && (
+              <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-primary/10 text-sm font-medium text-primary">
+                Отпустите, чтобы прикрепить изображения
+              </div>
+            )}
             <div className="p-5 border-b flex items-center justify-between shrink-0">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Bug className="h-5 w-5 text-primary" />
@@ -296,6 +360,57 @@ export function BugReportButton({ collapsed = false }: { collapsed?: boolean }) 
                       Экран / окно
                     </Button>
                   </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-medium flex items-center gap-1.5">
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    Изображения <span className="font-normal text-muted-foreground">{images.length}/{MAX_IMAGES}</span>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={images.length >= MAX_IMAGES}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    Загрузить
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={IMAGE_TYPES.join(',')}
+                    multiple
+                    hidden
+                    data-testid="bug-report-images-input"
+                    onChange={(e) => {
+                      addImages(Array.from(e.target.files ?? []))
+                      e.target.value = ''
+                    }}
+                  />
+                </div>
+                {images.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                    {images.map((img, i) => (
+                      <div key={img.url} className="group relative aspect-square overflow-hidden rounded-lg border border-border">
+                        <img src={img.url} alt={img.file.name || `Изображение ${i + 1}`} className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(i)}
+                          aria-label="Убрать изображение"
+                          className="absolute right-1 top-1 rounded-md bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">PNG, JPEG, GIF или WebP до 10 МБ. Можно вставить из буфера (Ctrl+V) или перетащить в это окно.</p>
                 )}
               </div>
 

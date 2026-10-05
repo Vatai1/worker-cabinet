@@ -1,7 +1,7 @@
 import express from 'express'
 import { query } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
-import { asyncHandler, ValidationError } from '../middleware/errors.js'
+import { asyncHandler, ValidationError, ForbiddenError, NotFoundError } from '../middleware/errors.js'
 import { uploadAvatar } from '../middleware/upload.js'
 import { uploadToS3, getS3FileUrl, deleteFromS3, S3_ENDPOINT, S3_BUCKET, S3_PUBLIC_URL } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
@@ -12,6 +12,7 @@ import { revokeAllUserSessions } from '../lib/sessionTokens.js'
 import { phrasePrefixPattern, wordPrefixPatterns } from '../lib/wordSearch.js'
 import { setKcUserEnabled, updateKcUserRole } from '../config/keycloak.js'
 import { requirePermission } from '../lib/permissions.js'
+import { suggestGenitive } from '../lib/nameGenitive.js'
 
 const ELEVATED_ROLES = ['admin', 'superadmin', 'director']
 
@@ -682,6 +683,67 @@ router.delete('/me/avatar', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Не удалось сбросить аватар' })
   }
 })
+
+/**
+ * @swagger
+ * /users/{id}/name-genitive:
+ *   get:
+ *     tags: [Users]
+ *     summary: ФИО в родительном падеже для документов (сохранённое или автоматическая подсказка); id = me — свои. Чужие — с правом правки профиля (hr/admin). Query lastName/firstName/middleName — посчитать подсказку для несохранённого ФИО
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: '{ saved, nominative, genitive, suggestion } — каждое { lastName, firstName, middleName }'
+ *   put:
+ *     tags: [Users]
+ *     summary: Сохранить ФИО в родительном падеже ({ reset: true } — вернуть автоматическое)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [lastName, firstName]
+ *             properties:
+ *               lastName: { type: string }
+ *               firstName: { type: string }
+ *               middleName: { type: string }
+ *               reset: { type: boolean }
+ */
+function nameGenitiveTarget(req) {
+  const targetId = req.params.id === undefined ? req.user.id : parseInt(req.params.id, 10)
+  if (!Number.isInteger(targetId)) throw new ValidationError('Некорректный id')
+  if (!checkProfileEditAccess(req, targetId)) throw new ForbiddenError()
+  return targetId
+}
+
+const getNameGenitive = asyncHandler(async (req, res) => {
+  const u = (await query('SELECT first_name, last_name, middle_name, gender, name_genitive FROM users WHERE id = $1', [nameGenitiveTarget(req)])).rows[0]
+  if (!u) throw new NotFoundError('Пользователь не найден')
+  const override = (key, fallback) => (typeof req.query[key] === 'string' ? req.query[key].trim().slice(0, 100) : fallback || '')
+  const nominative = {
+    lastName: override('lastName', u.last_name), firstName: override('firstName', u.first_name), middleName: override('middleName', u.middle_name),
+  }
+  const suggestion = suggestGenitive({ ...nominative, gender: u.gender })
+  res.json({ saved: !!u.name_genitive, nominative, genitive: u.name_genitive || suggestion, suggestion })
+})
+
+const putNameGenitive = asyncHandler(async (req, res) => {
+  const targetId = nameGenitiveTarget(req)
+  if (req.body?.reset === true) {
+    await query('UPDATE users SET name_genitive = NULL WHERE id = $1', [targetId])
+    return res.json({ saved: false })
+  }
+  const value = Object.fromEntries(['lastName', 'firstName', 'middleName'].map((k) => [k, String(req.body?.[k] ?? '').trim().slice(0, 100)]))
+  if (!value.lastName || !value.firstName) throw new ValidationError('Укажите фамилию и имя в родительном падеже')
+  await query('UPDATE users SET name_genitive = $1 WHERE id = $2', [value, targetId])
+  res.json({ saved: true, genitive: value })
+})
+
+router.get('/me/name-genitive', authenticateToken, getNameGenitive)
+router.put('/me/name-genitive', authenticateToken, putNameGenitive)
+router.get('/:id/name-genitive', authenticateToken, getNameGenitive)
+router.put('/:id/name-genitive', authenticateToken, putNameGenitive)
 
 /**
  * @swagger

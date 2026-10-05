@@ -2,16 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import {
-  Users, Search, RotateCcw, X, Loader2, ChevronUp, ChevronDown, ArrowUpDown, Filter,
+  Users, Search, RotateCcw, X, Loader2, ChevronUp, ChevronDown, ArrowUpDown,
   User as UserIcon, Building2, Tag, Wallet, Lock, ShieldCheck, Globe, Unlock, Star, Trash2,
+  ChevronRight,
 } from 'lucide-react'
 import { Card } from '@/shared/components/ui/Card'
+import { FilterHeader, TableEmptyRow } from '@/shared/components/ui/DataTable'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Switch } from '@/shared/components/ui/Switch'
 import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
-import { SearchableCheckList, type CheckListItem } from '@/shared/components/ui/SearchableCheckList'
+import { type CheckListItem } from '@/shared/components/ui/SearchableCheckList'
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/components/ui/Avatar'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { useOrgStore } from '@/shared/store/orgStore'
@@ -22,6 +24,7 @@ import { generateAvatarUrl } from '@/shared/lib/avatar'
 import { cn, getErrorMessage, personName } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { LeaveAdjustmentsSection } from '@/modules/vacation/components/LeaveAdjustmentsSection'
+import { NameGenitiveForm, type NameGenitiveInfo, type PersonName } from '@/shared/components/NameGenitive'
 
 interface EmployeeTag {
   id: number
@@ -170,6 +173,36 @@ function EmployeeSettingsModal({
   const [hireDate, setHireDate] = useState(employee.hire_date ? employee.hire_date.slice(0, 10) : '')
   const [managerId, setManagerId] = useState(employee.manager_id ? String(employee.manager_id) : '')
   const [managerCandidates, setManagerCandidates] = useState<EmployeeRow[]>([])
+  const [genitiveInfo, setGenitiveInfo] = useState<NameGenitiveInfo | null>(null)
+  const [genitive, setGenitive] = useState<PersonName | null>(null)
+  const [genitiveAction, setGenitiveAction] = useState<'none' | 'save' | 'reset'>('none')
+  const genitiveActionRef = useRef(genitiveAction)
+  genitiveActionRef.current = genitiveAction
+
+  useEffect(() => {
+    apiGet<NameGenitiveInfo>(`/users/${employee.id}/name-genitive`)
+      .then((info) => {
+        setGenitiveInfo(info)
+        setGenitive(info.genitive)
+      })
+      .catch(() => setGenitiveInfo(null))
+  }, [employee.id])
+
+  useEffect(() => {
+    if (!genitiveInfo) return
+    const { nominative } = genitiveInfo
+    if (nominative.lastName === lastName.trim() && nominative.firstName === firstName.trim() && nominative.middleName === middleName.trim()) return
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({ lastName: lastName.trim(), firstName: firstName.trim(), middleName: middleName.trim() })
+      apiGet<NameGenitiveInfo>(`/users/${employee.id}/name-genitive?${params}`)
+        .then((info) => {
+          setGenitiveInfo((prev) => (prev ? { ...prev, nominative: info.nominative, suggestion: info.suggestion } : prev))
+          if (genitiveActionRef.current !== 'save' && (genitiveActionRef.current === 'reset' || !info.saved)) setGenitive(info.suggestion)
+        })
+        .catch(() => {})
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [lastName, firstName, middleName, genitiveInfo, employee.id])
 
   // Organization section
   const [orgRole, setOrgRole] = useState<string>(employee.org_role || 'employee')
@@ -283,6 +316,14 @@ function EmployeeSettingsModal({
         }),
         apiPatch(`/vacation/balances/${employee.id}`, { year: balanceYear, total_days: days }),
       ]
+      if (genitiveAction === 'save' && genitive) {
+        if (!genitive.lastName.trim() || !genitive.firstName.trim()) {
+          toast.error('Укажите фамилию и имя в родительном падеже')
+          return
+        }
+        tasks.push(apiPut(`/users/${employee.id}/name-genitive`, genitive))
+      }
+      if (genitiveAction === 'reset') tasks.push(apiPut(`/users/${employee.id}/name-genitive`, { reset: true }))
       if (currentOrgId) {
         tasks.push(apiPut(`/organizations/${currentOrgId}/members/${employee.id}`, {
           org_role: orgRole,
@@ -291,6 +332,10 @@ function EmployeeSettingsModal({
         }))
       }
       await Promise.all(tasks)
+      if (genitiveAction !== 'none' && genitiveInfo && genitive) {
+        setGenitiveInfo({ ...genitiveInfo, saved: genitiveAction === 'save', genitive })
+        setGenitiveAction('none')
+      }
 
       const manager = managerCandidates.find((m) => String(m.id) === managerId)
       const dept = departments.find((d) => String(d.id) === departmentId)
@@ -499,6 +544,42 @@ function EmployeeSettingsModal({
               <Input placeholder="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="h-9 text-sm" />
               <Input placeholder="Отчество" value={middleName} onChange={(e) => setMiddleName(e.target.value)} className="h-9 text-sm" />
             </div>
+            {genitiveInfo && genitive && (
+              <details data-testid="employee-name-genitive" className="group mb-3 rounded-xl border border-border/60">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+                  <span className="text-xs font-medium">Отображение в документах</span>
+                  <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+                    от {[genitive.lastName, genitive.firstName, genitive.middleName].filter(Boolean).join(' ')} · {genitiveAction === 'reset' || (!genitiveInfo.saved && genitiveAction === 'none') ? 'автоматически' : 'задано вручную'}
+                  </span>
+                </summary>
+                <div className="border-t border-border/60 p-3">
+                  <div className="mb-2.5 flex items-center justify-between gap-2">
+                    <p className="text-[11px] text-muted-foreground">Родительный падеж — «от кого» в заявлениях</p>
+                    {(genitiveInfo.saved || genitiveAction === 'save') && genitiveAction !== 'reset' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGenitive(genitiveInfo.suggestion)
+                          setGenitiveAction(genitiveInfo.saved ? 'reset' : 'none')
+                        }}
+                        className="text-[11px] text-primary hover:underline"
+                      >
+                        Вернуть автоматическое
+                      </button>
+                    )}
+                  </div>
+                  <NameGenitiveForm
+                    nominative={genitiveInfo.nominative}
+                    value={genitive}
+                    onChange={(v) => {
+                      setGenitive(v)
+                      setGenitiveAction('save')
+                    }}
+                  />
+                </div>
+              </details>
+            )}
             <div className="grid grid-cols-2 gap-2.5 mb-2.5">
               <div>
                 <label className="mb-1 block text-xs text-muted-foreground">Должность</label>
@@ -763,120 +844,6 @@ function EmployeeSettingsModal({
   )
 }
 
-const FILTER_POPOVER_WIDTH = 320
-
-function FilterableHeader({
-  label,
-  sortActive,
-  sortDir,
-  onSort,
-  filterOptions,
-  selected,
-  onFilterChange,
-  searchPlaceholder,
-}: {
-  label: string
-  sortActive?: boolean
-  sortDir?: 'asc' | 'desc'
-  onSort?: () => void
-  filterOptions: CheckListItem[]
-  selected: string[]
-  onFilterChange: (values: string[]) => void
-  searchPlaceholder?: string
-}) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
-  const popoverRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (ref.current?.contains(target) || popoverRef.current?.contains(target)) return
-      setOpen(false)
-    }
-    const close = () => setOpen(false)
-    const onScroll = (e: Event) => {
-      if (popoverRef.current?.contains(e.target as Node)) return
-      setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    window.addEventListener('resize', close)
-    window.addEventListener('scroll', onScroll, true)
-    return () => {
-      document.removeEventListener('mousedown', handler)
-      window.removeEventListener('resize', close)
-      window.removeEventListener('scroll', onScroll, true)
-    }
-  }, [open])
-
-  const toggleOpen = () => {
-    if (open) {
-      setOpen(false)
-      return
-    }
-    const rect = ref.current?.getBoundingClientRect()
-    if (rect) {
-      const width = Math.min(FILTER_POPOVER_WIDTH, window.innerWidth - 32)
-      setPos({ left: Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)), top: rect.bottom + 6 })
-    }
-    setOpen(true)
-  }
-
-  const activeCount = selected.length
-
-  return (
-    <div ref={ref} className="relative inline-flex items-center gap-1">
-      <button
-        type="button"
-        onClick={toggleOpen}
-        className={cn(
-          'inline-flex items-center gap-1 hover:text-foreground',
-          activeCount > 0 && 'text-primary font-semibold'
-        )}
-      >
-        {label}
-        <Filter className={cn('h-3 w-3', activeCount > 0 ? 'text-primary' : 'opacity-30')} />
-        {activeCount > 0 && (
-          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-            {activeCount}
-          </span>
-        )}
-      </button>
-      {onSort && (
-        <button type="button" onClick={onSort} className="text-muted-foreground hover:text-foreground">
-          {sortActive ? (sortDir === 'asc' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />}
-        </button>
-      )}
-      {open && pos && createPortal(
-        <div
-          ref={popoverRef}
-          style={{ left: pos.left, top: pos.top, width: `min(${FILTER_POPOVER_WIDTH}px, calc(100vw - 2rem))` }}
-          className="fixed z-[70] rounded-xl border border-border bg-card p-2.5 text-left font-normal normal-case tracking-normal shadow-lg"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <SearchableCheckList
-            items={filterOptions}
-            selected={selected}
-            onChange={onFilterChange}
-            searchPlaceholder={searchPlaceholder}
-          />
-          {activeCount > 0 && (
-            <button
-              type="button"
-              onClick={() => onFilterChange([])}
-              className="mt-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              Сбросить фильтр
-            </button>
-          )}
-        </div>,
-        document.body,
-      )}
-    </div>
-  )
-}
 
 export function HREmployees({ adminMode = false, isGlobalMode = false }: { adminMode?: boolean; isGlobalMode?: boolean } = {}) {
   const currentOrgId = useOrgStore((s) => s.currentOrgId)
@@ -1158,19 +1125,14 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
           </div>
         )}
 
-        {loading ? (
+        {loading && rows.length === 0 && !hasColumnFilters && !search.trim() ? (
           <div className="space-y-1.5">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="h-14 rounded-lg bg-muted/40 animate-pulse" />
             ))}
           </div>
-        ) : sortedRows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 py-12 text-center">
-            <Users className="h-8 w-8 text-muted-foreground/40" />
-            <p className="mt-3 text-sm text-muted-foreground">Никого не нашли</p>
-          </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-border">
+          <div className={cn('overflow-x-auto rounded-xl border border-border transition-opacity', loading && 'opacity-60')}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
@@ -1188,7 +1150,7 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
                     </button>
                   </th>
                   <th className="px-4 py-2.5 font-medium">
-                    <FilterableHeader
+                    <FilterHeader
                       label="Должность"
                       sortActive={sortKey === 'position'}
                       sortDir={sortDir}
@@ -1200,7 +1162,7 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
                     />
                   </th>
                   <th className="px-4 py-2.5 font-medium">
-                    <FilterableHeader
+                    <FilterHeader
                       label="Отдел"
                       sortActive={sortKey === 'department'}
                       sortDir={sortDir}
@@ -1212,7 +1174,7 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
                     />
                   </th>
                   <th className="px-4 py-2.5 font-medium">
-                    <FilterableHeader
+                    <FilterHeader
                       label="Теги"
                       filterOptions={tagFilterOptions}
                       selected={filterTagIds}
@@ -1221,7 +1183,7 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
                     />
                   </th>
                   <th className="px-4 py-2.5 font-medium">
-                    <FilterableHeader
+                    <FilterHeader
                       label="Статус"
                       filterOptions={STATUS_FILTER_OPTIONS}
                       selected={filterStatuses}
@@ -1231,6 +1193,7 @@ export function HREmployees({ adminMode = false, isGlobalMode = false }: { admin
                 </tr>
               </thead>
               <tbody>
+                {sortedRows.length === 0 && <TableEmptyRow colSpan={6} icon={Users} title={loading ? 'Загрузка…' : 'Никого не нашли'} />}
                 {sortedRows.map((r) => (
                   <tr
                     key={r.id}

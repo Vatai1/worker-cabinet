@@ -79,8 +79,6 @@ export function Employees() {
   const filteredGroups = groups
     .map((g) => ({ ...g, employees: g.employees.filter(matches) }))
     .filter((g) => g.employees.length > 0)
-  const totalCount = groups.reduce((sum, g) => sum + g.employees.length, 0)
-  const filteredCount = filteredGroups.reduce((sum, g) => sum + g.employees.length, 0)
   const hasLinkedGroups = groups.some((g) => !g.isOwn)
 
 
@@ -114,11 +112,7 @@ export function Employees() {
         subtitle={hasLinkedGroups ? 'Ваш отдел и связанные подразделения' : user?.department ? `Отдел: ${user.department}` : 'Все работники компании'}
       />
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-          <span className="text-sm font-medium">{filteredCount} из {totalCount} работников</span>
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
           <Input

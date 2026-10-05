@@ -40,6 +40,7 @@ import {
   Calendar as CalendarIcon, Lightbulb, HelpCircle, AlertTriangle, Plane, Pencil, Coffee,
 } from 'lucide-react'
 import { useLeaveAdjustments, DAY_OFF_HINT } from '@/modules/vacation/lib/dayOffs'
+import { formatISODate } from '@/modules/vacation/lib/holidayExtension'
 import { LeaveAdjustmentsPanel } from '@/modules/vacation/components/LeaveAdjustmentsPanel'
 import { CreateVacationFormModal } from '@/modules/vacation/components/modals/CreateVacationFormModal'
 import { PageBanner } from '@/shared/components/PageBanner'
@@ -137,6 +138,7 @@ export function Vacation() {
   const canTakeDayOffs = mayTakeDayOffs && dayOffsEnabled
   const canGrantDayOffs = mayGrantDayOffs && dayOffsEnabled
   const canManageRestrictions = useCan('vacation:restrictions')
+  const canManageVacations = useCan('vacation:manage')
   const dayOffs = canTakeDayOffs ? rawDayOffs : null
   const [dateErrorMessage, setDateErrorMessage] = useState<string | null>(null)
   const [year, setYear] = useState(initialUrlState.year)
@@ -420,6 +422,14 @@ export function Vacation() {
     }, 250)
   }
 
+  const cancelBlockReason = (request: VacationRequest) => {
+    if (request.endDate.slice(0, 10) < formatISODate(new Date())) return 'Отпуск уже прошёл — отменить нельзя'
+    if (request.status === VacationRequestStatus.APPROVED && request.vacationType !== VacationType.DAY_OFF && request.userId === user?.id && vacationBlocked && !canManageVacations) {
+      return 'HR закрыл подачу заявок — согласованный отпуск отменить нельзя'
+    }
+    return null
+  }
+
   const handleCancelClick = (requestId: string) => {
     setCancellingRequestId(requestId)
     setShowCancelModal(true)
@@ -432,7 +442,7 @@ export function Vacation() {
       setExpandedRequestId(null)
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
-      toast.error('Ошибка при отмене заявки')
+      toast.error(getErrorMessage(err))
     } finally {
       setShowCancelModal(false)
       setCancellingRequestId(null)
@@ -1486,15 +1496,19 @@ export function Vacation() {
                                             Изменить
                                           </Button>
                                         )}
-                                        <Button
-                                          size="sm"
-                                          variant="destructive"
-                                          onClick={() => handleCancelClick(request.id)}
-                                          disabled={loading}
-                                          className="w-full sm:w-auto"
-                                        >
-                                          Отменить заявку
-                                        </Button>
+                                        {cancelBlockReason(request) ? (
+                                          <span className="self-center text-xs text-muted-foreground">{cancelBlockReason(request)}</span>
+                                        ) : (
+                                          <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            onClick={() => handleCancelClick(request.id)}
+                                            disabled={loading}
+                                            className="w-full sm:w-auto"
+                                          >
+                                            Отменить заявку
+                                          </Button>
+                                        )}
                                       </div>
                                     )}
                                     {isAddingComment && (

@@ -583,19 +583,14 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
  *       200:
  *         description: Системные настройки
  */
+const INTERNAL_SETTING_KEYS = ['permissions_matrix_version', 'notification_delivery_version']
+
 router.get('/settings', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
-  const globalRes = await query('SELECT key, value, description, updated_at FROM system_settings WHERE organization_id IS NULL ORDER BY key')
-  let merged = {}
-  for (const row of globalRes.rows) {
-    merged[row.key] = row
-  }
-  if (req.org) {
-    const orgRes = await query('SELECT key, value, description, updated_at FROM system_settings WHERE organization_id = $1 ORDER BY key', [req.org.org_id])
-    for (const row of orgRes.rows) {
-      merged[row.key] = row
-    }
-  }
-  res.json(Object.values(merged))
+  const result = await query(
+    'SELECT key, value, description, updated_at FROM system_settings WHERE NOT (key = ANY($1)) ORDER BY key',
+    [INTERNAL_SETTING_KEYS]
+  )
+  res.json(result.rows)
 }))
 
 /**
@@ -603,7 +598,7 @@ router.get('/settings', requirePermission('admin:settings'), asyncHandler(async 
  * /admin/settings:
  *   put:
  *     tags: [Admin]
- *     summary: Обновить системные настройки
+ *     summary: Обновить системные настройки (общие для всех учреждений, только суперадмин; служебные версии миграций изменить нельзя)
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -626,21 +621,20 @@ router.get('/settings', requirePermission('admin:settings'), asyncHandler(async 
 router.put('/settings', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
   const { settings } = req.body
   if (!Array.isArray(settings)) throw new ValidationError('Ожидается массив настроек')
+  if (req.user.role !== 'superadmin') throw new ForbiddenError('Системные настройки общие для всех учреждений — их меняет суперадминистратор')
 
-  const valid = settings.filter(s => s.key && s.value !== undefined)
+  const valid = settings.filter(s => typeof s?.key === 'string' && s.key.trim() && s.value !== undefined)
+  if (valid.some(s => INTERNAL_SETTING_KEYS.includes(s.key))) throw new ValidationError('Служебные настройки изменять нельзя')
   if (valid.length > 0) {
-    const isSuperadmin = req.user.role === 'superadmin'
-    const targetOrgId = isSuperadmin ? null : (req.org?.org_id || null)
     const placeholders = []
     const params = []
     valid.forEach((s, i) => {
-      const base = i * 3
-      placeholders.push(`($${base + 1}, $${base + 2}, $${base + 3}, NOW())`)
-      params.push(s.key, String(s.value), targetOrgId)
+      placeholders.push(`($${i * 2 + 1}, $${i * 2 + 2}, NOW())`)
+      params.push(s.key.trim().slice(0, 100), String(s.value))
     })
     await query(
-      `INSERT INTO system_settings (key, value, organization_id, updated_at) VALUES ${placeholders.join(', ')}
-       ON CONFLICT (key, organization_id) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      `INSERT INTO system_settings (key, value, updated_at) VALUES ${placeholders.join(', ')}
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
       params
     )
   }
@@ -1155,7 +1149,7 @@ router.get('/security/locked-accounts', asyncHandler(async (req, res) => {
  *   get:
  *     tags: [Admin]
  *     summary: Статистика входов (сессии)
- *     description: 'Онлайн сейчас, входы по дням, входы по отделам — на основе user_sessions'
+ *     description: 'Онлайн сейчас, входы по дням, входы по организациям (основная организация пользователя) — на основе user_sessions'
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { name: days, in: query, schema: { type: integer, default: 30 } }
@@ -1182,15 +1176,20 @@ router.get('/security/session-stats', asyncHandler(async (req, res) => {
     ORDER BY date DESC
   `, [days])
 
-  const byDepartment = await query(`
-    SELECT COALESCE(d.id, 0) AS department_id, COALESCE(d.name, 'Без отдела') AS department_name,
+  const byOrganization = await query(`
+    SELECT COALESCE(o.id, 0) AS organization_id, COALESCE(o.name, 'Без организации') AS organization_name,
       COUNT(*)::int AS logins,
       COUNT(DISTINCT s.user_id)::int AS unique_users
     FROM user_sessions s
-    JOIN users u ON u.id = s.user_id
-    LEFT JOIN departments d ON d.id = u.department_id
+    LEFT JOIN LATERAL (
+      SELECT org_id FROM user_organizations
+      WHERE user_id = s.user_id AND is_active
+      ORDER BY is_primary DESC NULLS LAST, org_id
+      LIMIT 1
+    ) uo ON true
+    LEFT JOIN organizations o ON o.id = uo.org_id
     WHERE s.created_at >= CURRENT_DATE - ($1 || ' days')::interval
-    GROUP BY d.id, d.name
+    GROUP BY o.id, o.name
     ORDER BY logins DESC
   `, [days])
 
@@ -1204,7 +1203,7 @@ router.get('/security/session-stats', asyncHandler(async (req, res) => {
   res.json({
     onlineNow: online.rows[0].count,
     daily: daily.rows,
-    byDepartment: byDepartment.rows,
+    byOrganization: byOrganization.rows,
     byMethod: byMethod.rows,
   })
 }))

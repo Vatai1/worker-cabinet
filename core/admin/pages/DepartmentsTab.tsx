@@ -8,18 +8,26 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { Button } from '@/shared/components/ui/Button'
 import { toast } from 'sonner'
 import {
-  Building2, Users, UserX, Plus, Trash2, Settings2, X,
-  AlertTriangle, Loader2, Search, MoreVertical, Ban, Network,
+  Building2, UserX, Plus, Trash2, Settings2, X,
+  AlertTriangle, Loader2, Search, Ban, Network,
 } from 'lucide-react'
+import {
+  CountBadge, FilterHeader, RowAction, TableCard, TableEmpty, TableEmptyRow, TableFrame, TableHeadRow, TableSearch, TableSkeleton, TD, TH, TR,
+  filterOptionsOf, matchesFilter, useTableSort,
+} from '@/shared/components/ui/DataTable'
 import { DeleteDepartmentDialog, DepartmentSettings, type Dept } from '@/core/admin/components/DepartmentSettings'
 
-type SortKey = 'name' | 'count'
-
-const hueFromString = (s: string) => {
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h)
-  return Math.abs(h) % 360
-}
+const NO_MANAGER = 'Не назначен'
+const TOP_LEVEL = 'Верхний уровень'
+const FLAG_OPTIONS = [
+  { id: 'blocked', label: 'Отпуска закрыты' },
+  { id: 'hierarchy', label: 'На схеме «Иерархия»' },
+  { id: 'no_manager', label: 'Без руководителя' },
+]
+const COUNT_OPTIONS = [
+  { id: 'with', label: 'Есть работники' },
+  { id: 'without', label: 'Без работников' },
+]
 
 const pluralRu = (n: number, one: string, few: string, many: string) => {
   const a = n % 10
@@ -35,8 +43,11 @@ export function DepartmentsTab() {
   const [error, setError] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
-  const [sort, setSort] = useState<SortKey>('name')
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null)
+  const sort = useTableSort<'name' | 'manager' | 'parent' | 'count'>('name')
+  const [fFlags, setFFlags] = useState<string[]>([])
+  const [fManagers, setFManagers] = useState<string[]>([])
+  const [fParents, setFParents] = useState<string[]>([])
+  const [fCount, setFCount] = useState<string[]>([])
 
   const [creating, setCreating] = useState(false)
   const [formName, setFormName] = useState('')
@@ -58,16 +69,8 @@ export function DepartmentsTab() {
   useEffect(() => { fetchDepartments() }, [])
 
   useEffect(() => {
-    if (openMenuId === null) return
-    const close = () => setOpenMenuId(null)
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [openMenuId])
-
-  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      setOpenMenuId(null)
       if (pickerFor) setPickerFor(null)
       else if (deletingId !== null) setDeletingId(null)
       else if (settingsId !== null) setSettingsId(null)
@@ -141,23 +144,30 @@ export function DepartmentsTab() {
     return { total, people, managers }
   }, [departments])
 
-  const visible = useMemo(() => {
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const list = q
-      ? departments.filter(d => `${d.name} ${d.manager_name || ''}`.toLowerCase().includes(q))
-      : [...departments]
-    list.sort((a, b) => sort === 'name'
-      ? a.name.localeCompare(b.name, 'ru')
-      : b.employee_count - a.employee_count || a.name.localeCompare(b.name, 'ru'))
-    return list
-  }, [departments, search, sort])
-
-  if (loading) {
-    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-  }
+    return departments.filter(d =>
+      (!q || `${d.name} ${d.manager_name || ''}`.toLowerCase().includes(q)) &&
+      matchesFilter(fFlags, [d.vacation_requests_blocked ? 'blocked' : '', d.on_hierarchy ? 'hierarchy' : '', !d.manager_name ? 'no_manager' : ''].filter(Boolean)) &&
+      matchesFilter(fManagers, d.manager_name || NO_MANAGER) &&
+      matchesFilter(fParents, d.parent_name || d.parent_user_name || TOP_LEVEL) &&
+      matchesFilter(fCount, d.employee_count > 0 ? 'with' : 'without'))
+  }, [departments, search, fFlags, fManagers, fParents, fCount])
+  const managerOptions = useMemo(() => [{ id: NO_MANAGER, label: NO_MANAGER }, ...filterOptionsOf(departments.flatMap(d => (d.manager_name ? [d.manager_name] : [])))], [departments])
+  const parentOptions = useMemo(() => [{ id: TOP_LEVEL, label: TOP_LEVEL }, ...filterOptionsOf(departments.flatMap(d => (d.parent_name || d.parent_user_name ? [d.parent_name || d.parent_user_name || ''] : [])))], [departments])
+  const visible = sort.sorted(filtered, (d, k) => (
+    k === 'count' ? d.employee_count
+      : k === 'manager' ? d.manager_name || '\uffff'
+      : k === 'parent' ? d.parent_name || d.parent_user_name || '\uffff'
+      : d.name
+  ))
 
   return (
-    <div className="space-y-4">
+    <TableCard
+      icon={Building2}
+      title="Отделы"
+      subtitle={`Структура организации · ${stats.total} ${pluralRu(stats.total, 'отдел', 'отдела', 'отделов')}, ${stats.people} ${pluralRu(stats.people, 'работник', 'работника', 'работников')}, ${stats.managers} ${pluralRu(stats.managers, 'руководитель', 'руководителя', 'руководителей')}`}
+    >
       {error && !creating && (
         <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
@@ -165,81 +175,50 @@ export function DepartmentsTab() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2.5">
-        {[
-          { b: stats.total, label: pluralRu(stats.total, 'отдел', 'отдела', 'отделов') },
-          { b: stats.people, label: pluralRu(stats.people, 'работник', 'работника', 'работников') },
-          { b: stats.managers, label: pluralRu(stats.managers, 'руководитель', 'руководителя', 'руководителей') },
-        ].map((s, i) => (
-          <div key={i} className="flex min-w-[120px] flex-col gap-0.5 rounded-xl border border-border bg-card px-4 py-2.5">
-            <b className="text-lg font-bold leading-tight">{s.b}</b>
-            <span className="text-xs text-muted-foreground">{s.label}</span>
-          </div>
-        ))}
-      </div>
-
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Поиск отдела или руководителя…"
-            className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
-          />
-        </div>
-        <select
-          value={sort}
-          onChange={e => setSort(e.target.value as SortKey)}
-          className="rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25"
-        >
-          <option value="name">По алфавиту</option>
-          <option value="count">По количеству работников</option>
-        </select>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="whitespace-nowrap text-sm text-muted-foreground">
-            Показано {visible.length} из {departments.length}
-          </span>
-          <Button onClick={openCreate}><Plus className="mr-1 h-4 w-4" /> Новый отдел</Button>
-        </div>
+        <TableSearch value={search} onChange={setSearch} placeholder="Поиск отдела или руководителя…" />
+        {(search.trim() || fFlags.length + fManagers.length + fParents.length + fCount.length > 0) && (
+          <span className="whitespace-nowrap text-xs text-muted-foreground">Найдено {visible.length} из {departments.length}</span>
+        )}
+        <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-3.5 w-3.5" /> Новый отдел</Button>
       </div>
+      <p className="text-xs text-muted-foreground">Нажмите на отдел, чтобы изменить состав, руководителя, запрет отпусков и видимость</p>
 
-      {visible.length === 0 ? (
-        <div className="py-16 text-center text-sm text-muted-foreground">
-          <b className="mb-1 block text-[15px] text-foreground">
-            {departments.length === 0 ? 'Нет отделов' : 'Отделы не найдены'}
-          </b>
-          {departments.length === 0 ? 'Создайте первый отдел' : 'Измените запрос или создайте новый отдел'}
-        </div>
+      {loading ? <TableSkeleton /> : departments.length === 0 ? (
+        <TableEmpty icon={Building2} title="Нет отделов" hint="Создайте первый отдел" />
       ) : (
-        <div className="grid grid-cols-1 gap-3">
-          {visible.map((d) => {
-            const hue = hueFromString(d.name)
-            const count = d.employee_count
-            return (
-              <article
-                key={d.id}
-                onClick={() => openSettings(d)}
-                className="flex cursor-pointer items-center gap-3.5 rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-muted-foreground/30"
-              >
-                <div
-                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
-                  style={{ background: `hsl(${hue} 80% 94%)`, color: `hsl(${hue} 55% 38%)` }}
-                >
-                  <Building2 className="h-5 w-5" />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-[14.5px] font-semibold leading-snug [overflow-wrap:anywhere]">{d.name}</h3>
-                    {(d.parent_name || d.parent_user_name) && (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        в составе: {d.parent_name || d.parent_user_name}
-                      </span>
-                    )}
+        <TableFrame>
+          <thead>
+            <TableHeadRow>
+              <th className={TH}>
+                <FilterHeader label="Отдел" sortActive={sort.key === 'name'} sortDir={sort.dir} onSort={() => sort.toggle('name')}
+                  filterOptions={FLAG_OPTIONS} selected={fFlags} onFilterChange={setFFlags} />
+              </th>
+              <th className={TH}>
+                <FilterHeader label="Руководитель" sortActive={sort.key === 'manager'} sortDir={sort.dir} onSort={() => sort.toggle('manager')}
+                  filterOptions={managerOptions} selected={fManagers} onFilterChange={setFManagers} searchPlaceholder="Поиск руководителя…" />
+              </th>
+              <th className={TH}>
+                <FilterHeader label="Входит в" sortActive={sort.key === 'parent'} sortDir={sort.dir} onSort={() => sort.toggle('parent')}
+                  filterOptions={parentOptions} selected={fParents} onFilterChange={setFParents} searchPlaceholder="Поиск подразделения…" />
+              </th>
+              <th className={cn(TH, 'w-36')}>
+                <FilterHeader label="Работников" sortActive={sort.key === 'count'} sortDir={sort.dir} onSort={() => sort.toggle('count')}
+                  filterOptions={COUNT_OPTIONS} selected={fCount} onFilterChange={setFCount} />
+              </th>
+              <th className={cn(TH, 'w-20')} />
+            </TableHeadRow>
+          </thead>
+          <tbody>
+            {visible.length === 0 && <TableEmptyRow colSpan={5} icon={Building2} title="Отделы не найдены" />}
+            {visible.map((d) => (
+              <tr key={d.id} onClick={() => openSettings(d)} className={cn(TR, 'group cursor-pointer')}>
+                <td className={TD}>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-medium [overflow-wrap:anywhere]">{d.name}</span>
                     {d.vacation_requests_blocked && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
-                        <Ban className="h-2.5 w-2.5" /> заявки на отпуск закрыты
+                        <Ban className="h-2.5 w-2.5" /> отпуска закрыты
                       </span>
                     )}
                     {d.on_hierarchy && (
@@ -248,73 +227,29 @@ export function DepartmentsTab() {
                       </span>
                     )}
                   </div>
+                </td>
+                <td className={TD}>
                   {d.manager_name ? (
-                    <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                      <Users className="h-3.5 w-3.5 shrink-0" />
-                      <span className="font-medium text-foreground/80">{d.manager_name}</span>
-                      {d.manager_position && (
-                        <>
-                          <span className="text-muted-foreground/40">·</span>
-                          <span className="truncate">{d.manager_position}</span>
-                        </>
-                      )}
-                    </p>
+                    <div className="min-w-0">
+                      <p className="truncate">{d.manager_name}</p>
+                      {d.manager_position && <p className="truncate text-xs text-muted-foreground">{d.manager_position}</p>}
+                    </div>
                   ) : (
-                    <p className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-muted-foreground/70">
-                      <UserX className="h-3.5 w-3.5 shrink-0" /> Руководитель не назначен
-                    </p>
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground/70"><UserX className="h-3.5 w-3.5" /> не назначен</span>
                   )}
-                </div>
-
-                <div className="flex shrink-0 flex-col items-end gap-1.5" onClick={e => e.stopPropagation()}>
-                  <span className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold',
-                    count === 0 ? 'bg-muted text-muted-foreground/60' : 'bg-primary/10 text-primary',
-                  )}>
-                    <Users className="h-3 w-3" /> {count} чел.
-                  </span>
-
-                  <div className="relative">
-                    <button
-                      aria-haspopup="true"
-                      aria-expanded={openMenuId === d.id}
-                      aria-label={`Действия: ${d.name}`}
-                      onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === d.id ? null : d.id) }}
-                      className={cn(
-                        'grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                        openMenuId === d.id && 'bg-muted text-foreground',
-                      )}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
-                    {openMenuId === d.id && (
-                      <div
-                        role="menu"
-                        onClick={e => e.stopPropagation()}
-                        className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[180px] rounded-xl border border-border bg-card p-1.5 shadow-xl"
-                      >
-                        <button
-                          role="menuitem"
-                          onClick={() => { setOpenMenuId(null); openSettings(d) }}
-                          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium hover:bg-muted"
-                        >
-                          <Settings2 className="h-3.5 w-3.5" /> Настроить
-                        </button>
-                        <button
-                          role="menuitem"
-                          onClick={() => { setOpenMenuId(null); setDeletingId(d.id) }}
-                          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Удалить
-                        </button>
-                      </div>
-                    )}
+                </td>
+                <td className={cn(TD, 'text-muted-foreground')}>{d.parent_name || d.parent_user_name || '—'}</td>
+                <td className={TD}><CountBadge count={d.employee_count} /></td>
+                <td className={TD}>
+                  <div className="flex justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
+                    <RowAction icon={Settings2} label="Настроить" onClick={() => openSettings(d)} />
+                    <RowAction icon={Trash2} label="Удалить" danger onClick={() => setDeletingId(d.id)} />
                   </div>
-                </div>
-              </article>
-            )
-          })}
-        </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </TableFrame>
       )}
 
       {creating && (
@@ -446,7 +381,7 @@ export function DepartmentsTab() {
       {pickerFor && (
         <UserPickerModal onSelect={pickUser} onClose={() => setPickerFor(null)} />
       )}
-    </div>
+    </TableCard>
   )
 }
 

@@ -13,6 +13,7 @@ import { resolveVacationDays, applyRuleToExistingBalances } from '../lib/vacatio
 import { getVisibleColleagueIds } from '../lib/colleagues.js'
 import { hasFullDepartmentAccess, managedDepartmentIds } from '../lib/departmentScope.js'
 import { requirePermission, hasPermission, isModuleEnabledForOrg } from '../lib/permissions.js'
+import { genitiveTemplateData, departmentGenitive } from '../lib/nameGenitive.js'
 
 const router = express.Router()
 
@@ -2053,9 +2054,20 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].user_id !== req.user.id && req.user.role === 'employee') { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Доступ запрещён' }) }
     if (!['on_approval', 'approved'].includes(request.rows[0].status)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Нельзя отменить эту заявку' }) }
+    if (String(request.rows[0].end_date).slice(0, 10) < todayISO()) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Нельзя отменить уже прошедший отпуск' }) }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
     const cancelledDayOff = await isDayOffRequest(client, request.rows[0])
+    if (request.rows[0].status === 'approved' && !cancelledDayOff && !(await hasPermission(req, 'vacation:manage'))) {
+      const blocked = await client.query(
+        'SELECT d.vacation_requests_blocked FROM users u JOIN departments d ON d.id = u.department_id WHERE u.id = $1',
+        [request.rows[0].user_id]
+      )
+      if (blocked.rows[0]?.vacation_requests_blocked) {
+        await client.query('ROLLBACK')
+        return res.status(403).json({ error: 'Отмена согласованных отпусков запрещена: HR закрыл подачу заявок для отдела' })
+      }
+    }
     if (!cancelledDayOff && request.rows[0].status === 'approved') {
       const { text: cnlUseText, values: cnlUseValues } = orgScopedQuery('UPDATE vacation_balances SET used_days = GREATEST(0, used_days - $1) WHERE user_id = $2 AND year = $3',
         [request.rows[0].duration, request.rows[0].user_id, origYear], req)
@@ -2843,9 +2855,9 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
     }
 
     const { text: gaUserText, values: gaUserValues } = req.org
-      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
+      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id AND d.organization_id = $2 WHERE u.id = $1`, values: [userId, req.org.org_id] }
-      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
+      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`, values: [userId] }
     const { text: gaTmplText, values: gaTmplValues } = orgScopedQuery(
       `SELECT name, file_key, mime_type FROM document_templates WHERE id = $1 AND purpose = 'vacation_template'`,
@@ -2941,11 +2953,13 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
     const data = {
       full_name: fullName,
       short_name: shortName,
+      ...genitiveTemplateData(u),
       last_name: u.last_name || '',
       first_name: u.first_name || '',
       middle_name: u.middle_name || '',
       position: u.position || '',
       department: u.department_name || '',
+      department_gen: u.department_name ? departmentGenitive({ name: u.department_name, name_genitive: u.department_name_genitive }) : '',
       year: String(year),
       selected_year: String(year),
       next_year: String(year + 1),
@@ -3016,9 +3030,9 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
     }
 
     const { text: gtUserText, values: gtUserValues } = req.org
-      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
+      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id AND d.organization_id = $2 WHERE u.id = $1`, values: [userId, req.org.org_id] }
-      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.position, u.hire_date, d.name as department_name
+      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`, values: [userId] }
     const { text: gtTmplText, values: gtTmplValues } = orgScopedQuery(
       `SELECT name, file_key FROM document_templates WHERE id = $1 AND purpose = 'vacation_transfer_template'`,
@@ -3088,11 +3102,13 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
     const data = {
       full_name: fullName,
       short_name: shortName,
+      ...genitiveTemplateData(u),
       last_name: u.last_name || '',
       first_name: u.first_name || '',
       middle_name: u.middle_name || '',
       position: u.position || '',
       department: u.department_name || '',
+      department_gen: u.department_name ? departmentGenitive({ name: u.department_name, name_genitive: u.department_name_genitive }) : '',
       date_today: formatDate(today),
       year: String(today.getFullYear()),
       next_year: String(today.getFullYear() + 1),

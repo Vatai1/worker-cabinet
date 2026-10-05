@@ -16,6 +16,7 @@ interface BugReport {
   title: string
   description: string | null
   screenshot_s3_key: string | null
+  image_s3_keys?: string[]
   page_url: string | null
   browser_info: string | null
   actions: TelemetryAction[] | null
@@ -64,6 +65,7 @@ export function AdminBugReports() {
   const [sendingReply, setSendingReply] = useState(false)
   const [saving, setSaving] = useState(false)
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
+  const [imageUrls, setImageUrls] = useState<string[]>([])
 
   const fetchReports = useCallback(async () => {
     setLoading(true)
@@ -90,11 +92,13 @@ export function AdminBugReports() {
 
   const loadScreenshot = async (id: number) => {
     setScreenshotUrl(null)
+    setImageUrls([])
     try {
       const res = await fetch(`${API_BASE_URL}/bug-reports/${id}/screenshot`, { headers: getAuthHeaders() })
       if (res.ok) {
         const data = await res.json()
         setScreenshotUrl(data.url)
+        setImageUrls(data.images ?? [])
       }
     } catch {}
   }
@@ -110,7 +114,8 @@ export function AdminBugReports() {
     setEditComment(report.admin_comment || '')
     setEditReply('')
     setScreenshotUrl(null)
-    if (report.screenshot_s3_key) loadScreenshot(report.id)
+    setImageUrls([])
+    if (report.screenshot_s3_key || report.image_s3_keys?.length) loadScreenshot(report.id)
   }
 
   useEffect(() => {
@@ -253,6 +258,19 @@ export function AdminBugReports() {
                       <div>
                         <div className="text-xs text-muted-foreground mb-1">Скриншот</div>
                         <img src={screenshotUrl} alt="Скриншот" className="max-w-full rounded-lg border border-border" />
+                      </div>
+                    )}
+
+                    {imageUrls.length > 0 && (
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Изображения ({imageUrls.length})</div>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                          {imageUrls.map((url, i) => (
+                            <a key={url} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-border hover:opacity-90">
+                              <img src={url} alt={`Изображение ${i + 1}`} className="h-40 w-full object-cover" />
+                            </a>
+                          ))}
+                        </div>
                       </div>
                     )}
 

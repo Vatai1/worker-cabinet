@@ -6,7 +6,8 @@ import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
-import { Input } from '@/shared/components/ui/Input'
+import { MultiSelectDropdown } from '@/shared/components/ui/MultiSelectDropdown'
+import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 
 interface RoleMappingRule {
   id: number
@@ -29,6 +30,8 @@ export function AdminRoleMappings() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pattern, setPattern] = useState('')
+  const [newPatterns, setNewPatterns] = useState<string[]>([])
+  const [positions, setPositions] = useState<string[]>([])
   const [role, setRole] = useState<string>('employee')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
@@ -47,8 +50,21 @@ export function AdminRoleMappings() {
 
   useEffect(() => { fetchRules() }, [fetchRules])
 
+  useEffect(() => {
+    apiGet<{ name: string }[]>('/dictionaries/positions')
+      .then((rows) => setPositions(rows.map((r) => r.name)))
+      .catch(() => setPositions([]))
+  }, [])
+
+  const taken = new Set(rules.map((r) => r.position_pattern.toLowerCase()))
+  const addOptions = positions.filter((p) => !taken.has(p.toLowerCase())).map((p) => ({ value: p, label: p }))
+  const editOptions = [...new Set([pattern, ...positions].filter(Boolean))]
+    .filter((p) => p === pattern || !taken.has(p.toLowerCase()))
+    .sort((a, b) => a.localeCompare(b, 'ru'))
+    .map((p) => ({ value: p, label: p }))
+
   const handleSubmit = async () => {
-    if (!pattern.trim()) { setError('Укажите должность'); return }
+    if (editingId !== null ? !pattern.trim() : newPatterns.length === 0) { setError('Выберите должность'); return }
     setSaving(true)
     setError(null)
     try {
@@ -56,15 +72,17 @@ export function AdminRoleMappings() {
         await apiPut(`/admin/role-mappings/${editingId}`, { position_pattern: pattern.trim(), org_role: role })
         toast.success('Правило обновлено')
       } else {
-        await apiPost('/admin/role-mappings', { position_pattern: pattern.trim(), org_role: role })
-        toast.success('Правило добавлено')
+        for (const position of newPatterns) await apiPost('/admin/role-mappings', { position_pattern: position, org_role: role })
+        toast.success(newPatterns.length === 1 ? 'Правило добавлено' : `Добавлено правил: ${newPatterns.length}`)
       }
       setPattern('')
+      setNewPatterns([])
       setRole('employee')
       setEditingId(null)
       fetchRules()
     } catch (err) {
       setError(getErrorMessage(err))
+      fetchRules()
     } finally {
       setSaving(false)
     }
@@ -97,6 +115,7 @@ export function AdminRoleMappings() {
   const cancelEdit = () => {
     setEditingId(null)
     setPattern('')
+    setNewPatterns([])
     setRole('employee')
     setError(null)
   }
@@ -153,13 +172,21 @@ export function AdminRoleMappings() {
         <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
           <div className="flex flex-wrap gap-3 items-end">
             <div className="flex-1 min-w-[220px]">
-              <label className="text-xs text-muted-foreground block mb-1">Должность</label>
-              <Input
-                value={pattern}
-                onChange={(e) => setPattern(e.target.value)}
-                placeholder="Начальник отдела"
-                className="h-9 rounded-lg"
-              />
+              <label className="text-xs text-muted-foreground block mb-1">{editingId !== null ? 'Должность' : 'Должности'}</label>
+              {editingId !== null ? (
+                <SelectDropdown options={editOptions} value={pattern} onChange={setPattern} className="w-full min-w-0" />
+              ) : (
+                <MultiSelectDropdown
+                  options={addOptions}
+                  selected={newPatterns}
+                  onChange={setNewPatterns}
+                  placeholder={addOptions.length ? 'Выберите должности' : 'Для всех должностей уже есть правила'}
+                  countLabel="Выбрано должностей"
+                  searchable
+                  searchPlaceholder="Поиск должности…"
+                  className="w-full max-w-none"
+                />
+              )}
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Роль</label>

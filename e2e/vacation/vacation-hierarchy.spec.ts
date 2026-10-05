@@ -135,7 +135,7 @@ test.describe('Настройки отпусков через иерархию',
   test('настройки отдела и схема синхронизированы: флаг, выключенный на схеме, виден в настройках отдела и возвращается оттуда на схему', async ({ page }) => {
     await world.loginPage(page, 'admin@example.com')
     await page.goto('/hr?tab=hr_departments')
-    await page.getByRole('heading', { name: CHILD_DEPT, exact: true }).first().click()
+    await page.getByRole('row').filter({ has: page.getByText(CHILD_DEPT, { exact: true }) }).first().click()
     const panel = page.getByRole('dialog', { name: `Настройки отдела ${CHILD_DEPT}` })
     await expect(panel).toBeVisible({ timeout: 10000 })
     await expect(panel.getByText('на схеме «Иерархия»', { exact: false })).toBeVisible()

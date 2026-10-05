@@ -9,6 +9,7 @@ import { Card } from '@/shared/components/ui/Card'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { cn, getErrorMessage, formatDate } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { useNameGenitiveGate } from '@/shared/components/NameGenitive'
 import { useAuthStore } from '@/core/auth/store/authStore'
 
 interface Template {
@@ -68,6 +69,7 @@ const STATUS_LABEL: Record<string, { label: string; className: string }> = {
 const emptyForm = (): AddForm => ({ vacationId: '', newStartDate: '', newDays: '', reason: '', note: '', hasTravel: false, travelDestination: '', travelChildren: [] })
 
 export function VacationTransferApplicationPage() {
+  const nameGate = useNameGenitiveGate()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const [templates, setTemplates] = useState<Template[]>([])
@@ -232,6 +234,7 @@ export function VacationTransferApplicationPage() {
   const handleGenerate = async () => {
     const transferIds = approvedIds.filter((id) => selected.has(id))
     if (!templateId || transferIds.length === 0) return
+    if (!(await nameGate.ensure())) return
     setGenerating(true)
     setError(null)
     try {
@@ -271,6 +274,7 @@ export function VacationTransferApplicationPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 animate-fade-in">
+      {nameGate.dialog}
       <div className="space-y-3">
         <Link
           to="/vacation"

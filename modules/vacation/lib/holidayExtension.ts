@@ -3,7 +3,7 @@ function parseISODate(dateStr: string): Date {
   return new Date(year, month - 1, day)
 }
 
-function formatISODate(d: Date): string {
+export function formatISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 

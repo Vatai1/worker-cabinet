@@ -7,6 +7,7 @@ import { Card } from '@/shared/components/ui/Card'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { cn, getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { useNameGenitiveGate } from '@/shared/components/NameGenitive'
 
 interface Template {
   id: number
@@ -15,6 +16,7 @@ interface Template {
 }
 
 export function VacationApplicationPage() {
+  const nameGate = useNameGenitiveGate()
   const navigate = useNavigate()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
@@ -39,6 +41,7 @@ export function VacationApplicationPage() {
 
   const handleGenerate = async () => {
     if (!templateId) return
+    if (!(await nameGate.ensure())) return
     setLoading(true)
     setError(null)
     try {
@@ -71,6 +74,7 @@ export function VacationApplicationPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 animate-fade-in">
+      {nameGate.dialog}
       <div className="space-y-3">
         <Link
           to="/vacation"

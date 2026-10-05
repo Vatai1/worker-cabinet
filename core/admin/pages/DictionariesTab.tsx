@@ -7,8 +7,13 @@ import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import {
   Briefcase, Plane, Tag, Plus, Trash2, Edit3, Check, X,
-  AlertTriangle, Loader2, Users, UserPlus, Search, MoreVertical,
+  AlertTriangle, Loader2, Users, UserPlus,
 } from 'lucide-react'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
+import {
+  CountBadge, FilterHeader, RowAction, TableCard, TableEmpty, TableEmptyRow, TableFrame, TableHeadRow, TableSearch, TableSkeleton, TD, TH, TR,
+  filterOptionsOf, matchesFilter, useTableSort,
+} from '@/shared/components/ui/DataTable'
 
 const ROLE_LABELS: Record<string, string> = {
   employee: 'Работник', manager: 'Руководитель', hr: 'HR-менеджер',
@@ -25,6 +30,11 @@ const STATUS_LABELS: Record<string, string> = {
   active: 'Активен', inactive: 'Неактивен', on_leave: 'В отпуске',
 }
 
+const COUNT_FILTER_OPTIONS = [
+  { id: 'with', label: 'Есть работники' },
+  { id: 'without', label: 'Без работников' },
+]
+
 const pluralRu = (n: number, one: string, few: string, many: string) => {
   const a = n % 10
   const b = n % 100
@@ -39,105 +49,12 @@ interface DictionariesData {
   skills: { id: number; name: string }[]
 }
 
-function StatPill({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="flex min-w-[120px] flex-col gap-0.5 rounded-xl border border-border bg-card px-4 py-2.5">
-      <b className="text-lg font-bold leading-tight">{value}</b>
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </div>
-  )
-}
-
-function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
-  return (
-    <div className="relative min-w-[200px] flex-1">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-      <input
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
-      />
-    </div>
-  )
-}
-
-function EmptyState({ icon: Icon, title, hint }: { icon: React.ComponentType<{ className?: string }>; title: string; hint: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
-      <Icon className="h-8 w-8 opacity-20" />
-      <b className="text-[15px] text-foreground">{title}</b>
-      {hint}
-    </div>
-  )
-}
-
-function RowCard({ children }: { children: React.ReactNode }) {
-  return (
-    <article className="flex items-center gap-3.5 rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-muted-foreground/30">
-      {children}
-    </article>
-  )
-}
-
-function IconChip({ icon: Icon, className }: { icon: React.ComponentType<{ className?: string }>; className: string }) {
-  return (
-    <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', className)}>
-      <Icon className="h-5 w-5" />
-    </div>
-  )
-}
-
-function RowMenu({ open, onToggle, children, label }: { open: boolean; onToggle: () => void; children: React.ReactNode; label: string }) {
-  return (
-    <div className="relative">
-      <button
-        aria-haspopup="true"
-        aria-expanded={open}
-        aria-label={label}
-        onClick={e => { e.stopPropagation(); onToggle() }}
-        className={cn(
-          'grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-          open && 'bg-muted text-foreground',
-        )}
-      >
-        <MoreVertical className="h-4 w-4" />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          onClick={e => e.stopPropagation()}
-          className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[180px] rounded-xl border border-border bg-card p-1.5 shadow-xl"
-        >
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function MenuItem({ icon: Icon, label, danger, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; danger?: boolean; onClick: () => void }) {
-  return (
-    <button
-      role="menuitem"
-      onClick={onClick}
-      className={cn(
-        'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium hover:bg-muted',
-        danger && 'text-destructive hover:bg-destructive/10',
-      )}
-    >
-      <Icon className="h-3.5 w-3.5" /> {label}
-    </button>
-  )
-}
-
 export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }: { initialTab?: string; variant?: 'admin' | 'hr' }) {
   const isAdmin = variant === 'admin'
   const activeDict = initialTab
   const [data, setData] = useState<DictionariesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
   const [newSkill, setNewSkill] = useState('')
   const [newVacationName, setNewVacationName] = useState('')
   const [newVacationCode, setNewVacationCode] = useState('')
@@ -153,13 +70,6 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   const [assigningTag, setAssigningTag] = useState<{ id: number; name: string } | null>(null)
 
   useEffect(() => { setSearch('') }, [activeDict])
-
-  useEffect(() => {
-    if (openMenuKey === null) return
-    const close = () => setOpenMenuKey(null)
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [openMenuKey])
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -207,7 +117,8 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
-  const deleteSkill = async (id: number) => {
+  const deleteSkill = async (id: number, name: string) => {
+    if (!(await confirmDialog({ title: 'Удаление тега', message: `Удалить тег «${name}»? Он пропадёт у всех работников.`, confirmText: 'Удалить', variant: 'danger' }))) return
     try {
       await fetchWithRetry(`${API_BASE_URL}/dictionaries/skills/${id}`, {
         method: 'DELETE', headers: getAuthHeaders(),
@@ -240,7 +151,8 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
     } catch (err) { setError(getErrorMessage(err)) }
   }
 
-  const deleteVacationType = async (id: number) => {
+  const deleteVacationType = async (id: number, name: string) => {
+    if (!(await confirmDialog({ title: 'Удаление типа отпуска', message: `Удалить тип «${name}»?`, confirmText: 'Удалить', variant: 'danger' }))) return
     try {
       await fetchWithRetry(`${API_BASE_URL}/dictionaries/vacation-types/${id}`, {
         method: 'DELETE', headers: getAuthHeaders(),
@@ -262,6 +174,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   }
 
   const deletePosition = async (name: string) => {
+    if (!(await confirmDialog({ title: 'Удаление должности', message: `Удалить должность «${name}»? Она будет очищена в профилях работников.`, confirmText: 'Удалить', variant: 'danger' }))) return
     try {
       await fetchWithRetry(`${API_BASE_URL}/dictionaries/positions/${encodeURIComponent(name)}`, {
         method: 'DELETE', headers: getAuthHeaders(),
@@ -271,212 +184,221 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   }
 
   const q = search.trim().toLowerCase()
-  const filteredPositions = useMemo(() =>
-    !q ? (data?.positions ?? []) : (data?.positions ?? []).filter(p => p.name.toLowerCase().includes(q)),
-    [data, q])
-  const filteredVacationTypes = useMemo(() =>
-    !q ? (data?.vacationTypes ?? []) : (data?.vacationTypes ?? []).filter(v => `${v.name} ${v.code}`.toLowerCase().includes(q)),
-    [data, q])
-  const filteredSkills = useMemo(() =>
-    !q ? (data?.skills ?? []) : (data?.skills ?? []).filter(s => s.name.toLowerCase().includes(q)),
-    [data, q])
+  const positionSort = useTableSort<'name' | 'count'>('name')
+  const vacationSort = useTableSort<'name' | 'code'>('name')
+  const skillSort = useTableSort<'name'>('name')
+  const [fPositions, setFPositions] = useState<string[]>([])
+  const [fPositionCount, setFPositionCount] = useState<string[]>([])
+  const [fVacationNames, setFVacationNames] = useState<string[]>([])
+  const [fVacationCodes, setFVacationCodes] = useState<string[]>([])
+  const [fSkills, setFSkills] = useState<string[]>([])
 
-  if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-  if (!data) return null
+  const filteredPositions = useMemo(() =>
+    (data?.positions ?? []).filter(p =>
+      (!q || p.name.toLowerCase().includes(q)) &&
+      matchesFilter(fPositions, p.name) &&
+      matchesFilter(fPositionCount, Number(p.count) > 0 ? 'with' : 'without')),
+    [data, q, fPositions, fPositionCount])
+  const filteredVacationTypes = useMemo(() =>
+    (data?.vacationTypes ?? []).filter(v =>
+      (!q || `${v.name} ${v.code}`.toLowerCase().includes(q)) &&
+      matchesFilter(fVacationNames, v.name) &&
+      matchesFilter(fVacationCodes, v.code)),
+    [data, q, fVacationNames, fVacationCodes])
+  const filteredSkills = useMemo(() =>
+    (data?.skills ?? []).filter(sk => (!q || sk.name.toLowerCase().includes(q)) && matchesFilter(fSkills, sk.name)),
+    [data, q, fSkills])
 
   const tabInfo = activeDict === 'positions'
-    ? { name: 'Должности', icon: Briefcase, color: 'from-blue-500 to-indigo-600', desc: 'Должности работников (из профиля)' }
+    ? { name: 'Должности', icon: Briefcase, desc: 'Должности работников (из профиля)' }
     : activeDict === 'vacationTypes'
-    ? { name: 'Типы отпусков', icon: Plane, color: 'from-emerald-500 to-teal-600', desc: 'Виды отпусков, доступные при подаче заявления' }
-    : { name: 'Теги', icon: Tag, color: 'from-violet-500 to-purple-600', desc: 'Каталог тегов компании' }
-  const ActiveIcon = tabInfo.icon
+    ? { name: 'Типы отпусков', icon: Plane, desc: 'Виды отпусков, доступные при подаче заявления' }
+    : { name: 'Теги', icon: Tag, desc: 'Каталог тегов компании' }
+
+  const count = activeDict === 'positions' ? data?.positions.length : activeDict === 'vacationTypes' ? data?.vacationTypes.length : data?.skills.length
+  const countLabel = count === undefined ? '' : activeDict === 'positions'
+    ? `${count} ${pluralRu(count, 'должность', 'должности', 'должностей')}`
+    : activeDict === 'vacationTypes'
+    ? `${count} ${pluralRu(count, 'тип', 'типа', 'типов')}`
+    : `${count} ${pluralRu(count, 'тег', 'тега', 'тегов')}`
 
   return (
-    <div className="space-y-4">
+    <TableCard icon={tabInfo.icon} title={tabInfo.name} subtitle={countLabel ? `${tabInfo.desc} · ${countLabel}` : tabInfo.desc}>
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
           <button onClick={() => setError(null)} className="ml-auto"><X className="h-4 w-4" /></button>
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white', tabInfo.color)}>
-          <ActiveIcon className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-lg font-bold leading-tight">{tabInfo.name}</h2>
-          <p className="text-sm text-muted-foreground">{tabInfo.desc}</p>
-        </div>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <TableSearch
+          value={search}
+          onChange={setSearch}
+          placeholder={activeDict === 'positions' ? 'Поиск должности…' : activeDict === 'vacationTypes' ? 'Поиск по названию или коду…' : 'Поиск тега…'}
+        />
+        {activeDict === 'vacationTypes' && (
+          <>
+            <Input placeholder="Название нового типа" value={newVacationName} onChange={e => setNewVacationName(e.target.value)} className="h-9 w-56 rounded-[10px] text-[13px]" />
+            <Input placeholder="Код" value={newVacationCode} onChange={e => setNewVacationCode(e.target.value)} className="h-9 w-24 rounded-[10px] text-[13px]" onKeyDown={e => e.key === 'Enter' && addVacationType()} />
+            <Button size="sm" onClick={addVacationType} disabled={!newVacationName.trim() || !newVacationCode.trim()}>
+              <Plus className="mr-1 h-3.5 w-3.5" /> Добавить
+            </Button>
+          </>
+        )}
+        {activeDict === 'skills' && (
+          <>
+            <Input placeholder="Новый тег" value={newSkill} onChange={e => setNewSkill(e.target.value)} className="h-9 w-56 rounded-[10px] text-[13px]" onKeyDown={e => e.key === 'Enter' && addSkill()} />
+            <Button size="sm" onClick={addSkill} disabled={!newSkill.trim()}>
+              <Plus className="mr-1 h-3.5 w-3.5" /> Добавить
+            </Button>
+          </>
+        )}
       </div>
 
-      {activeDict === 'positions' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <StatPill value={data.positions.length} label={pluralRu(data.positions.length, 'должность', 'должности', 'должностей')} />
-            <SearchBox value={search} onChange={setSearch} placeholder="Поиск должности…" />
-          </div>
-
-          {filteredPositions.length === 0 ? (
-            <EmptyState
-              icon={Briefcase}
-              title={data.positions.length === 0 ? 'Нет должностей' : 'Должности не найдены'}
-              hint={data.positions.length === 0 ? 'Должности появятся, когда их укажут в профилях работников' : 'Измените запрос поиска'}
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-3">
-              {filteredPositions.map((p) => {
-                const count = Number(p.count) || 0
-                const key = `pos-${p.name}`
-                return (
-                  <RowCard key={p.name}>
-                    {editPositionName === p.name ? (
-                      <div className="flex flex-1 items-center gap-2">
-                        <Input value={editPositionNewName} onChange={e => setEditPositionNewName(e.target.value)} className="h-9 text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && renamePosition(p.name)} />
+      {loading || !data ? <TableSkeleton /> : activeDict === 'positions' ? (
+        data.positions.length === 0 ? (
+          <TableEmpty icon={Briefcase} title="Нет должностей" hint="Должности появятся, когда их укажут в профилях работников" />
+        ) : (
+          <TableFrame>
+            <thead>
+              <TableHeadRow>
+                <th className={TH}>
+                  <FilterHeader label="Должность" sortActive={positionSort.key === 'name'} sortDir={positionSort.dir} onSort={() => positionSort.toggle('name')}
+                    filterOptions={filterOptionsOf(data.positions.map(p => p.name))} selected={fPositions} onFilterChange={setFPositions} searchPlaceholder="Поиск должности…" />
+                </th>
+                <th className={cn(TH, 'w-36')}>
+                  <FilterHeader label="Работников" sortActive={positionSort.key === 'count'} sortDir={positionSort.dir} onSort={() => positionSort.toggle('count')}
+                    filterOptions={COUNT_FILTER_OPTIONS} selected={fPositionCount} onFilterChange={setFPositionCount} />
+                </th>
+                <th className={cn(TH, 'w-24')} />
+              </TableHeadRow>
+            </thead>
+            <tbody>
+              {filteredPositions.length === 0 && <TableEmptyRow colSpan={3} icon={Briefcase} title="Должности не найдены" />}
+              {positionSort.sorted(filteredPositions, (p, k) => (k === 'count' ? Number(p.count) || 0 : p.name)).map((p) => (
+                <tr key={p.name} onClick={() => editPositionName !== p.name && setShowPositionUsers(p.name)} className={cn(TR, 'group cursor-pointer')}>
+                  {editPositionName === p.name ? (
+                    <td colSpan={3} className={TD} onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-2">
+                        <Input value={editPositionNewName} onChange={e => setEditPositionNewName(e.target.value)} className="h-8 text-[13px]" autoFocus onKeyDown={e => e.key === 'Enter' && renamePosition(p.name)} />
                         <Button size="sm" variant="outline" onClick={() => renamePosition(p.name)}><Check className="h-3.5 w-3.5" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => setEditPositionName(null)}><X className="h-3.5 w-3.5" /></Button>
                       </div>
-                    ) : (
-                      <>
-                        <IconChip icon={Briefcase} className="bg-blue-500/10 text-blue-600 dark:text-blue-400" />
-                        <h3 className="min-w-0 flex-1 truncate text-[14.5px] font-semibold">{p.name}</h3>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <span className={cn(
-                            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold',
-                            count === 0 ? 'bg-muted text-muted-foreground/60' : 'bg-primary/10 text-primary',
-                          )}>
-                            <Users className="h-3 w-3" /> {count} чел.
-                          </span>
-                          <button onClick={() => setShowPositionUsers(p.name)} className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" title="Работники">
-                            <Users className="h-3.5 w-3.5" />
-                          </button>
-                          {isAdmin && (
-                            <RowMenu open={openMenuKey === key} onToggle={() => setOpenMenuKey(openMenuKey === key ? null : key)} label={`Действия: ${p.name}`}>
-                              <MenuItem icon={Edit3} label="Переименовать" onClick={() => { setOpenMenuKey(null); setEditPositionName(p.name); setEditPositionNewName(p.name) }} />
-                              <MenuItem icon={Trash2} label="Удалить" danger onClick={() => { setOpenMenuKey(null); deletePosition(p.name) }} />
-                            </RowMenu>
-                          )}
+                    </td>
+                  ) : (
+                    <>
+                      <td className={cn(TD, 'font-medium')}>{p.name}</td>
+                      <td className={TD}><CountBadge count={Number(p.count) || 0} /></td>
+                      <td className={TD}>
+                        <div className="flex justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
+                          <RowAction icon={Users} label="Работники" onClick={() => setShowPositionUsers(p.name)} />
+                          {isAdmin && <RowAction icon={Edit3} label="Переименовать" onClick={() => { setEditPositionName(p.name); setEditPositionNewName(p.name) }} />}
+                          {isAdmin && <RowAction icon={Trash2} label="Удалить" danger onClick={() => deletePosition(p.name)} />}
                         </div>
-                      </>
-                    )}
-                  </RowCard>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeDict === 'vacationTypes' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <StatPill value={data.vacationTypes.length} label={pluralRu(data.vacationTypes.length, 'тип', 'типа', 'типов')} />
-            <SearchBox value={search} onChange={setSearch} placeholder="Поиск по названию или коду…" />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
-            <Input placeholder="Название" value={newVacationName} onChange={e => setNewVacationName(e.target.value)} className="h-9 min-w-[160px] flex-1 text-sm" />
-            <Input placeholder="Код" value={newVacationCode} onChange={e => setNewVacationCode(e.target.value)} className="h-9 w-24 text-sm" />
-            <Button size="sm" onClick={addVacationType} disabled={!newVacationName.trim() || !newVacationCode.trim()}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
-            </Button>
-          </div>
-
-          {filteredVacationTypes.length === 0 ? (
-            <EmptyState
-              icon={Plane}
-              title={data.vacationTypes.length === 0 ? 'Нет типов отпусков' : 'Ничего не найдено'}
-              hint={data.vacationTypes.length === 0 ? 'Добавьте первый тип отпуска' : 'Измените запрос поиска'}
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-3">
-              {filteredVacationTypes.map((vt) => {
-                const key = `vac-${vt.id}`
-                return (
-                  <RowCard key={vt.id}>
-                    {editVacationId === vt.id ? (
-                      <div className="flex flex-1 items-center gap-2">
-                        <Input value={editVacationName} onChange={e => setEditVacationName(e.target.value)} className="h-9 text-sm" autoFocus />
-                        <Input value={editVacationCode} onChange={e => setEditVacationCode(e.target.value)} className="h-9 w-20 text-sm" />
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </TableFrame>
+        )
+      ) : activeDict === 'vacationTypes' ? (
+        data.vacationTypes.length === 0 ? (
+          <TableEmpty icon={Plane} title="Нет типов отпусков" hint="Добавьте первый тип отпуска" />
+        ) : (
+          <TableFrame>
+            <thead>
+              <TableHeadRow>
+                <th className={TH}>
+                  <FilterHeader label="Название" sortActive={vacationSort.key === 'name'} sortDir={vacationSort.dir} onSort={() => vacationSort.toggle('name')}
+                    filterOptions={filterOptionsOf(data.vacationTypes.map(v => v.name))} selected={fVacationNames} onFilterChange={setFVacationNames} searchPlaceholder="Поиск типа…" />
+                </th>
+                <th className={cn(TH, 'w-44')}>
+                  <FilterHeader label="Код" sortActive={vacationSort.key === 'code'} sortDir={vacationSort.dir} onSort={() => vacationSort.toggle('code')}
+                    filterOptions={filterOptionsOf(data.vacationTypes.map(v => v.code))} selected={fVacationCodes} onFilterChange={setFVacationCodes} searchPlaceholder="Поиск кода…" />
+                </th>
+                <th className={cn(TH, 'w-24')} />
+              </TableHeadRow>
+            </thead>
+            <tbody>
+              {filteredVacationTypes.length === 0 && <TableEmptyRow colSpan={3} icon={Plane} title="Ничего не найдено" />}
+              {vacationSort.sorted(filteredVacationTypes, (v, k) => (k === 'code' ? v.code : v.name)).map((vt) => (
+                <tr key={vt.id} className={cn(TR, 'group')}>
+                  {editVacationId === vt.id ? (
+                    <td colSpan={3} className={TD}>
+                      <div className="flex items-center gap-2">
+                        <Input value={editVacationName} onChange={e => setEditVacationName(e.target.value)} className="h-8 text-[13px]" autoFocus onKeyDown={e => e.key === 'Enter' && updateVacationType(vt.id)} />
+                        <Input value={editVacationCode} onChange={e => setEditVacationCode(e.target.value)} className="h-8 w-28 text-[13px]" onKeyDown={e => e.key === 'Enter' && updateVacationType(vt.id)} />
                         <Button size="sm" variant="outline" onClick={() => updateVacationType(vt.id)}><Check className="h-3.5 w-3.5" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => setEditVacationId(null)}><X className="h-3.5 w-3.5" /></Button>
                       </div>
-                    ) : (
-                      <>
-                        <IconChip icon={Plane} className="bg-amber-500/10 text-amber-600 dark:text-amber-400" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="truncate text-[14.5px] font-semibold">{vt.name}</h3>
-                            <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">{vt.code}</span>
-                          </div>
+                    </td>
+                  ) : (
+                    <>
+                      <td className={cn(TD, 'font-medium')}>{vt.name}</td>
+                      <td className={TD}><span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">{vt.code}</span></td>
+                      <td className={TD}>
+                        <div className="flex justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
+                          <RowAction icon={Edit3} label="Редактировать" onClick={() => { setEditVacationId(vt.id); setEditVacationName(vt.name); setEditVacationCode(vt.code) }} />
+                          <RowAction icon={Trash2} label="Удалить" danger onClick={() => deleteVacationType(vt.id, vt.name)} />
                         </div>
-                        <RowMenu open={openMenuKey === key} onToggle={() => setOpenMenuKey(openMenuKey === key ? null : key)} label={`Действия: ${vt.name}`}>
-                          <MenuItem icon={Edit3} label="Редактировать" onClick={() => { setOpenMenuKey(null); setEditVacationId(vt.id); setEditVacationName(vt.name); setEditVacationCode(vt.code) }} />
-                          <MenuItem icon={Trash2} label="Удалить" danger onClick={() => { setOpenMenuKey(null); deleteVacationType(vt.id) }} />
-                        </RowMenu>
-                      </>
-                    )}
-                  </RowCard>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeDict === 'skills' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <StatPill value={data.skills.length} label={pluralRu(data.skills.length, 'тег', 'тега', 'тегов')} />
-            <SearchBox value={search} onChange={setSearch} placeholder="Поиск тега…" />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
-            <Input placeholder="Новый тег" value={newSkill} onChange={e => setNewSkill(e.target.value)} className="h-9 min-w-[160px] flex-1 text-sm" onKeyDown={e => e.key === 'Enter' && addSkill()} />
-            <Button size="sm" onClick={addSkill} disabled={!newSkill.trim()}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> Добавить
-            </Button>
-          </div>
-
-          {filteredSkills.length === 0 ? (
-            <EmptyState
-              icon={Tag}
-              title={data.skills.length === 0 ? 'Нет тегов' : 'Ничего не найдено'}
-              hint={data.skills.length === 0 ? 'Добавьте первый тег' : 'Измените запрос поиска'}
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-3">
-              {filteredSkills.map((s) => {
-                const key = `skl-${s.id}`
-                return (
-                  <RowCard key={s.id}>
-                    {editSkillId === s.id ? (
-                      <div className="flex flex-1 items-center gap-2">
-                        <Input value={editSkillName} onChange={e => setEditSkillName(e.target.value)} className="h-9 text-sm" autoFocus onKeyDown={e => e.key === 'Enter' && updateSkill(s.id)} />
-                        <Button size="sm" variant="outline" onClick={() => updateSkill(s.id)}><Check className="h-3.5 w-3.5" /></Button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </TableFrame>
+        )
+      ) : (
+        data.skills.length === 0 ? (
+          <TableEmpty icon={Tag} title="Нет тегов" hint="Добавьте первый тег" />
+        ) : (
+          <TableFrame>
+            <thead>
+              <TableHeadRow>
+                <th className={TH}>
+                  <FilterHeader label="Тег" sortActive={skillSort.key === 'name'} sortDir={skillSort.dir} onSort={() => skillSort.toggle('name')}
+                    filterOptions={filterOptionsOf(data.skills.map(sk => sk.name))} selected={fSkills} onFilterChange={setFSkills} searchPlaceholder="Поиск тега…" />
+                </th>
+                <th className={cn(TH, 'w-28')} />
+              </TableHeadRow>
+            </thead>
+            <tbody>
+              {filteredSkills.length === 0 && <TableEmptyRow colSpan={2} icon={Tag} title="Ничего не найдено" />}
+              {skillSort.sorted(filteredSkills, (sk) => sk.name).map((sk) => (
+                <tr key={sk.id} className={cn(TR, 'group')}>
+                  {editSkillId === sk.id ? (
+                    <td colSpan={2} className={TD}>
+                      <div className="flex items-center gap-2">
+                        <Input value={editSkillName} onChange={e => setEditSkillName(e.target.value)} className="h-8 text-[13px]" autoFocus onKeyDown={e => e.key === 'Enter' && updateSkill(sk.id)} />
+                        <Button size="sm" variant="outline" onClick={() => updateSkill(sk.id)}><Check className="h-3.5 w-3.5" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => setEditSkillId(null)}><X className="h-3.5 w-3.5" /></Button>
                       </div>
-                    ) : (
-                      <>
-                        <IconChip icon={Tag} className="bg-violet-500/10 text-violet-600 dark:text-violet-400" />
-                        <h3 className="min-w-0 flex-1 truncate text-[14.5px] font-semibold">{s.name}</h3>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <button onClick={() => setAssigningTag({ id: s.id, name: s.name })} className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" title="Назначить работникам">
-                            <UserPlus className="h-3.5 w-3.5" />
-                          </button>
-                          <RowMenu open={openMenuKey === key} onToggle={() => setOpenMenuKey(openMenuKey === key ? null : key)} label={`Действия: ${s.name}`}>
-                            <MenuItem icon={Edit3} label="Переименовать" onClick={() => { setOpenMenuKey(null); setEditSkillId(s.id); setEditSkillName(s.name) }} />
-                            <MenuItem icon={Trash2} label="Удалить" danger onClick={() => { setOpenMenuKey(null); deleteSkill(s.id) }} />
-                          </RowMenu>
+                    </td>
+                  ) : (
+                    <>
+                      <td className={TD}>
+                        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-0.5 text-[12px] font-medium">
+                          <Tag className="h-3 w-3 text-muted-foreground" /> {sk.name}
+                        </span>
+                      </td>
+                      <td className={TD}>
+                        <div className="flex justify-end gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
+                          <RowAction icon={UserPlus} label="Назначить работникам" onClick={() => setAssigningTag({ id: sk.id, name: sk.name })} />
+                          <RowAction icon={Edit3} label="Переименовать" onClick={() => { setEditSkillId(sk.id); setEditSkillName(sk.name) }} />
+                          <RowAction icon={Trash2} label="Удалить" danger onClick={() => deleteSkill(sk.id, sk.name)} />
                         </div>
-                      </>
-                    )}
-                  </RowCard>
-                )
-              })}
-            </div>
-          )}
-        </div>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </TableFrame>
+        )
       )}
 
       {showPositionUsers && (
@@ -490,7 +412,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
           onAssigned={() => fetchData(true)}
         />
       )}
-    </div>
+    </TableCard>
   )
 }
 

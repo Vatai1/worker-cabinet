@@ -8,9 +8,10 @@ import { OnlyOfficePreviewModal } from '@/shared/components/OnlyOfficePreviewMod
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { PLACEHOLDERS_BY_PURPOSE, getAllGroups } from '@/shared/lib/docPlaceholders'
-import { formatDate, getErrorMessage } from '@/shared/lib/utils'
+import { cn, formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { formatFileSize, getFileTypeLabel } from '@/shared/lib/documentUtils'
 import { API_BASE_URL } from '@/shared/lib/api'
+import { DeclensionsPanel } from '@/modules/documents/components/DeclensionsPanel'
 
 const PURPOSE_LABELS: Record<string, string> = {
   vacation_template: 'Шаблон отпуска',
@@ -41,6 +42,7 @@ interface DocTemplate {
 
 export function HRDocTemplates() {
   const navigate = useNavigate()
+  const [view, setView] = useState<'templates' | 'declensions'>('templates')
   const [templates, setTemplates] = useState<DocTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -144,7 +146,7 @@ export function HRDocTemplates() {
           <h1 className="text-xl font-bold">Шаблоны документов</h1>
           <p className="text-sm text-muted-foreground">Шаблоны документов организации</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        {view === 'templates' && <div className="flex items-center gap-3 flex-wrap">
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
@@ -166,8 +168,27 @@ export function HRDocTemplates() {
             <Plus className="h-4 w-4" />
             Добавить шаблон
           </Button>
-        </div>
+        </div>}
       </div>
+
+      <div role="tablist" className="inline-flex rounded-xl bg-muted/50 p-1">
+        {([['templates', 'Шаблоны'], ['declensions', 'Склонения']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={view === id}
+            onClick={() => setView(id)}
+            className={cn(
+              'rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
+              view === id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'declensions' ? <DeclensionsPanel /> : <>
 
       {error && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>
@@ -293,6 +314,8 @@ export function HRDocTemplates() {
           })}
         </div>
       )}
+
+      </>}
 
       {deleteTarget && (
         <ConfirmModal

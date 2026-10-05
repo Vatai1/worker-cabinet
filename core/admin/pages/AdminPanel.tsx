@@ -1,12 +1,13 @@
 import { Fragment, useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { fetchWithRetry, apiGet, apiPost, apiDelete } from '@/shared/lib/apiClient'
+import { fetchWithRetry, apiGet, apiPost, apiPut, apiDelete } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { ChangelogModal } from '@/shared/components/ChangelogModal'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { isSuperAdmin, hasOrgRole } from '@/shared/lib/permissions'
+import { hasOrgRole } from '@/shared/lib/permissions'
+import { toast } from 'sonner'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { HREmployees } from '@/core/employees/pages/HREmployees'
@@ -22,6 +23,10 @@ import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Badge } from '@/shared/components/ui/Badge'
 import { Switch } from '@/shared/components/ui/Switch'
+import { Label } from '@/shared/components/ui/Label'
+import { useSiteSettingsStore } from '@/shared/store/siteSettingsStore'
+import { LoginPreview } from '@/core/admin/components/LoginPreview'
+import { DEFAULT_LOGIN_SUBTITLE, DEFAULT_LOGIN_TITLE } from '@/core/auth/components/LoginHero'
 import { ModuleSettingsModal } from '@/core/admin/components/modules/ModuleSettingsModal'
 import { AppearanceSettings } from '@/core/admin/components/modules/AppearanceSettings'
 import { AdminBugReports } from '@/core/admin/pages/AdminBugReports'
@@ -101,6 +106,7 @@ const TAB_GROUPS: TabGroup[] = [
       { id: 'dict_positions', name: 'Должности', icon: Briefcase, description: 'Справочник должностей', color: 'from-pink-500 to-rose-600' },
       { id: 'dict_vacation', name: 'Отпуск', icon: Plane, description: 'Типы отпусков', color: 'from-sky-500 to-cyan-600', module: 'vacation' },
       { id: 'dict_skills', name: 'Теги', icon: Tag, description: 'Справочник тегов', color: 'from-violet-500 to-purple-600', module: 'skills' },
+      { id: 'instructions', name: 'Видеоинструкции', icon: Film, description: 'Видеоинструкции для пользователей', color: 'from-indigo-500 to-violet-600' },
     ],
   },
   {
@@ -119,7 +125,6 @@ const TAB_GROUPS: TabGroup[] = [
     label: 'Оформление',
     tabs: [
       { id: 'appearance', name: 'Темы', icon: Palette, description: 'Тема оформления системы', color: 'from-blue-500 to-cyan-600' },
-      { id: 'instructions', name: 'Инструкции', icon: Film, description: 'Видеоинструкции для пользователей', color: 'from-indigo-500 to-violet-600' },
     ],
   },
 ]
@@ -787,133 +792,116 @@ function RolesTab() {
 
 // ===================== SETTINGS TAB =====================
 
-function SettingsTab({ mode }: { mode: 'global' | 'org' }) {
-  const [settings, setSettings] = useState<SystemSetting[]>([])
-  const [loading, setLoading] = useState(true)
+const LOGIN_SETTING_KEYS = ['login_title', 'login_subtitle', 'login_demo_buttons'] as const
+type LoginSettings = Record<(typeof LOGIN_SETTING_KEYS)[number], string>
+
+function LoginSettingsCard() {
+  const [values, setValues] = useState<LoginSettings | null>(null)
+  const [saved, setSaved] = useState<LoginSettings | null>(null)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const isSuper = isSuperAdmin()
+  const [keycloak, setKeycloak] = useState(false)
+  const fetchPublicSettings = useSiteSettingsStore((s) => s.fetchPublicSettings)
 
-  useEffect(() => { fetchSettings() }, [])
+  useEffect(() => {
+    apiGet<{ keycloak: boolean }>('/auth/config').then((c) => setKeycloak(!!c.keycloak)).catch(() => {})
+  }, [])
 
-  const fetchSettings = async () => {
-    setLoading(true)
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
-      if (res.ok) {
-        const all = await res.json()
-        const hidden = ['timesheet_auto_create', 'vacation_default_days', 'session_duration_days', 'password_min_length']
-        setSettings(all.filter((s: SystemSetting) => !s.key.startsWith('assistant_') && !hidden.includes(s.key)))
-      }
-    } catch {} finally { setLoading(false) }
-  }
-
-  const saveSettings = async () => {
-    setSaving(true); setError(null); setSuccess(false)
-    try {
-      const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, {
-        method: 'PUT', headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify({ settings: settings.map((s) => ({ key: s.key, value: s.value })) }),
+  useEffect(() => {
+    apiGet<SystemSetting[]>('/admin/settings')
+      .then((all) => {
+        const byKey = Object.fromEntries(all.map((x) => [x.key, x.value]))
+        const loaded: LoginSettings = {
+          login_title: byKey.login_title ?? DEFAULT_LOGIN_TITLE,
+          login_subtitle: byKey.login_subtitle ?? DEFAULT_LOGIN_SUBTITLE,
+          login_demo_buttons: byKey.login_demo_buttons ?? 'true',
+        }
+        setValues(loaded)
+        setSaved(loaded)
       })
-      if (res.ok) setSuccess(true)
-      else { const data = await res.json(); setError(data.error || 'Ошибка') }
-    } catch (err) { setError(getErrorMessage(err)) }
-    finally { setSaving(false) }
-  }
+      .catch((err) => toast.error(getErrorMessage(err)))
+  }, [])
 
-  const updateValue = (key: string, value: string) => {
-    setSettings((prev) => prev.map((s) => (s.key === key ? { ...s, value } : s)))
-  }
+  if (!values || !saved) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
 
-  const COMPANY_KEYS = ['company_name']
-  const LOGIN_KEYS = ['login_title', 'login_subtitle', 'login_demo_buttons']
-  const GROUPED_KEYS = [...COMPANY_KEYS, ...LOGIN_KEYS]
-  const companySettings = settings.filter(s => COMPANY_KEYS.includes(s.key))
-  const loginSettings = settings.filter(s => LOGIN_KEYS.includes(s.key))
-  const otherSettings = settings.filter(s => !GROUPED_KEYS.includes(s.key))
+  const changed = LOGIN_SETTING_KEYS.some((k) => values[k] !== saved[k])
+  const set = (key: keyof LoginSettings, value: string) => setValues({ ...values, [key]: value })
 
-  const renderSetting = (setting: SystemSetting) => {
-    const isBoolean = setting.value === 'true' || setting.value === 'false'
-    return (
-      <div key={setting.key} className="flex flex-col sm:flex-row sm:items-center gap-2 p-4 rounded-xl border border-border/50">
-        <div className="flex-1">
-          <p className="font-medium text-sm">{setting.description || setting.key}</p>
-          <p className="text-xs text-muted-foreground font-mono">{setting.key}</p>
-        </div>
-        {isBoolean ? (
-          <Switch
-            checked={setting.value === 'true'}
-            onCheckedChange={(checked) => updateValue(setting.key, String(checked))}
-          />
-        ) : (
-          <Input
-            value={setting.value}
-            onChange={(e) => updateValue(setting.key, e.target.value)}
-            className="sm:w-64"
-          />
-        )}
-      </div>
-    )
-  }
-
-  const renderBlock = (title: string, icon: React.ComponentType<{ className?: string }>, desc: string, blockSettings: SystemSetting[]) => {
-    if (blockSettings.length === 0) return null
-    const Icon = icon
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base"><Icon className="h-5 w-5" /> {title}</CardTitle>
-          <CardDescription>{desc}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {blockSettings.map(renderSetting)}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (loading) {
-    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+  const save = async () => {
+    setSaving(true)
+    try {
+      await apiPut('/admin/settings', { settings: LOGIN_SETTING_KEYS.map((key) => ({ key, value: values[key].trim() })) })
+      setSaved(values)
+      fetchPublicSettings()
+      toast.success('Страница входа обновлена')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm">
-        {isSuper ? <Globe className="h-4 w-4 text-muted-foreground" /> : <Building2 className="h-4 w-4 text-muted-foreground" />}
-        <span className="font-medium text-muted-foreground">
-          {isSuper ? 'Глобальные настройки' : 'Настройки учреждения'}
-        </span>
-      </div>
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base"><LogIn className="h-5 w-5" /> Страница входа</CardTitle>
+        <CardDescription>Общая для всех учреждений — показывается до входа в систему</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="login-title">Заголовок</Label>
+            <Input id="login-title" value={values.login_title} maxLength={120} placeholder={DEFAULT_LOGIN_TITLE} onChange={(e) => set('login_title', e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="login-subtitle">Подзаголовок</Label>
+            <textarea
+              id="login-subtitle"
+              rows={4}
+              maxLength={300}
+              value={values.login_subtitle}
+              placeholder={DEFAULT_LOGIN_SUBTITLE}
+              onChange={(e) => set('login_subtitle', e.target.value)}
+              className="w-full resize-y rounded-xl border border-input bg-background px-4 py-2.5 text-sm focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15"
+            />
+          </div>
+          {keycloak ? (
+            <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">Вход через Keycloak включён — на странице входа одна кнопка «Войти через Keycloak», кнопок быстрого входа нет.</p>
+          ) : (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-3">
+            <div>
+              <p className="text-sm font-medium">Кнопки быстрого входа</p>
+              <p className="text-xs text-muted-foreground">Только в режиме разработки, на рабочем сервере не показываются</p>
+            </div>
+            <Switch checked={values.login_demo_buttons !== 'false'} onCheckedChange={(checked) => set('login_demo_buttons', String(checked))} />
+          </div>
+          )}
+          <div className="flex justify-end gap-2">
+            {changed && <Button variant="outline" onClick={() => setValues(saved)} disabled={saving}>Отменить</Button>}
+            <Button onClick={save} disabled={saving || !changed}>
+              {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+              Сохранить
+            </Button>
+          </div>
         </div>
-      )}
-      {success && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-sm">
-          <Check className="h-4 w-4 shrink-0" /> Настройки сохранены
+        <div className="min-w-0 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Предпросмотр{keycloak ? ' · вход через Keycloak' : ''}{changed ? ' · не сохранено' : ''}</p>
+          <LoginPreview title={values.login_title} subtitle={values.login_subtitle} demoButtons={values.login_demo_buttons !== 'false'} keycloak={keycloak} />
         </div>
-      )}
-
-      {renderBlock('Компания', Building2, 'Название организации', companySettings)}
-      {renderBlock('Страница входа', LogIn, 'Текст на странице авторизации', loginSettings)}
-      {otherSettings.length > 0 && renderBlock('Прочие настройки', Settings2, 'Дополнительные системные параметры', otherSettings)}
-
-      <div className="flex justify-end">
-        <Button onClick={saveSettings} disabled={saving}>
-          {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
-          Сохранить
-        </Button>
-      </div>
-
-      {mode === 'global' ? (
-        <AdminBannerCard scope="global" />
-      ) : (
-        hasOrgRole('admin') && <AdminBannerCard scope="org" />
-      )}
-    </div>
+      </CardContent>
+    </Card>
   )
+}
+
+function SettingsTab({ mode }: { mode: 'global' | 'org' }) {
+  if (mode === 'global') {
+    return (
+      <div className="space-y-4">
+        <LoginSettingsCard />
+        <AdminBannerCard scope="global" />
+      </div>
+    )
+  }
+  return hasOrgRole('admin') ? <AdminBannerCard scope="org" /> : null
 }
 
 // ===================== ASSISTANT SETTINGS TAB =====================
@@ -1775,7 +1763,7 @@ function ErrorsTab() {
 interface SessionStats {
   onlineNow: number
   daily: { date: string; logins: number; unique_users: number }[]
-  byDepartment: { department_id: number; department_name: string; logins: number; unique_users: number }[]
+  byOrganization: { organization_id: number; organization_name: string; logins: number; unique_users: number }[]
   byMethod: { login_method: string; logins: number }[]
 }
 
@@ -1847,18 +1835,18 @@ function SecurityTab() {
                 </div>
               </div>
               <div>
-                <h4 className="text-sm font-medium mb-2">По отделам</h4>
+                <h4 className="text-sm font-medium mb-2">По организациям</h4>
                 <div className="max-h-64 overflow-y-auto space-y-1">
-                  {sessionStats.byDepartment.map((d) => (
-                    <div key={d.department_id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 text-sm">
-                      <span className="truncate">{d.department_name}</span>
+                  {sessionStats.byOrganization.map((d) => (
+                    <div key={d.organization_id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 text-sm">
+                      <span className="truncate">{d.organization_name}</span>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
                         <span>{d.unique_users} польз.</span>
                         <Badge className="text-[10px]">{d.logins} вх.</Badge>
                       </div>
                     </div>
                   ))}
-                  {sessionStats.byDepartment.length === 0 && <p className="text-sm text-muted-foreground py-2">Нет данных</p>}
+                  {sessionStats.byOrganization.length === 0 && <p className="text-sm text-muted-foreground py-2">Нет данных</p>}
                 </div>
               </div>
             </div>

@@ -7,7 +7,8 @@ import { uploadToS3, deleteFromS3, getFromS3 } from '../config/s3.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { departmentMembers, moveUsersToDepartment } from '../lib/departmentMembers.js'
 import multer from 'multer'
-import { requirePermission } from '../lib/permissions.js'
+import { requirePermission, FULL_ACCESS_ROLES } from '../lib/permissions.js'
+import { suggestDepartmentGenitive } from '../lib/nameGenitive.js'
 
 async function validateOnlyOfficeUrl(url) {
   try {
@@ -272,7 +273,7 @@ router.put('/departments/:id', authenticateToken, requirePermission('departments
   try {
     await client.query('BEGIN')
     const { text, values } = orgScopedQuery(
-      `UPDATE departments SET name = $1, manager_id = $2, description = $3, parent_id = $4, vacation_requests_blocked = $5,
+      `UPDATE departments SET name_genitive = CASE WHEN name = $1 THEN name_genitive END, name = $1, manager_id = $2, description = $3, parent_id = $4, vacation_requests_blocked = $5,
          vac_parent_sees_child = $6, vac_child_sees_parent = $7, vac_parent_approves = $8, emp_parent_sees_child = $9, emp_child_sees_parent = $10,
          updated_at = NOW()
        WHERE id = $11 RETURNING id, name, manager_id, description, parent_id`,
@@ -745,7 +746,7 @@ router.delete('/vacation-types/:id', authenticateToken, requirePermission('dicti
  */
 router.get('/positions', authenticateToken, requirePermission('dictionaries:manage'), asyncHandler(async (req, res) => {
   const result = await query(
-    `SELECT DISTINCT position as name, COUNT(*) as employee_count
+    `SELECT DISTINCT position as name, COUNT(*)::int as count
      FROM users
      WHERE position IS NOT NULL AND position != ''
      GROUP BY position
@@ -1234,6 +1235,64 @@ router.post('/doc-templates/:id/callback', authenticateToken, asyncHandler(async
   await query(cbUpdText, cbUpdVals)
 
   res.json({ error: 0 })
+}))
+
+/**
+ * @swagger
+ * /dictionaries/declensions:
+ *   get:
+ *     tags: [Dictionaries]
+ *     summary: Склонения для шаблонов документов — отделы в родительном падеже
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: '{ departments: [{ id, name, organization, genitive (сохранённое или null), suggestion }] } — администратор видит отделы всех организаций, остальные — текущей'
+ */
+router.get('/declensions', authenticateToken, requirePermission('documents:templates'), asyncHandler(async (req, res) => {
+  const allOrgs = FULL_ACCESS_ROLES.includes(req.user.role)
+  const sql = `SELECT d.id, d.name, d.name_genitive, o.name AS organization FROM departments d
+    LEFT JOIN organizations o ON o.id = d.organization_id
+    ${allOrgs || !req.org ? '' : 'WHERE d.organization_id = $1'}
+    ORDER BY o.id NULLS LAST, d.name`
+  const result = await query(sql, allOrgs || !req.org ? [] : [currentOrgId(req)])
+  res.json({
+    departments: result.rows.map((d) => ({
+      id: d.id, name: d.name, organization: d.organization, genitive: d.name_genitive, suggestion: suggestDepartmentGenitive(d.name),
+    })),
+  })
+}))
+
+/**
+ * @swagger
+ * /dictionaries/declensions/departments/{id}:
+ *   put:
+ *     tags: [Dictionaries]
+ *     summary: Сохранить название отдела в родительном падеже (пустое значение — вернуть автоматическое)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               genitive: { type: string }
+ */
+router.put('/declensions/departments/:id', authenticateToken, requirePermission('documents:templates'), asyncHandler(async (req, res) => {
+  const genitive = String(req.body?.genitive ?? '').trim().slice(0, 255) || null
+  const result = await query(
+    ...(FULL_ACCESS_ROLES.includes(req.user.role)
+      ? ['UPDATE departments SET name_genitive = $1 WHERE id = $2 RETURNING id, name, name_genitive', [genitive, parseInt(req.params.id, 10)]]
+      : orgScopedQuery('UPDATE departments SET name_genitive = $1 WHERE id = $2 RETURNING id, name, name_genitive', [genitive, parseInt(req.params.id, 10)], req))
+  )
+  if (result.rows.length === 0) throw new NotFoundError('Отдел не найден')
+  const d = result.rows[0]
+  const org = await query('SELECT o.name FROM departments d LEFT JOIN organizations o ON o.id = d.organization_id WHERE d.id = $1', [d.id])
+  res.json({ id: d.id, name: d.name, organization: org.rows[0]?.name ?? null, genitive: d.name_genitive, suggestion: suggestDepartmentGenitive(d.name) })
 }))
 
 /**

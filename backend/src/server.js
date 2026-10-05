@@ -202,7 +202,7 @@ app.get('/api/settings/public', async (req, res) => {
   try {
     const { query } = await import('./config/database.js')
     const result = await query(
-      "SELECT key, value FROM system_settings WHERE key LIKE 'login_%' OR key = 'company_name'"
+      "SELECT key, value FROM system_settings WHERE key IN ('login_title', 'login_subtitle', 'login_demo_buttons')"
     )
     const settings = {}
     for (const row of result.rows) {
