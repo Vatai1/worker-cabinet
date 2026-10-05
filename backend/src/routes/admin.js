@@ -16,7 +16,6 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { requirePermission, invalidatePermissionCache } from '../lib/permissions.js'
 import { deliveryStats, retryFailedEmails } from '../lib/notificationDelivery.js'
-import { suggestPositionGenitive } from '../lib/nameGenitive.js'
 
 const require = createRequire(import.meta.url)
 const pkg = require('../../package.json')
@@ -1616,83 +1615,6 @@ router.get('/reports/hires', asyncHandler(async (req, res) => {
   }
 
   res.json(result.rows)
-}))
-
-// ===================== DICTIONARIES =====================
-
-/**
- * @swagger
- * /admin/dictionaries:
- *   get:
- *     tags: [Admin]
- *     summary: Все справочники для редактирования
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200:
- *         description: Справочники
- */
-router.get('/dictionaries', asyncHandler(async (req, res) => {
-  const vacationTypesQuery = orgScopedQuery('SELECT id, code, name FROM vacation_types ORDER BY name', [], req)
-  const skillsQuery = orgScopedQuery('SELECT id, name FROM skills_dictionary ORDER BY name', [], req)
-  const [positions, vacationTypes, skills] = await Promise.all([
-    query(`SELECT p.name, p.count, pg.genitive FROM (SELECT position AS name, COUNT(*) AS count FROM users GROUP BY position) p
-      LEFT JOIN position_genitives pg ON pg.name = p.name ORDER BY p.name`),
-    query(vacationTypesQuery.text, vacationTypesQuery.values),
-    query(skillsQuery.text, skillsQuery.values),
-  ])
-
-  res.json({ positions: positions.rows.map((p) => ({ ...p, suggestion: suggestPositionGenitive(p.name) })), vacationTypes: vacationTypes.rows, skills: skills.rows })
-}))
-
-/**
- * @swagger
- * /admin/dictionaries/skills:
- *   post:
- *     tags: [Admin]
- *     summary: Добавить тег в справочник
- *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [name]
- *             properties:
- *               name: { type: string }
- *     responses:
- *       201:
- *         description: Тег добавлен
- */
-router.post('/dictionaries/skills', asyncHandler(async (req, res) => {
-  const { name } = req.body
-  if (!name?.trim()) throw new ValidationError('Название обязательно')
-  const orgId = currentOrgId(req)
-  const result = await query(
-    `INSERT INTO skills_dictionary (name, organization_id) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING RETURNING *`,
-    [name.trim(), orgId]
-  )
-  if (result.rows.length === 0) throw new ValidationError('Такой тег уже существует')
-  res.status(201).json(result.rows[0])
-}))
-
-/**
- * @swagger
- * /admin/dictionaries/skills/{id}:
- *   delete:
- *     tags: [Admin]
- *     summary: Удалить тег из справочника
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - { name: id, in: path, required: true, schema: { type: integer } }
- *     responses:
- *       200:
- *         description: Тег удалён
- */
-router.delete('/dictionaries/skills/:id', asyncHandler(async (req, res) => {
-  const { text, values } = orgScopedQuery('DELETE FROM skills_dictionary WHERE id = $1', [req.params.id], req)
-  await query(text, values)
-  res.json({ success: true })
 }))
 
 // ===================== MODULES =====================

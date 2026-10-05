@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Switch } from '@/shared/components/ui/Switch'
-import { ConfirmModal } from '@/shared/components/ConfirmModal'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
 import { apiDelete, apiGet } from '@/shared/lib/apiClient'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -338,8 +338,6 @@ export function InstructionsTab() {
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<AdminInstruction | null>(null)
-  const [deleting, setDeleting] = useState<AdminInstruction | null>(null)
-  const [deleteLoading, setDeleteLoading] = useState(false)
   const reloadPublic = useInstructionsStore((s) => s.load)
 
   const fetchItems = useCallback(async () => {
@@ -373,18 +371,14 @@ export function InstructionsTab() {
     }
   }
 
-  const handleDelete = async () => {
-    if (!deleting) return
-    setDeleteLoading(true)
+  const handleDelete = async (item: AdminInstruction) => {
+    if (!(await confirmDialog({ title: 'Удалить инструкцию', message: `Удалить «${item.title}»? Видео и обложка будут удалены из хранилища.`, confirmText: 'Удалить', variant: 'danger' }))) return
     try {
-      await apiDelete(`/instructions/admin/${deleting.id}`)
+      await apiDelete(`/instructions/admin/${item.id}`)
       toast.success('Инструкция удалена')
-      setDeleting(null)
       afterChange()
     } catch (err) {
       toast.error(getErrorMessage(err))
-    } finally {
-      setDeleteLoading(false)
     }
   }
 
@@ -444,7 +438,7 @@ export function InstructionsTab() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDeleting(item)}
+                        onClick={() => handleDelete(item)}
                         className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                         title="Удалить"
                       >
@@ -478,16 +472,6 @@ export function InstructionsTab() {
         />
       )}
 
-      <ConfirmModal
-        isOpen={deleting !== null}
-        onClose={() => setDeleting(null)}
-        onConfirm={handleDelete}
-        title="Удалить инструкцию"
-        message={deleting ? `Удалить «${deleting.title}»? Видео и обложка будут удалены из хранилища.` : ''}
-        confirmText="Удалить"
-        danger
-        loading={deleteLoading}
-      />
     </Card>
   )
 }

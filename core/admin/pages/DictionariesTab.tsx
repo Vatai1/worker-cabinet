@@ -6,10 +6,12 @@ import { API_BASE_URL } from '@/shared/lib/api'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import {
-  Briefcase, Plane, Tag, Plus, Trash2, Check, X,
+  Briefcase, Plane, Tag, Plus, Trash2, X,
   AlertTriangle, Loader2, Users, UserPlus, RotateCcw, Settings2,
 } from 'lucide-react'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
+import { EntityModal, ModalError } from '@/shared/components/ui/EntityModal'
+import { useCan } from '@/shared/lib/permissions'
 import {
   CountBadge, FilterHeader, RowAction, TableCard, TableEmpty, TableEmptyRow, TableFrame, TableHeadRow, TableSearch, TableSkeleton, TD, TH, TR,
   filterOptionsOf, matchesFilter, useTableSort,
@@ -59,8 +61,8 @@ interface DictionariesData {
   skills: { id: number; name: string }[]
 }
 
-export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }: { initialTab?: string; variant?: 'admin' | 'hr' }) {
-  const isAdmin = variant === 'admin'
+export function DictionariesTab({ initialTab = 'positions' }: { initialTab?: string }) {
+  const canEditPositions = useCan('dictionaries:positions')
   const activeDict = initialTab
   const [data, setData] = useState<DictionariesData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -78,22 +80,17 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      if (isAdmin) {
-        const res = await fetchWithRetry(`${API_BASE_URL}/admin/dictionaries`, { headers: getAuthHeaders() })
-        if (res.ok) setData(await res.json())
-      } else {
-        const [posRes, vacRes, sklRes] = await Promise.all([
-          fetchWithRetry(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() }),
-          fetchWithRetry(`${API_BASE_URL}/dictionaries/vacation-types`, { headers: getAuthHeaders() }),
-          fetchWithRetry(`${API_BASE_URL}/dictionaries/skills`, { headers: getAuthHeaders() }),
-        ])
-        const positions = posRes.ok ? await posRes.json() : []
-        const vacationTypes = vacRes.ok ? await vacRes.json() : []
-        const skills = sklRes.ok ? await sklRes.json() : []
-        setData({ positions, vacationTypes, skills })
-      }
+      const [posRes, vacRes, sklRes] = await Promise.all([
+        fetchWithRetry(`${API_BASE_URL}/dictionaries/positions`, { headers: getAuthHeaders() }),
+        fetchWithRetry(`${API_BASE_URL}/dictionaries/vacation-types`, { headers: getAuthHeaders() }),
+        fetchWithRetry(`${API_BASE_URL}/dictionaries/skills`, { headers: getAuthHeaders() }),
+      ])
+      const positions = posRes.ok ? await posRes.json() : []
+      const vacationTypes = vacRes.ok ? await vacRes.json() : []
+      const skills = sklRes.ok ? await sklRes.json() : []
+      setData({ positions, vacationTypes, skills })
     } catch {} finally { if (!silent) setLoading(false) }
-  }, [isAdmin])
+  }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -355,7 +352,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
       {settingsPosition && (
         <PositionSettingsModal
           position={settingsPosition}
-          isAdmin={isAdmin}
+          canEdit={canEditPositions}
           onDelete={() => deletePosition(settingsPosition.name)}
           onClose={() => setSettingsPosition(null)}
           onSaved={() => { setSettingsPosition(null); fetchData(true) }}
@@ -366,7 +363,7 @@ export function DictionariesTab({ initialTab = 'positions', variant = 'admin' }:
   )
 }
 
-function DictEditModal({ icon: Icon, title, subtitle, fields, onSave, onClose }: {
+function DictEditModal({ icon, title, subtitle, fields, onSave, onClose }: {
   icon: React.ComponentType<{ className?: string }>
   title: string
   subtitle: string
@@ -381,16 +378,7 @@ function DictEditModal({ icon: Icon, title, subtitle, fields, onSave, onClose }:
   const trimmed = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim()]))
   const canSave = fields.every(f => trimmed[f.id]) && fields.some(f => trimmed[f.id] !== f.initial)
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !saving) onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose, saving])
-
   const save = async () => {
-    if (!canSave) return
     setSaving(true)
     setError(null)
     try {
@@ -402,149 +390,34 @@ function DictEditModal({ icon: Icon, title, subtitle, fields, onSave, onClose }:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => !saving && onClose()}>
-      <form
-        className="mx-4 flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-scale-in"
-        onClick={e => e.stopPropagation()}
-        onSubmit={e => { e.preventDefault(); save() }}
-      >
-        <div className="flex items-center justify-between border-b border-border p-5">
-          <div className="min-w-0">
-            <h3 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-5 w-5 text-muted-foreground" /> {title}</h3>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>
+    <EntityModal icon={icon} title={title} subtitle={subtitle} busy={saving} canSave={canSave} onSave={save} onClose={onClose}>
+      <div className="space-y-4">
+        <ModalError error={error} />
+        {fields.map((f, i) => (
+          <div key={f.id} className="space-y-1.5">
+            <label htmlFor={`dict-${f.id}`} className="text-xs font-medium text-muted-foreground">{f.label}</label>
+            <Input
+              id={`dict-${f.id}`}
+              value={values[f.id]}
+              onChange={e => setValues(prev => ({ ...prev, [f.id]: e.target.value }))}
+              className={cn(f.mono && 'font-mono')}
+              autoFocus={i === 0}
+            />
           </div>
-          <button type="button" onClick={onClose} disabled={saving} aria-label="Закрыть" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="space-y-4 p-5">
-          {error && (
-            <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              {error}
-            </div>
-          )}
-          {fields.map((f, i) => (
-            <div key={f.id} className="space-y-1.5">
-              <label htmlFor={`dict-${f.id}`} className="text-xs font-medium text-muted-foreground">{f.label}</label>
-              <Input
-                id={`dict-${f.id}`}
-                value={values[f.id]}
-                onChange={e => setValues(prev => ({ ...prev, [f.id]: e.target.value }))}
-                className={cn(f.mono && 'font-mono')}
-                autoFocus={i === 0}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-border p-4">
-          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Отмена</Button>
-          <Button type="submit" disabled={saving || !canSave}>
-            {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
-            Сохранить
-          </Button>
-        </div>
-      </form>
-    </div>
+        ))}
+      </div>
+    </EntityModal>
   )
 }
 
-function DictEntityModal({ icon: Icon, title, subtitle, tabs, tab, onTabChange, busy, canSave, onSave, onDelete, onClose, children }: {
-  icon: React.ComponentType<{ className?: string }>
-  title: string
-  subtitle: string
-  tabs: { id: string; label: string; icon: React.ComponentType<{ className?: string }> }[]
-  tab: string
-  onTabChange: (tab: string) => void
-  busy: boolean
-  canSave: boolean
-  onSave: () => void
-  onDelete?: () => void
-  onClose: () => void
-  children: React.ReactNode
-}) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose, busy])
-
-  const isSettings = tab === 'settings'
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => !busy && onClose()}>
-      <form
-        className="mx-4 flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-scale-in"
-        onClick={e => e.stopPropagation()}
-        onSubmit={e => { e.preventDefault(); if (isSettings && canSave) onSave() }}
-      >
-        <div className="shrink-0 border-b border-border px-5 pt-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-5 w-5 shrink-0 text-muted-foreground" /> <span className="truncate">{title}</span></h3>
-              <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
-            </div>
-            <button type="button" onClick={onClose} disabled={busy} aria-label="Закрыть" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
-          </div>
-          <div className="mt-4 flex gap-4" role="tablist">
-            {tabs.map(({ id, label, icon: TabIcon }) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={tab === id}
-                onClick={() => onTabChange(id)}
-                className={cn(
-                  '-mb-px flex items-center gap-1.5 border-b-2 pb-2.5 text-sm font-medium transition-colors',
-                  tab === id ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <TabIcon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin overscroll-contain p-5">{children}</div>
-        <div className="flex shrink-0 items-center gap-2 border-t border-border p-4">
-          {onDelete && (
-            <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete} disabled={busy}>
-              <Trash2 className="mr-1.5 h-4 w-4" />
-              Удалить
-            </Button>
-          )}
-          <div className="ml-auto flex gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>{isSettings ? 'Отмена' : 'Закрыть'}</Button>
-            {isSettings && (
-              <Button type="submit" disabled={busy || !canSave}>
-                {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
-                Сохранить
-              </Button>
-            )}
-          </div>
-        </div>
-      </form>
-    </div>
-  )
-}
-
-function ModalError({ error }: { error: string | null }) {
-  if (!error) return null
-  return (
-    <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-      {error}
-    </div>
-  )
-}
-
-function PositionSettingsModal({ position, isAdmin, onDelete, onClose, onSaved }: {
+function PositionSettingsModal({ position, canEdit, onDelete, onClose, onSaved }: {
   position: DictionariesData['positions'][number]
-  isAdmin: boolean
+  canEdit: boolean
   onDelete: () => Promise<void>
   onClose: () => void
   onSaved: () => void
 }) {
-  const canRename = isAdmin
+  const canRename = canEdit
   const [tab, setTab] = useState<'settings' | 'users'>('settings')
   const [name, setName] = useState(position.name)
   const [genitive, setGenitive] = useState(position.genitive ?? '')
@@ -593,7 +466,7 @@ function PositionSettingsModal({ position, isAdmin, onDelete, onClose, onSaved }
   const count = Number(position.count) || 0
 
   return (
-    <DictEntityModal
+    <EntityModal
       icon={Briefcase}
       title={position.name}
       subtitle={`Должность · ${count} ${pluralRu(count, 'работник', 'работника', 'работников')}`}
@@ -603,12 +476,12 @@ function PositionSettingsModal({ position, isAdmin, onDelete, onClose, onSaved }
       busy={saving}
       canSave={canSave}
       onSave={save}
-      onDelete={isAdmin ? remove : undefined}
+      onDelete={canEdit ? remove : undefined}
       onClose={onClose}
     >
       <div className="space-y-4">
         <ModalError error={error} />
-        {tab === 'users' ? <PositionUsersList position={position.name} isAdmin={isAdmin} /> : <>
+        {tab === 'users' ? <PositionUsersList position={position.name} /> : <>
           <div className="space-y-1.5">
             <label htmlFor="position-name" className="text-xs font-medium text-muted-foreground">Название</label>
             <Input id="position-name" value={name} onChange={e => setName(e.target.value)} disabled={!canRename} autoFocus={canRename} />
@@ -638,7 +511,7 @@ function PositionSettingsModal({ position, isAdmin, onDelete, onClose, onSaved }
           </div>
         </>}
       </div>
-    </DictEntityModal>
+    </EntityModal>
   )
 }
 
@@ -707,14 +580,15 @@ function TagSettingsModal({ tag, onDelete, onClose, onSaved }: {
 
   return (
     <>
-      <DictEntityModal
+      <EntityModal
         icon={Tag}
         title={tag.name}
         subtitle={count === undefined ? 'Тег' : `Тег · ${count} ${pluralRu(count, 'работник', 'работника', 'работников')}`}
         tabs={[{ id: 'settings', label: 'Настройки', icon: Settings2 }, { id: 'users', label: count === undefined ? 'Работники' : `Работники (${count})`, icon: Users }]}
         tab={tab}
         onTabChange={(t) => setTab(t as typeof tab)}
-        busy={saving || assigning}
+        busy={saving}
+        locked={assigning}
         canSave={canSave}
         onSave={save}
         onDelete={() => run(onDelete)}
@@ -762,26 +636,23 @@ function TagSettingsModal({ tag, onDelete, onClose, onSaved }: {
             </>
           )}
         </div>
-      </DictEntityModal>
+      </EntityModal>
       {assigning && <AssignTagModal tag={tag} onClose={() => setAssigning(false)} onAssigned={loadUsers} />}
     </>
   )
 }
 
-function PositionUsersList({ position, isAdmin }: { position: string; isAdmin: boolean }) {
+function PositionUsersList({ position }: { position: string }) {
   const [users, setUsers] = useState<{ id: number; first_name: string; last_name: string; middle_name: string | null; email: string; department_name: string | null; role: string; status: string }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const url = isAdmin
-      ? `${API_BASE_URL}/admin/users?position=${encodeURIComponent(position)}&limit=100`
-      : `${API_BASE_URL}/users?position=${encodeURIComponent(position)}&limit=100`
-    fetchWithRetry(url, { headers: getAuthHeaders() })
-      .then(r => r.json())
-      .then(data => setUsers(data.users || data || []))
+    fetchWithRetry(`${API_BASE_URL}/users/search?position=${encodeURIComponent(position)}&includeInactive=true`, { headers: getAuthHeaders() })
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => setUsers(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [position, isAdmin])
+  }, [position])
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
   if (users.length === 0) {

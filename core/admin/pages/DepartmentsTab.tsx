@@ -15,6 +15,7 @@ import {
   CountBadge, FilterHeader, RowAction, TableCard, TableEmpty, TableEmptyRow, TableFrame, TableHeadRow, TableSearch, TableSkeleton, TD, TH, TR,
   filterOptionsOf, matchesFilter, useTableSort,
 } from '@/shared/components/ui/DataTable'
+import { EntityModal, ModalError } from '@/shared/components/ui/EntityModal'
 import { DeleteDepartmentDialog, DepartmentSettings, type Dept } from '@/core/admin/components/DepartmentSettings'
 
 const NO_MANAGER = 'Не назначен'
@@ -253,103 +254,83 @@ export function DepartmentsTab() {
       )}
 
       {creating && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-5"
-          onClick={closeCreate}
+        <EntityModal
+          icon={Building2}
+          title="Новый отдел"
+          busy={saving}
+          locked={pickerFor !== null}
+          canSave={!!formName.trim()}
+          saveLabel="Добавить"
+          onSave={submitCreate}
+          onClose={closeCreate}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Новый отдел"
-            onClick={e => e.stopPropagation()}
-            className="w-full max-w-[440px] rounded-2xl border border-border bg-card p-6 shadow-2xl max-h-[85vh] overflow-y-auto scrollbar-thin overscroll-contain"
-          >
-            <h3 className="mb-4 text-base font-bold">Новый отдел</h3>
+          <div className="space-y-3.5">
+            <ModalError error={error} />
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[12.5px] font-semibold text-muted-foreground">Название</span>
+            <input
+              autoFocus
+              value={formName}
+              onChange={e => setFormName(e.target.value)}
+              maxLength={120}
+              placeholder="Например, Отдел исследований"
+              className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+            />
+          </label>
 
-            {error && (
-              <div className="mb-3 flex items-center gap-2 rounded-lg bg-destructive/10 p-2.5 text-[13px] text-destructive">
-                <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
-              </div>
-            )}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[12.5px] font-semibold text-muted-foreground">Описание</span>
+            <textarea
+              value={formDescription}
+              onChange={e => setFormDescription(e.target.value)}
+              rows={2}
+              maxLength={1000}
+              className="resize-y rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+            />
+          </label>
 
-            <form
-              onSubmit={e => { e.preventDefault(); submitCreate() }}
-              className="space-y-3.5"
-            >
-              <label className="flex flex-col gap-1.5">
-                <span className="text-[12.5px] font-semibold text-muted-foreground">Название</span>
-                <input
-                  autoFocus
-                  value={formName}
-                  onChange={e => setFormName(e.target.value)}
-                  maxLength={120}
-                  placeholder="Например, Отдел исследований"
-                  className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
-                />
-              </label>
-
-              <label className="flex flex-col gap-1.5">
-                <span className="text-[12.5px] font-semibold text-muted-foreground">Описание</span>
-                <textarea
-                  value={formDescription}
-                  onChange={e => setFormDescription(e.target.value)}
-                  rows={2}
-                  maxLength={1000}
-                  className="resize-y rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
-                />
-              </label>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[12.5px] font-semibold text-muted-foreground">Руководитель</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPickerFor('create')}
-                    className="flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40"
-                  >
-                    <span className={formManagerName ? 'text-foreground' : 'text-muted-foreground'}>
-                      {formManagerName || 'Не назначен'}
-                    </span>
-                  </button>
-                  {formManagerId != null && (
-                    <button
-                      type="button"
-                      onClick={() => { setFormManagerId(null); setFormManagerName('') }}
-                      className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      aria-label="Снять руководителя"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <label className="flex flex-col gap-1.5">
-                <span className="text-[12.5px] font-semibold text-muted-foreground">Входит в подразделение</span>
-                <select
-                  value={formParentId ?? ''}
-                  onChange={e => setFormParentId(e.target.value ? Number(e.target.value) : null)}
-                  className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[12.5px] font-semibold text-muted-foreground">Руководитель</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPickerFor('create')}
+                className="flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/40"
+              >
+                <span className={formManagerName ? 'text-foreground' : 'text-muted-foreground'}>
+                  {formManagerName || 'Не назначен'}
+                </span>
+              </button>
+              {formManagerId != null && (
+                <button
+                  type="button"
+                  onClick={() => { setFormManagerId(null); setFormManagerName('') }}
+                  className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="Снять руководителя"
                 >
-                  <option value="">—</option>
-                  {departments.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </label>
-
-              <p className="text-xs text-muted-foreground">Состав, запрет отпусков и видимость настраиваются после создания — кликните по отделу в списке</p>
-
-              <div className="flex justify-end gap-2.5 pt-1">
-                <Button type="button" variant="outline" onClick={closeCreate}>Отмена</Button>
-                <Button type="submit" disabled={!formName.trim() || saving}>
-                  {saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                  Добавить
-                </Button>
-              </div>
-            </form>
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[12.5px] font-semibold text-muted-foreground">Входит в подразделение</span>
+            <select
+              value={formParentId ?? ''}
+              onChange={e => setFormParentId(e.target.value ? Number(e.target.value) : null)}
+              className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+            >
+              <option value="">—</option>
+              {departments.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <p className="text-xs text-muted-foreground">Состав, запрет отпусков и видимость настраиваются после создания — кликните по отделу в списке</p>
+          </div>
+        </EntityModal>
       )}
 
       {settingsDept && (

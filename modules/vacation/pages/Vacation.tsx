@@ -18,7 +18,7 @@ import { CalendarLegendSwatches } from '@/shared/components/calendar/CalendarLeg
 import { VacationHistoryList } from '@/modules/vacation/components/modals/VacationHistoryModal'
 import { CreateVacationModal } from '@/modules/vacation/components/modals/CreateVacationModal'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
-import { ConfirmModal } from '@/shared/components/ConfirmModal'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { VacationRestrictions } from '@/modules/vacation/components/VacationRestrictions'
 import { DepartmentBalanceTable } from '@/modules/vacation/components/DepartmentBalanceTable'
 import { VacationIntroModal } from '@/modules/vacation/components/VacationIntroModal'
@@ -117,8 +117,6 @@ export function Vacation() {
   const [showCreateFromCalendar, setShowCreateFromCalendar] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [detailRequest, setDetailRequest] = useState<VacationRequest | null>(null)
-  const [showCancelModal, setShowCancelModal] = useState(false)
-  const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null)
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null)
   const autoExpandedRef = useRef(false)
   const [myRequestsExpanded, setMyRequestsExpanded] = useState(true)
@@ -430,22 +428,22 @@ export function Vacation() {
     return null
   }
 
-  const handleCancelClick = (requestId: string) => {
-    setCancellingRequestId(requestId)
-    setShowCancelModal(true)
-  }
-
-  const handleCancelConfirm = async () => {
-    if (!user || !cancellingRequestId) return
+  const handleCancelClick = async (requestId: string) => {
+    if (!user) return
+    const ok = await confirmDialog({
+      title: 'Отменить заявку?',
+      message: 'Вы уверены, что хотите отменить эту заявку на отпуск? Дни отпуска будут возвращены на ваш баланс.',
+      confirmText: 'Отменить',
+      cancelText: 'Вернуться',
+      variant: 'danger',
+    })
+    if (!ok) return
     try {
-      await useVacationStore.getState().cancelRequest(cancellingRequestId)
+      await useVacationStore.getState().cancelRequest(requestId)
       setExpandedRequestId(null)
       fetchBalance(user.id, year).then(setBalance)
     } catch (err) {
       toast.error(getErrorMessage(err))
-    } finally {
-      setShowCancelModal(false)
-      setCancellingRequestId(null)
     }
   }
 
@@ -464,11 +462,6 @@ export function Vacation() {
     } finally {
       setSavingEdit(false)
     }
-  }
-
-  const handleCancelClose = () => {
-    setShowCancelModal(false)
-    setCancellingRequestId(null)
   }
 
   const handleTransferClick = (request: VacationRequest) => {
@@ -1823,19 +1816,6 @@ export function Vacation() {
           restrictionWarnings={restrictionWarningsCalendar}
           onCheckRestrictions={handleCheckRestrictionsCalendar}
           showSubstitutes
-        />
-      )}
-
-      {showCancelModal && (
-        <ConfirmModal
-          isOpen={showCancelModal}
-          title="Отменить заявку?"
-          message="Вы уверены, что хотите отменить эту заявку на отпуск? Дни отпуска будут возвращены на ваш баланс."
-          onConfirm={handleCancelConfirm}
-          onCancel={handleCancelClose}
-          confirmText="Отменить"
-          cancelText="Вернуться"
-          loading={loading}
         />
       )}
 

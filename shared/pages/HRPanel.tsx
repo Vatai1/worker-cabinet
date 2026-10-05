@@ -25,9 +25,9 @@ const HRTimesheet = lazy(() => import('@/modules/timesheet/pages/HRTimesheet').t
 const HRInstitution = lazy(() => import('@/modules/institution/pages/HRInstitution').then(m => ({ default: m.HRInstitution })))
 const HRDocTemplates = lazy(() => import('@/modules/documents/pages/HRDocTemplates').then(m => ({ default: m.HRDocTemplates })))
 const HRMailing = lazy(() => import('@/modules/mailing/pages/HRMailing').then(m => ({ default: m.HRMailing })))
-const HRPositionsTab = () => <DictionariesTab variant="hr" initialTab="positions" />
-const HRVacationTypesTab = () => <DictionariesTab variant="hr" initialTab="vacationTypes" />
-const HRSkillsTab = () => <DictionariesTab variant="hr" initialTab="skills" />
+const HRPositionsTab = () => <DictionariesTab initialTab="positions" />
+const HRVacationTypesTab = () => <DictionariesTab initialTab="vacationTypes" />
+const HRSkillsTab = () => <DictionariesTab initialTab="skills" />
 
 type TabId = 'hr_employees' | 'surveys' | 'onboarding' | 'vacation' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
 

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileText, Plus, Pencil, Trash2, Search, X, Download, Eye, Loader2, FolderOpen } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
-import { ConfirmModal } from '@/shared/components/ConfirmModal'
 import { AddDictItemModal } from '@/core/admin/components/modals/AddDictItemModal'
 import { OnlyOfficePreviewModal } from '@/shared/components/OnlyOfficePreviewModal'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
@@ -48,7 +47,6 @@ export function HRDocTemplates() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [editItem, setEditItem] = useState<DocTemplate | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<DocTemplate | null>(null)
   const [previewItem, setPreviewItem] = useState<DocTemplate | null>(null)
   const [downloadingId, setDownloadingId] = useState<number | null>(null)
 
@@ -119,11 +117,9 @@ export function HRDocTemplates() {
         headers: getAuthHeaders(),
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Ошибка')
-      setDeleteTarget(null)
       fetchTemplates()
     } catch (err: unknown) {
       setError(getErrorMessage(err))
-      setDeleteTarget(null)
     }
   }
 
@@ -135,7 +131,6 @@ export function HRDocTemplates() {
       variant: 'danger',
     })
     if (!ok) return
-    setDeleteTarget(item)
     handleDelete(item)
   }
 
@@ -317,16 +312,6 @@ export function HRDocTemplates() {
 
       </>}
 
-      {deleteTarget && (
-        <ConfirmModal
-          isOpen={true}
-          title="Удаление"
-          message={`Удалить «${deleteTarget.name}»? Это действие нельзя отменить.`}
-          confirmText="Удалить"
-          onConfirm={() => handleDelete(deleteTarget)}
-          onCancel={() => setDeleteTarget(null)}
-        />
-      )}
 
       {previewItem && (
         <OnlyOfficePreviewModal
