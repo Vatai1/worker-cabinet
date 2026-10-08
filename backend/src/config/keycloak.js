@@ -7,8 +7,8 @@ const config = {
   enabled: !!process.env.KEYCLOAK_URL,
 }
 
-function kcLog() {}
-function kcErr(...args) { console.error('[KC]', ...args) }
+export function kcLog(...args) { console.log(new Date().toISOString(), '[KC]', ...args) }
+export function kcErr(...args) { console.error(new Date().toISOString(), '[KC]', ...args) }
 
 export function getIssuer() {
   return `${config.url}/realms/${config.realm}`
@@ -80,7 +80,7 @@ async function getKcUserId(guid) {
     { headers: { Authorization: `Bearer ${token}` } }
   )
   if (!res.ok || !res.headers.get('content-type')?.includes('json')) {
-    kcErr('admin: search user by guid failed:', res.status)
+    kcErr('admin: search user by guid failed:', res.status, await res.text().catch(() => ''))
     return null
   }
   const users = await res.json()
@@ -100,7 +100,7 @@ async function getKcUserIdByEmail(email) {
     { headers: { Authorization: `Bearer ${token}` } }
   )
   if (!res.ok || !res.headers.get('content-type')?.includes('json')) {
-    kcErr('admin: search by email failed:', res.status)
+    kcErr('admin: search by email failed:', res.status, await res.text().catch(() => ''))
     return null
   }
   const users = await res.json()
@@ -141,11 +141,12 @@ async function updateKcUserRole(kcUserId, newRole) {
 
     if (removeBody.length > 0) {
       kcLog('admin: removing roles:', removeBody.map(r => r.name).join(','))
-      await fetch(userRolesUrl, {
+      const delRes = await fetch(userRolesUrl, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(removeBody),
       })
+      kcLog('admin: remove roles status=', delRes.status)
     }
 
     let roleDef = allRoles.find(r => r.name === newRole)
@@ -168,12 +169,12 @@ async function updateKcUserRole(kcUserId, newRole) {
       body: JSON.stringify([{ id: roleDef.id, name: roleDef.name }]),
     })
     if (!assignRes.ok) {
-      kcErr('admin: failed to assign role:', assignRes.status)
+      kcErr('admin: failed to assign role:', assignRes.status, await assignRes.text().catch(() => ''))
     } else {
       kcLog('admin: role assigned:', newRole, '→ kcUserId=', kcUserId)
     }
   } catch (err) {
-    kcErr('admin: updateKcUserRole error:', err.message)
+    kcErr('admin: updateKcUserRole error:', err.message, err.cause?.code || '', err.cause?.message || '')
   }
 }
 
@@ -191,12 +192,12 @@ async function updateKcUserProfile(kcGuid, { firstName, lastName, email }) {
       }
     )
     if (!res.ok) {
-      kcErr('admin: failed to update profile:', kcGuid, res.status)
+      kcErr('admin: failed to update profile:', kcGuid, res.status, await res.text().catch(() => ''))
     } else {
       kcLog('admin: profile updated for kcGuid=', kcGuid)
     }
   } catch (err) {
-    kcErr('admin: updateKcUserProfile error:', err.message)
+    kcErr('admin: updateKcUserProfile error:', err.message, err.cause?.code || '', err.cause?.message || '')
   }
 }
 
@@ -214,12 +215,12 @@ async function setKcUserEnabled(kcGuid, enabled) {
       }
     )
     if (!res.ok) {
-      kcErr('admin: failed to set enabled:', kcGuid, res.status)
+      kcErr('admin: failed to set enabled:', kcGuid, res.status, await res.text().catch(() => ''))
     } else {
       kcLog('admin: enabled =', enabled, 'applied to kcGuid=', kcGuid)
     }
   } catch (err) {
-    kcErr('admin: setKcUserEnabled error:', err.message)
+    kcErr('admin: setKcUserEnabled error:', err.message, err.cause?.code || '', err.cause?.message || '')
   }
 }
 
@@ -237,12 +238,12 @@ async function resetKcUserPassword(kcGuid, newPassword) {
       }
     )
     if (!res.ok) {
-      kcErr('admin: failed to reset password:', kcGuid, res.status)
+      kcErr('admin: failed to reset password:', kcGuid, res.status, await res.text().catch(() => ''))
     } else {
       kcLog('admin: password reset for kcGuid=', kcGuid)
     }
   } catch (err) {
-    kcErr('admin: resetKcUserPassword error:', err.message)
+    kcErr('admin: resetKcUserPassword error:', err.message, err.cause?.code || '', err.cause?.message || '')
   }
 }
 
@@ -266,7 +267,7 @@ async function unlockKcUser(kcGuid) {
     )
     kcLog('admin: enable status=', enableRes.status, 'for kcGuid=', kcGuid)
   } catch (err) {
-    kcErr('admin: unlockKcUser error:', err.message)
+    kcErr('admin: unlockKcUser error:', err.message, err.cause?.code || '', err.cause?.message || '')
   }
 }
 
@@ -285,12 +286,13 @@ async function deleteKcRole(roleName) {
     }
     kcLog('admin: role deleted:', roleName, 'status=', res.status)
   } catch (err) {
-    kcErr('admin: deleteKcRole error:', err.message)
+    kcErr('admin: deleteKcRole error:', err.message, err.cause?.code || '', err.cause?.message || '')
   }
 }
 
 async function syncKcSessionSettings({ sessionLifetimeMinutes, refreshLifetimeDays }) {
   if (!config.enabled) return
+  kcLog('admin: sync session settings, sessionLifetimeMinutes=', sessionLifetimeMinutes, 'refreshLifetimeDays=', refreshLifetimeDays)
   try {
     const token = await getKcAdminToken()
     const res = await fetch(`${config.url}/admin/realms/${config.realm}`, {
@@ -303,10 +305,12 @@ async function syncKcSessionSettings({ sessionLifetimeMinutes, refreshLifetimeDa
       }),
     })
     if (!res.ok) {
-      kcErr('syncKcSessionSettings: failed', res.status)
+      kcErr('syncKcSessionSettings: failed', res.status, await res.text().catch(() => ''))
+    } else {
+      kcLog('admin: session settings synced')
     }
   } catch (err) {
-    kcErr('syncKcSessionSettings error:', err.message)
+    kcErr('syncKcSessionSettings error:', err.message, err.cause?.code || '', err.cause?.message || '')
   }
 }
 

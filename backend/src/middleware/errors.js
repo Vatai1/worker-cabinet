@@ -47,7 +47,10 @@ function writeErrorLog(req, statusCode, message, cause) {
   const path = (req.originalUrl || req.url || '').split('?')[0]
   const segments = path.split('/').filter(Boolean)
   const errorModule = segments[0] === 'api' && segments[1] ? segments[1].substring(0, 50) : 'general'
-  const causeMessage = cause?.message && cause.message !== message ? cause.message : null
+  const inner = cause?.cause
+  const innerMessage = inner ? [inner.code, inner.message].filter(Boolean).join(' ') : ''
+  const causeText = [cause?.message, innerMessage].filter(Boolean).join(': ')
+  const causeMessage = causeText && causeText !== message ? causeText : null
   const fullMessage = causeMessage ? `${message} — причина: ${causeMessage}` : message
 
   console.error(`[${new Date().toISOString()}] ${req.method} ${path} ${statusCode}: ${fullMessage}`, {

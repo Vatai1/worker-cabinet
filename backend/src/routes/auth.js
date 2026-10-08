@@ -4,10 +4,10 @@ import { query } from '../config/database.js'
 import { authLimiter } from '../middleware/rateLimiter.js'
 import { validateLogin, validateRegister, sanitizeInput } from '../middleware/validation.js'
 import { asyncHandler, ValidationError, UnauthorizedError, ForbiddenError } from '../middleware/errors.js'
-import { authenticateToken, logScopes, verifyKeycloakToken, findOrCreateUser, keycloakOrgSource, ACCOUNT_DISABLED_MESSAGE } from '../middleware/auth.js'
+import { authenticateToken, verifyKeycloakToken, findOrCreateUser, keycloakOrgSource, ACCOUNT_DISABLED_MESSAGE } from '../middleware/auth.js'
 import { isRealSuperadmin, signValue, testCookieOptions, TEST_PREVIEW_ROLES, getTestDataState } from '../utils/testScope.js'
 import { personName } from '../utils/personName.js'
-import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl } from '../config/keycloak.js'
+import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl, kcLog, kcErr } from '../config/keycloak.js'
 import { getAuthSettings } from '../config/authSettings.js'
 import { signAccessToken, createSession, findActiveSessionByToken, isRecentlyRotatedToken, rotateSession, revokeSessionByToken } from '../lib/sessionTokens.js'
 import { permissionsFor } from '../lib/permissions.js'
@@ -61,10 +61,13 @@ router.get('/config', asyncHandler(async (req, res) => {
 router.post('/callback', asyncHandler(async (req, res) => {
   const { code, code_verifier, redirect_uri } = req.body
 
+  kcLog('callback: ip=', getClientIp(req), 'redirect_uri=', redirect_uri, 'hasCode=', !!code, 'hasVerifier=', !!code_verifier)
   if (!code || !code_verifier) {
+    kcErr('callback: missing code or code_verifier')
     throw new ValidationError('Отсутствует код или PKCE verifier')
   }
 
+  kcLog('callback: exchanging code at', getTokenEndpoint(), 'client_id=', keycloakConfig.clientId)
   const tokenRes = await fetch(getTokenEndpoint(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -76,23 +79,32 @@ router.post('/callback', asyncHandler(async (req, res) => {
       client_secret: keycloakConfig.clientSecret,
       code_verifier,
     }),
+  }).catch((err) => {
+    kcErr('callback: token endpoint unreachable', getTokenEndpoint(), '-', err.message, err.cause?.code || '', err.cause?.message || '')
+    throw err
   })
 
   if (!tokenRes.ok) {
     const errBody = await tokenRes.json().catch(() => ({}))
-    console.error('[KC] token exchange failed:', tokenRes.status, JSON.stringify(errBody))
+    kcErr('callback: token exchange failed:', tokenRes.status, JSON.stringify(errBody))
     throw new ValidationError(errBody.error_description || 'Ошибка обмена токена')
   }
 
   const tokenData = await tokenRes.json()
+  kcLog('callback: token exchange ok, expires_in=', tokenData.expires_in, 'refresh_expires_in=', tokenData.refresh_expires_in,
+    'scope=', tokenData.scope, 'hasIdToken=', !!tokenData.id_token)
 
   // KC is used here only to establish identity (this one exchange). From this point on,
   // the session is entirely our own: our JWT access token + our own DB-backed refresh token.
   const kcPayload = await verifyKeycloakToken(tokenData.access_token)
   const existedBefore = (await query('SELECT 1 FROM users WHERE keycloak_guid = $1', [kcPayload.sub])).rows.length > 0
+  kcLog('callback: claims', JSON.stringify(Object.fromEntries(Object.entries(kcPayload).filter(([key]) => !TECHNICAL_TOKEN_CLAIMS.has(key)))))
   const user = await findOrCreateUser(kcPayload)
   const statusRow = (await query('SELECT status FROM users WHERE id = $1', [user.id])).rows[0]
-  if (statusRow?.status === 'inactive') throw new ForbiddenError(ACCOUNT_DISABLED_MESSAGE)
+  if (statusRow?.status === 'inactive') {
+    kcErr('callback: user', user.id, user.email, 'is inactive, login denied')
+    throw new ForbiddenError(ACCOUNT_DISABLED_MESSAGE)
+  }
 
   const { sessionLifetime, sessionMs, refreshLifetime, refreshMs } = await getAuthSettings()
   const accessToken = signAccessToken(user, sessionLifetime)
@@ -107,8 +119,9 @@ router.post('/callback', asyncHandler(async (req, res) => {
   await query(
     `INSERT INTO audit_log (user_id, user_name, action, entity_type, entity_id, ip_address, details) VALUES ($1, $2, 'login', 'user', $3, $4, $5)`,
     [user.id, personName(user), String(user.id), getClientIp(req), JSON.stringify(await keycloakLoginDetails(kcPayload, user.id, existedBefore))]
-  ).catch(() => {})
+  ).catch((err) => kcErr('callback: audit log failed:', err.message))
 
+  kcLog('callback: login ok, user', user.id, user.email, 'existedBefore=', existedBefore, 'sessionLifetime=', sessionLifetime, 'refreshLifetime=', refreshLifetime)
   res.cookie('auth_token', accessToken, { ...cookieOptions(req), maxAge: sessionMs })
   res.cookie('auth_refresh_token', refreshToken, { ...cookieOptions(req), maxAge: refreshMs })
 
@@ -187,6 +200,7 @@ router.post('/logout', asyncHandler(async (req, res) => {
     if (idToken) {
       logoutUrl += `&id_token_hint=${encodeURIComponent(idToken)}`
     }
+    kcLog('logout: ip=', getClientIp(req), 'hasIdToken=', !!idToken)
     res.clearCookie('auth_token', opts)
     res.clearCookie('auth_refresh_token', opts)
     res.clearCookie('kc_id_token', opts)

@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { query } from '../config/database.js'
-import keycloakConfig, { getJwksUrl, getIssuer } from '../config/keycloak.js'
+import keycloakConfig, { getJwksUrl, getIssuer, kcLog, kcErr } from '../config/keycloak.js'
 import { attachOrgContext } from './orgContext.js'
 import { applyTestContext } from '../utils/testScope.js'
 
@@ -19,83 +19,28 @@ async function getJwks() {
 
 async function verifyKeycloakToken(token) {
   const jwks = await getJwks()
-  const { payload } = await jwtVerify(token, jwks, {
-    clockTolerance: 30,
-    issuer: getIssuer(),
-  })
+  let payload
+  try {
+    ({ payload } = await jwtVerify(token, jwks, {
+      clockTolerance: 30,
+      issuer: getIssuer(),
+    }))
+  } catch (err) {
+    kcErr('verify: token rejected:', err.code || '', err.message, err.cause?.code || '', err.cause?.message || '', '| expected iss=', getIssuer(), 'jwks=', getJwksUrl())
+    throw err
+  }
 
   if (payload.azp !== keycloakConfig.clientId && (!payload.aud || !payload.aud.includes(keycloakConfig.clientId))) {
+    kcErr('verify: wrong client, azp=', payload.azp, 'aud=', payload.aud, 'expected=', keycloakConfig.clientId)
     throw new Error(`Token not intended for client "${keycloakConfig.clientId}"`)
   }
 
+  kcLog('verify: ok, sub=', payload.sub, 'email=', payload.email, 'azp=', payload.azp, 'scope=', payload.scope,
+    'exp=', payload.exp && new Date(payload.exp * 1000).toISOString())
   return payload
 }
 
 export { verifyKeycloakToken }
-
-const SCOPE_CLAIMS = {
-  openid: ['sub', 'auth_time', 'acr', 'sid', 'session_state'],
-  profile: ['name', 'full_name', 'family_name', 'given_name', 'middle_name', 'middlename', 'nickname', 'preferred_username', 'profile', 'picture', 'website', 'gender', 'birth_date', 'zoneinfo', 'locale', 'updated_at'],
-  email: ['email', 'email_verified'],
-  address: ['address'],
-  phone: ['phone_number', 'phone_number_verified', 'telephone_number'],
-  roles: ['realm_access', 'resource_access', 'allowed-origins'],
-  'web-origins': ['allowed-origins'],
-  microprofile_jwt: ['upn', 'groups'],
-  cabinet: [
-    'email', 'email_verified',
-    'name', 'firstname', 'lastname', 'middlename',
-    'preferred_username', 'birth_date', 'gender',
-    'phone_number', 'telephone_number',
-    'picture',
-    'position', 'hire_date', 'address', 'city', 'postal_code', 'room_number',
-    'company', 'department',
-    'responsibility_area',
-    'groups',
-  ],
-}
-
-export function logScopes(payload, label) {
-  const scopeStr = payload.scope || ''
-  const scopes = scopeStr.split(/\s+/).filter(Boolean)
-  if (scopes.length === 0) {
-    return
-  }
-
-  const allMappedKeys = new Set()
-  for (const arr of Object.values(SCOPE_CLAIMS)) {
-    for (const k of arr) allMappedKeys.add(k)
-  }
-
-  for (const scope of scopes) {
-    const claimKeys = SCOPE_CLAIMS[scope]
-    if (!claimKeys) {
-      continue
-    }
-    const present = {}
-    for (const key of claimKeys) {
-      if (payload[key] !== undefined) present[key] = payload[key]
-    }
-    const presentKeys = Object.keys(present)
-    if (presentKeys.length === 0) {
-    } else {
-      console.log('   ', JSON.stringify(present, null, 2).replace(/\n/g, '\n    '))
-    }
-  }
-
-  const orphanKeys = Object.keys(payload).filter(k =>
-    !allMappedKeys.has(k) &&
-    k !== 'scope' &&
-    k !== 'exp' && k !== 'iat' && k !== 'nbf' && k !== 'aud' &&
-    k !== 'azp' && k !== 'session_state' && k !== 'sid' && k !== 'acr' &&
-    k !== 'typ' && k !== 'iss' && k !== 'jti' && k !== 'auth_time'
-  )
-  if (orphanKeys.length > 0) {
-    const orphanClaims = {}
-    for (const k of orphanKeys) orphanClaims[k] = payload[k]
-    console.log('   ', JSON.stringify(orphanClaims, null, 2).replace(/\n/g, '\n    '))
-  }
-}
 
 function mapRealmRoleToOrgRole(realmRoles) {
   if (realmRoles.includes('admin') || realmRoles.includes('administrator')) return 'admin'
@@ -112,13 +57,16 @@ async function findOrCreateOrganization({ name, slug }) {
      ORDER BY (slug = $1) DESC, id LIMIT 1`,
     [slug, name || null]
   )
-  if (found.rows.length) return found.rows[0].id
+  if (found.rows.length) {
+    kcLog('org: matched', JSON.stringify({ name, slug }), '→ id=', found.rows[0].id)
+    return found.rows[0].id
+  }
   const created = await query(
     `INSERT INTO organizations (name, slug, is_active) VALUES ($1, $2, true)
      ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug RETURNING id`,
     [name || slug.charAt(0).toUpperCase() + slug.slice(1), slug]
   )
-  console.log('[KC] auto-created organization:', name || slug)
+  kcLog('org: auto-created', name || slug, 'slug=', slug, '→ id=', created.rows[0].id)
   return created.rows[0].id
 }
 
@@ -134,7 +82,9 @@ export function keycloakOrgSource(kcPayload) {
 
 async function syncUserOrganizations(userId, kcPayload) {
   const realmRoles = kcPayload.realm_access?.roles || []
-  const { orgs } = keycloakOrgSource(kcPayload)
+  const { source, orgs } = keycloakOrgSource(kcPayload)
+  kcLog('org sync: user', userId, 'source=', source, 'groups=', JSON.stringify(kcPayload.groups || []),
+    'company=', JSON.stringify(kcPayload.company || null), 'realmRoles=', realmRoles.join(','), '→ orgRole=', mapRealmRoleToOrgRole(realmRoles))
 
   const existing = await query('SELECT COUNT(*)::int AS cnt FROM user_organizations WHERE user_id = $1', [userId])
   const isFirstOrgEntry = existing.rows[0].cnt === 0
@@ -151,11 +101,13 @@ async function syncUserOrganizations(userId, kcPayload) {
       [userId, orgId, mapRealmRoleToOrgRole(realmRoles)]
     )
   }
+  kcLog('org sync: user', userId, 'active in orgs', joinedOrgIds.join(','), 'firstEntry=', isFirstOrgEntry)
   if (orgs.length) {
-    await query(
-      'UPDATE user_organizations SET is_active = false WHERE user_id = $1 AND NOT (org_id = ANY($2::int[]))',
+    const deactivated = await query(
+      'UPDATE user_organizations SET is_active = false WHERE user_id = $1 AND NOT (org_id = ANY($2::int[])) AND is_active RETURNING org_id',
       [userId, joinedOrgIds]
     )
+    if (deactivated.rows.length) kcLog('org sync: user', userId, 'deactivated in orgs', deactivated.rows.map(r => r.org_id).join(','))
   }
 
   if (isFirstOrgEntry) {
@@ -167,6 +119,7 @@ async function syncUserOrganizations(userId, kcPayload) {
         [position]
       )
       for (const rule of rules.rows) {
+        kcLog('org sync: user', userId, 'position', JSON.stringify(position), 'matched role rule →', rule.org_role)
         for (const orgId of joinedOrgIds) {
           await query(
             'UPDATE user_organizations SET org_role = $1 WHERE user_id = $2 AND org_id = $3',
@@ -182,9 +135,10 @@ async function syncUserOrganizations(userId, kcPayload) {
 
 export async function findOrCreateUser(kcPayload) {
   const sub = kcPayload.sub
-  if (!sub) throw new Error('sub (GUID) not found in Keycloak token')
   const email = kcPayload.email
-  if (!email) throw new Error('Email not found in Keycloak token')
+  kcLog('user: resolving sub=', sub, 'email=', email)
+  if (!sub) { kcErr('user: no sub in token'); throw new Error('sub (GUID) not found in Keycloak token') }
+  if (!email) { kcErr('user: no email in token, sub=', sub); throw new Error('Email not found in Keycloak token') }
 
   const firstName = kcPayload.firstname || kcPayload.given_name || ''
   const lastName = kcPayload.lastname || kcPayload.family_name || ''
@@ -207,9 +161,12 @@ export async function findOrCreateUser(kcPayload) {
     const trimmed = deptName.trim()
     const oid = orgId || 1
     let res = await query('SELECT id FROM departments WHERE name ILIKE $1 AND organization_id = $2', [trimmed, oid])
-    if (res.rows.length > 0) return res.rows[0].id
+    if (res.rows.length > 0) {
+      kcLog('dept: matched', JSON.stringify(trimmed), 'org=', oid, '→ id=', res.rows[0].id)
+      return res.rows[0].id
+    }
     res = await query('INSERT INTO departments (name, organization_id) VALUES ($1, $2) RETURNING id', [trimmed, oid])
-    console.log('[KC] auto-created department:', trimmed, '→ id=', res.rows[0].id)
+    kcLog('dept: auto-created', JSON.stringify(trimmed), 'org=', oid, '→ id=', res.rows[0].id)
     return res.rows[0].id
   }
 
@@ -236,6 +193,7 @@ export async function findOrCreateUser(kcPayload) {
 
   if (result.rows.length > 0) {
     const user = result.rows[0]
+    kcLog('user: found by sub → id=', user.id, 'role=', user.role)
     if (user.is_test) return user
     const firstOrgId = await syncUserOrganizations(user.id, kcPayload)
     const updates = []
@@ -280,10 +238,12 @@ export async function findOrCreateUser(kcPayload) {
     }
 
     if (updates.length > 0) {
+      kcLog('user', user.id, 'sync fields:', updates.map((u, i) => `${u.split(' = ')[0]}=${JSON.stringify(values[i])}`).join(', '))
       values.push(user.id)
       await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values)
     }
 
+    if (!updates.length) kcLog('user', user.id, 'sync fields: nothing changed')
     return user
   }
 
@@ -293,6 +253,7 @@ export async function findOrCreateUser(kcPayload) {
   )
   if (result.rows.length > 0) {
     const user = result.rows[0]
+    kcLog('user: found by email → id=', user.id, 'role=', user.role, ', linking keycloak_guid=', sub)
     await query('UPDATE users SET keycloak_guid = $1 WHERE id = $2', [sub, user.id])
     await syncUserOrganizations(user.id, kcPayload)
     return user
@@ -323,6 +284,7 @@ export async function findOrCreateUser(kcPayload) {
   )
 
   const user = result.rows[0]
+  kcLog('user: created id=', user.id, 'email=', email, 'name=', [lastName, firstName, middleName].filter(Boolean).join(' '))
   const firstOrgId = await syncUserOrganizations(user.id, kcPayload)
 
   if (department) {
