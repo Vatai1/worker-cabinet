@@ -583,7 +583,7 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
  *       200:
  *         description: Системные настройки
  */
-const INTERNAL_SETTING_KEYS = ['permissions_matrix_version', 'notification_delivery_version']
+const INTERNAL_SETTING_KEYS = ['permissions_matrix_version', 'notification_delivery_version', 'vacation_type_rules_version']
 
 router.get('/settings', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
   const result = await query(

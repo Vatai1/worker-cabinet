@@ -199,7 +199,7 @@ export function CreateVacationFormModal({
   const vacationTypeInfo = VACATION_TYPES[vacationType]
   const countsInCounter = vacationTypeInfo?.countedInCounter
   const isDayOff = vacationType === VacationType.DAY_OFF
-  const duration = isDayOff ? vacationDuration.workingDays : vacationDuration.countedDays
+  const duration = isDayOff ? vacationDuration.workingDays : countsInCounter ? vacationDuration.countedDays : vacationDuration.calendarDays
   const requiredDays = countsInCounter || isDayOff ? duration : 0
   const hasEnoughDays = isDayOff
     ? duration > 0 && dayOffsAvailable >= duration
@@ -276,7 +276,7 @@ export function CreateVacationFormModal({
           {vacationDuration.calendarDays > 0 && (
             <div className="space-y-0.5 text-sm text-muted-foreground">
               <div>Продолжительность: {duration} {pluralDays(duration)}</div>
-              {vacationDuration.holidays > 0 && (
+              {countsInCounter && vacationDuration.holidays > 0 && (
                 <div className="text-xs">Праздничные дни не входят в отпуск: {vacationDuration.holidays} из {vacationDuration.calendarDays} календарных</div>
               )}
               {returnDate && (

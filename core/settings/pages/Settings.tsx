@@ -3,11 +3,13 @@ import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Label } from '@/shared/components/ui/Label'
 import { Switch } from '@/shared/components/ui/Switch'
-import { Bell, Moon, Sun } from 'lucide-react'
+import { Bell, FileText, Moon, Sun } from 'lucide-react'
 import { useUIStore } from '@/shared/store/uiStore'
 import { fetchPushConfig, isSubscribed, subscribePush, unsubscribePush } from '@/shared/lib/push'
 import { readLocalPref, writeLocalPref } from '@/shared/lib/localPrefs'
 import { NameGenitiveCard } from '@/shared/components/NameGenitive'
+import { apiGet, apiPut } from '@/shared/lib/apiClient'
+import { getErrorMessage } from '@/shared/lib/utils'
 
 const PUSH_PREF_KEY = 'pushNotifications'
 
@@ -18,6 +20,28 @@ export function Settings() {
   const [pushPublicKey, setPushPublicKey] = useState('')
   const [pushLoading, setPushLoading] = useState(false)
   const { darkMode, toggleTheme } = useUIStore()
+  const [hideDepartment, setHideDepartment] = useState<boolean | null>(null)
+  const [savingHideDepartment, setSavingHideDepartment] = useState(false)
+
+  useEffect(() => {
+    apiGet<{ hide_department_in_documents: boolean }>('/users/me/document-preferences')
+      .then((p) => setHideDepartment(p.hide_department_in_documents))
+      .catch(() => setHideDepartment(false))
+  }, [])
+
+  const handleHideDepartment = async (checked: boolean) => {
+    setSavingHideDepartment(true)
+    setHideDepartment(checked)
+    try {
+      await apiPut('/users/me/document-preferences', { hide_department_in_documents: checked })
+      toast.success(checked ? 'Отдел не будет указываться в заявлениях' : 'Отдел будет указываться в заявлениях')
+    } catch (err) {
+      setHideDepartment(!checked)
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSavingHideDepartment(false)
+    }
+  }
 
   const setPushNotifications = (value: boolean) => {
     writeLocalPref(PUSH_PREF_KEY, String(value))
@@ -135,6 +159,34 @@ export function Settings() {
               <Switch
                 checked={darkMode}
                 onCheckedChange={toggleTheme}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Заявления
+            </CardTitle>
+            <CardDescription>
+              Что указывать в формируемых заявлениях
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="hide-department">Не указывать отдел</Label>
+                <p className="text-xs text-muted-foreground">
+                  Название отдела не будет подставляться в заявления на отпуск и перенос
+                </p>
+              </div>
+              <Switch
+                id="hide-department"
+                checked={!!hideDepartment}
+                onCheckedChange={handleHideDepartment}
+                disabled={hideDepartment === null || savingHideDepartment}
               />
             </div>
           </CardContent>

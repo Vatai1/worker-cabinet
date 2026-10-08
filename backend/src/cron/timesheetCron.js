@@ -1,3 +1,4 @@
+import { vacationTypeRule } from '../lib/vacationTypes.js'
 import cron from 'node-cron'
 import { query, getClient } from '../config/database.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
@@ -43,19 +44,20 @@ async function addDayEntries(year, month, day) {
         continue
       }
 
-      let vacationDays = new Set()
+      const vacationDays = new Map()
       if (dow !== 0 && dow !== 6) {
         const vacResult = await client.query(
-          `SELECT vr.user_id
+          `SELECT vr.user_id, vt.code AS type_code
            FROM vacation_requests vr
            JOIN request_statuses rs ON vr.status_id = rs.id
+           JOIN vacation_types vt ON vt.id = vr.vacation_type_id
            WHERE vr.user_id = ANY($1)
              AND rs.code = 'approved'
              AND vr.start_date <= $2
              AND vr.end_date >= $2`,
           [employees.map(e => e.id), dateStr]
         )
-        for (const row of vacResult.rows) vacationDays.add(row.user_id)
+        for (const row of vacResult.rows) vacationDays.set(row.user_id, vacationTypeRule(row.type_code).code)
       }
 
       const entries = employees.map(emp => {
@@ -63,7 +65,7 @@ async function addDayEntries(year, month, day) {
         if (dow === 0 || dow === 6) {
           code = 'В'
         } else if (vacationDays.has(emp.id)) {
-          code = 'ОТ'
+          code = vacationDays.get(emp.id)
         } else {
           code = null
         }

@@ -11,6 +11,8 @@ export const PERMISSIONS = [
   { code: 'hr:access', module: 'hr', name: 'Доступ к HR-панели', defaults: ['hr'] },
 
   { code: 'vacation:manage', module: 'vacation', name: 'Настройки отпусков: балансы, нормы дней, блокировка подачи заявлений', defaults: ['hr'] },
+  { code: 'vacation:reports', module: 'vacation', name: 'Отчёты по отпускам', defaults: ['hr'] },
+  { code: 'staff:reports', module: 'users', name: 'Отчёты по персоналу', defaults: ['hr'] },
   { code: 'vacation:restrictions', module: 'vacation', name: 'Правила пересечений отпусков', defaults: [...MANAGERS, 'hr'] },
 
   { code: 'day_off:take', module: 'day_offs', name: 'Оформление отгулов', defaults: STAFF },

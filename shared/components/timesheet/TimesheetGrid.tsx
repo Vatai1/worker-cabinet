@@ -1,5 +1,5 @@
 ﻿import { useState, useMemo, useEffect } from 'react'
-import { TIMESHEET_CODES, CODE_COLORS } from '@/shared/lib/timesheetCodes'
+import { TIMESHEET_CODES, CODE_COLORS, VACATION_CODES } from '@/shared/lib/timesheetCodes'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -95,7 +95,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, on
     const date = dateStr(year, month, day)
     const cell = getCell(empId, day)
     if (cell.submitted) return
-    const vacationCodes = ['ОТ', 'ОС', 'ДО', 'НВ']
+    const vacationCodes = VACATION_CODES
     if (cell.code && vacationCodes.includes(cell.code)) return
     setChanges(prev => ({ ...prev, [`${empId}:${date}`]: { code } }))
   }
@@ -148,7 +148,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, on
     setSaving(true)
     setError(null)
     try {
-      const vacationCodes = ['ОТ', 'ОС', 'ДО', 'НВ']
+      const vacationCodes = VACATION_CODES
       const body = Object.entries(changes)
         .map(([key, val]) => {
           const colonIdx = key.indexOf(':')
@@ -296,7 +296,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, on
                   const weekend = isWeekend(year, month, day)
                   const future = isFutureDay(day)
                   const todayDay = isToday(day)
-                  const vacationCodes = ['ОТ', 'ОС', 'ДО', 'НВ']
+                  const vacationCodes = VACATION_CODES
                   const isVacation = cell.code && vacationCodes.includes(cell.code)
                   const cellReadonly = !todayDay || weekend || isVacation || cell.submitted
                   return (
@@ -324,7 +324,7 @@ export function TimesheetGrid({ timesheetId, entries, employees, year, month, on
                             className="w-full h-full bg-transparent text-center text-xs focus:outline-none cursor-pointer py-2 px-0 font-medium"
                           >
                             <option value=""></option>
-                            {TIMESHEET_CODES.filter(c => hasAnyRole('hr', 'admin') || !['ОТ','ОС','ДО','НВ'].includes(c.code)).map(c => (
+                            {TIMESHEET_CODES.filter(c => hasAnyRole('hr', 'admin') || !VACATION_CODES.includes(c.code)).map(c => (
                               <option key={c.code} value={c.code}>{c.code}</option>
                             ))}
                           </select>

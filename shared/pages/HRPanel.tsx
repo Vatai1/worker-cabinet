@@ -4,7 +4,7 @@ import { cn } from '@/shared/lib/utils'
 import {
   Users, ClipboardList, UserPlus, Plane,
   Calendar, Loader2, Sparkles, FileText, Building2, Briefcase, Tag, Send,
-  HelpCircle,
+  HelpCircle, BarChart3,
 } from 'lucide-react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
@@ -19,6 +19,7 @@ const HREmployees = lazy(() => import('@/core/employees/pages/HREmployees').then
 const HRSurveys = lazy(() => import('@/modules/surveys/pages/HRSurveys').then(m => ({ default: m.HRSurveys })))
 const HROnboarding = lazy(() => import('@/modules/onboarding/pages/HROnboarding').then(m => ({ default: m.HROnboarding })))
 const HRVacationCalendar = lazy(() => import('@/modules/vacation/pages/HRVacationCalendar').then(m => ({ default: m.HRVacationCalendar })))
+const HRReports = lazy(() => import('@/modules/reports/pages/HRReports').then(m => ({ default: m.HRReports })))
 const DepartmentsTab = lazy(() => import('@/core/admin/pages/DepartmentsTab').then(m => ({ default: m.DepartmentsTab })))
 const DictionariesTab = lazy(() => import('@/core/admin/pages/DictionariesTab').then(m => ({ default: m.DictionariesTab })))
 const HRTimesheet = lazy(() => import('@/modules/timesheet/pages/HRTimesheet').then(m => ({ default: m.HRTimesheet })))
@@ -29,7 +30,7 @@ const HRPositionsTab = () => <DictionariesTab initialTab="positions" />
 const HRVacationTypesTab = () => <DictionariesTab initialTab="vacationTypes" />
 const HRSkillsTab = () => <DictionariesTab initialTab="skills" />
 
-type TabId = 'hr_employees' | 'surveys' | 'onboarding' | 'vacation' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
+type TabId = 'hr_employees' | 'surveys' | 'onboarding' | 'vacation' | 'vacation_reports' | 'hr_departments' | 'hr_positions' | 'hr_vacation_types' | 'hr_skills' | 'timesheet' | 'doc-templates' | 'mailing' | 'institution'
 
 interface TabItem {
   id: TabId
@@ -55,6 +56,7 @@ const TAB_GROUPS: TabGroup[] = [
   ]},
   { label: 'Отпуска и структура', tabs: [
     { id: 'vacation', name: 'Отпуск', icon: Plane, description: 'Календарь отпусков, дни, доступ, пересечения', module: 'vacation', color: 'from-orange-500 to-amber-600', permission: 'hr:access' },
+    { id: 'vacation_reports', name: 'Отчёты', icon: BarChart3, description: 'Отчёты по отпускам и персоналу с графиками и выгрузкой в Excel', module: null, color: 'from-sky-500 to-blue-600', permission: 'hr:access' },
   ]},
   { label: 'Документы', tabs: [
     { id: 'doc-templates', name: 'Шаблоны документов', icon: FileText, description: 'Шаблоны документов организации', module: 'documents', color: 'from-pink-500 to-rose-600', permission: 'documents:templates' },
@@ -160,6 +162,7 @@ export function HRPanel() {
             ['institution', HRInstitution],
             ['onboarding', HROnboarding],
             ['vacation', HRVacationCalendar],
+            ['vacation_reports', HRReports],
             ['hr_departments', DepartmentsTab],
             ['hr_positions', HRPositionsTab],
             ['hr_vacation_types', HRVacationTypesTab],

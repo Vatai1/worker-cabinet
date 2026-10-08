@@ -8,17 +8,10 @@ import { excludeTest } from '../utils/testScope.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
 import { getTimesheetExportData } from '../lib/timesheetExport.js'
 import { requirePermission, hasPermission } from '../lib/permissions.js'
+import { vacationTypeRule, VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
 
 const router = express.Router()
 
-const VACATION_TYPE_TO_CODE = {
-  annual_paid: 'ОТ',
-  additional: 'ОТ',
-  veteran: 'ОТ',
-  unpaid: 'ОС',
-  educational: 'ДО',
-  day_off: 'НВ',
-}
 
 router.use(authenticateToken)
 router.use(requirePermission('timesheet:view'))
@@ -353,7 +346,7 @@ router.get('/:id', async (req, res) => {
       const vacationEntries = []
 
       for (const v of vacations.rows) {
-        const tsCode = VACATION_TYPE_TO_CODE[v.type_code]
+        const tsCode = vacationTypeRule(v.type_code).code
         if (!tsCode || !empMap[v.user_id]) continue
 
         const start = new Date(Math.max(new Date(v.start_date).getTime(), new Date(rangeStart).getTime()))
@@ -464,7 +457,7 @@ router.put('/:id/entries', async (req, res) => {
     const rangeStart = `${timesheet.year}-${mm}-01`
     const rangeEnd = `${timesheet.year}-${mm}-${String(daysInTs).padStart(2, '0')}`
     const today = toLocalDateStr(new Date())
-    const vacationCodes = ['ОТ', 'ОС', 'ДО', 'НВ']
+    const vacationCodes = VACATION_TIMESHEET_CODES
 
     const employeeIds = [...new Set(entries.map(e => e.employee_id))]
     const dates = [...new Set(entries.map(e => e.date))]

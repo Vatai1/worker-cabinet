@@ -9,7 +9,7 @@ import {
   LayoutDashboard, User, FileText, FolderKanban,
   LogOut, Menu, X, Users, Plane, Settings, Sun, Moon, Undo2,
   ChevronDown, Building2, ClipboardList,
-  Calendar, Bell, Crown, Bot,
+  Calendar, Bell, Crown, Bot, BarChart3,
   Send, UserPlus, Network, Briefcase,
   Key, ShieldCheck, Boxes, Settings2,
   Activity, Palette,
@@ -81,6 +81,7 @@ const getHRSectionItems = (): NavItem[] => [
   { name: 'Онбординг', href: '/hr?tab=onboarding', icon: UserPlus, module: 'onboarding', section: 'HR', permission: 'onboarding:manage' },
   { name: 'Табель', href: '/hr?tab=timesheet', icon: Calendar, module: 'timesheet', section: 'HR', permission: 'timesheet:manage' },
   { name: 'Отпуск', href: '/hr?tab=vacation', icon: Plane, module: 'vacation', section: 'HR', permission: 'hr:access' },
+  { name: 'Отчёты', href: '/hr?tab=vacation_reports', icon: BarChart3, section: 'HR', permission: 'hr:access' },
   { name: 'Шаблоны документов', href: '/hr?tab=doc-templates', icon: FileText, module: 'documents', section: 'HR', permission: 'documents:templates' },
   { name: 'Справочники', icon: Boxes, section: 'HR', permission: 'hr:access', children: [
     { name: 'Сотрудники', href: '/hr?tab=hr_employees', permission: 'users:edit' },

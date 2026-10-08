@@ -11,6 +11,8 @@ interface ModulesState {
   modulesLoaded: boolean
 }
 
+const moduleChecker = (loaded: boolean, enabled: Set<string>) => (code: string) => !loaded || enabled.has(code)
+
 export const useModulesStore = create<ModulesState>((set, get) => ({
   enabledModules: new Set<string>(),
   badges: {},
@@ -27,20 +29,17 @@ export const useModulesStore = create<ModulesState>((set, get) => ({
         for (const m of modules) {
           if (m.dashboard_badge) badges[m.code] = m.dashboard_badge
         }
-        set({ enabledModules: new Set(data.enabled as string[]), badges, loaded: true, modulesLoaded: true })
+        const enabledModules = new Set(data.enabled as string[])
+        set({ enabledModules, badges, loaded: true, modulesLoaded: true, isModuleEnabled: moduleChecker(true, enabledModules) })
       } else {
-        set({ loaded: true, modulesLoaded: true })
+        set({ loaded: true, modulesLoaded: true, isModuleEnabled: moduleChecker(true, get().enabledModules) })
       }
-    } catch (err) {
-      set({ loaded: true, modulesLoaded: true })
+    } catch {
+      set({ loaded: true, modulesLoaded: true, isModuleEnabled: moduleChecker(true, get().enabledModules) })
     }
   },
 
-  isModuleEnabled: (code: string) => {
-    const state = get()
-    if (!state.loaded) return true
-    return state.enabledModules.has(code)
-  },
+  isModuleEnabled: moduleChecker(false, new Set<string>()),
 }))
 
 if (typeof window !== 'undefined') {

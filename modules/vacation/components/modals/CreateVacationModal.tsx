@@ -150,7 +150,8 @@ export function CreateVacationModal({
   const start = new Date(startDate)
   const end = new Date(endDate)
   const isDayOff = vacationType === VacationType.DAY_OFF
-  const duration = isDayOff ? vacationDuration.workingDays : vacationDuration.countedDays
+  const excludesHolidays = VACATION_TYPES[vacationType]?.countedInCounter
+  const duration = isDayOff ? vacationDuration.workingDays : excludesHolidays ? vacationDuration.countedDays : vacationDuration.calendarDays
   const hasEnoughDayOffs = duration > 0 && dayOffsAvailable >= duration
   const typeOptions = dayOffOnly
     ? [VacationType.DAY_OFF]
@@ -275,7 +276,7 @@ export function CreateVacationModal({
                 Отгул считается в рабочих днях: {duration} из {vacationDuration.calendarDays} календарных
               </p>
             )}
-            {!isDayOff && vacationDuration.holidays > 0 && (
+            {excludesHolidays && vacationDuration.holidays > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Праздничные дни не входят в отпуск: {vacationDuration.holidays} из {vacationDuration.calendarDays} календарных
               </p>

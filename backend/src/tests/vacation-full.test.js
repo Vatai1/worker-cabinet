@@ -1728,10 +1728,37 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(res.data.holidaysCount, 4)
     })
 
-    it('диапазон с 6+ праздниками → 400 «слишком много праздничных»', async () => {
+    it('ежегодный отпуск только из праздников (1–8 января) → 400', async () => {
       const res = await postVacation(emp, { startDate: '2027-01-01', endDate: '2027-01-08', vacationType: 'annual_paid' })
       assert.strictEqual(res.status, 400)
-      assert.match(res.data.error, /празднич/i)
+      assert.match(res.data.error, /только нерабочие праздничные/i)
+    })
+
+    it('ограничения на число праздников нет: 1–12 января → 4 дня, 8 праздников не считаются', async () => {
+      const res = await postVacation(emp, { startDate: '2027-01-01', endDate: '2027-01-12', vacationType: 'annual_paid' })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      assert.strictEqual(res.data.duration, 4)
+      assert.strictEqual(res.data.holidaysCount, 8)
+    })
+
+    it('отпуск без сохранения: праздники входят, баланс ежегодного не меняется ни при подаче, ни при согласовании (ст. 120, 128)', async () => {
+      const before = await balanceOf(emp.id, 2027)
+      const res = await postVacation(emp, { startDate: '2027-01-05', endDate: '2027-01-12', vacationType: 'unpaid' })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      assert.strictEqual(res.data.duration, 8)
+      assert.strictEqual(res.data.holidaysCount, 0)
+      const pending = await balanceOf(emp.id, 2027)
+      assert.deepStrictEqual([pending.reserved_days, pending.used_days], [before.reserved_days, before.used_days])
+      assert.strictEqual((await call('POST', `/vacation/requests/${res.data.id}/approve`, await tokenFor(mgr), {})).status, 200)
+      const approved = await balanceOf(emp.id, 2027)
+      assert.deepStrictEqual([approved.reserved_days, approved.used_days, approved.available_days], [before.reserved_days, before.used_days, before.available_days])
+    })
+
+    it('отпуск без сохранения длиннее остатка ежегодного не упирается в его баланс', async () => {
+      await query('UPDATE vacation_balances SET used_days = total_days WHERE user_id = $1 AND year = 2027', [emp.id])
+      const res = await postVacation(emp, { startDate: '2027-03-01', endDate: '2027-03-20', vacationType: 'unpaid' })
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      assert.strictEqual(res.data.duration, 20)
     })
 
     it('идемпотентность: перенос с одинаковыми новыми датами дважды → даты и длительность совпадают', async () => {
@@ -2284,7 +2311,7 @@ describe('Модуль отпусков — user stories', () => {
     it('check-restrictions: диапазон с 6+ праздниками → 400 «слишком много праздничных»', async () => {
       const res = await call('POST', '/vacation/check-restrictions', await tokenFor(emp), { userId: emp.id, startDate: '2027-01-01', endDate: '2027-01-08' })
       assert.strictEqual(res.status, 400)
-      assert.match(res.data.error, /слишком много праздничных/i)
+      assert.match(res.data.error, /только нерабочие праздничные/i)
     })
 
     it('generate-application и generate-transfer-application: шаблон без файла → 400', async () => {

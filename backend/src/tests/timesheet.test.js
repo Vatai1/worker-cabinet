@@ -1,6 +1,7 @@
 import { describe, it, before } from 'node:test'
 import assert from 'node:assert'
 import { BASE, headers, headersJSON, getAdminToken, getHrToken, getManagerToken, getEmployeeToken, getFirstDepartment } from './helpers.js'
+import { VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
 
 describe('Timesheet API', () => {
   let hrToken, managerToken, employeeToken, timesheetId
@@ -73,7 +74,7 @@ describe('Timesheet API', () => {
     const ts = await tsRes.json()
     if (!ts.entries?.length) return
 
-    const vacationCodes = ['ОТ', 'ОС', 'ДО']
+    const vacationCodes = VACATION_TIMESHEET_CODES
     const entry = ts.entries.find(e => !vacationCodes.includes(e.code))
     if (!entry) return
 
@@ -91,7 +92,7 @@ describe('Timesheet API', () => {
     const ts = await tsRes.json()
     if (!ts.entries?.length) return
 
-    const vacationCodes = ['ОТ', 'ОС', 'ДО']
+    const vacationCodes = VACATION_TIMESHEET_CODES
     const entry = ts.entries.find(e => !vacationCodes.includes(e.code))
     if (!entry) return
 

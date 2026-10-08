@@ -4,6 +4,8 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
 import { getTravelState, assertTravelAllowed } from '../lib/travel.js'
+import { vacationTypeRule, requestTypeCode, VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
+import { VACATION_REPORTS, buildReport, sendReportXlsx } from '../lib/vacationReports.js'
 import { getFromS3, uploadToS3, getPresignedUrl } from '../config/s3.js'
 import multer from 'multer'
 import { notify } from '../config/notifications.js'
@@ -22,7 +24,6 @@ const router = express.Router()
 
 const VALID_VACATION_TYPES = ['annual_paid', 'unpaid', 'educational', 'maternity', 'child_care', 'additional', 'veteran', 'day_off']
 const DAY_OFF = 'day_off'
-const MAX_HOLIDAYS_PER_VACATION = 5
 
 class VacationValidationError extends Error {}
 
@@ -110,11 +111,6 @@ async function workingDaysBetween(startDate, endDate) {
   return days
 }
 
-async function isDayOffRequest(db, request) {
-  const row = (await db.query('SELECT code FROM vacation_types WHERE id = $1', [request.vacation_type_id])).rows[0]
-  return row?.code === DAY_OFF
-}
-
 async function adjustmentScopeUserIds(req) {
   if (hasFullDepartmentAccess(req)) return null
   const deptIds = [...await managedDepartmentIds(req.user.id, currentOrgId(req))]
@@ -159,8 +155,8 @@ async function allowOverBalance(req) {
   return row?.allow_over_balance === true
 }
 
-async function computeVacationDates(startDate, endDate) {
-  if (startDate < todayISO()) {
+async function computeVacationDates(startDate, endDate, typeCode = 'annual_paid') {
+  if (startDate < todayISO() || !vacationTypeRule(typeCode).excludeHolidays) {
     return { startDate, endDate, countedDays: daysBetweenInclusive(startDate, endDate), holidaysCount: 0 }
   }
 
@@ -171,11 +167,10 @@ async function computeVacationDates(startDate, endDate) {
     return { startDate, endDate, countedDays: daysBetweenInclusive(startDate, endDate), holidaysCount: 0 }
   }
 
-  if (holidaysCount > MAX_HOLIDAYS_PER_VACATION) {
-    throw new VacationValidationError(`Отпуск содержит слишком много праздничных дней (${holidaysCount}). Максимум — ${MAX_HOLIDAYS_PER_VACATION}`)
-  }
-
   const countedDays = daysBetweenInclusive(startDate, endDate) - holidaysCount
+  if (countedDays <= 0) {
+    throw new VacationValidationError('В выбранном периоде только нерабочие праздничные дни — они не входят в ежегодный отпуск')
+  }
 
   return { startDate, endDate, countedDays, holidaysCount }
 }
@@ -335,17 +330,19 @@ async function vacationDatesByMonth(startDate, endDate) {
   return byMonth
 }
 
-async function fillVacationTimesheetEntries(client, userId, startDate, endDate, req, dayOff = false) {
+async function fillVacationTimesheetEntries(client, userId, startDate, endDate, req, typeCode = 'annual_paid') {
+  const rule = vacationTypeRule(typeCode)
+  const dayOff = !!rule.workingDays
   const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
   const deptId = deptResult.rows[0]?.department_id
   if (!deptId) return
-  const code = dayOff ? 'НВ' : 'ОТ'
+  const code = rule.code
   const holidaysResult = await client.query("SELECT day FROM calendar_holidays WHERE day BETWEEN $1 AND $2 AND kind = 'holiday'", [startDate, endDate])
   const holidaySet = new Set(holidaysResult.rows.map((r) => r.day))
   const workingSet = dayOff ? new Set(await workingDaysBetween(startDate, endDate)) : null
   const byMonth = await vacationDatesByMonth(startDate, endDate)
   for (const { year, month, dates: allDates } of Object.values(byMonth)) {
-    const dates = allDates.filter((d) => (workingSet ? workingSet.has(d) : !holidaySet.has(d)))
+    const dates = allDates.filter((d) => (workingSet ? workingSet.has(d) : !rule.excludeHolidays || !holidaySet.has(d)))
     if (dates.length === 0) continue
     const tsOrgClause = req.org ? ' AND organization_id = $4' : ''
     const tsResult = await client.query(
@@ -382,8 +379,8 @@ async function clearVacationTimesheetEntries(client, userId, startDate, endDate,
     const delOrgClause = req.org ? ' AND organization_id = $4' : ''
     await client.query(
       `DELETE FROM timesheet_entries
-       WHERE timesheet_id = $1 AND employee_id = $2 AND date = ANY($3) AND code = 'ОТ'${delOrgClause}`,
-      req.org ? [tsId, userId, dates, req.org.org_id] : [tsId, userId, dates]
+       WHERE timesheet_id = $1 AND employee_id = $2 AND date = ANY($3) AND code = ANY($${req.org ? 5 : 4})${delOrgClause}`,
+      req.org ? [tsId, userId, dates, req.org.org_id, VACATION_TIMESHEET_CODES] : [tsId, userId, dates, VACATION_TIMESHEET_CODES]
     )
   }
 }
@@ -1110,6 +1107,62 @@ router.put('/travel/:userId', authenticateToken, requirePermission('vacation:man
   res.json(await getTravelState(userId, orgId))
 }))
 
+/**
+ * @swagger
+ * /vacation/reports/{type}:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Отчёты по отпускам текущей организации
+ *     description: 'type — balances | unused | plan | overlaps | approvals | changes | day-offs | travel'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: type
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: departmentId
+ *         description: Список id отделов через запятую
+ *         schema: { type: string }
+ *       - in: query
+ *         name: months
+ *         description: Для unused — порог месяцев без отпуска (по умолчанию 6)
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: format
+ *         schema: { type: string, enum: [xlsx] }
+ *     responses:
+ *       200:
+ *         description: '{ title, columns: [{ key, label, type }], rows } или файл xlsx'
+ */
+router.get('/reports/:type', authenticateToken, requirePermission('vacation:reports'), asyncHandler(async (req, res) => {
+  const build = VACATION_REPORTS[req.params.type]
+  if (!build) throw new NotFoundError('Отчёт не найден')
+  const orgId = currentOrgId(req)
+  if (!orgId) throw new ValidationError('Не выбрана организация')
+  const year = parseInt(req.query.year) || new Date().getFullYear()
+  const departmentIds = String(req.query.departmentId || '').split(',').map((v) => parseInt(v)).filter((n) => !Number.isNaN(n))
+  const months = Math.max(1, parseInt(req.query.months) || 6)
+  const report = await buildReport(req.params.type, { orgId, departmentIds, year, months })
+  if (req.query.format === 'xlsx') {
+    const org = (await query('SELECT name FROM organizations WHERE id = $1', [orgId])).rows[0]
+    const depts = departmentIds.length
+      ? (await query('SELECT name FROM departments WHERE id = ANY($1::int[]) ORDER BY name', [departmentIds])).rows.map((d) => d.name)
+      : []
+    const yearly = !['day-offs', 'travel'].includes(req.params.type)
+    const filters = [
+      yearly && `Год: ${year}`,
+      `Отделы: ${depts.length ? depts.join(', ') : 'все'}`,
+      req.params.type === 'unused' && `Порог: ${months} мес.`,
+    ].filter(Boolean).join('   •   ')
+    return sendReportXlsx(res, report, `vacation-${req.params.type}-${year}`, { organization: org?.name, filters })
+  }
+  res.json(report)
+}))
+
 router.patch('/balances/:userId', authenticateToken, requirePermission('vacation:manage'), async (req, res) => {
   try {
     const userId = parseInt(req.params.userId)
@@ -1464,7 +1517,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     try {
       computedDates = isDayOff
         ? { endDate: formatDate(end), countedDays: (await workingDaysBetween(formatDate(start), formatDate(end))).length, holidaysCount: 0 }
-        : await computeVacationDates(formatDate(start), formatDate(end))
+        : await computeVacationDates(formatDate(start), formatDate(end), vacationType)
     } catch (err) {
       res.locals.errorCause = err
       await client.query('ROLLBACK')
@@ -1506,7 +1559,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const balanceResult = await client.query(balText, balValues)
 
     const balance = balanceResult.rows[0]
-    if (!isDayOff && (!balance || balance.available_days < finalDuration) && !(await allowOverBalance(req))) {
+    if (vacationTypeRule(vacationType).balance && (!balance || balance.available_days < finalDuration) && !(await allowOverBalance(req))) {
       await client.query('ROLLBACK')
       return res.status(400).json({
         error: 'Недостаточно дней на балансе',
@@ -1589,7 +1642,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
 
     const request = result.rows[0]
 
-    if (!isDayOff) {
+    if (vacationTypeRule(vacationType).balance) {
       const { text: rbText, values: rbValues } = orgScopedQuery(
         `UPDATE vacation_balances
          SET reserved_days = reserved_days + $1
@@ -1606,7 +1659,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
       [request.id, userId, currentOrgId(req)]
     )
 
-    await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req, isDayOff)
+    await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req, vacationType)
 
     if (Array.isArray(substitute_ids) && substitute_ids.length > 0) {
       for (const subId of substitute_ids) {
@@ -1814,13 +1867,16 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Можно редактировать только заявки на согласовании' })
     }
 
-    const wasDayOff = await isDayOffRequest(client, request)
+    const oldTypeCode = await requestTypeCode(client, request)
+    const wasDayOff = oldTypeCode === DAY_OFF
     const nowDayOff = vacationType === DAY_OFF
+    const wasOnBalance = vacationTypeRule(oldTypeCode).balance
+    const nowOnBalance = vacationTypeRule(vacationType).balance
     let computedDates
     try {
       computedDates = nowDayOff
         ? { endDate, countedDays: (await workingDaysBetween(startDate, endDate)).length }
-        : await computeVacationDates(startDate, endDate)
+        : await computeVacationDates(startDate, endDate, vacationType)
     } catch (err) {
       res.locals.errorCause = err
       await client.query('ROLLBACK')
@@ -1858,8 +1914,8 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
         await client.query('ROLLBACK')
         return res.status(400).json({ error: 'Недостаточно отгулов', available: dayOffs.available, required: newDuration })
       }
-    } else {
-      const availableForEdit = (balance?.available_days ?? 0) + (newYear === oldYear && !wasDayOff ? request.duration : 0)
+    } else if (nowOnBalance) {
+      const availableForEdit = (balance?.available_days ?? 0) + (newYear === oldYear && wasOnBalance ? request.duration : 0)
       if ((!balance || availableForEdit < newDuration) && !(await allowOverBalance(req))) {
         await client.query('ROLLBACK')
         return res.status(400).json({ error: 'Недостаточно дней на балансе', available: availableForEdit, required: newDuration })
@@ -1901,14 +1957,14 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Пересечение с существующей заявкой' })
     }
 
-    if (!wasDayOff) {
+    if (wasOnBalance) {
       const { text: relText, values: relValues } = orgScopedQuery(
         'UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
         [request.duration, userId, oldYear], req
       )
       await client.query(relText, relValues)
     }
-    if (!nowDayOff) {
+    if (nowOnBalance) {
       const { text: resText, values: resValues } = orgScopedQuery(
         'UPDATE vacation_balances SET reserved_days = reserved_days + $1 WHERE user_id = $2 AND year = $3',
         [newDuration, userId, newYear], req
@@ -1937,7 +1993,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     const updated = result.rows[0]
 
     await clearVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req)
-    await fillVacationTimesheetEntries(client, userId, updated.start_date, updated.end_date, req, nowDayOff)
+    await fillVacationTimesheetEntries(client, userId, updated.start_date, updated.end_date, req, vacationType)
 
     let addedSubs = []
     let removedSubs = []
@@ -2006,7 +2062,7 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
     }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
-    if (!(await isDayOffRequest(client, request.rows[0]))) {
+    if (vacationTypeRule(await requestTypeCode(client, request.rows[0])).balance) {
       const { text: appBalText, values: appBalValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1), used_days = used_days + $1 WHERE user_id = $2 AND year = $3',
         [request.rows[0].duration, request.rows[0].user_id, origYear], req)
       await client.query(appBalText, appBalValues)
@@ -2068,7 +2124,7 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
     }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
-    if (!(await isDayOffRequest(client, request.rows[0]))) {
+    if (vacationTypeRule(await requestTypeCode(client, request.rows[0])).balance) {
       const { text: rejBalText, values: rejBalValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
         [request.rows[0].duration, request.rows[0].user_id, origYear], req)
       await client.query(rejBalText, rejBalValues)
@@ -2125,7 +2181,9 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     if (String(request.rows[0].end_date).slice(0, 10) < todayISO()) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Нельзя отменить уже прошедший отпуск' }) }
 
     const origYear = new Date(request.rows[0].start_date).getFullYear()
-    const cancelledDayOff = await isDayOffRequest(client, request.rows[0])
+    const cancelledType = await requestTypeCode(client, request.rows[0])
+    const cancelledDayOff = cancelledType === DAY_OFF
+    const cancelledOnBalance = vacationTypeRule(cancelledType).balance
     if (request.rows[0].status === 'approved' && !cancelledDayOff && !(await hasPermission(req, 'vacation:manage'))) {
       const blocked = await client.query(
         'SELECT d.vacation_requests_blocked FROM users u JOIN departments d ON d.id = u.department_id WHERE u.id = $1',
@@ -2136,11 +2194,11 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Отмена согласованных отпусков запрещена: HR закрыл подачу заявок для отдела' })
       }
     }
-    if (!cancelledDayOff && request.rows[0].status === 'approved') {
+    if (cancelledOnBalance && request.rows[0].status === 'approved') {
       const { text: cnlUseText, values: cnlUseValues } = orgScopedQuery('UPDATE vacation_balances SET used_days = GREATEST(0, used_days - $1) WHERE user_id = $2 AND year = $3',
         [request.rows[0].duration, request.rows[0].user_id, origYear], req)
       await client.query(cnlUseText, cnlUseValues)
-    } else if (!cancelledDayOff) {
+    } else if (cancelledOnBalance) {
       const { text: cnlResText, values: cnlResValues } = orgScopedQuery('UPDATE vacation_balances SET reserved_days = GREATEST(0, reserved_days - $1) WHERE user_id = $2 AND year = $3',
         [request.rows[0].duration, request.rows[0].user_id, origYear], req)
       await client.query(cnlResText, cnlResValues)
@@ -2264,9 +2322,13 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Можно переносить только согласованные заявки' })
     }
 
-    if (await isDayOffRequest(client, original)) {
+    const originalType = await requestTypeCode(client, original)
+    if (originalType === DAY_OFF) {
       await client.query('ROLLBACK')
       return res.status(400).json({ error: 'Отгул нельзя перенести — отмените его и оформите новый' })
+    }
+    if (!vacationTypeRule(originalType).excludeHolidays) {
+      computedTransferDates = { endDate: newEndDate, countedDays: daysBetweenInclusive(newStartDate, newEndDate), holidaysCount: 0 }
     }
 
     const originalYear = Number(String(original.start_date).slice(0, 4))
@@ -2279,7 +2341,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     const computedNewEndDate = computedTransferDates.endDate
 
     const extraDays = newDuration - original.duration
-    if (extraDays > 0) {
+    if (extraDays > 0 && vacationTypeRule(originalType).balance) {
       const balanceRow = (await client.query(
         `SELECT available_days FROM vacation_balances
          WHERE user_id = $1 AND year = $2${req.org ? ' AND organization_id = $3' : ''}
@@ -2463,7 +2525,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
        WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
       [newRequest.duration, originalRequest.duration, newRequest.user_id, originalRequest.start_date], req
     )
-    await client.query(tAppBalText, tAppBalValues)
+    if (vacationTypeRule(await requestTypeCode(client, originalRequest)).balance) await client.query(tAppBalText, tAppBalValues)
 
     await client.query(
       `INSERT INTO vacation_request_status_history
@@ -2473,7 +2535,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
     )
 
     await clearVacationTimesheetEntries(client, originalRequest.user_id, originalRequest.start_date, originalRequest.end_date, req)
-    await fillVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date, req)
+    await fillVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date, req, await requestTypeCode(client, newRequest))
 
     await notify({
       userId: newRequest.user_id,
@@ -2603,7 +2665,7 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
         WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
       [newRequest.duration, originalRequest.duration, newRequest.user_id, originalRequest.start_date], req
     )
-    await client.query(tRejBalText, tRejBalValues)
+    if (vacationTypeRule(await requestTypeCode(client, originalRequest)).balance) await client.query(tRejBalText, tRejBalValues)
 
     const { text: tRejClrText, values: tRejClrValues } = orgScopedQuery(
       `UPDATE vacation_requests
@@ -2731,7 +2793,7 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
         WHERE user_id = $3 AND year = EXTRACT(YEAR FROM $4::date)`,
       [newRequest.duration, originalRequest.duration, userId, originalRequest.start_date], req
     )
-    await client.query(tCnlBalText, tCnlBalValues)
+    if (vacationTypeRule(await requestTypeCode(client, originalRequest)).balance) await client.query(tCnlBalText, tCnlBalValues)
 
     const { text: tCnlClrText, values: tCnlClrValues } = orgScopedQuery(
       `UPDATE vacation_requests
@@ -2912,9 +2974,9 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
     }
 
     const { text: gaUserText, values: gaUserValues } = req.org
-      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
+      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, u.hide_department_in_documents, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id AND d.organization_id = $2 WHERE u.id = $1`, values: [userId, req.org.org_id] }
-      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
+      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, u.hide_department_in_documents, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`, values: [userId] }
     const { text: gaTmplText, values: gaTmplValues } = orgScopedQuery(
       `SELECT name, file_key, mime_type FROM document_templates WHERE id = $1 AND purpose = 'vacation_template'`,
@@ -3016,8 +3078,8 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       middle_name: u.middle_name || '',
       position: u.position || '',
       position_gen: positionGenitive(u.position, u.position_genitive),
-      department: u.department_name || '',
-      department_gen: u.department_name ? departmentGenitive({ name: u.department_name, name_genitive: u.department_name_genitive }) : '',
+      department: u.hide_department_in_documents ? '' : u.department_name || '',
+      department_gen: !u.hide_department_in_documents && u.department_name ? departmentGenitive({ name: u.department_name, name_genitive: u.department_name_genitive }) : '',
       year: String(year),
       selected_year: String(year),
       next_year: String(year + 1),
@@ -3088,9 +3150,9 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
     }
 
     const { text: gtUserText, values: gtUserValues } = req.org
-      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
+      ? { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, u.hide_department_in_documents, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id AND d.organization_id = $2 WHERE u.id = $1`, values: [userId, req.org.org_id] }
-      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
+      : { text: `SELECT u.first_name, u.last_name, u.middle_name, u.gender, u.name_genitive, u.position, u.hire_date, u.hide_department_in_documents, d.name as department_name, d.name_genitive AS department_name_genitive, (SELECT genitive FROM position_genitives pg WHERE pg.name = u.position) AS position_genitive
          FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`, values: [userId] }
     const { text: gtTmplText, values: gtTmplValues } = orgScopedQuery(
       `SELECT name, file_key FROM document_templates WHERE id = $1 AND purpose = 'vacation_transfer_template'`,
@@ -3166,8 +3228,8 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       middle_name: u.middle_name || '',
       position: u.position || '',
       position_gen: positionGenitive(u.position, u.position_genitive),
-      department: u.department_name || '',
-      department_gen: u.department_name ? departmentGenitive({ name: u.department_name, name_genitive: u.department_name_genitive }) : '',
+      department: u.hide_department_in_documents ? '' : u.department_name || '',
+      department_gen: !u.hide_department_in_documents && u.department_name ? departmentGenitive({ name: u.department_name, name_genitive: u.department_name_genitive }) : '',
       date_today: formatDate(today),
       year: String(today.getFullYear()),
       next_year: String(today.getFullYear() + 1),

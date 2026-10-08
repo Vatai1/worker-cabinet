@@ -1824,6 +1824,7 @@ async function runMigrations() {
     await migrateMembershipDepartmentSync(db)
     await migrateVacationSettings(db)
     await migrateDayOffs(db)
+    await migrateVacationTypeRules(db)
     await migratePermissionsMatrix(db)
     await migrateNotificationDelivery(db)
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name_genitive JSONB')
@@ -2008,6 +2009,7 @@ async function migrateApprovalHierarchy(db) {
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_parent_sees_child BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_child_sees_parent BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS travel_available_from DATE')
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS hide_department_in_documents BOOLEAN NOT NULL DEFAULT false')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS vac_parent_approves BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_parent_approves BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS emp_parent_sees_child BOOLEAN NOT NULL DEFAULT false')
@@ -2265,6 +2267,46 @@ async function migrateDayOffs(db) {
   `)
   await db.query('CREATE INDEX IF NOT EXISTS idx_leave_adjustments_user ON leave_adjustments (user_id, organization_id, kind)')
   console.log('  ✓ day_off type + leave_adjustments')
+}
+
+async function migrateVacationTypeRules(db) {
+  const applied = (await db.query("SELECT value FROM system_settings WHERE key = 'vacation_type_rules_version'")).rows[0]?.value
+  if (applied === '1') return
+  const NON_BALANCE = ['educational', 'maternity', 'child_care', 'unpaid', 'veteran']
+  const balances = await db.query(
+    `UPDATE vacation_balances vb
+     SET used_days = GREATEST(0, vb.used_days - x.used), reserved_days = GREATEST(0, vb.reserved_days - x.reserved), updated_at = NOW()
+     FROM (
+       SELECT vr.user_id, vr.organization_id, EXTRACT(YEAR FROM vr.start_date)::int AS year,
+         COALESCE(SUM(vr.duration) FILTER (WHERE rs.code = 'approved'), 0)::int AS used,
+         COALESCE(SUM(vr.duration) FILTER (WHERE rs.code = 'on_approval'), 0)::int AS reserved
+       FROM vacation_requests vr
+       JOIN vacation_types vt ON vt.id = vr.vacation_type_id
+       JOIN request_statuses rs ON rs.id = vr.status_id
+       WHERE vt.code = ANY($1) AND rs.code IN ('approved', 'on_approval')
+       GROUP BY 1, 2, 3
+     ) x
+     WHERE vb.user_id = x.user_id AND vb.organization_id IS NOT DISTINCT FROM x.organization_id AND vb.year = x.year`,
+    [NON_BALANCE]
+  )
+  const covered = `EXISTS (SELECT 1 FROM vacation_requests vr JOIN request_statuses rs ON rs.id = vr.status_id
+    WHERE vr.user_id = te.employee_id AND rs.code IN ('approved', 'on_approval') AND te.date BETWEEN vr.start_date AND vr.end_date)`
+  await db.query(`UPDATE timesheet_entries te SET code = 'ОД' WHERE te.code = 'ДО' AND NOT ${covered}`)
+  await db.query(`UPDATE timesheet_entries te SET code = 'ДО' WHERE te.code = 'ОС' AND NOT ${covered}`)
+  const entries = await db.query(
+    `UPDATE timesheet_entries te SET code = CASE vt.code
+       WHEN 'additional' THEN 'ОД' WHEN 'educational' THEN 'У' WHEN 'maternity' THEN 'Р' WHEN 'child_care' THEN 'ОЖ'
+       WHEN 'unpaid' THEN 'ДО' WHEN 'veteran' THEN 'ОЗ' ELSE 'ОТ' END
+     FROM vacation_requests vr
+     JOIN request_statuses rs ON rs.id = vr.status_id AND rs.code IN ('approved', 'on_approval')
+     JOIN vacation_types vt ON vt.id = vr.vacation_type_id AND vt.code <> 'day_off'
+     WHERE vr.user_id = te.employee_id AND te.date BETWEEN vr.start_date AND vr.end_date AND te.code IN ('ОТ', 'ОС', 'ДО')`
+  )
+  await db.query(
+    `INSERT INTO system_settings (key, value, description) VALUES ('vacation_type_rules_version', '1', 'Правила видов отпусков')
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`
+  )
+  console.log(`  ✓ vacation type rules: ${balances.rowCount} balances fixed, ${entries.rowCount} timesheet entries recoded`)
 }
 
 async function migrateVacationSettings(db) {

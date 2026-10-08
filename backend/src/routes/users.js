@@ -13,6 +13,8 @@ import { phrasePrefixPattern, wordPrefixPatterns } from '../lib/wordSearch.js'
 import { setKcUserEnabled, updateKcUserRole } from '../config/keycloak.js'
 import { requirePermission, hasPermission } from '../lib/permissions.js'
 import ExcelJS from 'exceljs'
+import { STAFF_REPORTS, STAFF_YEARLY, buildStaffReport } from '../lib/staffReports.js'
+import { sendReportXlsx } from '../lib/vacationReports.js'
 import { suggestGenitive } from '../lib/nameGenitive.js'
 
 const ELEVATED_ROLES = ['admin', 'superadmin', 'director']
@@ -196,6 +198,46 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  *               type: array
  *               items: { $ref: '#/components/schemas/User' }
  */
+/**
+ * @swagger
+ * /users/reports/{type}:
+ *   get:
+ *     tags: [Users]
+ *     summary: Отчёты по персоналу текущей организации
+ *     description: 'type — headcount | hires | tenure | positions | structure | activity'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: type
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: departmentId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: format
+ *         schema: { type: string, enum: [xlsx] }
+ *     responses:
+ *       200:
+ *         description: '{ title, columns, rows, summary, totals, charts } или файл xlsx'
+ */
+router.get('/reports/:type', authenticateToken, requirePermission('staff:reports'), asyncHandler(async (req, res) => {
+  if (!STAFF_REPORTS[req.params.type]) throw new NotFoundError('Отчёт не найден')
+  const orgId = currentOrgId(req)
+  if (!orgId) throw new ValidationError('Не выбрана организация')
+  const year = parseInt(req.query.year) || new Date().getFullYear()
+  const departmentIds = String(req.query.departmentId || '').split(',').map((v) => parseInt(v)).filter((n) => !Number.isNaN(n))
+  const report = await buildStaffReport(req.params.type, { orgId, departmentIds, year })
+  if (req.query.format !== 'xlsx') return res.json(report)
+  const org = (await query('SELECT name FROM organizations WHERE id = $1', [orgId])).rows[0]
+  const depts = departmentIds.length ? (await query('SELECT name FROM departments WHERE id = ANY($1::int[]) ORDER BY name', [departmentIds])).rows.map((d) => d.name) : []
+  const filters = [STAFF_YEARLY.includes(req.params.type) && `Год: ${year}`, `Отделы: ${depts.length ? depts.join(', ') : 'все'}`].filter(Boolean).join('   •   ')
+  return sendReportXlsx(res, report, `staff-${req.params.type}-${year}`, { organization: org?.name, filters })
+}))
+
 async function sendEmployeesXlsx(res, rows, withBalance) {
   const STATUS = { active: 'Активен', inactive: 'Деактивирован', on_leave: 'В отпуске' }
   const ORG_ROLE = { employee: 'Работник', manager: 'Руководитель', hr: 'HR', admin: 'Администратор' }
@@ -762,7 +804,7 @@ router.delete('/me/avatar', authenticateToken, async (req, res) => {
  *         description: '{ saved, nominative, genitive, suggestion } — каждое { lastName, firstName, middleName }'
  *   put:
  *     tags: [Users]
- *     summary: Сохранить ФИО в родительном падеже ({ reset: true } — вернуть автоматическое)
+ *     summary: 'Сохранить ФИО в родительном падеже ({ reset: true } — вернуть автоматическое)'
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       content:
@@ -805,6 +847,40 @@ const putNameGenitive = asyncHandler(async (req, res) => {
   await query('UPDATE users SET name_genitive = $1 WHERE id = $2', [value, targetId])
   res.json({ saved: true, genitive: value })
 })
+
+/**
+ * @swagger
+ * /users/me/document-preferences:
+ *   get:
+ *     tags: [Users]
+ *     summary: Личные настройки формирования заявлений
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: '{ hide_department_in_documents }'
+ *   put:
+ *     tags: [Users]
+ *     summary: Изменить личные настройки формирования заявлений
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               hide_department_in_documents: { type: boolean }
+ */
+router.get('/me/document-preferences', authenticateToken, asyncHandler(async (req, res) => {
+  const row = (await query('SELECT hide_department_in_documents FROM users WHERE id = $1', [req.user.id])).rows[0]
+  res.json({ hide_department_in_documents: !!row?.hide_department_in_documents })
+}))
+
+router.put('/me/document-preferences', authenticateToken, asyncHandler(async (req, res) => {
+  const value = req.body?.hide_department_in_documents
+  if (typeof value !== 'boolean') throw new ValidationError('Некорректное значение')
+  await query('UPDATE users SET hide_department_in_documents = $2 WHERE id = $1', [req.user.id, value])
+  res.json({ hide_department_in_documents: value })
+}))
 
 router.get('/me/name-genitive', authenticateToken, getNameGenitive)
 router.put('/me/name-genitive', authenticateToken, putNameGenitive)

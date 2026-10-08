@@ -453,7 +453,7 @@ export function EmployeeProfile() {
         }
         aside={
           <div className="hidden flex-wrap justify-end gap-2 lg:flex">
-            <BannerPill icon={FolderKanban}>{activeProjects} активных проектов</BannerPill>
+            {isModuleEnabled('projects') && <BannerPill icon={FolderKanban}>{activeProjects} активных проектов</BannerPill>}
             <BannerPill icon={Clock}>{calculateWorkExperience(employee.hireDate)}</BannerPill>
             {(employee.office || employee.cabinet) && (
               <BannerPill icon={MapPin}>{[employee.office, employee.cabinet].filter(Boolean).join(', ')}</BannerPill>
@@ -601,6 +601,7 @@ export function EmployeeProfile() {
         <PlannedVacationsBlock userId={id!} />
       )}
 
+      {isModuleEnabled('projects') && (
       <Card className="animate-slide-up stagger-6 overflow-hidden p-0">
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -661,6 +662,7 @@ export function EmployeeProfile() {
           )}
         </div>
       </Card>
+      )}
 
       {isModuleEnabled('skills') && (
         <SkillsCard
