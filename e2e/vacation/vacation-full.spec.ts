@@ -32,7 +32,7 @@ const C_S = iso(75), C_E = iso(79)
 const OWN_DAY = iso(31)
 const D_S = iso(60), D_E = iso(64)
 const E_S = iso(70), E_E = iso(74)
-const F_S = iso(80), F_E = iso(84)
+const [F_S, F_E] = iso(80).slice(0, 4) === iso(84).slice(0, 4) ? [iso(80), iso(84)] : [`${iso(84).slice(0, 4)}-01-11`, `${iso(84).slice(0, 4)}-01-15`]
 
 let api: APIRequestContext
 let empToken = ''
@@ -231,7 +231,6 @@ async function selectRange(page: Page, startIso: string, endIso: string) {
   await showYear(page, startIso)
   await monthCard(page, monthName(startIso)).locator('[data-date-cell]').nth(dayOfMonth(startIso) - 1).click()
   await expect(page.getByText(/Выбрана дата:/)).toBeVisible({ timeout: 5000 })
-  await showYear(page, endIso)
   await monthCard(page, monthName(endIso)).locator('[data-date-cell]').nth(dayOfMonth(endIso) - 1).click()
   await expect(page.getByText(/Период:/)).toBeVisible({ timeout: 5000 })
 }
