@@ -1,9 +1,10 @@
-import { CalendarCheck, CalendarRange, Hourglass, Plane, Repeat, Timer, Users, Wallet } from 'lucide-react'
+import { CalendarCheck, ClipboardCheck, CalendarRange, Hourglass, Plane, Repeat, Timer, Users, Wallet } from 'lucide-react'
 import { ReportsWorkspace, type ReportDef } from '@/modules/reports/components/ReportsWorkspace'
 
 const REPORTS: ReportDef[] = [
   { id: 'balances', name: 'Остатки', hint: 'Положено, использовано, осталось', yearly: true, icon: Wallet, accent: 'from-blue-500 to-indigo-600' },
   { id: 'plan', name: 'Распределение', hint: 'Нераспределённые дни и часть от 14 дней', yearly: true, icon: CalendarRange, accent: 'from-violet-500 to-purple-600' },
+  { id: 'submissions', name: 'Заявления', hint: 'Кто подал и не подал заявление по отделам', yearly: true, icon: ClipboardCheck, accent: 'from-lime-500 to-green-600' },
   { id: 'unused', name: 'Неиспользованные', hint: 'Кто давно не был в отпуске', yearly: true, icon: Hourglass, accent: 'from-amber-500 to-orange-600', monthsFilter: true },
   { id: 'overlaps', name: 'Отсутствия', hint: 'Сколько людей в отпуске по неделям', yearly: true, icon: Users, accent: 'from-rose-500 to-pink-600' },
   { id: 'approvals', name: 'Согласование', hint: 'Сколько дней заявления ждали решения', yearly: true, icon: Timer, accent: 'from-cyan-500 to-sky-600' },

@@ -167,6 +167,53 @@ async function plan({ orgId, departmentIds, year }) {
   }
 }
 
+async function submissions({ orgId, departmentIds, year }) {
+  const rows = (await query(
+    `WITH ${employeesCte}
+     SELECT e.name, e.department, e.position,
+       COUNT(vr.id) FILTER (WHERE rs.code = 'approved')::int AS approved,
+       COUNT(vr.id) FILTER (WHERE rs.code = 'on_approval')::int AS pending,
+       COALESCE(SUM(vr.duration) FILTER (WHERE rs.code IN ('approved', 'on_approval')), 0)::int AS days,
+       MIN(vr.start_date) FILTER (WHERE rs.code IN ('approved', 'on_approval')) AS first_start
+     FROM employees e
+     LEFT JOIN vacation_requests vr ON vr.user_id = e.id AND vr.organization_id = $1 AND EXTRACT(YEAR FROM vr.start_date) = $3
+       AND vr.vacation_type_id IN (SELECT id FROM vacation_types WHERE code <> 'day_off')
+     LEFT JOIN request_statuses rs ON rs.id = vr.status_id
+     GROUP BY e.id, e.name, e.department, e.position
+     ORDER BY e.department NULLS LAST, e.name`,
+    [orgId, departmentIds, year]
+  )).rows
+  const out = rows.map((r) => {
+    const submitted = r.approved + r.pending > 0
+    return {
+      ...r,
+      department: r.department || '—',
+      position: r.position || '',
+      state: submitted ? 'подал' : 'не подал',
+      first_start: ruDate(r.first_start),
+      submitted: submitted ? 1 : 0,
+      not_submitted: submitted ? 0 : 1,
+      _tone: { state: submitted ? (r.pending ? 'warning' : 'success') : 'danger' },
+    }
+  })
+  const done = count(out, (r) => r.submitted)
+  const depts = new Set(out.map((r) => r.department))
+  const fullDepts = [...depts].filter((d) => out.every((r) => r.department !== d || r.submitted)).length
+  return {
+    title: `Заявления на отпуск ${year} года по отделам`,
+    primary: 'days',
+    columns: [col('name', 'ФИО'), col('department', 'Отдел'), col('position', 'Должность'), col('state', 'Заявление', 'badge'), col('approved', 'Согласовано', 'number'), col('pending', 'На согласовании', 'number'), col('days', 'Дней', 'number'), col('first_start', 'Ближайший отпуск с')],
+    rows: out,
+    totals: totalsOf(out, ['approved', 'pending', 'days']),
+    summary: [
+      kpi('Подали', done, 'success', out.length ? `${Math.round((done / out.length) * 100)}% из ${out.length}` : undefined),
+      kpi('Не подали', out.length - done, out.length - done ? 'danger' : 'success'),
+      kpi('Отделов подали все', fullDepts, 'info', `из ${depts.size}`),
+      kpi('На согласовании', sum(out, 'pending'), 'warning', 'заявл.'),
+    ],
+  }
+}
+
 async function overlaps({ orgId, departmentIds, year }) {
   const rows = (await query(
     `WITH ${employeesCte},
@@ -433,6 +480,7 @@ function departmentStack(report, title, parts, unit = 'дн.') {
 const CHART_BUILDERS = {
   balances: (r) => [departmentStack(r, 'Дни отпуска по отделам', [['used_days', 'Использовано'], ['reserved_days', 'На согласовании'], ['available_days', 'Доступно']])],
   plan: (r) => [departmentStack(r, 'Распределение по отделам', [['approved', 'Согласовано'], ['pending', 'На согласовании'], ['unplanned', 'Не распределено']])],
+  submissions: (r) => [departmentStack(r, 'Заявления по отделам', [['submitted', 'Подали'], ['not_submitted', 'Не подали']], 'чел.')],
   'day-offs': (r) => [departmentStack(r, 'Отгулы по отделам', [['used', 'Использовано'], ['pending', 'На согласовании'], ['available', 'Остаток']])],
   unused: (r, { months }) => {
     const buckets = [
@@ -506,6 +554,7 @@ export const VACATION_REPORTS = {
   balances,
   unused,
   plan,
+  submissions,
   overlaps,
   approvals,
   changes,

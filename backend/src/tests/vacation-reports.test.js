@@ -58,7 +58,7 @@ describe('Отчёты по отпускам', () => {
   })
 
   it('все отчёты отвечают, Excel выгружается, неизвестный отчёт — 404', async () => {
-    for (const type of ['unused', 'approvals', 'changes', 'day-offs', 'travel']) {
+    for (const type of ['submissions', 'unused', 'approvals', 'changes', 'day-offs', 'travel']) {
       const res = await report(type, adminToken)
       assert.strictEqual(res.status, 200, type)
       assert.ok(Array.isArray(res.data.columns) && Array.isArray(res.data.rows), type)
