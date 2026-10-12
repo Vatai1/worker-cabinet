@@ -220,9 +220,18 @@ async function openVacation(page: Page, role: 'employee' | 'manager' | 'hr' | 'a
 
 const monthCard = (page: Page, name: string) => page.getByTestId('month-card').filter({ hasText: name }).first()
 
+async function showYear(page: Page, isoStr: string) {
+  const year = isoStr.slice(0, 4)
+  if (await page.getByText(`${year} год`, { exact: true }).isVisible()) return
+  await page.getByRole('button').filter({ has: page.locator('svg.lucide-chevron-right') }).first().click()
+  await expect(page.getByText(`${year} год`, { exact: true })).toBeVisible({ timeout: 5000 })
+}
+
 async function selectRange(page: Page, startIso: string, endIso: string) {
+  await showYear(page, startIso)
   await monthCard(page, monthName(startIso)).locator('[data-date-cell]').nth(dayOfMonth(startIso) - 1).click()
   await expect(page.getByText(/Выбрана дата:/)).toBeVisible({ timeout: 5000 })
+  await showYear(page, endIso)
   await monthCard(page, monthName(endIso)).locator('[data-date-cell]').nth(dayOfMonth(endIso) - 1).click()
   await expect(page.getByText(/Период:/)).toBeVisible({ timeout: 5000 })
 }
