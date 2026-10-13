@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { query } from '../config/database.js'
 import { BASE, login, getHrToken, headersJSON } from './helpers.js'
 import { PRODUCTION_CALENDAR } from '../db/productionCalendar.js'
+import { migrateCalendarHolidays } from '../db/migrate.js'
 
 const EMAIL = `prodcal-${Date.now()}@prod-calendar.test`
 let userId
@@ -99,6 +100,36 @@ describe('Производственный календарь 2027', () => {
       assert.strictEqual((await hr('DELETE', '2027-10-06')).status, 404)
     } finally {
       await query("DELETE FROM calendar_holidays WHERE day = '2027-10-06'")
+    }
+  })
+
+  it('миграция заполняет год один раз: ручная правка и удалённый день сохраняются, незаполненный год загружается', async () => {
+    const restore = async () => {
+      for (const day of ['2027-02-23', '2027-03-08']) {
+        const [, kind, description] = PRODUCTION_CALENDAR[2027].find(([d]) => d === day)
+        await query(
+          `INSERT INTO calendar_holidays (day, year, description, kind, manual) VALUES ($1, 2027, $2, $3, false)
+           ON CONFLICT (day) DO UPDATE SET description = EXCLUDED.description, kind = EXCLUDED.kind, manual = false`,
+          [day, description, kind]
+        )
+      }
+    }
+    const year2026 = (await query('SELECT day, kind, description, manual FROM calendar_holidays WHERE year = 2026')).rows
+    try {
+      await query("UPDATE calendar_holidays SET kind = 'transfer', description = 'правка HR', manual = true WHERE day = '2027-02-23'")
+      await query("DELETE FROM calendar_holidays WHERE day = '2027-03-08'")
+      await query('DELETE FROM calendar_holidays WHERE year = 2026')
+      await migrateCalendarHolidays({ query })
+      const rows = (await query("SELECT day, kind, description, manual FROM calendar_holidays WHERE day IN ('2027-02-23', '2027-03-08')")).rows
+      assert.deepStrictEqual(rows, [{ day: '2027-02-23', kind: 'transfer', description: 'правка HR', manual: true }])
+      const seeded = (await query('SELECT count(*)::int AS n FROM calendar_holidays WHERE year = 2026 AND NOT manual')).rows[0].n
+      assert.strictEqual(seeded, PRODUCTION_CALENDAR[2026].length)
+    } finally {
+      await restore()
+      await query('DELETE FROM calendar_holidays WHERE year = 2026')
+      for (const r of year2026) {
+        await query('INSERT INTO calendar_holidays (day, year, description, kind, manual) VALUES ($1, 2026, $2, $3, $4)', [r.day, r.description, r.kind, r.manual])
+      }
     }
   })
 

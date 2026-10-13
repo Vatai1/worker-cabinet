@@ -84,7 +84,7 @@ export function ProductionCalendarCard() {
 
   return (
     <Card>
-      <div className="p-6 space-y-5">
+      <div className="p-6 space-y-5" data-testid="production-calendar">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-primary/10 text-primary">
@@ -167,6 +167,7 @@ export function ProductionCalendarCard() {
                           <button
                             key={iso}
                             type="button"
+                            data-day={iso}
                             title={entry ? `${kindOf(entry.kind).label}${entry.description ? `: ${entry.description}` : ''}` : undefined}
                             onClick={() => pick(iso)}
                             className={cn(

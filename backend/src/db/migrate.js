@@ -1968,7 +1968,7 @@ if (isMainModule) {
   runMigrations()
 }
 
-export { runMigrations }
+export { runMigrations, migrateCalendarHolidays }
 
 async function migrateMailingTables(db) {
   console.log('Creating mailing tables...')

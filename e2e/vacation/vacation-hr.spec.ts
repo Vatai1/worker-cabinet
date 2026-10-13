@@ -10,6 +10,7 @@ const RULE = 'e2e-vhr правило HR'
 
 const T_CAL = { s: iso(workdayOffset(40)), e: iso(workdayOffset(40) + 4) }
 const T_BLOCK = iso(workdayOffset(60))
+const CUSTOM_DAY = '2031-08-13'
 
 test.beforeAll(async () => {
   await world.init()
@@ -28,6 +29,7 @@ test.afterAll(async () => {
 })
 
 async function cleanupRules() {
+  await world.call('DELETE', `/vacation/production-calendar/${CUSTOM_DAY}`)
   const rules = await world.ok<{ positionRules: Array<{ id: number; position: string }>; userRules: Array<{ id: number; userId: string }> }>('GET', '/vacation/day-rules')
   const userIds = Object.values(world.users).map((u) => String(u.id))
   for (const r of rules.positionRules.filter((r) => r.position === POSITION)) await world.call('DELETE', `/vacation/day-rules/${r.id}`)
@@ -148,5 +150,44 @@ test.describe('Отпуск: HR', () => {
     await page.getByPlaceholder('Поиск по названию или коду…').fill('annual_paid')
     await expect(page.getByText('annual_paid', { exact: true }).first()).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('unpaid', { exact: true })).toHaveCount(0)
+  })
+
+  test('праздники и выходные: HR отмечает день выходным, он подсвечивается и попадает в список, затем становится обычным', async ({ page }) => {
+    await openHrVacation(page, 'Дни отпуска')
+    const card = page.getByTestId('production-calendar')
+    await expect(card.getByRole('heading', { name: 'Праздники и выходные' })).toBeVisible({ timeout: 10000 })
+    await expect(card.locator(`[data-day="${THIS_YEAR}-01-01"]`)).toHaveClass(/bg-red-500/)
+
+    await card.locator(`[data-day="${THIS_YEAR}-01-15"]`).click()
+    await card.locator('input[type="date"]').fill(CUSTOM_DAY)
+    await card.getByRole('button', { name: 'Праздник (не входит в отпуск)' }).click()
+    await card.getByRole('button', { name: 'Выходной (входит в отпуск)' }).click()
+    await card.getByPlaceholder('Например, День города').fill('e2e-vhr день')
+    await card.getByRole('button', { name: 'Сохранить' }).click()
+
+    await expect(card.getByText('2031 год', { exact: true })).toBeVisible({ timeout: 10000 })
+    await expect(card.locator(`[data-day="${CUSTOM_DAY}"]`)).toHaveClass(/bg-amber-500/)
+    const row = card.locator('div.divide-y > div').filter({ hasText: '13.08.2031' })
+    await expect(row).toContainText('Выходной')
+    await expect(row).toContainText('e2e-vhr день')
+    await expect(row).toContainText('изменено вручную')
+    const saved = await world.ok<{ days: Array<{ day: string; kind: string; manual: boolean }> }>('GET', '/vacation/production-calendar?year=2031')
+    expect(saved.days).toContainEqual(expect.objectContaining({ day: CUSTOM_DAY, kind: 'transfer', manual: true }))
+
+    await row.getByRole('button', { name: '13.08.2031' }).click()
+    await card.getByRole('button', { name: 'Сделать обычным днём' }).click()
+    await expect(row).toHaveCount(0, { timeout: 10000 })
+    await expect(card.locator(`[data-day="${CUSTOM_DAY}"]`)).not.toHaveClass(/bg-amber-500/)
+    const cleared = await world.ok<{ days: Array<{ day: string }> }>('GET', '/vacation/production-calendar?year=2031')
+    expect(cleared.days.map((d) => d.day)).not.toContain(CUSTOM_DAY)
+  })
+
+  test('отчёт «Заявления»: HR видит по отделам, кто не подал заявление', async ({ page }) => {
+    await world.loginPage(page, 'hr')
+    await page.goto('/hr?tab=vacation_reports&section=vacation')
+    await page.getByRole('button', { name: /Кто подал и не подал заявление/ }).click()
+    await expect(page.getByRole('heading', { name: `Заявления на отпуск ${THIS_YEAR} года по отделам` })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('Не подали').first()).toBeVisible()
+    await expect(page.getByRole('row').filter({ hasText: 'Должностнов' })).toContainText('не подал', { timeout: 15000 })
   })
 })
