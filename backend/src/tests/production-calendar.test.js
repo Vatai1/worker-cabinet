@@ -78,6 +78,30 @@ describe('Производственный календарь 2027', () => {
     assert.strictEqual(res.data.duration, 8)
   })
 
+  it('HR настраивает день: праздник 06.10.2027 вычитается из отпуска, работнику менять нельзя, удаление возвращает обычный день', async () => {
+    const hr = async (method, day, body) => fetch(`${BASE}/vacation/production-calendar/${day}`, {
+      method,
+      headers: { ...headersJSON(await getHrToken()), 'X-Organization-Id': '1', 'X-CSRF-Token': 'dd', Cookie: 'csrf_token=dd' },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    try {
+      assert.strictEqual((await call('PUT', '/vacation/production-calendar/2027-10-06', { kind: 'holiday' })).status, 403)
+      assert.strictEqual((await hr('PUT', '2027-10-06', { kind: 'nope' })).status, 400)
+      const put = await hr('PUT', '2027-10-06', { kind: 'holiday', description: 'e2e праздник' })
+      assert.strictEqual(put.status, 200)
+      assert.deepStrictEqual(await put.json(), { day: '2027-10-06', kind: 'holiday', description: 'e2e праздник', manual: true })
+      const cal = await call('GET', '/vacation/production-calendar?year=2027')
+      assert.ok(cal.data.days.some((d) => d.day === '2027-10-06' && d.manual))
+      const res = await createVacation('2027-10-04', '2027-10-08')
+      assert.strictEqual(res.status, 201, JSON.stringify(res.data))
+      assert.strictEqual(res.data.duration, 4)
+      assert.strictEqual((await hr('DELETE', '2027-10-06')).status, 200)
+      assert.strictEqual((await hr('DELETE', '2027-10-06')).status, 404)
+    } finally {
+      await query("DELETE FROM calendar_holidays WHERE day = '2027-10-06'")
+    }
+  })
+
   it('без загруженного календаря год возвращается пустым, некорректный год — 400', async () => {
     const empty = await call('GET', '/vacation/production-calendar?year=2099')
     assert.strictEqual(empty.status, 200)

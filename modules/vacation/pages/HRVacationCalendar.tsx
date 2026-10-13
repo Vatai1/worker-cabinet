@@ -9,6 +9,7 @@ import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { VacationDetailModal } from '@/modules/vacation/components/modals/VacationDetailModal'
 import { VacationLimitSettingCard } from '@/modules/vacation/components/VacationLimitSettingCard'
 import { VacationDayRulesCard } from '@/modules/vacation/components/VacationDayRulesCard'
+import { ProductionCalendarCard } from '@/modules/vacation/components/ProductionCalendarCard'
 import { VacationAccessCard } from '@/modules/vacation/components/VacationAccessCard'
 import { LeaveAdjustmentsPanel } from '@/modules/vacation/components/LeaveAdjustmentsPanel'
 import { HRVacationRestrictions } from '@/modules/vacation/pages/HRVacationRestrictions'
@@ -288,6 +289,7 @@ export function HRVacationCalendar() {
         <div className="space-y-4">
           <VacationLimitSettingCard />
           <VacationDayRulesCard />
+          <ProductionCalendarCard />
         </div>
       )}
       {activeTab === 'adjustments' && canGrantDayOffs && <LeaveAdjustmentsPanel />}

@@ -500,13 +500,77 @@ router.get('/production-calendar', authenticateToken, async (req, res) => {
   const year = parseInt(req.query.year, 10)
   if (!Number.isInteger(year) || year < 2000 || year > 2100) return res.status(400).json({ error: 'Укажите год' })
   try {
-    const result = await query('SELECT day, kind, description FROM calendar_holidays WHERE year = $1 ORDER BY day', [year])
+    const result = await query('SELECT day, kind, description, manual FROM calendar_holidays WHERE year = $1 ORDER BY day', [year])
     res.json({ year, days: result.rows })
   } catch (error) {
     res.locals.errorCause = error
     res.status(500).json({ error: 'Не удалось загрузить производственный календарь' })
   }
 })
+
+const PRODUCTION_DAY_KINDS = ['holiday', 'transfer', 'shortened']
+const isIsoDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) && !Number.isNaN(Date.parse(v))
+
+/**
+ * @swagger
+ * /vacation/production-calendar/{day}:
+ *   put:
+ *     tags: [Vacation]
+ *     summary: Добавить или изменить день производственного календаря
+ *     description: 'Календарь общий для всех организаций. kind: holiday — праздник (не входит в отпуск), transfer — выходной (входит в отпуск), shortened — сокращённый рабочий день'
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: day
+ *         required: true
+ *         schema: { type: string, format: date }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               kind: { type: string, enum: [holiday, transfer, shortened] }
+ *               description: { type: string }
+ *     responses:
+ *       200:
+ *         description: '{ day, kind, description, manual }'
+ *   delete:
+ *     tags: [Vacation]
+ *     summary: Удалить день из производственного календаря
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: day
+ *         required: true
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: '{ success: true }'
+ */
+router.put('/production-calendar/:day', authenticateToken, requirePermission('vacation:manage'), asyncHandler(async (req, res) => {
+  const { day } = req.params
+  const { kind } = req.body || {}
+  const description = String(req.body?.description ?? '').trim() || null
+  if (!isIsoDay(day)) throw new ValidationError('Некорректная дата')
+  if (!PRODUCTION_DAY_KINDS.includes(kind)) throw new ValidationError('Укажите тип дня')
+  const result = await query(
+    `INSERT INTO calendar_holidays (day, year, description, kind, manual) VALUES ($1, $2, $3, $4, true)
+     ON CONFLICT (day) DO UPDATE SET description = EXCLUDED.description, kind = EXCLUDED.kind, manual = true
+     RETURNING day, kind, description, manual`,
+    [day, Number(day.slice(0, 4)), description, kind]
+  )
+  res.json(result.rows[0])
+}))
+
+router.delete('/production-calendar/:day', authenticateToken, requirePermission('vacation:manage'), asyncHandler(async (req, res) => {
+  if (!isIsoDay(req.params.day)) throw new ValidationError('Некорректная дата')
+  const result = await query('DELETE FROM calendar_holidays WHERE day = $1', [req.params.day])
+  if (!result.rowCount) throw new NotFoundError('День не найден')
+  res.json({ success: true })
+}))
 
 /**
  * @swagger

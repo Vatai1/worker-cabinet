@@ -7,6 +7,7 @@ export interface ProductionDay {
   day: string
   kind: ProductionDayKind
   description: string | null
+  manual?: boolean
 }
 
 const cache = new Map<number, Promise<Map<string, ProductionDay>>>()
@@ -23,6 +24,10 @@ function loadYear(year: number) {
     cache.set(year, pending)
   }
   return pending
+}
+
+export function invalidateProductionCalendar(year: number) {
+  cache.delete(year)
 }
 
 export function useProductionCalendar(year: number) {

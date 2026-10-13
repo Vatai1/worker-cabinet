@@ -1938,16 +1938,17 @@ async function migrateCalendarHolidays(db) {
     await db.query(`CREATE INDEX IF NOT EXISTS idx_calendar_holidays_year ON calendar_holidays(year)`)
 
     await db.query(`ALTER TABLE calendar_holidays ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'holiday'`)
+    await db.query(`ALTER TABLE calendar_holidays ADD COLUMN IF NOT EXISTS manual BOOLEAN NOT NULL DEFAULT false`)
 
     for (const [year, days] of Object.entries(PRODUCTION_CALENDAR)) {
+      const seeded = await db.query('SELECT 1 FROM calendar_holidays WHERE year = $1 AND NOT manual LIMIT 1', [Number(year)])
+      if (seeded.rows.length) continue
       for (const [day, kind, description] of days) {
         await db.query(
-          `INSERT INTO calendar_holidays (day, year, description, kind) VALUES ($1, $2, $3, $4)
-           ON CONFLICT (day) DO UPDATE SET year = EXCLUDED.year, description = EXCLUDED.description, kind = EXCLUDED.kind`,
+          'INSERT INTO calendar_holidays (day, year, description, kind) VALUES ($1, $2, $3, $4) ON CONFLICT (day) DO NOTHING',
           [day, Number(year), description, kind]
         )
       }
-      await db.query('DELETE FROM calendar_holidays WHERE year = $1 AND NOT (day = ANY($2::date[]))', [Number(year), days.map(([day]) => day)])
       console.log(`  ✓ calendar_holidays ${year}: ${days.length} дат`)
     }
   } catch (e) {
