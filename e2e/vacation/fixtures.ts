@@ -16,13 +16,15 @@ export const monthName = (isoStr: string) => RU_MONTHS[parseInt(isoStr.slice(5, 
 export const dayOfMonth = (isoStr: string) => parseInt(isoStr.slice(8, 10), 10)
 export const rangeText = (s: string, e: string, days: number) => `${ruDate(s)} - ${ruDate(e)} (${days} дней)`
 
+const nearNewYear = (d: Date) => (d.getMonth() === 11 && d.getDate() >= 18) || (d.getMonth() === 0 && d.getDate() <= 8)
+
 export function workdayOffset(minOffset: number) {
-  let offset = minOffset
-  for (;;) {
+  for (let offset = 0, n = 0; ; offset += 1) {
     const d = new Date()
     d.setDate(d.getDate() + offset)
-    if (d.getDay() !== 0 && d.getDay() !== 6) return offset
-    offset += 1
+    if (nearNewYear(d)) continue
+    if (n >= minOffset && d.getDay() !== 0 && d.getDay() !== 6) return offset
+    n += 1
   }
 }
 

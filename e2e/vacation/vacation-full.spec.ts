@@ -2,6 +2,7 @@ import { test, expect, request as pwRequest, type APIRequestContext, type Page }
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { loginAs } from '../helpers'
+import { workdayOffset } from './fixtures'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -32,7 +33,8 @@ const C_S = iso(75), C_E = iso(79)
 const OWN_DAY = iso(31)
 const D_S = iso(60), D_E = iso(64)
 const E_S = iso(70), E_E = iso(74)
-const [F_S, F_E] = iso(80).slice(0, 4) === iso(84).slice(0, 4) ? [iso(80), iso(84)] : [`${iso(84).slice(0, 4)}-01-11`, `${iso(84).slice(0, 4)}-01-15`]
+const F_OFFSET = workdayOffset(80)
+const F_S = iso(F_OFFSET), F_E = iso(F_OFFSET + 4)
 
 let api: APIRequestContext
 let empToken = ''
