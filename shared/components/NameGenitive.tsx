@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { FileSignature } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
+import { CollapsibleCard } from '@/shared/components/ui/CollapsibleCard'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
@@ -158,22 +158,16 @@ export function NameGenitiveCard() {
   const changed = !info.saved || FIELDS.some(({ key }) => value[key] !== info.genitive[key])
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileSignature className="h-5 w-5" />
-          ФИО в заявлениях
-        </CardTitle>
-        <CardDescription>
-          Родительный падеж — «от кого» в шапке заявления{info.saved ? '' : '. Сейчас подставляется автоматически'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <NameGenitiveForm nominative={info.nominative} value={value} onChange={setValue} />
-        <div className="flex justify-end">
-          <Button size="sm" onClick={save} disabled={saving || !changed || !isComplete(value)}>Сохранить</Button>
-        </div>
-      </CardContent>
-    </Card>
+    <CollapsibleCard
+      id="settings_name_genitive"
+      icon={<FileSignature className="h-5 w-5" />}
+      title="ФИО в заявлениях"
+      description={`Родительный падеж — «от кого» в шапке заявления${info.saved ? '' : '. Сейчас подставляется автоматически'}`}
+    >
+      <NameGenitiveForm nominative={info.nominative} value={value} onChange={setValue} />
+      <div className="flex justify-end">
+        <Button size="sm" onClick={save} disabled={saving || !changed || !isComplete(value)}>Сохранить</Button>
+      </div>
+    </CollapsibleCard>
   )
 }

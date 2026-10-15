@@ -28,3 +28,25 @@ test('настройки: выбор сгенерированной аватар
   expect(reset.status()).toBe(200)
   await expect(page.getByRole('button', { name: 'Сбросить', exact: true })).toHaveCount(0)
 })
+
+test('настройки: карточки сворачиваются и запоминают состояние', async ({ page }) => {
+  await loginAs(page, 'employee')
+  await page.goto('/settings')
+  await page.evaluate(() => localStorage.removeItem('collapsed_settings_appearance'))
+  await page.reload()
+
+  const header = page.getByRole('button', { name: /Оформление/ })
+  await expect(header).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByText('Темная тема')).toBeVisible()
+
+  await header.click()
+  await expect(header).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByText('Темная тема')).toHaveCount(0)
+
+  await page.reload()
+  await expect(page.getByRole('button', { name: /Оформление/ })).toHaveAttribute('aria-expanded', 'false')
+  await page.screenshot({ path: 'test-results/settings-collapsible.png' })
+
+  await page.getByRole('button', { name: /Оформление/ }).click()
+  await expect(page.getByText('Темная тема')).toBeVisible()
+})

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Camera, Loader2, RefreshCw, Trash2, UserCircle } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
+import { CollapsibleCard } from '@/shared/components/ui/CollapsibleCard'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarImage } from '@/shared/components/ui/Avatar'
 import { AvatarCropModal } from '@/shared/components/AvatarCropModal'
@@ -117,15 +117,12 @@ export function AvatarSettingsCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <UserCircle className="h-5 w-5" />
-          Аватар
-        </CardTitle>
-        <CardDescription>Загрузите фотографию или выберите сгенерированную аватарку</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <CollapsibleCard
+      id="settings_avatar"
+      icon={<UserCircle className="h-5 w-5" />}
+      title="Аватар"
+      description="Загрузите фотографию или выберите сгенерированную аватарку"
+    >
         <div className="flex items-center gap-4">
           <Avatar className="h-16 w-16 ring-4 ring-primary/15">
             <AvatarImage src={current} alt="" />
@@ -153,7 +150,7 @@ export function AvatarSettingsCard() {
               Другие варианты
             </Button>
           </div>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
             {seeds.map((seed) => (
               <button
                 key={seed}
@@ -173,7 +170,6 @@ export function AvatarSettingsCard() {
             ))}
           </div>
         </div>
-      </CardContent>
 
       <AvatarCropModal
         isOpen={cropSrc !== null}
@@ -184,6 +180,6 @@ export function AvatarSettingsCard() {
           if (await upload(blob, 'avatar.jpg', 'crop')) closeCrop()
         }}
       />
-    </Card>
+    </CollapsibleCard>
   )
 }

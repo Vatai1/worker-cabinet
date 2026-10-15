@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
+import { CollapsibleCard } from '@/shared/components/ui/CollapsibleCard'
 import { Label } from '@/shared/components/ui/Label'
 import { Switch } from '@/shared/components/ui/Switch'
 import { Bell, FileText, Moon, Sun } from 'lucide-react'
@@ -89,7 +89,7 @@ export function Settings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Настройки</h1>
         <p className="text-muted-foreground mt-2">
@@ -97,102 +97,84 @@ export function Settings() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="space-y-4">
         <AvatarSettingsCard />
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
-              Уведомления
-            </CardTitle>
-            <CardDescription>
-              Настройка способов получения уведомлений
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Почтовые уведомления</Label>
-                <p className="text-xs text-muted-foreground">
-                  Получать уведомления на email
-                </p>
-              </div>
-              <Switch
-                checked={emailNotifications}
-                onCheckedChange={setEmailNotifications}
-              />
+        <CollapsibleCard
+          id="settings_notifications"
+          icon={<Bell className="h-5 w-5" />}
+          title="Уведомления"
+          description="Настройка способов получения уведомлений"
+        >
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Почтовые уведомления</Label>
+              <p className="text-xs text-muted-foreground">
+                Получать уведомления на email
+              </p>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Push-уведомления</Label>
-                <p className="text-xs text-muted-foreground">
-                  {pushEnabled
-                    ? 'Приходят даже при закрытой вкладке'
-                    : 'Не настроено на сервере'}
-                </p>
-              </div>
-              <Switch
-                checked={pushNotifications}
-                onCheckedChange={handlePushToggle}
-                disabled={!pushEnabled || pushLoading}
-              />
+            <Switch
+              checked={emailNotifications}
+              onCheckedChange={setEmailNotifications}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Push-уведомления</Label>
+              <p className="text-xs text-muted-foreground">
+                {pushEnabled
+                  ? 'Приходят даже при закрытой вкладке'
+                  : 'Не настроено на сервере'}
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <Switch
+              checked={pushNotifications}
+              onCheckedChange={handlePushToggle}
+              disabled={!pushEnabled || pushLoading}
+            />
+          </div>
+        </CollapsibleCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {darkMode ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-              Оформление
-            </CardTitle>
-            <CardDescription>
-              Настройка внешнего вида приложения
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Темная тема</Label>
-                <p className="text-xs text-muted-foreground">
-                  Использовать темное оформление
-                </p>
-              </div>
-              <Switch
-                checked={darkMode}
-                onCheckedChange={toggleTheme}
-              />
+        <CollapsibleCard
+          id="settings_appearance"
+          icon={darkMode ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+          title="Оформление"
+          description="Настройка внешнего вида приложения"
+        >
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Темная тема</Label>
+              <p className="text-xs text-muted-foreground">
+                Использовать темное оформление
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <Switch
+              checked={darkMode}
+              onCheckedChange={toggleTheme}
+            />
+          </div>
+        </CollapsibleCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Заявления
-            </CardTitle>
-            <CardDescription>
-              Что указывать в формируемых заявлениях
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-0.5">
-                <Label htmlFor="hide-department">Не указывать отдел</Label>
-                <p className="text-xs text-muted-foreground">
-                  Название отдела не будет подставляться в заявления на отпуск и перенос
-                </p>
-              </div>
-              <Switch
-                id="hide-department"
-                checked={!!hideDepartment}
-                onCheckedChange={handleHideDepartment}
-                disabled={hideDepartment === null || savingHideDepartment}
-              />
+        <CollapsibleCard
+          id="settings_documents"
+          icon={<FileText className="h-5 w-5" />}
+          title="Заявления"
+          description="Что указывать в формируемых заявлениях"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="hide-department">Не указывать отдел</Label>
+              <p className="text-xs text-muted-foreground">
+                Название отдела не будет подставляться в заявления на отпуск и перенос
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <Switch
+              id="hide-department"
+              checked={!!hideDepartment}
+              onCheckedChange={handleHideDepartment}
+              disabled={hideDepartment === null || savingHideDepartment}
+            />
+          </div>
+        </CollapsibleCard>
 
         <NameGenitiveCard />
       </div>
