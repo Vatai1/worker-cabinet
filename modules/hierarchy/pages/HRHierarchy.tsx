@@ -1233,7 +1233,7 @@ function EdgeSettingsModal({
               {isDeptToDept && parentApproves && (
                 <VacationVisibilityRow
                   label="Руководитель вышестоящего отдела согласует отпуска всех работников отдела"
-                  hint={parentHeadApproves ? 'Руководитель этого отдела больше не согласует отпуска своих работников' : undefined}
+                  hint={parentHeadApproves ? 'Согласовать может любой из двух: руководитель этого отдела или вышестоящего' : undefined}
                   checked={parentHeadApproves} onCheckedChange={setParentHeadApproves}
                   cascade={cascadeParentHeadApproves} onCascadeChange={setCascadeParentHeadApproves}
                 />
@@ -1464,7 +1464,7 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
           {isDeptToDept && parentApproves && (
             <VacationVisibilityRow
               label="Руководитель вышестоящего отдела согласует отпуска всех работников отдела"
-              hint={parentHeadApproves ? 'Руководитель этого отдела больше не согласует отпуска своих работников' : undefined}
+              hint={parentHeadApproves ? 'Согласовать может любой из двух: руководитель этого отдела или вышестоящего' : undefined}
               checked={parentHeadApproves} onCheckedChange={setParentHeadApproves}
               cascade={cascadeParentHeadApproves} onCascadeChange={setCascadeParentHeadApproves}
             />

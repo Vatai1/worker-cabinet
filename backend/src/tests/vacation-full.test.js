@@ -2048,7 +2048,7 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(await approverOf(second.data.id), headUser.id)
     })
 
-    it('parentHeadApproves: руководитель родительского отдела согласует вместо руководителя дочернего', async () => {
+    it('parentHeadApproves: согласует руководитель родительского отдела или руководитель дочернего — любой из двух', async () => {
       await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [childMgr.id, childDeptId])
       await saveHierarchy([linkEdge({ parentApproves: true })], 0)
       const own = await postOwn(emp, 10)
@@ -2057,10 +2057,14 @@ describe('Модуль отпусков — user stories', () => {
       const head = await postOwn(emp, 30)
       assert.strictEqual(head.status, 201, JSON.stringify(head.data))
       assert.strictEqual(await approverOf(head.data.id), parentMgr.id)
-      const denied = await call('POST', `/vacation/requests/${head.data.id}/approve`, await tokenFor(childMgr), {}, orgId)
-      assert.strictEqual(denied.status, 403)
       const approved = await call('POST', `/vacation/requests/${head.data.id}/approve`, await tokenFor(parentMgr), {}, orgId)
       assert.strictEqual(approved.status, 200)
+      const third = await postOwn(emp, 50)
+      assert.strictEqual(third.status, 201, JSON.stringify(third.data))
+      const byChild = await call('POST', `/vacation/requests/${third.data.id}/approve`, await tokenFor(childMgr), {}, orgId)
+      assert.strictEqual(byChild.status, 200, JSON.stringify(byChild.data))
+      const notified = (await query("SELECT user_id FROM notification_queue WHERE type = 'vacation_created' AND (data->>'requestId')::int = $1", [third.data.id])).rows.map((x) => x.user_id)
+      assert.ok(notified.includes(parentMgr.id) && notified.includes(childMgr.id), JSON.stringify(notified))
     })
 
     it('parentHeadApproves: заявка на согласовании переходит к руководителю родительского отдела, даже с ролью employee', async () => {

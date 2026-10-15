@@ -44,6 +44,16 @@ export async function resolveApproverId(userId, orgId, db = { query }) {
   return null
 }
 
+export async function coApproverId(userId, db = { query }) {
+  const r = await db.query(
+    `SELECT d.manager_id FROM users u JOIN departments d ON d.id = u.department_id
+     WHERE u.id = $1 AND d.vac_parent_head_approves AND d.vac_parent_approves AND d.parent_id IS NOT NULL
+       AND d.manager_id IS NOT NULL AND d.manager_id <> u.id`,
+    [userId]
+  )
+  return r.rows[0]?.manager_id ?? null
+}
+
 export async function reassignPendingApprovers(orgId, db) {
   const pending = await db.query(
     `SELECT vr.id, vr.user_id, vr.approver_id, vr.start_date, vr.end_date, vr.duration, u.last_name, u.first_name

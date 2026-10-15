@@ -4,7 +4,7 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
 import { getTravelState, assertTravelAllowed } from '../lib/travel.js'
-import { resolveApproverId } from '../lib/vacationApprover.js'
+import { resolveApproverId, coApproverId } from '../lib/vacationApprover.js'
 import { vacationTypeRule, requestTypeCode, VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
 import { VACATION_REPORTS, buildReport, sendReportXlsx } from '../lib/vacationReports.js'
 import { getFromS3, uploadToS3, getPresignedUrl } from '../config/s3.js'
@@ -209,7 +209,8 @@ async function canReviewVacation(vacationRequest, req) {
   if (!vacationRequest.approver_id) return false
   if (vacationRequest.approver_id === req.user.id) return true
   const approverIds = await getApproverIds(vacationRequest.approver_id, req)
-  return approverIds.includes(req.user.id)
+  if (approverIds.includes(req.user.id)) return true
+  return vacationRequest.user_id != null && await coApproverId(vacationRequest.user_id) === req.user.id
 }
 
 const childSeesParentVacations = (n) => `EXISTS (
@@ -252,6 +253,8 @@ async function notifyVacationCreated(request, employeeId, req, db = { query }) {
   }
   if (request.approver_id) {
     const approverIds = await getApproverIds(request.approver_id, req)
+    const coApprover = await coApproverId(employeeId, db)
+    if (coApprover && !approverIds.includes(coApprover)) approverIds.push(coApprover)
     for (const mid of approverIds) {
       await notify({ userId: mid, type: 'vacation_created', data: payload, db })
     }
