@@ -6,6 +6,8 @@ import { excludeTest } from '../utils/testScope.js'
 import { vacationStatusBatch } from '../lib/vacationDays.js'
 import { canEditDepartmentHierarchy, hasFullDepartmentAccess, managedDepartmentIds } from '../lib/departmentScope.js'
 import { requirePermission } from '../lib/permissions.js'
+import { reassignPendingApprovers } from '../lib/vacationApprover.js'
+import { notify } from '../config/notifications.js'
 
 const router = express.Router()
 
@@ -704,6 +706,20 @@ router.put('/', authenticateToken, requirePermission('hierarchy:manage'), async 
         'UPDATE users SET manager_id = $1, vac_parent_sees_child = $2, vac_child_sees_parent = $3, vac_parent_approves = $4, emp_parent_sees_child = $5, emp_child_sees_parent = $6 WHERE id = $7',
         [managerId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, empParentSeesChild, empChildSeesParent, userId]
       )
+    }
+
+    const ruDate = (d) => String(d).slice(0, 10).split('-').reverse().join('.')
+    for (const r of await reassignPendingApprovers(orgId, client)) {
+      if (!r.approver_id) continue
+      await notify({
+        userId: r.approver_id,
+        type: 'vacation_created',
+        data: {
+          requestId: r.id, employeeId: r.user_id, employeeName: `${r.last_name} ${r.first_name}`,
+          startDate: ruDate(r.start_date), endDate: ruDate(r.end_date), days: r.duration, link: '/vacation',
+        },
+        db: client,
+      })
     }
 
     await client.query('COMMIT')

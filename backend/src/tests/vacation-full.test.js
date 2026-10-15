@@ -2063,6 +2063,22 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(approved.status, 200)
     })
 
+    it('parentHeadApproves: заявка на согласовании переходит к руководителю родительского отдела, даже с ролью employee', async () => {
+      await query("UPDATE users SET role = 'employee' WHERE id = $1", [parentMgr.id])
+      await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [childMgr.id, childDeptId])
+      await saveHierarchy([linkEdge({ parentApproves: true })], 0)
+      const created = await postOwn(emp)
+      assert.strictEqual(await approverOf(created.data.id), childMgr.id)
+      const saved = await saveHierarchy([linkEdge({ parentApproves: true, parentHeadApproves: true })], 1)
+      assert.strictEqual(saved.status, 200, JSON.stringify(saved.data))
+      assert.strictEqual(await approverOf(created.data.id), parentMgr.id)
+      const list = await call('GET', '/vacation/requests', await tokenFor(parentMgr), undefined, orgId)
+      assert.strictEqual(list.status, 200)
+      assert.ok(list.data.some((r) => r.id === created.data.id), 'согласующий не видит заявку')
+      const approved = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(parentMgr), {}, orgId)
+      assert.strictEqual(approved.status, 200, JSON.stringify(approved.data))
+    })
+
     it('parentHeadApproves игнорируется при parentApproves=false', async () => {
       await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [childMgr.id, childDeptId])
       await saveHierarchy([linkEdge({ parentApproves: false, parentHeadApproves: true })], 0)

@@ -4,6 +4,7 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
 import { getTravelState, assertTravelAllowed } from '../lib/travel.js'
+import { resolveApproverId } from '../lib/vacationApprover.js'
 import { vacationTypeRule, requestTypeCode, VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
 import { VACATION_REPORTS, buildReport, sendReportXlsx } from '../lib/vacationReports.js'
 import { getFromS3, uploadToS3, getPresignedUrl } from '../config/s3.js'
@@ -185,50 +186,6 @@ async function getEmpName(userId) {
   const r = await query('SELECT first_name, last_name FROM users WHERE id = $1', [userId])
   const row = r.rows[0]
   return row ? `${row.last_name} ${row.first_name}` : ''
-}
-
-async function resolveApproverId(userId, orgId, req) {
-  const userResult = await query('SELECT department_id FROM users WHERE id = $1', [userId])
-  const ownDeptId = userResult.rows[0]?.department_id || null
-  const visitedDepts = new Set()
-
-  if (ownDeptId && !visitedDepts.has(ownDeptId)) {
-    visitedDepts.add(ownDeptId)
-    const dRes = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves, vac_parent_head_approves FROM departments WHERE id = $1', [ownDeptId])
-    const d = dRes.rows[0]
-    if (d) {
-      const parentsAllowed = d.vac_parent_approves !== false
-      const skipOwnManager = parentsAllowed && d.vac_parent_head_approves === true && d.parent_id !== null
-      if (!skipOwnManager && d.manager_id !== null && d.manager_id !== userId) return d.manager_id
-      if (parentsAllowed && d.parent_user_id !== null && d.parent_user_id !== userId) return d.parent_user_id
-      if (parentsAllowed) {
-        let pId = d.parent_id
-        while (pId && !visitedDepts.has(pId)) {
-          visitedDepts.add(pId)
-          const pRes = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves, vac_parent_head_approves FROM departments WHERE id = $1', [pId])
-          const p = pRes.rows[0]
-          if (!p) break
-          const pSkipManager = p.vac_parent_approves !== false && p.vac_parent_head_approves === true && p.parent_id !== null
-          if (!pSkipManager && p.manager_id !== null && p.manager_id !== userId) return p.manager_id
-          if (p.vac_parent_approves !== false && p.parent_user_id !== null && p.parent_user_id !== userId) return p.parent_user_id
-          pId = p.parent_id
-        }
-      }
-    }
-  }
-
-  const visitedOrgs = new Set()
-  let currentOrgId = orgId
-  while (currentOrgId && !visitedOrgs.has(currentOrgId)) {
-    visitedOrgs.add(currentOrgId)
-    const orgResult = await query('SELECT head_id, parent_id FROM organizations WHERE id = $1', [currentOrgId])
-    const org = orgResult.rows[0]
-    if (!org) break
-    if (org.head_id !== null && org.head_id !== userId) return org.head_id
-    currentOrgId = org.parent_id
-  }
-
-  return null
 }
 
 async function getApproverIds(approverId, req) {
@@ -660,7 +617,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
     } else {
       const substExists = ` OR ${substExistsClause(params.length + 1)}`
       if (user.role === 'employee') {
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR ${sameDepartmentPending(params.length + 1)} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)}${substExists})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR ${sameDepartmentPending(params.length + 1)} OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)}${substExists})`
         params.push(user.id)
       } else if (user.role === 'manager') {
         whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR ${sameDepartmentPending(params.length + 1)} OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userParentSeesChildVacations(params.length + 1)}${substExists})`
@@ -1681,7 +1638,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const travelChildrenJson = JSON.stringify(travelChildrenParsed)
     const travelChildrenCount = travelChildrenParsed.length
 
-    const approverId = await resolveApproverId(userId, currentOrgId(req), req)
+    const approverId = await resolveApproverId(userId, currentOrgId(req))
 
     const result = await client.query(
       `INSERT INTO vacation_requests
@@ -2430,7 +2387,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     const travelChildrenJson = JSON.stringify(travelChildrenParsed)
     const travelChildrenCount = travelChildrenParsed.length
 
-    const approverId = await resolveApproverId(original.user_id, currentOrgId(req), req)
+    const approverId = await resolveApproverId(original.user_id, currentOrgId(req))
 
     const insertResult = await client.query(
       `INSERT INTO vacation_requests

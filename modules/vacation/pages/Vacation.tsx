@@ -795,9 +795,11 @@ export function Vacation() {
     return mySubstitutions.some((s) => s.status === 'approved' && s.start_date <= today && s.end_date >= today)
   }, [mySubstitutions])
 
-  const canApprove = isManager || hasActiveSubstitution
+  const isAssignedApprover = departmentRequests.some((r) => r.status === VacationRequestStatus.ON_APPROVAL && String(r.approverId) === user?.id)
+  const canApprove = isManager || hasActiveSubstitution || isAssignedApprover
 
-  const pendingApprovals = departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL)
+  const pendingApprovals = departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL &&
+    (isManager || hasActiveSubstitution || String(r.approverId) === user?.id))
 
   const filteredPendingApprovals = useMemo(() => {
     if (!isAdminOrSuperAdmin) return pendingApprovals
