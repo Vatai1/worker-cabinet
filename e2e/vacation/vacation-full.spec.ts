@@ -2,7 +2,7 @@ import { test, expect, request as pwRequest, type APIRequestContext, type Page }
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { loginAs } from '../helpers'
-import { workdayOffset } from './fixtures'
+import { workdayOffset, TEST_YEAR } from './fixtures'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -27,12 +27,14 @@ const monthName = (isoStr: string) => RU_MONTHS[parseInt(isoStr.slice(5, 7), 10)
 const dayOfMonth = (isoStr: string) => parseInt(isoStr.slice(8, 10), 10)
 const rangeText = (s: string, e: string, days: number) => `${ruDate(s)} - ${ruDate(e)} (${days} дней)`
 
-const A_S = iso(30), A_E = iso(34)
-const B_S = iso(45), B_E = iso(49)
-const C_S = iso(75), C_E = iso(79)
-const OWN_DAY = iso(31)
-const D_S = iso(60), D_E = iso(64)
-const E_S = iso(70), E_E = iso(74)
+const span = (from: number) => { const s = workdayOffset(from); return [iso(s), iso(s + 4)] }
+const A_OFFSET = workdayOffset(30)
+const A_S = iso(A_OFFSET), A_E = iso(A_OFFSET + 4)
+const [B_S, B_E] = span(45)
+const [C_S, C_E] = span(75)
+const OWN_DAY = iso(A_OFFSET + 1)
+const [D_S, D_E] = span(60)
+const [E_S, E_E] = span(70)
 const F_OFFSET = workdayOffset(80)
 const F_S = iso(F_OFFSET), F_E = iso(F_OFFSET + 4)
 
@@ -187,7 +189,7 @@ test.beforeAll(async () => {
   })
   await api.patch(`${API}/vacation/balances/3`, {
     headers: { ...ORG, Authorization: `Bearer ${admToken}` },
-    data: { year: new Date().getFullYear() + 1, total_days: 28 },
+    data: { year: new Date().getFullYear() + 1, total_days: 80 },
   })
 })
 
@@ -216,7 +218,7 @@ async function openVacation(page: Page, role: 'employee' | 'manager' | 'hr' | 'a
     { name: 'active_org_id', value: '1', domain: 'localhost', path: '/', sameSite: 'Lax' },
     { name: 'vacation_intro_seen', value: '1', domain: 'localhost', path: '/', sameSite: 'Lax' },
   ])
-  await page.goto('/vacation')
+  await page.goto(`/vacation?year=${TEST_YEAR}`)
   await expect(page.getByRole('heading', { name: 'Отпуска', exact: true })).toBeVisible()
 }
 
@@ -522,10 +524,6 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
   test.describe('US-15. Праздники 2027: заявка через UI со сдвигом длительности', () => {
     test('диапазон 05–20 января 2027 создаёт заявку на 12 дней', async ({ page }) => {
       await openVacation(page, 'employee')
-      await page.locator('button:has(svg.lucide-chevron-right), button[disabled]').first().waitFor({ state: 'detached' }).catch(() => {})
-      const nextYear = page.getByRole('button').filter({ has: page.locator('svg.lucide-chevron-right') }).first()
-      await nextYear.click()
-      await expect(page.getByText(`${new Date().getFullYear() + 1} год`, { exact: true })).toBeVisible({ timeout: 5000 })
       await selectRange(page, '2027-01-05', '2027-01-20')
       await submitRequest(page, 'e2e-vf праздники 2027')
       await expect(myCard(page, rangeText('2027-01-05', '2027-01-20', 12))).toBeVisible({ timeout: 15000 })

@@ -16,15 +16,32 @@ export const monthName = (isoStr: string) => RU_MONTHS[parseInt(isoStr.slice(5, 
 export const dayOfMonth = (isoStr: string) => parseInt(isoStr.slice(8, 10), 10)
 export const rangeText = (s: string, e: string, days: number) => `${ruDate(s)} - ${ruDate(e)} (${days} дней)`
 
+const dayAt = (offset: number) => {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  d.setDate(d.getDate() + offset)
+  return d
+}
 const nearNewYear = (d: Date) => (d.getMonth() === 11 && d.getDate() >= 18) || (d.getMonth() === 0 && d.getDate() <= 8)
+const HOLIDAYS = new Set(['02-23', '03-08', '05-01', '05-09', '06-12', '11-04'])
+const blocked = (d: Date) => nearNewYear(d) || HOLIDAYS.has(`${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
 
-export function workdayOffset(minOffset: number) {
-  for (let offset = 0, n = 0; ; offset += 1) {
-    const d = new Date()
-    d.setDate(d.getDate() + offset)
-    if (nearNewYear(d)) continue
-    if (n >= minOffset && d.getDay() !== 0 && d.getDay() !== 6) return offset
-    n += 1
+const TEST_SPAN_DAYS = 150
+const ORIGIN = (() => {
+  for (let o = 0; ; o += 1) {
+    const start = dayAt(o)
+    const end = dayAt(o + TEST_SPAN_DAYS)
+    if (!nearNewYear(start) && start.getFullYear() === end.getFullYear() && !nearNewYear(end)) return o
+  }
+})()
+export const TEST_YEAR = dayAt(ORIGIN).getFullYear()
+
+export function workdayOffset(minOffset: number, len = 5) {
+  for (let offset = ORIGIN + minOffset; ; offset += 1) {
+    const d = dayAt(offset)
+    if (d.getDay() === 0 || d.getDay() === 6) continue
+    if (Array.from({ length: len }, (_, i) => dayAt(offset + i)).some(blocked)) continue
+    return offset
   }
 }
 
@@ -227,7 +244,7 @@ export class World {
 }
 
 export async function openVacationPage(page: Page, path = '/vacation') {
-  await page.goto(path)
+  await page.goto(path.includes('year=') ? path : `${path}${path.includes('?') ? '&' : '?'}year=${TEST_YEAR}`)
   await expect(page.getByRole('heading', { name: 'Отпуска', exact: true })).toBeVisible({ timeout: 15000 })
 }
 

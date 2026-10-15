@@ -12,7 +12,7 @@ const RESTRICTION_EDITED = 'e2e-vm дежурство (изменено)'
 const USED_HINT = 'Дни согласованных отпусков за год, включая ещё не наступившие'
 
 const range = (from: number, len = 3) => {
-  const s = workdayOffset(from)
+  const s = workdayOffset(from, len)
   return { s: iso(s), e: iso(s + len - 1) }
 }
 const T_REJECT = range(30)

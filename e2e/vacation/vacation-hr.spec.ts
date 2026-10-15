@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { World, iso, workdayOffset, monthCard, monthName, dayOfMonth, openVacationPage, THIS_YEAR } from './fixtures'
+import { World, iso, workdayOffset, monthCard, monthName, dayOfMonth, openVacationPage, THIS_YEAR, TEST_YEAR } from './fixtures'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -9,7 +9,7 @@ const POSITION = 'E2E Специалист ВК'
 const RULE = 'e2e-vhr правило HR'
 
 const T_CAL = { s: iso(workdayOffset(40)), e: iso(workdayOffset(40) + 4) }
-const T_BLOCK = iso(workdayOffset(60))
+const T_BLOCK = iso(workdayOffset(60, 1))
 const CUSTOM_DAY = '2031-08-13'
 
 test.beforeAll(async () => {
@@ -90,6 +90,9 @@ test.describe('Отпуск: HR', () => {
     const req = await world.createRequest('cal', T_CAL.s, T_CAL.e)
     await world.approve(req.id)
     await openHrVacation(page)
+    for (let y = THIS_YEAR; y < TEST_YEAR; y += 1) {
+      await page.locator('span', { hasText: new RegExp(`^${y}$`) }).locator('xpath=following-sibling::button[1]').click()
+    }
     await page.getByPlaceholder('Поиск по имени, должности, отделу…').fill('Календарёв')
     const row = page.locator('tr', { hasText: 'Календарёв' }).first()
     await expect(row).toBeVisible({ timeout: 15000 })
@@ -160,8 +163,8 @@ test.describe('Отпуск: HR', () => {
 
     await card.locator(`[data-day="${THIS_YEAR}-01-15"]`).click()
     await card.locator('input[type="date"]').fill(CUSTOM_DAY)
-    await card.getByRole('button', { name: 'Праздник (не входит в отпуск)' }).click()
-    await card.getByRole('button', { name: 'Выходной (входит в отпуск)' }).click()
+    await card.getByTitle('Праздник (не входит в отпуск)').click()
+    await card.getByRole('button', { name: 'Выходной (входит в отпуск)', exact: true }).click()
     await card.getByPlaceholder('Например, День города').fill('e2e-vhr день')
     await card.getByRole('button', { name: 'Сохранить' }).click()
 

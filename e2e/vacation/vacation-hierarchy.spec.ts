@@ -17,10 +17,10 @@ const BLOCKED_TEXT = 'Подача заявок на отпуск для ваш�
 const world = new World('vh', ORG_SLUG)
 let canvasSnapshot: Awaited<ReturnType<World['hierarchySnapshot']>> | null = null
 
-const R1 = { s: iso(workdayOffset(40)), e: iso(workdayOffset(40) + 2) }
-const R2 = { s: iso(workdayOffset(55)), e: iso(workdayOffset(55) + 2) }
-const R3 = { s: iso(workdayOffset(70)), e: iso(workdayOffset(70) + 2) }
-const R4_START = workdayOffset(90)
+const R1 = { s: iso(workdayOffset(40, 3)), e: iso(workdayOffset(40, 3) + 2) }
+const R2 = { s: iso(workdayOffset(55, 3)), e: iso(workdayOffset(55, 3) + 2) }
+const R3 = { s: iso(workdayOffset(70, 3)), e: iso(workdayOffset(70, 3) + 2) }
+const R4_START = workdayOffset(90, 3)
 const R4_CROSSES_YEAR = iso(R4_START).slice(0, 4) !== iso(R4_START + 2).slice(0, 4)
 const R4 = R4_CROSSES_YEAR ? { s: iso(R4_START - 5), e: iso(R4_START - 3) } : { s: iso(R4_START), e: iso(R4_START + 2) }
 

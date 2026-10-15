@@ -9,7 +9,7 @@ const OTHER_DEPT = 'E2E ВС Соседи'
 const COMMENT = 'e2e-ve: нужен отпуск для поездки'
 
 const range = (from: number, len = 3) => {
-  const s = workdayOffset(from)
+  const s = workdayOffset(from, len)
   return { s: iso(s), e: iso(s + len - 1) }
 }
 const T_TRAVEL = range(25)
@@ -215,7 +215,7 @@ test.describe('Отпуск: работник', () => {
 
   test('год в адресе: переключение года меняет URL, ссылка с годом открывает нужный год', async ({ page }) => {
     await world.loginPage(page, 'emp')
-    await openVacationPage(page)
+    await openVacationPage(page, `/vacation?year=${THIS_YEAR}`)
     await page.getByRole('button').filter({ has: page.locator('svg.lucide-chevron-right') }).first().click()
     await expect(page.getByText(`${THIS_YEAR + 1} год`, { exact: true })).toBeVisible({ timeout: 5000 })
     await expect(page).toHaveURL(new RegExp(`year=${THIS_YEAR + 1}`))
