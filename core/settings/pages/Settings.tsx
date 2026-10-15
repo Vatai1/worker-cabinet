@@ -8,6 +8,7 @@ import { useUIStore } from '@/shared/store/uiStore'
 import { fetchPushConfig, isSubscribed, subscribePush, unsubscribePush } from '@/shared/lib/push'
 import { readLocalPref, writeLocalPref } from '@/shared/lib/localPrefs'
 import { NameGenitiveCard } from '@/shared/components/NameGenitive'
+import { AvatarSettingsCard } from '@/core/settings/components/AvatarSettingsCard'
 import { apiGet, apiPut } from '@/shared/lib/apiClient'
 import { getErrorMessage } from '@/shared/lib/utils'
 
@@ -97,6 +98,7 @@ export function Settings() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
+        <AvatarSettingsCard />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
