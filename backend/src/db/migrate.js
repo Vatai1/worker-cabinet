@@ -2013,6 +2013,7 @@ async function migrateApprovalHierarchy(db) {
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS hide_department_in_documents BOOLEAN NOT NULL DEFAULT false')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS vac_parent_approves BOOLEAN NOT NULL DEFAULT true')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vac_parent_approves BOOLEAN NOT NULL DEFAULT true')
+    await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS vac_parent_head_approves BOOLEAN NOT NULL DEFAULT false')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS emp_parent_sees_child BOOLEAN NOT NULL DEFAULT false')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS emp_child_sees_parent BOOLEAN NOT NULL DEFAULT false')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS emp_parent_sees_child BOOLEAN NOT NULL DEFAULT false')

@@ -1036,6 +1036,8 @@ function EdgeSettingsModal({
   const [cascadeChildSeesParent, setCascadeChildSeesParent] = useState(draft.vacationVisibility?.cascadeChildSeesParent ?? false)
   const [cascadeParentSeesChild, setCascadeParentSeesChild] = useState(draft.vacationVisibility?.cascadeParentSeesChild ?? false)
   const [cascadeParentApproves, setCascadeParentApproves] = useState(draft.vacationVisibility?.cascadeParentApproves ?? false)
+  const [parentHeadApproves, setParentHeadApproves] = useState(draft.vacationVisibility?.parentHeadApproves ?? false)
+  const [cascadeParentHeadApproves, setCascadeParentHeadApproves] = useState(draft.vacationVisibility?.cascadeParentHeadApproves ?? false)
   const [empParentSeesChild, setEmpParentSeesChild] = useState(draft.employeeVisibility?.parentSeesChild ?? false)
   const [empChildSeesParent, setEmpChildSeesParent] = useState(draft.employeeVisibility?.childSeesParent ?? false)
   const [empCascadeParentSeesChild, setEmpCascadeParentSeesChild] = useState(draft.employeeVisibility?.cascadeParentSeesChild ?? false)
@@ -1046,6 +1048,7 @@ function EdgeSettingsModal({
       draft.sourceType === 'position' || draft.targetType === 'position')
   const effectiveRelation: EdgeRelation = parentAvailable ? relation : 'plain'
   const isEmpToEmp = draft.sourceType === 'employee' && draft.targetType === 'employee'
+  const isDeptToDept = draft.sourceType === 'department' && draft.targetType === 'department'
   const vacationApplicable = effectiveRelation === 'parent' && draft.sourceType !== 'text' && draft.targetType !== 'text'
   const buildVacationVisibility = (): VacationVisibility | undefined =>
     effectiveRelation === 'parent'
@@ -1053,6 +1056,8 @@ function EdgeSettingsModal({
           childSeesParent, parentSeesChild, parentApproves: isEmpToEmp ? true : parentApproves,
           cascadeChildSeesParent, cascadeParentSeesChild,
           cascadeParentApproves: isEmpToEmp ? false : cascadeParentApproves,
+          parentHeadApproves: isDeptToDept && parentHeadApproves,
+          cascadeParentHeadApproves: isDeptToDept && cascadeParentHeadApproves,
         }
       : undefined
 
@@ -1225,6 +1230,14 @@ function EdgeSettingsModal({
                   cascade={cascadeParentApproves} onCascadeChange={setCascadeParentApproves}
                 />
               )}
+              {isDeptToDept && parentApproves && (
+                <VacationVisibilityRow
+                  label="Руководитель вышестоящего отдела согласует отпуска всех работников отдела"
+                  hint={parentHeadApproves ? 'Руководитель этого отдела больше не согласует отпуска своих работников' : undefined}
+                  checked={parentHeadApproves} onCheckedChange={setParentHeadApproves}
+                  cascade={cascadeParentHeadApproves} onCascadeChange={setCascadeParentHeadApproves}
+                />
+              )}
             </div>
           )}
           {vacationApplicable && (
@@ -1274,9 +1287,11 @@ type VacationVisibility = {
   childSeesParent: boolean
   parentSeesChild: boolean
   parentApproves?: boolean
+  parentHeadApproves?: boolean
   cascadeChildSeesParent?: boolean
   cascadeParentSeesChild?: boolean
   cascadeParentApproves?: boolean
+  cascadeParentHeadApproves?: boolean
 }
 
 function validateGraphEdges(nodes: Node[], edges: Edge[]): string | null {
@@ -1387,7 +1402,7 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
   edge: Edge
   sourceType?: string
   targetType?: string
-  onConfirm: (childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean, cascade: { childSeesParent: boolean; parentSeesChild: boolean; parentApproves: boolean } | undefined, employeeVisibility: EmployeeVisibility) => void
+  onConfirm: (vacationVisibility: VacationVisibility, employeeVisibility: EmployeeVisibility) => void
   onClose: () => void
 }) {
   const vis = (edge.data as { vacationVisibility?: Partial<VacationVisibility> } | undefined)?.vacationVisibility
@@ -1397,12 +1412,15 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
   const [empCascadeParentSeesChild, setEmpCascadeParentSeesChild] = useState(empVis?.cascadeParentSeesChild ?? false)
   const [empCascadeChildSeesParent, setEmpCascadeChildSeesParent] = useState(empVis?.cascadeChildSeesParent ?? false)
   const isEmpToEmp = sourceType === 'employee' && targetType === 'employee'
+  const isDeptToDept = sourceType === 'department' && targetType === 'department'
   const [childSeesParent, setChildSeesParent] = useState(vis?.childSeesParent ?? true)
   const [parentSeesChild, setParentSeesChild] = useState(vis?.parentSeesChild ?? true)
   const [parentApproves, setParentApproves] = useState(vis?.parentApproves ?? true)
   const [cascadeChildSeesParent, setCascadeChildSeesParent] = useState(vis?.cascadeChildSeesParent ?? false)
   const [cascadeParentSeesChild, setCascadeParentSeesChild] = useState(vis?.cascadeParentSeesChild ?? false)
   const [cascadeParentApproves, setCascadeParentApproves] = useState(vis?.cascadeParentApproves ?? false)
+  const [parentHeadApproves, setParentHeadApproves] = useState(vis?.parentHeadApproves ?? false)
+  const [cascadeParentHeadApproves, setCascadeParentHeadApproves] = useState(vis?.cascadeParentHeadApproves ?? false)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1443,16 +1461,26 @@ function ParentEdgeSettingsModal({ edge, sourceType, targetType, onConfirm, onCl
               cascade={cascadeParentApproves} onCascadeChange={setCascadeParentApproves}
             />
           )}
+          {isDeptToDept && parentApproves && (
+            <VacationVisibilityRow
+              label="Руководитель вышестоящего отдела согласует отпуска всех работников отдела"
+              hint={parentHeadApproves ? 'Руководитель этого отдела больше не согласует отпуска своих работников' : undefined}
+              checked={parentHeadApproves} onCheckedChange={setParentHeadApproves}
+              cascade={cascadeParentHeadApproves} onCascadeChange={setCascadeParentHeadApproves}
+            />
+          )}
           <p className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Видимость в разделе «Работники»</p>
           <VacationVisibilityRow label="Родитель видит работников подчинённых" checked={empParentSeesChild} onCheckedChange={setEmpParentSeesChild} cascade={empCascadeParentSeesChild} onCascadeChange={setEmpCascadeParentSeesChild} />
           <VacationVisibilityRow label="Работники родителя видны подчинённым" checked={empChildSeesParent} onCheckedChange={setEmpChildSeesParent} cascade={empCascadeChildSeesParent} onCascadeChange={setEmpCascadeChildSeesParent} />
         </div>
         <div className="px-6 py-3 border-t border-border flex gap-2 shrink-0">
           <Button variant="outline" className="flex-1" onClick={onClose}>Отмена</Button>
-          <Button className="flex-1" onClick={() => onConfirm(childSeesParent, parentSeesChild, isEmpToEmp ? true : parentApproves, {
-            childSeesParent: cascadeChildSeesParent,
-            parentSeesChild: cascadeParentSeesChild,
-            parentApproves: isEmpToEmp ? false : cascadeParentApproves,
+          <Button className="flex-1" onClick={() => onConfirm({
+            childSeesParent, parentSeesChild, parentApproves: isEmpToEmp ? true : parentApproves,
+            cascadeChildSeesParent, cascadeParentSeesChild,
+            cascadeParentApproves: isEmpToEmp ? false : cascadeParentApproves,
+            parentHeadApproves: isDeptToDept && parentHeadApproves,
+            cascadeParentHeadApproves: isDeptToDept && cascadeParentHeadApproves,
           }, { parentSeesChild: empParentSeesChild, childSeesParent: empChildSeesParent, cascadeParentSeesChild: empCascadeParentSeesChild, cascadeChildSeesParent: empCascadeChildSeesParent })}>
             Сохранить
           </Button>
@@ -2198,20 +2226,11 @@ export function HRHierarchy({ fullscreen = false, onClose, orgId, onOpenOrg, onV
     setEdgeContextMenu(null)
   }, [setEdges, saveSnapshot])
 
-  const saveParentEdgeSettings = useCallback((
-    childSeesParent: boolean, parentSeesChild: boolean, parentApproves: boolean,
-    cascade: { childSeesParent: boolean; parentSeesChild: boolean; parentApproves: boolean } | undefined,
-    employeeVisibility: EmployeeVisibility,
-  ) => {
+  const saveParentEdgeSettings = useCallback((vacationVisibility: VacationVisibility, employeeVisibility: EmployeeVisibility) => {
     if (!parentEdgeId) return
     saveSnapshot()
     setEdges(eds => eds.map(e => e.id === parentEdgeId
-      ? { ...e, data: { ...(e.data as Record<string, unknown>), vacationVisibility: {
-          childSeesParent, parentSeesChild, parentApproves,
-          cascadeChildSeesParent: cascade?.childSeesParent ?? false,
-          cascadeParentSeesChild: cascade?.parentSeesChild ?? false,
-          cascadeParentApproves: cascade?.parentApproves ?? false,
-        }, employeeVisibility } }
+      ? { ...e, data: { ...(e.data as Record<string, unknown>), vacationVisibility, employeeVisibility } }
       : e))
     setParentEdgeId(null)
   }, [parentEdgeId, saveSnapshot, setEdges])

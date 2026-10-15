@@ -194,20 +194,22 @@ async function resolveApproverId(userId, orgId, req) {
 
   if (ownDeptId && !visitedDepts.has(ownDeptId)) {
     visitedDepts.add(ownDeptId)
-    const dRes = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves FROM departments WHERE id = $1', [ownDeptId])
+    const dRes = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves, vac_parent_head_approves FROM departments WHERE id = $1', [ownDeptId])
     const d = dRes.rows[0]
     if (d) {
-      if (d.manager_id !== null && d.manager_id !== userId) return d.manager_id
       const parentsAllowed = d.vac_parent_approves !== false
+      const skipOwnManager = parentsAllowed && d.vac_parent_head_approves === true && d.parent_id !== null
+      if (!skipOwnManager && d.manager_id !== null && d.manager_id !== userId) return d.manager_id
       if (parentsAllowed && d.parent_user_id !== null && d.parent_user_id !== userId) return d.parent_user_id
       if (parentsAllowed) {
         let pId = d.parent_id
         while (pId && !visitedDepts.has(pId)) {
           visitedDepts.add(pId)
-          const pRes = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves FROM departments WHERE id = $1', [pId])
+          const pRes = await query('SELECT manager_id, parent_id, parent_user_id, vac_parent_approves, vac_parent_head_approves FROM departments WHERE id = $1', [pId])
           const p = pRes.rows[0]
           if (!p) break
-          if (p.manager_id !== null && p.manager_id !== userId) return p.manager_id
+          const pSkipManager = p.vac_parent_approves !== false && p.vac_parent_head_approves === true && p.parent_id !== null
+          if (!pSkipManager && p.manager_id !== null && p.manager_id !== userId) return p.manager_id
           if (p.vac_parent_approves !== false && p.parent_user_id !== null && p.parent_user_id !== userId) return p.parent_user_id
           pId = p.parent_id
         }

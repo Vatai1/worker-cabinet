@@ -2048,6 +2048,45 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(await approverOf(second.data.id), headUser.id)
     })
 
+    it('parentHeadApproves: руководитель родительского отдела согласует вместо руководителя дочернего', async () => {
+      await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [childMgr.id, childDeptId])
+      await saveHierarchy([linkEdge({ parentApproves: true })], 0)
+      const own = await postOwn(emp, 10)
+      assert.strictEqual(await approverOf(own.data.id), childMgr.id)
+      await saveHierarchy([linkEdge({ parentApproves: true, parentHeadApproves: true })], 1)
+      const head = await postOwn(emp, 30)
+      assert.strictEqual(head.status, 201, JSON.stringify(head.data))
+      assert.strictEqual(await approverOf(head.data.id), parentMgr.id)
+      const denied = await call('POST', `/vacation/requests/${head.data.id}/approve`, await tokenFor(childMgr), {}, orgId)
+      assert.strictEqual(denied.status, 403)
+      const approved = await call('POST', `/vacation/requests/${head.data.id}/approve`, await tokenFor(parentMgr), {}, orgId)
+      assert.strictEqual(approved.status, 200)
+    })
+
+    it('parentHeadApproves игнорируется при parentApproves=false', async () => {
+      await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [childMgr.id, childDeptId])
+      await saveHierarchy([linkEdge({ parentApproves: false, parentHeadApproves: true })], 0)
+      const row = (await query('SELECT vac_parent_head_approves FROM departments WHERE id = $1', [childDeptId])).rows[0]
+      assert.strictEqual(row.vac_parent_head_approves, false)
+      const created = await postOwn(emp)
+      assert.strictEqual(await approverOf(created.data.id), childMgr.id)
+    })
+
+    it('parentHeadApproves с каскадом: работник внучатого отдела уходит к руководителю верхнего', async () => {
+      const grandMgr = await mkUser({ email: `us17.gmgr${SUFFIX}`, role: 'manager', last: 'Внуков', orgIds: [orgId] })
+      await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [childMgr.id, childDeptId])
+      ownDeptId = await mkDept('US17 Свой', orgId, grandMgr.id)
+      await query('UPDATE users SET department_id = $1 WHERE id = $2', [ownDeptId, emp.id])
+      const grandEdge = { id: 'e-child-own', source: `department-${childDeptId}`, target: `department-${ownDeptId}`, type: 'editable', data: { relation: 'parent' } }
+      const saved = await saveHierarchy([linkEdge({ parentApproves: true, parentHeadApproves: true, cascadeParentHeadApproves: true }), grandEdge], 0)
+      assert.strictEqual(saved.status, 200, JSON.stringify(saved.data))
+      const row = (await query('SELECT vac_parent_head_approves FROM departments WHERE id = $1', [ownDeptId])).rows[0]
+      assert.strictEqual(row.vac_parent_head_approves, true)
+      const created = await postOwn(emp)
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      assert.strictEqual(await approverOf(created.data.id), parentMgr.id)
+    })
+
     it('удаление связи: фолбэк-роутинг на главу организации', async () => {
       await saveHierarchy([linkEdge(null)], 0)
       await saveHierarchy([], 1)

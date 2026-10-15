@@ -426,6 +426,7 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     ['parentSeesChild', 'cascadeParentSeesChild'],
     ['childSeesParent', 'cascadeChildSeesParent'],
     ['parentApproves', 'cascadeParentApproves'],
+    ['parentHeadApproves', 'cascadeParentHeadApproves', false],
   ]
   const EMP_VIS_FIELDS = [
     ['parentSeesChild', 'cascadeParentSeesChild'],
@@ -438,9 +439,9 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
   const cascadeStep = (ownVis, inherited, fields, fallback) => {
     const effective = {}
     const toChildren = {}
-    for (const [field, cascadeField] of fields) {
+    for (const [field, cascadeField, fieldFallback = fallback] of fields) {
       const ownValue = ownVis && ownVis[field] !== undefined ? ownVis[field] : undefined
-      effective[field] = ownValue !== undefined ? ownValue : (inherited[field] !== undefined ? inherited[field] : fallback)
+      effective[field] = ownValue !== undefined ? ownValue : (inherited[field] !== undefined ? inherited[field] : fieldFallback)
       toChildren[field] = (ownVis && ownVis[cascadeField]) ? effective[field] : inherited[field]
     }
     return { effective, toChildren }
@@ -478,13 +479,15 @@ async function buildDepartmentParentChanges(nodes, edges, req) {
     const deptId = Number(n.data.id)
     const parents = parentsByDept.get(deptId)
     const vis = effectiveVisByDept.get(deptId) ?? visByDept.get(deptId)
+    const parentId = parents && parents.size > 0 ? [...parents][0] : null
     deptChanges.push({
       deptId,
-      parentId: parents && parents.size > 0 ? [...parents][0] : null,
+      parentId,
       parentUserId: parentUserByDept.get(deptId) ?? null,
       vacParentSeesChild: vis?.parentSeesChild !== false,
       vacChildSeesParent: vis?.childSeesParent !== false,
       vacParentApproves: vis?.parentApproves !== false,
+      vacParentHeadApproves: parentId != null && vis?.parentApproves !== false && vis?.parentHeadApproves === true,
       empParentSeesChild: (effectiveEmpVisByDept.get(deptId) ?? empVisByDept.get(deptId))?.parentSeesChild === true,
       empChildSeesParent: (effectiveEmpVisByDept.get(deptId) ?? empVisByDept.get(deptId))?.childSeesParent === true,
     })
@@ -687,10 +690,10 @@ router.put('/', authenticateToken, requirePermission('hierarchy:manage'), async 
       [data, req.user.id, orgId, orgId]
     )
 
-    for (const { deptId, parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, empParentSeesChild, empChildSeesParent } of parentChanges.deptChanges) {
+    for (const { deptId, parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, vacParentHeadApproves, empParentSeesChild, empChildSeesParent } of parentChanges.deptChanges) {
       const { text, values } = orgScopedQuery(
-        'UPDATE departments SET parent_id = $1, parent_user_id = $2, vac_parent_sees_child = $3, vac_child_sees_parent = $4, vac_parent_approves = $5, emp_parent_sees_child = $6, emp_child_sees_parent = $7 WHERE id = $8',
-        [parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, empParentSeesChild, empChildSeesParent, deptId],
+        'UPDATE departments SET parent_id = $1, parent_user_id = $2, vac_parent_sees_child = $3, vac_child_sees_parent = $4, vac_parent_approves = $5, emp_parent_sees_child = $6, emp_child_sees_parent = $7, vac_parent_head_approves = $9 WHERE id = $8',
+        [parentId, parentUserId, vacParentSeesChild, vacChildSeesParent, vacParentApproves, empParentSeesChild, empChildSeesParent, deptId, vacParentHeadApproves],
         req
       )
       await client.query(text, values)
