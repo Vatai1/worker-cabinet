@@ -345,6 +345,7 @@ generate_test_env() {
 step_test_db() {
     TEST_PG_PASSWORD="$(openssl rand -hex 16)" || return 1
     TEST_JWT_SECRET="$(openssl rand -hex 32)" || return 1
+    rm -f "$(node -p "require('os').tmpdir()")/worker-cabinet-test-tokens.json"
     docker run -d --rm --name "$TEST_PG_NAME" \
         -e POSTGRES_PASSWORD="$TEST_PG_PASSWORD" \
         -e POSTGRES_DB=worker_cabinet \
