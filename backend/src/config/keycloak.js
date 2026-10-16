@@ -112,6 +112,23 @@ async function getKcUserIdByEmail(email) {
   return users[0].id
 }
 
+async function getKcUserLdapDn(kcGuid) {
+  if (!config.enabled || !kcGuid) return null
+  try {
+    const token = await getKcAdminToken()
+    const res = await fetch(`${config.url}/admin/realms/${config.realm}/users/${kcGuid}`, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) {
+      kcErr('admin: failed to fetch user for DN:', kcGuid, res.status)
+      return null
+    }
+    const user = await res.json()
+    return user.attributes?.LDAP_ENTRY_DN?.[0] ?? null
+  } catch (err) {
+    kcErr('admin: getKcUserLdapDn error:', err.message)
+    return null
+  }
+}
+
 const KC_CUSTOM_ROLES = ['employee', 'manager', 'hr', 'admin', 'onboarding']
 
 async function updateKcUserRole(kcUserId, newRole) {
@@ -314,4 +331,4 @@ async function syncKcSessionSettings({ sessionLifetimeMinutes, refreshLifetimeDa
   }
 }
 
-export { getKcAdminToken, getKcUserId, getKcUserIdByEmail, updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword, unlockKcUser, syncKcSessionSettings }
+export { getKcAdminToken, getKcUserId, getKcUserLdapDn, getKcUserIdByEmail, updateKcUserRole, deleteKcRole, updateKcUserProfile, setKcUserEnabled, resetKcUserPassword, unlockKcUser, syncKcSessionSettings }

@@ -119,6 +119,7 @@ interface TechnicalInfo {
   id: number
   email: string
   keycloak_guid: string | null
+  ldap_dn: string | null
   created_at: string | null
   updated_at: string | null
   last_seen_at: string | null
@@ -213,6 +214,7 @@ function TechnicalInfoSection({ userId }: { userId: number }) {
           <InfoRow label="ID" mono>{info.id}</InfoRow>
           <InfoRow label="Email" mono>{info.email}</InfoRow>
           <InfoRow label="Keycloak ID" mono>{info.keycloak_guid || <span className="font-sans text-muted-foreground">не привязан</span>}</InfoRow>
+          <InfoRow label="DN" mono>{info.ldap_dn || <span className="font-sans text-muted-foreground">—</span>}</InfoRow>
           <InfoRow label="Создан">{formatDateTime(info.created_at)}</InfoRow>
           <InfoRow label="Изменён">{formatDateTime(info.updated_at)}</InfoRow>
           <InfoRow label="Последняя активность">{formatDateTime(info.last_seen_at)}</InfoRow>
