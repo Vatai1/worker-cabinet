@@ -1595,7 +1595,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     }
 
     if (hasTravel) {
-      const travelCheck = await assertTravelAllowed(userId, currentOrgId(req), { db: client })
+      const travelCheck = await assertTravelAllowed(userId, currentOrgId(req), { db: client, startDate: formatDate(start), endDate: computedEndDate })
       if (!travelCheck.ok) {
         await client.query('ROLLBACK')
         return res.status(travelCheck.status).json({ error: travelCheck.error })
@@ -1949,7 +1949,7 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     }
 
     if (hasTravel) {
-      const travelCheck = await assertTravelAllowed(userId, currentOrgId(req), { excludeRequestId: parseInt(id), db: client })
+      const travelCheck = await assertTravelAllowed(userId, currentOrgId(req), { excludeRequestId: parseInt(id), db: client, startDate, endDate: newEndDate })
       if (!travelCheck.ok) {
         await client.query('ROLLBACK')
         return res.status(travelCheck.status).json({ error: travelCheck.error === 'Уже есть заявка с проездом на согласовании' ? 'Уже есть другая заявка с проездом на согласовании' : travelCheck.error })
@@ -2306,7 +2306,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
           }
         }
       }
-      const travelCheck = await assertTravelAllowed(userId, currentOrgId(req), { excludeRequestId: parseInt(id) })
+      const travelCheck = await assertTravelAllowed(userId, currentOrgId(req), { excludeRequestId: parseInt(id), startDate: newStartDate, endDate: newEndDate })
       if (!travelCheck.ok) return res.status(travelCheck.status).json({ error: travelCheck.error })
     }
 

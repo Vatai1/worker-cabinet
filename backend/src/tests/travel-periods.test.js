@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
-import { computeTravel } from '../lib/travel.js'
+import { computeTravel, checkTripDates } from '../lib/travel.js'
 
 const today = new Date('2026-10-06T00:00:00Z')
 const req = (id, start, status = 'approved') => ({ id, start_date: start, end_date: start, travel_destination: 'Сочи', status })
@@ -65,5 +65,22 @@ describe('Проезд: двухлетние периоды от даты най
   it('найм 29 февраля', () => {
     const s = computeTravel({ hireDate: '2020-02-29', requests: [], today })
     assert.deepStrictEqual(s.periods.slice(0, 3).map((p) => p.start), ['2020-02-29', '2022-02-28', '2024-02-29'])
+  })
+
+  it('поездка на стыке периодов списывается со следующего', () => {
+    const trip = { id: 1, start_date: '2027-01-10', end_date: '2027-01-20', status: 'approved' }
+    const s = computeTravel({ hireDate: '2023-01-15', requests: [trip], today })
+    assert.deepStrictEqual(s.periods.map((p) => p.used.length), [0, 0, 1, 0])
+  })
+
+  it('проверка дат: период выбирается по датам поездки', () => {
+    const d = (x) => new Date(`${x}T00:00:00Z`)
+    const used = computeTravel({ hireDate: '2023-01-15', requests: [req(1, '2026-03-01')], today })
+    assert.strictEqual(checkTripDates(used, d('2026-11-01'), d('2026-11-10')).ok, false)
+    assert.strictEqual(checkTripDates(used, d('2027-01-10'), d('2027-01-20')).ok, true)
+    assert.strictEqual(checkTripDates(used, d('2027-03-01'), d('2027-03-10')).ok, true)
+    const fresh = computeTravel({ hireDate: '2026-09-30', requests: [], today })
+    assert.strictEqual(checkTripDates(fresh, d('2027-03-01'), d('2027-03-10')).ok, false)
+    assert.strictEqual(checkTripDates(fresh, d('2027-04-01'), d('2027-04-10')).ok, true)
   })
 })

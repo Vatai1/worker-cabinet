@@ -42,6 +42,10 @@ export function periodBounds(hire, k) {
   }
 }
 
+const tripPeriod = (hire, r) => periodIndex(hire, toDate(r.end_date))
+
+const ru = (d) => iso(d).split('-').reverse().join('.')
+
 export function computeTravel({ hireDate, override, requests, today = new Date() }) {
   const hire = toDate(hireDate)
   const now = toDate(iso(today))
@@ -60,12 +64,12 @@ export function computeTravel({ hireDate, override, requests, today = new Date()
   }
 
   const currentK = periodIndex(hire, now)
-  const lastUsedK = approved.reduce((max, r) => Math.max(max, periodIndex(hire, toDate(r.start_date))), -1)
+  const lastUsedK = approved.reduce((max, r) => Math.max(max, tripPeriod(hire, r)), -1)
   const maxK = Math.max(currentK, lastUsedK) + 1
   const periods = []
   for (let k = 0; k <= maxK; k++) {
     const { start, end, eligibleFrom } = periodBounds(hire, k)
-    const used = approved.filter((r) => periodIndex(hire, toDate(r.start_date)) === k)
+    const used = approved.filter((r) => tripPeriod(hire, r) === k)
     periods.push({
       index: k,
       start: iso(start),
@@ -113,9 +117,28 @@ export async function assertTravelAllowed(userId, orgId, opts = {}) {
   const state = await getTravelState(userId, orgId, opts)
   if (!state) return { ok: false, status: 404, error: 'Работник не найден' }
   if (state.pending) return { ok: false, status: 409, error: 'Уже есть заявка с проездом на согласовании' }
+  if (opts.startDate && opts.endDate) return checkTripDates(state, toDate(opts.startDate), toDate(opts.endDate))
   if (!state.date_ok) {
     const d = state.next_available_date ? state.next_available_date.split('-').reverse().join('.') : null
     return { ok: false, status: 400, error: d ? `Проезд к месту отпуска будет доступен с ${d}` : 'Проезд к месту отпуска недоступен' }
+  }
+  return { ok: true }
+}
+
+export function checkTripDates(state, start, end) {
+  if (state.override) {
+    const from = toDate(state.override)
+    return start >= from ? { ok: true } : { ok: false, status: 400, error: `Проезд к месту отпуска будет доступен с ${ru(from)}` }
+  }
+  if (!state.hire_date) return { ok: false, status: 400, error: 'Проезд к месту отпуска недоступен' }
+  const hire = toDate(state.hire_date)
+  const k = periodIndex(hire, end)
+  const { start: pStart, end: pEnd, eligibleFrom } = periodBounds(hire, k)
+  if (state.periods[k]?.used.length) {
+    return { ok: false, status: 400, error: `Проезд за период ${ru(pStart)} – ${ru(pEnd)} уже использован` }
+  }
+  if (k === 0 && start < eligibleFrom) {
+    return { ok: false, status: 400, error: `Проезд к месту отпуска будет доступен с ${ru(eligibleFrom)}` }
   }
   return { ok: true }
 }
