@@ -31,6 +31,7 @@ export interface Dept {
   on_hierarchy: boolean
   name_genitive?: string | null
   name_genitive_suggestion?: string
+  ldap_ous?: string[]
 }
 
 export interface OrgUser {
@@ -113,6 +114,8 @@ export function DepartmentSettings({
   const [name, setName] = useState(dept.name)
   const [genitive, setGenitive] = useState(dept.name_genitive || '')
   const [description, setDescription] = useState(dept.description || '')
+  const [ous, setOus] = useState<string[]>(dept.ldap_ous ?? [])
+  const [ouDraft, setOuDraft] = useState('')
   const [managerId, setManagerId] = useState<number | null>(dept.manager_id)
   const [managerName, setManagerName] = useState(dept.manager_name || '')
   const [parentId, setParentId] = useState<number | null>(dept.parent_id)
@@ -141,11 +144,17 @@ export function DepartmentSettings({
 
   const genitivePreview = genitive.trim() || (name.trim() === dept.name ? dept.name_genitive_suggestion ?? '' : '')
 
-  const dirty = name !== dept.name || genitive !== (dept.name_genitive || '') || description !== (dept.description || '') || managerId !== dept.manager_id ||
+  const dirty = ous.join('\n') !== (dept.ldap_ous ?? []).join('\n') || ouDraft.trim() !== '' || name !== dept.name || genitive !== (dept.name_genitive || '') || description !== (dept.description || '') || managerId !== dept.manager_id ||
     parentId !== dept.parent_id || blocked !== dept.vacation_requests_blocked ||
     vacParentSeesChild !== dept.vac_parent_sees_child || vacChildSeesParent !== dept.vac_child_sees_parent ||
     vacParentApproves !== dept.vac_parent_approves || empParentSeesChild !== dept.emp_parent_sees_child ||
     empChildSeesParent !== dept.emp_child_sees_parent
+
+  const addOu = () => {
+    const v = ouDraft.trim().toLowerCase()
+    if (v && !ous.includes(v)) setOus([...ous, v])
+    setOuDraft('')
+  }
 
   const save = async () => {
     if (!name.trim()) { setSection('main'); setError('Название обязательно'); return }
@@ -156,6 +165,7 @@ export function DepartmentSettings({
         name: name.trim(),
         name_genitive: name.trim() !== dept.name && genitive === (dept.name_genitive || '') ? '' : genitive.trim(),
         description,
+        ldap_ous: ouDraft.trim() ? [...ous, ouDraft.trim()] : ous,
         manager_id: managerId,
         parent_id: parentId,
         vacation_requests_blocked: blocked,
@@ -277,6 +287,35 @@ export function DepartmentSettings({
                   className={cn(fieldClass, 'resize-y')}
                 />
               </label>
+
+              <div className="flex flex-col gap-1.5" data-testid="department-ldap-ous">
+                <span className="text-[12.5px] font-semibold text-muted-foreground">Коды OU в LDAP</span>
+                <div className={cn(fieldClass, 'flex flex-wrap items-center gap-1.5')}>
+                  {ous.map((ou) => (
+                    <span key={ou} className="flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 font-mono text-[12px]">
+                      {ou}
+                      <button type="button" aria-label={`Удалить ${ou}`} onClick={() => setOus(ous.filter((o) => o !== ou))} className="text-muted-foreground hover:text-foreground">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    value={ouDraft}
+                    onChange={(e) => setOuDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addOu() }
+                      if (e.key === 'Backspace' && !ouDraft && ous.length) setOus(ous.slice(0, -1))
+                    }}
+                    onBlur={addOu}
+                    maxLength={120}
+                    placeholder={ous.length ? '' : 'например, IT-Dept'}
+                    className="min-w-[8rem] flex-1 bg-transparent font-mono text-[13px] outline-none"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Значение OU из DN работника (OU=…). При входе через Keycloak работник попадает в этот отдел. Enter — добавить код
+                </p>
+              </div>
 
               <div className="flex flex-col gap-1.5">
                 <span className="text-[12.5px] font-semibold text-muted-foreground">Руководитель</span>

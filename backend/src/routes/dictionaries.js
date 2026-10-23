@@ -9,6 +9,8 @@ import { departmentMembers, moveUsersToDepartment } from '../lib/departmentMembe
 import multer from 'multer'
 import { requirePermission, FULL_ACCESS_ROLES } from '../lib/permissions.js'
 import { suggestDepartmentGenitive, suggestPositionGenitive } from '../lib/nameGenitive.js'
+import { normalizeOus, applyDepartmentFromDn } from '../lib/ldapDn.js'
+import { getKcUserLdapDn } from '../config/keycloak.js'
 
 async function validateOnlyOfficeUrl(url) {
   try {
@@ -88,7 +90,7 @@ async function savePositionGenitive(body) {
  */
 router.get('/departments', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   let sql = `
-    SELECT d.id, d.name, d.name_genitive, d.manager_id, d.description, d.vacation_requests_blocked,
+    SELECT d.id, d.name, d.name_genitive, d.ldap_ous, d.manager_id, d.description, d.vacation_requests_blocked,
             d.parent_id, p.name AS parent_name,
             d.parent_user_id,
             pu.last_name || ' ' || pu.first_name || COALESCE(' ' || NULLIF(pu.middle_name, ''), '') AS parent_user_name,
@@ -257,6 +259,42 @@ router.post('/departments', authenticateToken, requirePermission('departments:ma
  *       200:
  *         description: Отдел обновлён
  */
+/**
+ * @swagger
+ * /api/dictionaries/departments/resync-ldap:
+ *   post:
+ *     summary: Пересчитать отделы работников текущей организации по OU из LDAP DN
+ *     tags: [Dictionaries]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: '{ checked, changed, unmatched, noDn }'
+ */
+router.post('/departments/resync-ldap', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
+  const orgId = currentOrgId(req)
+  if (!orgId) throw new ValidationError('Выберите организацию')
+  const users = await query(
+    `SELECT u.id, u.ldap_dn, u.keycloak_guid FROM users u
+     JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $1 AND uo.is_active
+     WHERE u.status <> 'inactive' AND COALESCE(u.is_test, false) = false`,
+    [orgId]
+  )
+  const stats = { checked: 0, changed: 0, unmatched: 0, noDn: 0 }
+  for (const u of users.rows) {
+    let dn = u.ldap_dn
+    if (!dn && u.keycloak_guid) {
+      dn = await getKcUserLdapDn(u.keycloak_guid)
+      if (dn) await query('UPDATE users SET ldap_dn = $1 WHERE id = $2', [dn, u.id])
+    }
+    if (!dn) { stats.noDn++; continue }
+    stats.checked++
+    const { deptId, changed } = await applyDepartmentFromDn(u.id, dn, orgId)
+    if (!deptId) stats.unmatched++
+    if (changed) stats.changed++
+  }
+  res.json(stats)
+}))
+
 const VISIBILITY_FLAGS = ['vac_parent_sees_child', 'vac_child_sees_parent', 'vac_parent_approves', 'emp_parent_sees_child', 'emp_child_sees_parent']
 
 router.put('/departments/:id', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
@@ -288,6 +326,17 @@ router.put('/departments/:id', authenticateToken, requirePermission('departments
     ? req.body.name_genitive.trim().slice(0, 255) || null
     : current.name === name.trim() ? current.name_genitive : null
   const nextDescription = description === undefined ? current.description : (description?.trim() || null)
+  const nextOus = req.body.ldap_ous === undefined ? current.ldap_ous : normalizeOus(req.body.ldap_ous)
+  if (nextOus.length) {
+    const taken = await query(
+      'SELECT name, ldap_ous FROM departments WHERE organization_id = $2 AND id <> $3 AND ldap_ous && $1::text[] LIMIT 1',
+      [nextOus, current.organization_id, id]
+    )
+    if (taken.rows.length) {
+      const ou = nextOus.find((o) => taken.rows[0].ldap_ous.includes(o))
+      throw new ConflictError(`Код OU «${ou}» уже указан у отдела «${taken.rows[0].name}»`)
+    }
+  }
 
   const client = await getClient()
   try {
@@ -295,9 +344,9 @@ router.put('/departments/:id', authenticateToken, requirePermission('departments
     const { text, values } = orgScopedQuery(
       `UPDATE departments SET name_genitive = $12, name = $1, manager_id = $2, description = $3, parent_id = $4, vacation_requests_blocked = $5,
          vac_parent_sees_child = $6, vac_child_sees_parent = $7, vac_parent_approves = $8, emp_parent_sees_child = $9, emp_child_sees_parent = $10,
-         updated_at = NOW()
-       WHERE id = $11 RETURNING id, name, manager_id, description, parent_id, name_genitive`,
-      [name.trim(), manager_id || null, nextDescription, nextParentId, blocked, ...VISIBILITY_FLAGS.map((f) => flags[f]), id, nextGenitive],
+         ldap_ous = $13, updated_at = NOW()
+       WHERE id = $11 RETURNING id, name, manager_id, description, parent_id, name_genitive, ldap_ous`,
+      [name.trim(), manager_id || null, nextDescription, nextParentId, blocked, ...VISIBILITY_FLAGS.map((f) => flags[f]), id, nextGenitive, nextOus],
       req
     )
     const result = await client.query(text, values)

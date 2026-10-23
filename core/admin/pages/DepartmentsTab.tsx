@@ -9,7 +9,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { toast } from 'sonner'
 import {
   Building2, UserX, Plus, Trash2, Settings2, X,
-  AlertTriangle, Loader2, Search, Ban, Network,
+  AlertTriangle, Loader2, Search, Ban, Network, RefreshCw,
 } from 'lucide-react'
 import {
   CountBadge, FilterHeader, RowAction, TableCard, TableEmpty, TableEmptyRow, TableFrame, TableHeadRow, TableSearch, TableSkeleton, TD, TH, TR,
@@ -59,6 +59,7 @@ export function DepartmentsTab() {
   const [pickerFor, setPickerFor] = useState<'create' | 'settings' | null>(null)
   const [pickedManager, setPickedManager] = useState<{ id: number | null; name: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [resyncing, setResyncing] = useState(false)
 
   const [settingsId, setSettingsId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -129,6 +130,19 @@ export function DepartmentsTab() {
     }
   }
 
+  const resyncLdap = async () => {
+    setResyncing(true)
+    try {
+      const r = await apiPost<{ checked: number; changed: number; unmatched: number; noDn: number }>('/dictionaries/departments/resync-ldap', {})
+      toast.success(`Отделы по LDAP: проверено ${r.checked}, изменено ${r.changed}, без совпадения OU ${r.unmatched}, без DN ${r.noDn}`)
+      fetchDepartments()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setResyncing(false)
+    }
+  }
+
   const pickUser = (userId: number, userName: string) => {
     if (pickerFor === 'settings') setPickedManager({ id: userId, name: userName })
     else {
@@ -181,6 +195,9 @@ export function DepartmentsTab() {
         {(search.trim() || fFlags.length + fManagers.length + fParents.length + fCount.length > 0) && (
           <span className="whitespace-nowrap text-xs text-muted-foreground">Найдено {visible.length} из {departments.length}</span>
         )}
+        <Button size="sm" variant="outline" onClick={resyncLdap} disabled={resyncing} title="Назначить работникам отделы по кодам OU из их DN">
+          {resyncing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />} Пересчитать по LDAP
+        </Button>
         <Button size="sm" onClick={openCreate}><Plus className="mr-1 h-3.5 w-3.5" /> Новый отдел</Button>
       </div>
       <p className="text-xs text-muted-foreground">Нажмите на отдел, чтобы изменить состав, руководителя, запрет отпусков и видимость</p>

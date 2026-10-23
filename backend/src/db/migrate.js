@@ -1830,6 +1830,9 @@ async function runMigrations() {
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name_genitive JSONB')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS name_genitive TEXT')
     await db.query('ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS reference_document_key TEXT')
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ldap_dn TEXT')
+    await db.query("ALTER TABLE departments ADD COLUMN IF NOT EXISTS ldap_ous TEXT[] NOT NULL DEFAULT '{}'")
+    await db.query('CREATE INDEX IF NOT EXISTS idx_departments_ldap_ous ON departments USING GIN (ldap_ous)')
     await db.query(`CREATE TABLE IF NOT EXISTS position_genitives (
       name VARCHAR(255) PRIMARY KEY,
       genitive VARCHAR(255) NOT NULL,

@@ -12,6 +12,7 @@ import { revokeAllUserSessions } from '../lib/sessionTokens.js'
 import { phrasePrefixPattern, wordPrefixPatterns } from '../lib/wordSearch.js'
 import { getKcUserLdapDn, setKcUserEnabled, updateKcUserRole } from '../config/keycloak.js'
 import { requirePermission, hasPermission } from '../lib/permissions.js'
+import { extractLdapDn } from '../lib/ldapDn.js'
 import ExcelJS from 'exceljs'
 import { STAFF_REPORTS, STAFF_YEARLY, buildStaffReport } from '../lib/staffReports.js'
 import { sendReportXlsx } from '../lib/vacationReports.js'
@@ -1013,7 +1014,7 @@ router.get('/:id/technical', authenticateToken, requirePermission('users:edit'),
   const targetId = parseInt(req.params.id, 10)
   if (!(await checkProfileAccess(req, targetId))) throw new ForbiddenError('Нет доступа к профилю этого работника')
   const user = (await query(
-    `SELECT id, email, keycloak_guid, created_at, updated_at, last_seen_at, locked_until, failed_login_count
+    `SELECT id, email, keycloak_guid, ldap_dn, created_at, updated_at, last_seen_at, locked_until, failed_login_count
      FROM users WHERE id = $1`,
     [targetId]
   )).rows[0]
@@ -1030,11 +1031,10 @@ router.get('/:id/technical', authenticateToken, requirePermission('users:edit'),
      ORDER BY created_at DESC LIMIT 1`,
     [targetId]
   )).rows[0]
-  const claims = lastKc?.details?.keycloak ?? {}
-  const ldapDn = (await getKcUserLdapDn(user.keycloak_guid)) ?? claims.LDAP_ENTRY_DN ?? claims.dn ?? claims.distinguishedName ?? null
+  const ldapDn = user.ldap_dn ?? extractLdapDn(lastKc?.details?.keycloak) ?? (await getKcUserLdapDn(user.keycloak_guid))
   res.json({
     ...user,
-    ldap_dn: Array.isArray(ldapDn) ? ldapDn[0] : ldapDn,
+    ldap_dn: ldapDn,
     logins_count: logins?.total ?? 0,
     last_login: logins ? { at: logins.created_at, ip: logins.ip_address, method: logins.details?.method ?? null } : null,
     keycloak_login: lastKc ? { at: lastKc.created_at, claims: lastKc.details?.keycloak ?? {}, applied: lastKc.details?.applied ?? null } : null,

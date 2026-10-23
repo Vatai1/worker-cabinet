@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { query } from '../config/database.js'
+import { extractLdapDn, departmentIdFromDn, applyDepartmentFromDn } from '../lib/ldapDn.js'
+import { syncMembershipDepartment } from '../lib/departmentMembers.js'
 import keycloakConfig, { getJwksUrl, getIssuer, kcLog, kcErr } from '../config/keycloak.js'
 import { attachOrgContext } from './orgContext.js'
 import { applyTestContext } from '../utils/testScope.js'
@@ -155,6 +157,7 @@ export async function findOrCreateUser(kcPayload) {
   const cabinet = kcPayload.room_number || ''
   const responsibilityArea = kcPayload.responsibility_area || ''
   const department = kcPayload.department || ''
+  const ldapDn = extractLdapDn(kcPayload)
 
   async function resolveDepartmentId(deptName, orgId) {
     if (!deptName || !deptName.trim()) return null
@@ -187,7 +190,7 @@ export async function findOrCreateUser(kcPayload) {
   ]
 
   let result = await query(
-    'SELECT id, email, role, first_name, last_name, middle_name, gender, phone, position, hire_date, birth_date, avatar, office, cabinet, responsibility_area, department_id, is_test FROM users WHERE keycloak_guid = $1 AND is_test = false',
+    'SELECT id, email, role, first_name, last_name, middle_name, gender, phone, position, hire_date, birth_date, avatar, office, cabinet, responsibility_area, department_id, ldap_dn, is_test FROM users WHERE keycloak_guid = $1 AND is_test = false',
     [sub]
   )
 
@@ -229,18 +232,25 @@ export async function findOrCreateUser(kcPayload) {
       values.push(responsibilityArea.trim())
     }
 
-    if (department) {
-      const deptId = await resolveDepartmentId(department, firstOrgId)
-      if (deptId && user.department_id !== deptId) {
-        updates.push(`department_id = $${paramIndex++}`)
-        values.push(deptId)
-      }
+    if (ldapDn && user.ldap_dn !== ldapDn) {
+      updates.push(`ldap_dn = $${paramIndex++}`)
+      values.push(ldapDn)
+    }
+
+    const dnDeptId = await departmentIdFromDn(ldapDn, firstOrgId)
+    if (dnDeptId) kcLog('dept: matched by DN OU', JSON.stringify(ldapDn), '→ id=', dnDeptId)
+    const deptId = dnDeptId ?? (department ? await resolveDepartmentId(department, firstOrgId) : null)
+    const deptChanged = Boolean(deptId && user.department_id !== deptId)
+    if (deptChanged) {
+      updates.push(`department_id = $${paramIndex++}`)
+      values.push(deptId)
     }
 
     if (updates.length > 0) {
       kcLog('user', user.id, 'sync fields:', updates.map((u, i) => `${u.split(' = ')[0]}=${JSON.stringify(values[i])}`).join(', '))
       values.push(user.id)
       await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values)
+      if (deptChanged) await syncMembershipDepartment(null, user.id, user.department_id, deptId)
     }
 
     if (!updates.length) kcLog('user', user.id, 'sync fields: nothing changed')
@@ -254,8 +264,9 @@ export async function findOrCreateUser(kcPayload) {
   if (result.rows.length > 0) {
     const user = result.rows[0]
     kcLog('user: found by email → id=', user.id, 'role=', user.role, ', linking keycloak_guid=', sub)
-    await query('UPDATE users SET keycloak_guid = $1 WHERE id = $2', [sub, user.id])
-    await syncUserOrganizations(user.id, kcPayload)
+    await query('UPDATE users SET keycloak_guid = $1, ldap_dn = COALESCE($3, ldap_dn) WHERE id = $2', [sub, user.id, ldapDn])
+    const orgId = await syncUserOrganizations(user.id, kcPayload)
+    await applyDepartmentFromDn(user.id, ldapDn, orgId)
     return user
   }
 
@@ -265,12 +276,12 @@ export async function findOrCreateUser(kcPayload) {
   const insertValues = [
     email, firstName, lastName, middleName, gender, sub,
     phone, position, hireDateVal, birthDateVal,
-    picture, office, cabinet, responsibilityArea, null,
+    picture, office, cabinet, responsibilityArea, null, ldapDn,
   ]
   const insertCols = [
     'email', 'first_name', 'last_name', 'middle_name', 'gender', 'keycloak_guid',
     'phone', 'position', 'hire_date', 'birth_date',
-    'avatar', 'office', 'cabinet', 'responsibility_area', 'department_id',
+    'avatar', 'office', 'cabinet', 'responsibility_area', 'department_id', 'ldap_dn',
   ]
 
   const placeholders = insertCols.map((_, i) => `$${i + 1}`).join(', ')
@@ -287,7 +298,8 @@ export async function findOrCreateUser(kcPayload) {
   kcLog('user: created id=', user.id, 'email=', email, 'name=', [lastName, firstName, middleName].filter(Boolean).join(' '))
   const firstOrgId = await syncUserOrganizations(user.id, kcPayload)
 
-  if (department) {
+  const { deptId: dnDeptId } = await applyDepartmentFromDn(user.id, ldapDn, firstOrgId)
+  if (!dnDeptId && department) {
     const deptId = await resolveDepartmentId(department, firstOrgId)
     if (deptId) {
       await query('UPDATE users SET department_id = $1 WHERE id = $2', [deptId, user.id])

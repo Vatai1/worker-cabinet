@@ -11,6 +11,7 @@ import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl,
 import { getAuthSettings } from '../config/authSettings.js'
 import { signAccessToken, createSession, findActiveSessionByToken, isRecentlyRotatedToken, rotateSession, revokeSessionByToken } from '../lib/sessionTokens.js'
 import { permissionsFor } from '../lib/permissions.js'
+import { extractLdapDn, dnOus } from '../lib/ldapDn.js'
 
 const router = express.Router()
 
@@ -27,7 +28,9 @@ async function keycloakLoginDetails(kcPayload, userId, existedBefore) {
      WHERE uo.user_id = $1 AND uo.is_active ORDER BY o.id`,
     [userId]
   )
-  const dept = await query('SELECT d.name FROM users u LEFT JOIN departments d ON d.id = u.department_id WHERE u.id = $1', [userId])
+  const dept = await query('SELECT d.name, d.ldap_ous FROM users u LEFT JOIN departments d ON d.id = u.department_id WHERE u.id = $1', [userId])
+  const ous = dnOus(extractLdapDn(kcPayload))
+  const departmentSource = (dept.rows[0]?.ldap_ous ?? []).some((ou) => ous.includes(ou)) ? 'dn' : kcPayload.department ? 'claim' : null
   return {
     method: 'keycloak',
     keycloak: claims,
@@ -35,6 +38,7 @@ async function keycloakLoginDetails(kcPayload, userId, existedBefore) {
       userCreated: !existedBefore,
       organizations: orgs.rows.map((o) => ({ slug: o.slug, name: o.name, role: o.org_role })),
       department: dept.rows[0]?.name ?? null,
+      departmentSource,
       orgSource: keycloakOrgSource(kcPayload).source,
     },
   }
