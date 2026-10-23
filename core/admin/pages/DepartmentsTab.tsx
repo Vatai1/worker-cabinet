@@ -133,8 +133,8 @@ export function DepartmentsTab() {
   const resyncLdap = async () => {
     setResyncing(true)
     try {
-      const r = await apiPost<{ checked: number; changed: number; unmatched: number; noDn: number }>('/dictionaries/departments/resync-ldap', {})
-      toast.success(`Отделы по LDAP: проверено ${r.checked}, изменено ${r.changed}, без совпадения OU ${r.unmatched}, без DN ${r.noDn}`)
+      const r = await apiPost<{ checked: number; changed: number; created: number; unmatched: number; noDn: number }>('/dictionaries/departments/resync-ldap', {})
+      toast.success(`Отделы по LDAP: проверено ${r.checked}, изменено ${r.changed}, создано отделов ${r.created}, без OU в DN ${r.unmatched}, без DN ${r.noDn}`)
       fetchDepartments()
     } catch (err) {
       toast.error(getErrorMessage(err))

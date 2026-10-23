@@ -268,7 +268,7 @@ router.post('/departments', authenticateToken, requirePermission('departments:ma
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: '{ checked, changed, unmatched, noDn }'
+ *         description: '{ checked, changed, created, unmatched, noDn }'
  */
 router.post('/departments/resync-ldap', authenticateToken, requirePermission('departments:manage'), asyncHandler(async (req, res) => {
   const orgId = currentOrgId(req)
@@ -279,7 +279,7 @@ router.post('/departments/resync-ldap', authenticateToken, requirePermission('de
      WHERE u.status <> 'inactive' AND COALESCE(u.is_test, false) = false`,
     [orgId]
   )
-  const stats = { checked: 0, changed: 0, unmatched: 0, noDn: 0 }
+  const stats = { checked: 0, changed: 0, created: 0, unmatched: 0, noDn: 0 }
   for (const u of users.rows) {
     let dn = u.ldap_dn
     if (!dn && u.keycloak_guid) {
@@ -288,7 +288,8 @@ router.post('/departments/resync-ldap', authenticateToken, requirePermission('de
     }
     if (!dn) { stats.noDn++; continue }
     stats.checked++
-    const { deptId, changed } = await applyDepartmentFromDn(u.id, dn, orgId)
+    const { deptId, changed, created } = await applyDepartmentFromDn(u.id, dn, orgId)
+    if (created) stats.created++
     if (!deptId) stats.unmatched++
     if (changed) stats.changed++
   }

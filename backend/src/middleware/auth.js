@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { query } from '../config/database.js'
-import { extractLdapDn, departmentIdFromDn, applyDepartmentFromDn } from '../lib/ldapDn.js'
+import { extractLdapDn, resolveDepartmentFromDn, applyDepartmentFromDn } from '../lib/ldapDn.js'
 import { syncMembershipDepartment } from '../lib/departmentMembers.js'
 import keycloakConfig, { getJwksUrl, getIssuer, kcLog, kcErr } from '../config/keycloak.js'
 import { attachOrgContext } from './orgContext.js'
@@ -237,8 +237,8 @@ export async function findOrCreateUser(kcPayload) {
       values.push(ldapDn)
     }
 
-    const dnDeptId = await departmentIdFromDn(ldapDn, firstOrgId)
-    if (dnDeptId) kcLog('dept: matched by DN OU', JSON.stringify(ldapDn), '→ id=', dnDeptId)
+    const { deptId: dnDeptId, created: dnDeptCreated } = await resolveDepartmentFromDn(ldapDn, firstOrgId)
+    if (dnDeptId) kcLog('dept:', dnDeptCreated ? 'auto-created from DN OU' : 'resolved by DN OU', JSON.stringify(ldapDn), '→ id=', dnDeptId)
     const deptId = dnDeptId ?? (department ? await resolveDepartmentId(department, firstOrgId) : null)
     const deptChanged = Boolean(deptId && user.department_id !== deptId)
     if (deptChanged) {
