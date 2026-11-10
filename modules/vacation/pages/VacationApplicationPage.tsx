@@ -8,6 +8,8 @@ import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/auth
 import { cn, getErrorMessage } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { useNameGenitiveGate } from '@/shared/components/NameGenitive'
+import { useAuthStore } from '@/core/auth/store/authStore'
+import { apiGet } from '@/shared/lib/apiClient'
 
 interface Template {
   id: number
@@ -18,6 +20,7 @@ interface Template {
 export function VacationApplicationPage() {
   const nameGate = useNameGenitiveGate()
   const navigate = useNavigate()
+  const userId = useAuthStore((state) => state.user?.id)
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [templates, setTemplates] = useState<Template[]>([])
@@ -40,11 +43,16 @@ export function VacationApplicationPage() {
   }, [])
 
   const handleGenerate = async () => {
-    if (!templateId) return
-    if (!(await nameGate.ensure())) return
+    if (!userId || !templateId) return
     setLoading(true)
     setError(null)
     try {
+      const approved = await apiGet<unknown[]>(`/vacation/requests?userId=${userId}&year=${year}&status=approved`)
+      if (!approved.length) {
+        setError('За выбранный год нет согласованных отпусков')
+        return
+      }
+      if (!(await nameGate.ensure())) return
       const res = await fetch(`${API_BASE_URL}/vacation/generate-application`, {
         method: 'POST',
         headers: getAuthHeadersWithContentType(),
@@ -96,10 +104,6 @@ export function VacationApplicationPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>
-      )}
-
       <Card className="overflow-hidden p-0">
         <section className="border-b border-border/60 p-5">
           <div className="mb-3 flex items-center gap-2">
@@ -111,7 +115,8 @@ export function VacationApplicationPage() {
               <button
                 key={y}
                 type="button"
-                onClick={() => setYear(y)}
+                disabled={loading}
+                onClick={() => { setYear(y); setError(null) }}
                 className={cn(
                   'min-w-[68px] rounded-xl border px-4 py-2 text-sm font-medium transition-colors',
                   year === y
@@ -125,7 +130,7 @@ export function VacationApplicationPage() {
           </div>
           <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Info className="h-3.5 w-3.5" />
-            В документ попадут все отпуска за {year} год
+            В документ попадут согласованные отпуска за {year} год
           </p>
         </section>
 
@@ -152,6 +157,7 @@ export function VacationApplicationPage() {
                   <button
                     key={t.id}
                     type="button"
+                    disabled={loading}
                     onClick={() => setTemplateId(String(t.id))}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
@@ -175,6 +181,10 @@ export function VacationApplicationPage() {
           )}
         </section>
       </Card>
+
+      {error && (
+        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>
+      )}
 
       <div className="flex items-center justify-between gap-3">
         <Button type="button" variant="outline" onClick={() => navigate('/vacation')}>

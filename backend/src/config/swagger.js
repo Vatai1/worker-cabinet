@@ -97,6 +97,9 @@ const options = {
         VacationBalance: {
           type: 'object',
           properties: {
+            has_membership: { type: 'boolean' },
+            department_id: { type: 'integer', nullable: true },
+            vacation_requests_blocked: { type: 'boolean' },
             total_days: { type: 'number' },
             used_days: { type: 'number' },
             reserved_days: { type: 'number' },

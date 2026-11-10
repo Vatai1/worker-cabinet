@@ -912,6 +912,22 @@ describe('Модуль отпусков — user stories', () => {
       assert.deepStrictEqual(res.data, [])
     })
 
+    it('check-restrictions: праздничный день допустим для отпуска без оплаты', async () => {
+      const day = ahead(11)
+      await query("INSERT INTO calendar_holidays (day, year, kind) VALUES ($1, $2, 'holiday')", [day, yearOf(day)])
+      try {
+        const token = await tokenFor(emp)
+        const dates = { userId: emp.id, startDate: day, endDate: day }
+        const paid = await call('POST', '/vacation/check-restrictions', token, { ...dates, vacationType: 'annual_paid' })
+        assert.strictEqual(paid.status, 400)
+        const unpaid = await call('POST', '/vacation/check-restrictions', token, { ...dates, vacationType: 'unpaid' })
+        assert.strictEqual(unpaid.status, 200)
+        assert.deepStrictEqual(unpaid.data, [])
+      } finally {
+        await query('DELETE FROM calendar_holidays WHERE day = $1', [day])
+      }
+    })
+
     it('check-restrictions: 400 без полей; 404 несуществующий пользователь', async () => {
       const bad = await call('POST', '/vacation/check-restrictions', await tokenFor(mgr), {})
       assert.strictEqual(bad.status, 400)
@@ -1425,6 +1441,15 @@ describe('Модуль отпусков — user stories', () => {
       assert.ok(res.contentType.includes('wordprocessingml.document'))
       assert.strictEqual(res.data[0], 0x50)
       assert.strictEqual(res.data[1], 0x4b)
+    })
+
+    it('POST /generate-application без согласованных отпусков за выбранный год → 409', async () => {
+      const year = yearOf(ahead(10))
+      await mkVacation({ userId: emp.id, start: ahead(10), end: ahead(14), duration: 5 })
+      await mkVacation({ userId: emp.id, start: `${year - 1}-06-10`, end: `${year - 1}-06-14`, duration: 5, status: 'approved' })
+      const res = await call('POST', '/vacation/generate-application', await tokenFor(emp), { year, templateId: templateA.id })
+      assert.strictEqual(res.status, 409)
+      assert.strictEqual(res.data.code, 'NO_APPROVED_VACATIONS')
     })
 
     it('несуществующий templateId → 404', async () => {
@@ -2322,6 +2347,26 @@ describe('Модуль отпусков — user stories', () => {
       await restoreModules(modulesSnap)
       const strayDeptIds = (await query("SELECT id FROM departments WHERE name = 'US20 Чужой отдел vac-full'")).rows.map((r) => r.id)
       await cleanupFixtures({ deptIds: [deptId, ...strayDeptIds], templateNames: ['vac-full us20 nofile', 'vac-full us20 notfile'] })
+    })
+
+    it('запрет отдела применяется только к заявкам в его организации', async () => {
+      const otherDept = await mkDept('US20 Чужой отдел vac-full', foreignOrgId)
+      await query('UPDATE departments SET vacation_requests_blocked = true WHERE id = $1', [otherDept])
+      await query("INSERT INTO user_organizations (user_id, org_id, org_role, department_id) VALUES ($1, $2, 'employee', $3)", [emp.id, foreignOrgId, otherDept])
+      const token = await tokenFor(emp)
+      const dates = { startDate: ahead(10), endDate: ahead(14), vacationType: 'unpaid' }
+      const balancePath = `/vacation/balance/${emp.id}?year=${yearOf(dates.startDate)}`
+      const outsideBalance = await call('GET', balancePath, token, undefined, String(foreignOrgId))
+      assert.strictEqual(outsideBalance.data.department_id, otherDept)
+      assert.strictEqual(outsideBalance.data.vacation_requests_blocked, true)
+      assert.strictEqual((await call('GET', balancePath, token)).data.vacation_requests_blocked, false)
+      assert.strictEqual((await call('POST', '/vacation/requests', token, dates, String(foreignOrgId))).status, 403)
+      const approved = await mkVacation({
+        userId: emp.id, orgId: foreignOrgId, start: dates.startDate, end: dates.endDate,
+        duration: 5, status: 'approved', type: 'unpaid',
+      })
+      assert.strictEqual((await call('POST', `/vacation/requests/${approved.id}/cancel`, token, {}, String(foreignOrgId))).status, 403)
+      assert.strictEqual((await postVacation(emp, dates)).status, 201)
     })
 
     it('substitutes POST: пустой список → 400; левая заявка → 404; чужой employee → 403', async () => {

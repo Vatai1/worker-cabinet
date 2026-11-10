@@ -135,6 +135,9 @@ export type { VacationRequestStatusHistory }
 export interface VacationBalance {
   userId: string
   year: number
+  hasMembership?: boolean
+  departmentId?: string
+  vacationRequestsBlocked?: boolean
   
   totalDays: number
   usedDays: number

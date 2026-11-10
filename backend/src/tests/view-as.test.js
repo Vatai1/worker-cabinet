@@ -15,8 +15,12 @@ function headers(token, extraCookie = '') {
   }
 }
 
-async function call(method, path, token, body, cookie = '') {
-  const res = await fetch(`${BASE}${path}`, { method, headers: headers(token, cookie), body: body ? JSON.stringify(body) : undefined })
+async function call(method, path, token, body, cookie = '', orgId = 1) {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { ...headers(token, cookie), 'X-Organization-Id': String(orgId) },
+    body: body ? JSON.stringify(body) : undefined,
+  })
   const data = await res.json().catch(() => null)
   const impCookie = res.headers.getSetCookie().find((c) => c.startsWith('imp_user=') && !c.startsWith('imp_user=;'))
   return { status: res.status, data, impCookie: impCookie ? impCookie.split(';')[0] : null }
@@ -25,6 +29,30 @@ async function call(method, path, token, body, cookie = '') {
 const userId = async (email) => (await query('SELECT id FROM users WHERE email = $1', [email])).rows[0].id
 
 describe('Просмотр кабинета от лица пользователя (view-as)', () => {
+  it('суперадмин без членства не получает баланс и не может подать заявку', async () => {
+    const su = await login('superadmin@example.com')
+    const id = await userId('superadmin@example.com')
+    const { rows: [org] } = await query(
+      `SELECT o.id FROM organizations o WHERE o.is_active AND NOT EXISTS (
+         SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = o.id
+       ) ORDER BY o.id LIMIT 1`, [id]
+    )
+    assert.ok(org)
+    const year = new Date().getFullYear() + 1
+    const path = `/vacation/balance/${id}?year=${year}`
+    const outside = await call('GET', path, su, undefined, '', org.id)
+    assert.strictEqual(outside.status, 200)
+    assert.deepStrictEqual(outside.data, { user_id: id, year, has_membership: false })
+    const { rowCount } = await query('SELECT 1 FROM vacation_balances WHERE user_id = $1 AND organization_id = $2 AND year = $3', [id, org.id, year])
+    assert.strictEqual(rowCount, 0)
+    const home = await call('GET', path, su)
+    assert.strictEqual(home.status, 200)
+    assert.strictEqual(home.data.has_membership, true)
+    const blocked = await call('POST', '/vacation/requests', su, { vacationType: 'unpaid' }, '', org.id)
+    assert.strictEqual(blocked.status, 403)
+    assert.strictEqual(blocked.data.error, 'Вы не числитесь сотрудником выбранной организации')
+  })
+
   it('суперадмин видит кабинет реального сотрудника, изменения запрещены, выход работает, всё в аудите', async () => {
     const su = await login('superadmin@example.com')
     const suId = await userId('superadmin@example.com')

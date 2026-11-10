@@ -1,9 +1,10 @@
 ﻿import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import type { VacationRequest } from '@/shared/types'
+import type { VacationRequest, VacationValidationError } from '@/shared/types'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
-import { VACATION_TYPES, VacationType } from '@/shared/types'
+import { VACATION_TYPES, VacationRequestStatus, VacationType } from '@/shared/types'
 import { Button } from '@/shared/components/ui/Button'
+import { RestrictionWarnings } from '@/modules/vacation/components/RestrictionWarnings'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { X, UserCheck, FileText } from 'lucide-react'
@@ -19,11 +20,11 @@ interface VacationDetailModalProps {
   onApprove?: (requestId: string) => Promise<void>
   onReject?: (requestId: string, reason: string) => Promise<void>
   loading?: boolean
-  intersectionWarnings?: {message: string; employeeName: string; dates: string}[]
+  checkRestrictions?: boolean
   onTransfer?: (request: VacationRequest) => void
 }
 
-export function VacationDetailModal({ isOpen, request, onClose, onApprove, onReject, loading, intersectionWarnings = [], onTransfer }: VacationDetailModalProps) {
+export function VacationDetailModal({ isOpen, request, onClose, onApprove, onReject, loading, checkRestrictions = false, onTransfer }: VacationDetailModalProps) {
   useModalOpen(isOpen)
   const [showRejectInput, setShowRejectInput] = useState(false)
   const [referenceUrl, setReferenceUrl] = useState<string | null>(null)
@@ -37,6 +38,20 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
       .catch(() => {})
     return () => { cancelled = true }
   }, [isOpen, request?.id, request?.hasReferenceFile])
+  const [restrictionWarnings, setRestrictionWarnings] = useState<VacationValidationError[]>([])
+  useEffect(() => {
+    setRestrictionWarnings([])
+    if (!isOpen || !checkRestrictions || !request || request.vacationType === VacationType.DAY_OFF ||
+      (request.status !== VacationRequestStatus.APPROVED && request.status !== VacationRequestStatus.ON_APPROVAL)) return
+
+    let cancelled = false
+    vacationApi.checkRestrictions(request.userId, {
+      startDate: request.startDate.slice(0, 10),
+      endDate: request.endDate.slice(0, 10),
+      vacationType: request.vacationType,
+    }).then((warnings) => { if (!cancelled) setRestrictionWarnings(warnings) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [isOpen, checkRestrictions, request])
   const [rejectionReason, setRejectionReason] = useState('')
   const returnToWork = useReturnToWork(request?.endDate)
 
@@ -194,22 +209,7 @@ export function VacationDetailModal({ isOpen, request, onClose, onApprove, onRej
             </div>
           )}
 
-          {intersectionWarnings.length > 0 && (
-            <div className="p-3 rounded-lg bg-[hsl(var(--warning)/0.1)] border border-[hsl(var(--warning)/0.25)]">
-              <div className="text-sm">
-                <div className="font-medium mb-2 flex items-center gap-2 text-[hsl(var(--warning))]">
-                  <span>⚠️</span>
-                  Пересечение с другими отпусками
-                </div>
-                {intersectionWarnings.map((warning, index) => (
-                  <div key={index} className="text-[hsl(var(--warning)/0.85)] mb-2 last:mb-0">
-                    <div className="font-medium">{warning.employeeName}</div>
-                    <div className="text-xs text-[hsl(var(--warning)/0.7)]">{warning.dates}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <RestrictionWarnings warnings={restrictionWarnings} />
 
           {request.comment && (
             <div>

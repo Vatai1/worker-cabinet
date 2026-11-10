@@ -55,7 +55,7 @@ interface CreateVacationModalProps {
     details?: VacationValidationErrorDetails
     conflicts?: RestrictionConflict[]
   }>
-  onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
+  onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string; vacationType: VacationType }) => void
   showSubstitutes?: boolean
   dayOffsAvailable?: number
   dayOffOnly?: boolean
@@ -88,7 +88,7 @@ export function CreateVacationModal({
   const [comment, setComment] = useState('')
   const [travelError, setTravelError] = useState<string | null>(null)
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
-  const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
+  const [lastCheckedDates, setLastCheckedDates] = useState<{ startDate: string; endDate: string; vacationType: VacationType } | null>(null)
   const [substituteIds, setSubstituteIds] = useState<number[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [showSubstituteModal, setShowSubstituteModal] = useState(false)
@@ -112,13 +112,14 @@ export function CreateVacationModal({
   useEffect(() => {
     if (!isOpen) return
     if (userId && startDate && endDate && onCheckRestrictions) {
-      if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
+      if (lastCheckedDates?.startDate === startDate && lastCheckedDates.endDate === endDate && lastCheckedDates.vacationType === vacationType) {
         return
       }
-      setLastCheckedDates({ startDate, endDate })
-      onCheckRestrictions(userId, { startDate, endDate })
+      const selection = { startDate, endDate, vacationType }
+      setLastCheckedDates(selection)
+      onCheckRestrictions(userId, selection)
     }
-  }, [isOpen, userId, startDate, endDate, onCheckRestrictions, lastCheckedDates])
+  }, [isOpen, userId, startDate, endDate, vacationType, onCheckRestrictions, lastCheckedDates])
 
   useEffect(() => {
     if (isOpen && showSubstitutes) {

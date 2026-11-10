@@ -953,10 +953,12 @@ router.get('/department-head-requests', authenticateToken, async (req, res) => {
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Баланс отпусков
+ *         description: 'Баланс отпусков или has_membership: false для своего кабинета вне организации'
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/VacationBalance' }
+ *       404:
+ *         description: Работник не найден в организации
  */
 router.get('/balance/:userId', authenticateToken, async (req, res) => {
   try {
@@ -969,28 +971,37 @@ router.get('/balance/:userId', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Доступ запрещён' })
     }
 
-    const balanceSql = `SELECT vb.*, u.hire_date
-       FROM vacation_balances vb
-       LEFT JOIN users u ON u.id = vb.user_id
-       WHERE vb.user_id = $1 AND vb.year = $2${req.org ? ' AND vb.organization_id = $3' : ''}`
-    const balanceParams = req.org ? [userId, targetYear, req.org.org_id] : [userId, targetYear]
+    const isSelf = currentUser.id === Number(userId)
+    const membership = await vacationMembership(userId, currentOrgId(req))
+    if (!membership || (isSelf && !membership.is_active)) {
+      if (!isSelf) return res.status(404).json({ error: 'Работник не найден в организации' })
+      return res.json({ user_id: Number(userId), year: targetYear, has_membership: false })
+    }
+
+    const orgId = membership.org_id
+    const balanceSql = `SELECT * FROM vacation_balances WHERE user_id = $1 AND year = $2 AND organization_id = $3`
+    const balanceParams = [userId, targetYear, orgId]
     let row = (await query(balanceSql, balanceParams)).rows[0]
 
     if (!row) {
-      const resolvedDays = await resolveVacationDays(userId, currentOrgId(req))
+      const resolvedDays = await resolveVacationDays(userId, orgId)
       await query(
         `INSERT INTO vacation_balances (user_id, total_days, used_days, reserved_days, year, organization_id)
          VALUES ($1, $4, 0, 0, $2, $3)
          ON CONFLICT (user_id, organization_id, year) DO NOTHING`,
-        [userId, targetYear, currentOrgId(req), resolvedDays]
-      ).catch(() => null)
+        [userId, targetYear, orgId, resolvedDays]
+      )
       row = (await query(balanceSql, balanceParams)).rows[0]
       if (!row) return res.status(404).json({ error: 'Баланс отпуска не найден' })
     }
 
-    const travel = await getTravelState(parseInt(userId), currentOrgId(req))
+    const travel = await getTravelState(parseInt(userId), orgId)
     res.json({
       ...row,
+      hire_date: membership.hire_date,
+      has_membership: membership.is_active,
+      department_id: membership.department_id,
+      vacation_requests_blocked: membership.vacation_requests_blocked,
       travel_available: !!travel?.available,
       travel_pending: !!travel?.pending,
       travel_next_available_date: travel?.next_available_date ?? null,
@@ -1088,6 +1099,20 @@ router.get('/balances', authenticateToken, async (req, res) => {
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
+async function vacationMembership(userId, orgId, db = { query }) {
+  return (await db.query(
+    `SELECT uo.org_id, uo.is_active, u.hire_date, d.id AS department_id,
+       COALESCE(d.vacation_requests_blocked, false) AS vacation_requests_blocked
+     FROM user_organizations uo
+     JOIN users u ON u.id = uo.user_id
+     JOIN organizations o ON o.id = uo.org_id AND o.is_active
+     LEFT JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id) AND d.organization_id = uo.org_id
+     WHERE uo.user_id = $1 AND (uo.org_id = $2::int OR ($2::int IS NULL AND uo.is_active))
+     ORDER BY uo.is_primary DESC, uo.id LIMIT 1`,
+    [userId, orgId]
+  )).rows[0]
+}
+
 async function requireOrgMember(userId, orgId) {
   if (!orgId) throw new ValidationError('Не выбрана организация')
   const member = await query('SELECT 1 FROM user_organizations WHERE user_id = $1 AND org_id = $2', [userId, orgId])
@@ -1476,6 +1501,8 @@ router.post('/adjustments', authenticateToken, async (req, res) => {
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Нет активного членства в выбранной организации или подача заявок заблокирована для отдела
  */
 router.post('/requests', authenticateToken, async (req, res) => {
   const client = await getClient()
@@ -1485,12 +1512,12 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const userId = req.user.id
     const isDayOff = vacationType === DAY_OFF
 
-    const { text: blockText, values: blockValues } = orgScopedQuery(
-      `SELECT d.vacation_requests_blocked FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = $1`,
-      [userId], req
-    )
-    const blockCheck = await query(blockText, blockValues)
-    if (!isDayOff && blockCheck.rows.length > 0 && blockCheck.rows[0].vacation_requests_blocked) {
+    const orgId = currentOrgId(req)
+    const membership = orgId && await vacationMembership(userId, orgId, client)
+    if (!membership?.is_active) {
+      return res.status(403).json({ error: 'Вы не числитесь сотрудником выбранной организации' })
+    }
+    if (!isDayOff && membership.vacation_requests_blocked) {
       return res.status(403).json({ error: 'Подача заявок на отпуск для вашего отдела временно заблокирована HR' })
     }
 
@@ -2194,6 +2221,29 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /vacation/requests/{id}/cancel:
+ *   post:
+ *     tags: [Vacation]
+ *     summary: Отменить заявку на отпуск
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Заявка отменена
+ *       400:
+ *         description: Заявку нельзя отменить в текущем статусе или отпуск уже прошёл
+ *       403:
+ *         description: Нет доступа или для отдела в организации заявки запрещена отмена согласованных отпусков
+ *       404:
+ *         description: Заявка не найдена
+ */
 router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
   const { id } = req.params
   const client = await getClient()
@@ -2211,11 +2261,8 @@ router.post('/requests/:id/cancel', authenticateToken, async (req, res) => {
     const cancelledDayOff = cancelledType === DAY_OFF
     const cancelledOnBalance = vacationTypeRule(cancelledType).balance
     if (request.rows[0].status === 'approved' && !cancelledDayOff && !(await hasPermission(req, 'vacation:manage'))) {
-      const blocked = await client.query(
-        'SELECT d.vacation_requests_blocked FROM users u JOIN departments d ON d.id = u.department_id WHERE u.id = $1',
-        [request.rows[0].user_id]
-      )
-      if (blocked.rows[0]?.vacation_requests_blocked) {
+      const membership = await vacationMembership(request.rows[0].user_id, request.rows[0].organization_id, client)
+      if (membership?.vacation_requests_blocked) {
         await client.query('ROLLBACK')
         return res.status(403).json({ error: 'Отмена согласованных отпусков запрещена: HR закрыл подачу заявок для отдела' })
       }
@@ -2975,7 +3022,7 @@ router.get('/my-transfer-requests', authenticateToken, async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [year]
+ *             required: [year, templateId]
  *             properties:
  *               year: { type: integer }
  *               templateId: { type: integer }
@@ -2987,6 +3034,8 @@ router.get('/my-transfer-requests', authenticateToken, async (req, res) => {
  *             schema:
  *               type: string
  *               format: binary
+ *       409:
+ *         description: За выбранный год нет согласованных отпусков
  */
 // POST /api/vacation/generate-application
 // Body: { year, templateId }
@@ -3032,6 +3081,9 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
 
     if (userResult.rows.length === 0) return res.status(404).json({ error: 'Пользователь не найден' })
     if (tmplResult.rows.length === 0) return res.status(404).json({ error: 'Шаблон не найден' })
+    if (vacResult.rows.length === 0) {
+      return res.status(409).json({ error: 'За выбранный год нет согласованных отпусков', code: 'NO_APPROVED_VACATIONS' })
+    }
 
     const u = userResult.rows[0]
     const tmpl = tmplResult.rows[0]
@@ -4095,21 +4147,29 @@ router.delete('/restrictions/:id', authenticateToken, requirePermission('vacatio
  *               userId: { type: integer }
  *               startDate: { type: string, format: date }
  *               endDate: { type: string, format: date }
+ *               vacationType: { $ref: '#/components/schemas/VacationType' }
  *     responses:
  *       200:
  *         description: 'Список нарушений: message, rule (group), ruleType (manual|tag|combined), tagNames, names (ФИО пересекающихся), dates (интервалы пересечений)'
+ *       400:
+ *         description: Не указаны обязательные поля, неверный тип отпуска или период состоит из праздничных дней
+ *       404:
+ *         description: Пользователь не найден в организации
  */
 router.post('/check-restrictions', authenticateToken, async (req, res) => {
   try {
-    const { userId, startDate, endDate: rawEndDate } = req.body
+    const { userId, startDate, endDate: rawEndDate, vacationType = 'annual_paid' } = req.body
 
     if (!userId || !startDate || !rawEndDate) {
       return res.status(400).json({ error: 'Укажите userId, startDate и endDate' })
     }
+    if (!VALID_VACATION_TYPES.includes(vacationType)) {
+      return res.status(400).json({ error: 'Неверный тип отпуска' })
+    }
 
     let endDate
     try {
-      endDate = (await computeVacationDates(startDate, rawEndDate)).endDate
+      endDate = (await computeVacationDates(startDate, rawEndDate, vacationType)).endDate
     } catch (err) {
       res.locals.errorCause = err
       if (err instanceof VacationValidationError) {
@@ -4118,11 +4178,11 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
       throw err
     }
 
-    const userResult = await query('SELECT department_id FROM users WHERE id = $1', [userId])
-    if (userResult.rows.length === 0) {
+    const membership = await vacationMembership(userId, currentOrgId(req))
+    if (!membership) {
       return res.status(404).json({ error: 'Пользователь не найден' })
     }
-    const departmentId = userResult.rows[0].department_id
+    const departmentId = membership.department_id
 
     const { text: chkRestText, values: chkRestValues } = orgScopedQuery(
       'SELECT * FROM vacation_restrictions WHERE (department_id = $1 OR department_id IS NULL)',

@@ -59,7 +59,7 @@ interface VacationStore {
 
   checkRestrictions: (
     userId: string,
-    data: VacationFormData
+    data: Pick<VacationFormData, 'startDate' | 'endDate' | 'vacationType'>
   ) => Promise<VacationValidationError[]>
   
   createRestriction: (
@@ -244,13 +244,9 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
         return errors
       },
 
-      checkRestrictions: async (userId: string, data: VacationFormData) => {
+      checkRestrictions: async (userId, data) => {
         try {
-          const warnings = await vacationApi.checkRestrictions(userId, {
-            startDate: data.startDate,
-            endDate: data.endDate,
-          })
-          return warnings
+          return await vacationApi.checkRestrictions(userId, data)
         } catch {
           return []
         }

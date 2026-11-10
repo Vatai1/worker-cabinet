@@ -198,6 +198,33 @@ test.describe('Отпуск: работник', () => {
     await expect(page.getByText('Чужаков Игорь')).toHaveCount(0)
   })
 
+  test('в деталях отпуска совпадение с коллегой предупреждает только при нарушении правила', async ({ page }) => {
+    const dates = range(110)
+    const request = await world.createRequest('emp', dates.s, dates.e)
+    const colleague = await world.createRequest('col', dates.s, dates.e)
+    await world.approve(colleague.id)
+    await world.loginPage(page, 'emp')
+    const url = `/vacation?requestId=${request.id}&year=${dates.s.slice(0, 4)}`
+    const modal = page.getByTestId('vacation-detail-modal')
+    const checked = page.waitForResponse((response) => response.url().endsWith('/vacation/check-restrictions'))
+    await openVacationPage(page, url)
+    expect(await (await checked).json()).toEqual([])
+    await expect(modal).toBeVisible()
+    await expect(modal.getByText(/пересечение.*отпуск/i)).toHaveCount(0)
+
+    const rule = await world.ok<{ id: number }>('POST', '/vacation/restrictions', {
+      departmentId: world.departments.dept,
+      type: 'group', employeeIds: [world.users.emp.id, world.users.col.id], maxConcurrent: 1,
+    })
+    try {
+      await openVacationPage(page, url)
+      await expect(modal.getByText('Внимание: пересечение отпусков')).toBeVisible()
+      await expect(modal.getByText('Коллегин Роман', { exact: true })).toBeVisible()
+    } finally {
+      await world.ok('DELETE', `/vacation/restrictions/${rule.id}`)
+    }
+  })
+
   test('производственный календарь: перенесённый выходной отмечен нерабочим, рабочая суббота — рабочим днём', async ({ page }) => {
     const year = THIS_YEAR + 1
     const cal = await world.ok<{ days: Array<{ day: string; kind: string }> }>('GET', `/vacation/production-calendar?year=${year}`)

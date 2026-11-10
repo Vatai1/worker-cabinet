@@ -39,7 +39,7 @@ interface CreateVacationFormModalProps {
     conflicts?: RestrictionConflict[]
   }>
   userId?: string
-  onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string }) => void
+  onCheckRestrictions?: (userId: string, data: { startDate: string; endDate: string; vacationType: VacationType }) => void
   showSubstitutes?: boolean
   dayOffsAvailable?: number
   mode?: 'create' | 'edit'
@@ -91,7 +91,7 @@ export function CreateVacationFormModal({
   const [comment, setComment] = useState(initial?.comment ?? '')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [lastCheckedDates, setLastCheckedDates] = useState<{startDate: string; endDate: string} | null>(null)
+  const [lastCheckedDates, setLastCheckedDates] = useState<{ startDate: string; endDate: string; vacationType: VacationType } | null>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const [selectedSubstitutes, setSelectedSubstitutes] = useState<number[]>(initial?.substituteIds ?? [])
   const [employeeSearch, setEmployeeSearch] = useState('')
@@ -122,13 +122,14 @@ export function CreateVacationFormModal({
     }
 
     if (userId && startDate && endDate && onCheckRestrictions) {
-      if (lastCheckedDates?.startDate === startDate && lastCheckedDates?.endDate === endDate) {
+      if (lastCheckedDates?.startDate === startDate && lastCheckedDates.endDate === endDate && lastCheckedDates.vacationType === vacationType) {
         return
       }
 
       const timer = setTimeout(() => {
-        setLastCheckedDates({ startDate, endDate })
-        onCheckRestrictions(userId, { startDate, endDate })
+        const selection = { startDate, endDate, vacationType }
+        setLastCheckedDates(selection)
+        onCheckRestrictions(userId, selection)
       }, 500)
 
       debounceTimerRef.current = timer
@@ -139,7 +140,7 @@ export function CreateVacationFormModal({
         clearTimeout(debounceTimerRef.current)
       }
     }
-  }, [startDate, endDate, userId, onCheckRestrictions, lastCheckedDates])
+  }, [startDate, endDate, vacationType, userId, onCheckRestrictions, lastCheckedDates])
 
   const vacationDuration = useVacationDuration(startDate, endDate)
   const returnDate = useReturnToWork(endDate)
@@ -565,7 +566,7 @@ export function CreateVacationFormModal({
             </div>
           )}
 
-          <RestrictionWarnings warnings={restrictionWarnings} />
+          {vacationType !== VacationType.DAY_OFF && <RestrictionWarnings warnings={restrictionWarnings} />}
 
           </div>
           <div className="px-6 py-4 border-t border-border/60 shrink-0">

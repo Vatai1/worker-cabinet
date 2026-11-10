@@ -125,8 +125,9 @@ export function Vacation() {
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferRequest, setTransferRequest] = useState<VacationRequest | null>(null)
   const [restrictionWarningsCalendar, setRestrictionWarningsCalendar] = useState<VacationValidationError[]>([])
-  const [intersectionWarnings, setIntersectionWarnings] = useState<{message: string; employeeName: string; dates: string}[]>([])
-  const [vacationBlocked, setVacationBlocked] = useState(false)
+  const restrictionCheck = useRef(0)
+  const vacationBlocked = balance?.vacationRequestsBlocked === true
+  const noVacationMembership = balance?.hasMembership === false
   const [dayOffOnly, setDayOffOnly] = useState(false)
   const [showDayOffForm, setShowDayOffForm] = useState(false)
   const { dayOffs: rawDayOffs, items: leaveAdjustments, reload: reloadDayOffs } = useLeaveAdjustments()
@@ -137,7 +138,7 @@ export function Vacation() {
   const canGrantDayOffs = mayGrantDayOffs && dayOffsEnabled
   const canManageRestrictions = useCan('vacation:restrictions')
   const canManageVacations = useCan('vacation:manage')
-  const dayOffs = canTakeDayOffs ? rawDayOffs : null
+  const dayOffs = canTakeDayOffs && !noVacationMembership ? rawDayOffs : null
   const [dateErrorMessage, setDateErrorMessage] = useState<string | null>(null)
   const [year, setYear] = useState(initialUrlState.year)
   const [showSubstitutePicker, setShowSubstitutePicker] = useState<string | null>(null)
@@ -188,25 +189,17 @@ export function Vacation() {
   const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id)
 
   useEffect(() => {
-    if (user) {
-      fetchUserRequests(user.id)
-      fetchBalance(user.id, year).then(setBalance)
-
-      if (isManager) {
-        fetchRestrictions(user.departmentId || '1')
-      }
-
-      if (user.departmentId) {
-        fetch(`${API_BASE_URL}/departments/${user.departmentId}`, { headers: getAuthHeaders() })
-          .then(res => res.ok ? res.json() : null)
-          .then(data => {
-            if (data?.vacation_requests_blocked) setVacationBlocked(true)
-          })
-          .catch(() => {})
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, user?.departmentId, user?.role, year])
+    setBalance(null)
+    if (!user?.id) return
+    let active = true
+    fetchUserRequests(user.id)
+    fetchBalance(user.id, year).then((data) => {
+      if (!active) return
+      setBalance(data)
+      if (isManager && data.departmentId) fetchRestrictions(data.departmentId)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [user?.id, currentOrgId, isManager, year, fetchUserRequests, fetchBalance, fetchRestrictions])
 
   const reloadRequests = useCallback(() => {
     if (!user) return
@@ -469,47 +462,15 @@ export function Vacation() {
     setShowTransferModal(true)
   }
 
-  const findIntersections = (request: VacationRequest) => {
-    const warnings: {message: string; employeeName: string; dates: string}[] = []
-    const requestStart = new Date(request.startDate)
-    const requestEnd = new Date(request.endDate)
-
-    departmentRequests.forEach((otherRequest) => {
-      if (otherRequest.id === request.id) return
-      if (!request.departmentId || !otherRequest.departmentId) return
-      if (otherRequest.departmentId !== request.departmentId) return
-      if (otherRequest.status !== VacationRequestStatus.APPROVED &&
-          otherRequest.status !== VacationRequestStatus.ON_APPROVAL) return
-
-      const otherStart = new Date(otherRequest.startDate)
-      const otherEnd = new Date(otherRequest.endDate)
-
-      const hasOverlap = requestStart <= otherEnd && requestEnd >= otherStart
-
-      if (hasOverlap) {
-        const employeeName = personName(otherRequest.userLastName, otherRequest.userFirstName, otherRequest.userMiddleName)
-        const dates = `${new Date(otherRequest.startDate).toLocaleDateString('ru-RU')} - ${new Date(otherRequest.endDate).toLocaleDateString('ru-RU')}`
-        warnings.push({
-          message: `Пересечение с отпуском работника`,
-          employeeName,
-          dates
-        })
-      }
-    })
-
-    return warnings
-  }
-
   const handleOpenDetailModal = (request: VacationRequest) => {
     setDetailRequest(request)
-    const intersections = findIntersections(request)
-    setIntersectionWarnings(intersections)
     setShowDetailModal(true)
   }
 
   const MIN_ADVANCE_NOTICE_DAYS = 14
 
   const validateVacationStartDate = (startDate: string): string | null => {
+    if (noVacationMembership) return 'Вы не числитесь сотрудником выбранной организации'
     if (vacationBlocked) return 'Подача заявок на отпуск для вашего отдела временно заблокирована HR'
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -669,16 +630,13 @@ export function Vacation() {
     }
   }
 
-  const handleCheckRestrictionsCalendar = async (userId: string, data: { startDate: string; endDate: string }) => {
-    const warnings = await useVacationStore.getState().checkRestrictions(userId, {
-      startDate: data.startDate,
-      endDate: data.endDate,
-      vacationType: VacationType.ANNUAL_PAID,
-      comment: '',
-      hasTravel: false,
-    })
-    setRestrictionWarningsCalendar(warnings)
-  }
+  const handleCheckRestrictionsCalendar = useCallback(async (userId: string, data: { startDate: string; endDate: string; vacationType: VacationType }) => {
+    const checkId = ++restrictionCheck.current
+    setRestrictionWarningsCalendar([])
+    if (data.vacationType === VacationType.DAY_OFF) return
+    const warnings = await useVacationStore.getState().checkRestrictions(userId, data)
+    if (checkId === restrictionCheck.current) setRestrictionWarningsCalendar(warnings)
+  }, [])
 
   const handleOpenSubstitutePicker = async (requestId: string) => {
     if (showSubstitutePicker === requestId) {
@@ -1178,7 +1136,10 @@ export function Vacation() {
             </div>
           </div>
 
-          {balance && (
+          {noVacationMembership && (
+            <p className="text-sm text-muted-foreground">Вы не числитесь сотрудником выбранной организации</p>
+          )}
+          {balance && !noVacationMembership && (
             <div className="rounded-2xl border border-border bg-card p-[22px] shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -1771,7 +1732,9 @@ export function Vacation() {
           onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isDepartmentManager ? handleApprove : undefined}
           onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isDepartmentManager ? handleReject : undefined}
           loading={loading}
-          intersectionWarnings={intersectionWarnings}
+          checkRestrictions={!!user && !!detailRequest && (
+            detailRequest.userId === user.id || isManager || detailRequest.approverId === user.id || detailRequest.departmentManagerId === user.id
+          )}
           onTransfer={detailRequest && user?.id === detailRequest?.userId && detailRequest?.status === VacationRequestStatus.APPROVED ? handleTransferClick : undefined}
         />
       )}

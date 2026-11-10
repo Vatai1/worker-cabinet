@@ -191,9 +191,12 @@ export const vacationApi = {
     return {
       userId: data.user_id?.toString() || userId,
       year: data.year ?? year,
-      totalDays: data.total_days ?? 47,
+      hasMembership: data.has_membership,
+      departmentId: data.department_id?.toString(),
+      vacationRequestsBlocked: data.vacation_requests_blocked,
+      totalDays: data.total_days ?? 0,
       usedDays: data.used_days ?? 0,
-      availableDays: data.available_days ?? 47,
+      availableDays: data.available_days ?? 0,
       reservedDays: data.reserved_days ?? 0,
       lastAccrualDate: data.last_accrual_date,
       travelAvailable: data.travel_available ?? false,
@@ -230,12 +233,12 @@ export const vacationApi = {
 
   async checkRestrictions(
     userId: string,
-    data: { startDate: string; endDate: string }
+    data: Pick<VacationFormData, 'startDate' | 'endDate' | 'vacationType'>
   ): Promise<VacationValidationError[]> {
     const response = await fetchWithRetry(`${API_BASE_URL}/vacation/check-restrictions`, {
       method: 'POST',
       headers: getAuthHeadersWithContentType(),
-      body: JSON.stringify({ userId, startDate: data.startDate, endDate: data.endDate }),
+      body: JSON.stringify({ userId, ...data }),
     })
     const result = await handleResponse(response)
     return result
