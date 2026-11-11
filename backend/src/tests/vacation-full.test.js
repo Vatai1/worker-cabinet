@@ -436,18 +436,21 @@ describe('Модуль отпусков — user stories', () => {
     })
 
     it('approve с проездом: следующий проезд — со следующего двухлетнего периода, второй проезд в периоде сервер не пропускает', async () => {
+      const periodStart = `${shift(-30).slice(0, 7)}-01`
+      const periodYear = yearOf(periodStart)
+      const anniversary = periodStart.slice(4)
+      await query('UPDATE users SET hire_date = $1 WHERE id = $2', [`${periodYear - 8}${anniversary}`, emp.id])
       const created = await postVacation(emp, { startDate: ahead(10), endDate: ahead(14), vacationType: 'annual_paid', hasTravel: true, travelDestination: 'Южно-Сахалинск' })
       assert.strictEqual(created.status, 201, JSON.stringify(created.data))
       assert.strictEqual((await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(mgr), {})).status, 200)
       const balance = await call('GET', `/vacation/balance/${emp.id}?year=${yearOf(ahead(10))}`, await tokenFor(emp))
-      const k = Math.floor((Number(ahead(10).slice(0, 4)) - 2020) / 2)
-      assert.strictEqual(balance.data.travel_next_available_date, `${2020 + (k + 1) * 2}-01-01`)
+      assert.strictEqual(balance.status, 200)
+      assert.strictEqual(balance.data.travel_next_available_date, `${periodYear + 2}${anniversary}`)
       assert.strictEqual(balance.data.travel_available, false)
       const second = await postVacation(emp, { startDate: ahead(30), endDate: ahead(32), vacationType: 'annual_paid', hasTravel: true, travelDestination: 'Сочи' })
-      if (Number(ahead(30).slice(0, 4)) - 2020 < (k + 1) * 2) {
-        assert.strictEqual(second.status, 400, JSON.stringify(second.data))
-        assert.match(second.data.error, /будет доступен с/)
-      }
+      assert.strictEqual(second.status, 400, JSON.stringify(second.data))
+      assert.match(second.data.error, /Проезд за период .+ уже использован/)
+      assert.ok(second.data.error.includes(periodStart.split('-').reverse().join('.')))
     })
 
     it('reject заявки с проездом не сбрасывает уже использованный период', async () => {

@@ -69,7 +69,19 @@ describe('Удаление отдела', () => {
     await query("INSERT INTO timesheets (department_id, year, month, status, organization_id) VALUES ($1, 2026, 8, 'approved', 1)", [dept])
     const res = await del(dept)
     assert.strictEqual(res.status, 409)
-    assert.match(res.data.error, /табели — август 2026/)
+    assert.match(res.data.error, /табели.*август 2026/)
+  })
+
+  it('с возвращённым дневным табелем в черновом месяце → 409 с периодом', async () => {
+    const dept = await mkDept('Удаление: дневной табель')
+    const { rows: [sheet] } = await query(
+      "INSERT INTO timesheets (department_id, year, month, status, organization_id) VALUES ($1, 2026, 9, 'draft', 1) RETURNING id",
+      [dept]
+    )
+    await query("INSERT INTO timesheet_days (timesheet_id, date, status) VALUES ($1, '2026-09-01', 'returned')", [sheet.id])
+    const res = await del(dept)
+    assert.strictEqual(res.status, 409)
+    assert.match(res.data.error, /табели.*сентябрь 2026/)
   })
 
   it('пустой отдел → удаляется', async () => {
