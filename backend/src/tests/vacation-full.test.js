@@ -1597,19 +1597,14 @@ describe('Модуль отпусков — user stories', () => {
 
     const dayOfMonth = (month, day) => iso(new Date(month.getFullYear(), month.getMonth(), day))
 
-    it('после создания заявки — записи ОТ на все даты в черновом таймшите', async () => {
+    it('заявка на согласовании не записывает отпуск в черновой табель', async () => {
       const start = dayOfMonth(month1, 10)
       const end = dayOfMonth(month1, 14)
       const res = await postVacation(emp, { startDate: start, endDate: end, vacationType: 'annual_paid' })
       assert.strictEqual(res.status, 201, JSON.stringify(res.data))
-      const entries = (await query(
-        'SELECT date, code FROM timesheet_entries WHERE timesheet_id = $1 AND employee_id = $2 ORDER BY date', [tsDraftId, emp.id])).rows
-      assert.strictEqual(entries.length, 5)
-      assert.ok(entries.every((e) => e.code === 'ОТ'))
-      const dates = entries.map((e) => String(e.date))
-      const expected = []
-      for (let d = 10; d <= 14; d++) expected.push(dayOfMonth(month1, d))
-      assert.deepStrictEqual(dates, expected)
+      const entries = await query(
+        'SELECT 1 FROM timesheet_entries WHERE timesheet_id = $1 AND employee_id = $2', [tsDraftId, emp.id])
+      assert.strictEqual(entries.rowCount, 0)
     })
 
     it('согласованный (approved) таймшит не заполняется', async () => {

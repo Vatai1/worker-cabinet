@@ -410,7 +410,7 @@ router.post('/departments/:id/members', authenticateToken, requirePermission('de
  *         name: id
  *         required: true
  *         schema: { type: integer }
- *     description: 'Нельзя удалить отдел, в котором есть действующие работники (users.department_id, кроме деактивированных), если не передан transfer_to — тогда работники переводятся в указанный отдел. Также нельзя удалить при отправленных/утверждённых табелях. Прочие ссылки на отдел очищаются, черновики табелей удаляются'
+ *     description: 'Нельзя удалить отдел, в котором есть действующие работники (users.department_id, кроме деактивированных), если не передан transfer_to — тогда работники переводятся в указанный отдел. Также нельзя удалить, если хотя бы один табель отдела отправлялся на проверку. Прочие ссылки на отдел очищаются, черновики табелей удаляются'
  *     responses:
  *       200:
  *         description: Отдел удалён
@@ -449,16 +449,21 @@ router.delete('/departments/:id', authenticateToken, requirePermission('departme
     throw new ConflictError(`Нельзя удалить отдел: в нём есть работники — ${listPreview(people.map(shortPersonName))}. Переведите их в другой отдел`)
   }
 
-  const sheets = await query('SELECT id, year, month, status FROM timesheets WHERE department_id = $1 ORDER BY year, month', [id])
-  const finalSheets = sheets.rows.filter((t) => t.status !== 'draft')
-  if (finalSheets.length > 0) {
-    const periods = finalSheets.map((t) => `${MONTHS_NOMINATIVE[t.month - 1]} ${t.year}`)
-    throw new ConflictError(`Нельзя удалить отдел: по нему есть отправленные или утверждённые табели — ${listPreview(periods)}`)
-  }
-
   const client = await getClient()
   try {
     await client.query('BEGIN')
+    await client.query('SELECT id FROM departments WHERE id = $1 FOR UPDATE', [id])
+    await client.query('SELECT id FROM timesheets WHERE department_id = $1 ORDER BY id FOR UPDATE', [id])
+    const { rows: finalSheets } = await client.query(
+      `SELECT t.year, t.month FROM timesheets t WHERE t.department_id = $1
+         AND (t.status <> 'draft' OR EXISTS (SELECT 1 FROM timesheet_days td WHERE td.timesheet_id = t.id))
+       ORDER BY t.year, t.month`,
+      [id]
+    )
+    if (finalSheets.length > 0) {
+      const periods = finalSheets.map(t => `${MONTHS_NOMINATIVE[t.month - 1]} ${t.year}`)
+      throw new ConflictError(`Нельзя удалить отдел: по нему есть табели, которые уже отправлялись — ${listPreview(periods)}`)
+    }
     if (people.length > 0) await moveUsersToDepartment(client, people.map((p) => p.id), transferTo)
     await client.query('UPDATE user_organizations SET department_id = NULL WHERE department_id = $1', [id])
     await client.query('UPDATE users SET department_id = NULL WHERE department_id = $1', [id])

@@ -1,6 +1,7 @@
 import pg from 'pg'
 import dotenv from 'dotenv'
 import { PRODUCTION_CALENDAR } from './productionCalendar.js'
+import { VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
 import { FULL_ACCESS_ROLES, PERMISSIONS, PERMISSION_CODES } from '../lib/permissionCatalog.js'
 
 dotenv.config()
@@ -1740,6 +1741,47 @@ async function runMigrations() {
     }
     console.log('  ✓ multi-tenancy indexes created')
     console.log('✅ Multi-tenancy migration completed')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS timesheet_days (
+        timesheet_id INTEGER NOT NULL REFERENCES timesheets(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('submitted', 'approved', 'returned')),
+        revision INTEGER NOT NULL DEFAULT 1,
+        employee_ids INTEGER[] NOT NULL DEFAULT '{}',
+        submitted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        reason TEXT,
+        PRIMARY KEY (timesheet_id, date)
+      )
+    `)
+    await db.query(`
+      UPDATE timesheet_entries te SET organization_id = d.organization_id
+      FROM timesheets t JOIN departments d ON d.id = t.department_id,
+           user_organizations uo JOIN users u ON u.id = uo.user_id
+      WHERE te.timesheet_id = t.id AND te.organization_id = 1 AND d.organization_id <> 1
+        AND (t.organization_id = d.organization_id OR (t.organization_id = 1 AND t.created_by IS NULL))
+        AND uo.user_id = te.employee_id AND uo.org_id = d.organization_id
+        AND COALESCE(uo.department_id, u.department_id) = d.id
+    `)
+    await db.query(`
+      UPDATE timesheets t SET organization_id = d.organization_id
+      FROM departments d
+      WHERE d.id = t.department_id AND t.organization_id = 1 AND d.organization_id <> 1
+        AND t.created_by IS NULL
+    `)
+    await db.query(`
+      INSERT INTO timesheet_days (timesheet_id, date, status)
+      SELECT DISTINCT t.id, te.date, 'submitted'
+      FROM timesheets t JOIN timesheet_entries te ON te.timesheet_id = t.id AND te.organization_id = t.organization_id
+      JOIN departments d ON d.id = t.department_id AND d.organization_id = t.organization_id
+      JOIN users u ON u.id = te.employee_id
+      JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = t.organization_id
+        AND COALESCE(uo.department_id, u.department_id) = t.department_id
+      WHERE t.status = 'draft' AND te.is_submitted AND te.code <> ALL($1::text[])
+        AND EXTRACT(YEAR FROM te.date) = t.year AND EXTRACT(MONTH FROM te.date) = t.month
+      ON CONFLICT (timesheet_id, date) DO NOTHING
+    `, [[...VACATION_TIMESHEET_CODES, 'В']])
+
 
     console.log('Creating module_overrides table...')
     await db.query(`

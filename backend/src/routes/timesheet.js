@@ -1,135 +1,195 @@
 import express from 'express'
-import ExcelJS from 'exceljs'
-import PDFDocument from 'pdfkit'
-import { query, getClient } from '../config/database.js'
+import { query, inTransaction } from '../config/database.js'
+import { notify } from '../config/notifications.js'
 import { authenticateToken } from '../middleware/auth.js'
+import { asyncHandler, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../middleware/errors.js'
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
-import { excludeTest } from '../utils/testScope.js'
+import { excludeTest, testScopeAware } from '../utils/testScope.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
-import { getTimesheetExportData } from '../lib/timesheetExport.js'
+import { getTimesheetData, getTimesheetEmployees, getTimesheetMarks, timesheetDates } from '../lib/timesheetData.js'
+import { createTimesheetWorkbook, getTimesheetExportData, writeTimesheetPdf } from '../lib/timesheetExport.js'
 import { requirePermission, hasPermission } from '../lib/permissions.js'
-import { vacationTypeRule, VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
+import { VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
 
 const router = express.Router()
+const ATTENDANCE_CODES = ['Я', 'К', 'Б']
 
+router.use(authenticateToken, requirePermission('timesheet:view'), asyncHandler(async (req, res, next) => {
+  req.canManageTimesheets = await hasPermission(req, 'timesheet:manage')
+  next()
+}))
 
-router.use(authenticateToken)
-router.use(requirePermission('timesheet:view'))
-
-router.post('/auto-create', requirePermission('timesheet:manage'), async (req, res) => {
-  const { year, month } = req.body
-  const now = new Date()
-  const y = year || now.getFullYear()
-  const m = month || (now.getMonth() + 1)
-
-  try {
-    const { text: dText, values: dVals } = orgScopedQuery(`SELECT id FROM departments WHERE 1=1 ${excludeTest(req, 'departments', 'AND')}`, [], req)
-    const depts = await query(dText, dVals)
-    const { text: eText, values: eVals } = orgScopedQuery(
-      'SELECT department_id FROM timesheets WHERE year = $1 AND month = $2',
-      [y, m], req
-    )
-    const existing = await query(eText, eVals)
-    const existingSet = new Set(existing.rows.map(r => r.department_id))
-    const toCreate = depts.rows.filter(d => !existingSet.has(d.id))
-
-    if (toCreate.length === 0) {
-      return res.json({ created: 0, message: 'Все табели уже существуют' })
-    }
-
-    let created = 0
-    const client = await getClient()
-    try {
-      await client.query('BEGIN')
-      for (const dept of toCreate) {
-        await client.query(
-          'INSERT INTO timesheets (department_id, year, month, created_by, organization_id) VALUES ($1, $2, $3, $4, $5)',
-          [dept.id, y, m, req.user.id, currentOrgId(req)]
-        )
-        created++
-      }
-      await client.query('COMMIT')
-    } catch (error) {
-      await client.query('ROLLBACK')
-      throw error
-    } finally {
-      client.release()
-    }
-
-    res.status(201).json({
-      created,
-      total: depts.rows.length,
-      alreadyExisted: existingSet.size,
-      message: `Создано ${created} табел${created === 1 ? 'ь' : created < 5 ? 'я' : 'ей'} за ${String(m).padStart(2, '0')}.${y}`
-    })
-  } catch (error) {
-    res.locals.errorCause = error
-    console.error('Error auto-creating timesheets:', error)
-    res.status(500).json({ error: 'Ошибка при создании табелей' })
+function period(year, month) {
+  const y = Number(year)
+  const m = Number(month)
+  if (!Number.isInteger(y) || y < 2000 || y > 2100 || !Number.isInteger(m) || m < 1 || m > 12) {
+    throw new ValidationError('Некорректный год или месяц')
   }
-})
+  return [y, m]
+}
 
-async function getManagerDepartments(userId, req) {
-  const { text, values } = orgScopedQuery(
-    `SELECT id, name FROM departments WHERE manager_id = $1 ORDER BY name`,
-    [userId], req
+async function getManagerDepartments(req, db = { query }) {
+  const orgId = currentOrgId(req)
+  const { rows } = await db.query(
+    `SELECT d.id, d.name FROM departments d
+     WHERE d.manager_id = $1 AND d.organization_id = $2 ${excludeTest(req, 'd')}
+     ORDER BY d.name`,
+    [req.user.id, orgId]
   )
-  const byManagerId = await query(text, values)
-  if (byManagerId.rows.length > 0) return byManagerId.rows
+  if (rows.length > 0) return rows
 
-  const byDeptId = await query(
-    `SELECT d.id, d.name FROM users u JOIN departments d ON d.id = u.department_id WHERE u.id = $1 AND u.role = 'manager'`,
-    [userId]
+  const fallback = await db.query(
+    `SELECT d.id, d.name FROM users u
+     JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $2 AND uo.is_active
+     JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id) AND d.organization_id = uo.org_id
+     WHERE u.id = $1 AND (u.role = 'manager' OR uo.org_role = 'manager') ${excludeTest(req, 'd')}`,
+    [req.user.id, orgId]
   )
-  return byDeptId.rows
+  return fallback.rows
 }
 
-async function getManagerDepartmentIds(userId, req) {
-  return (await getManagerDepartments(userId, req)).map((d) => d.id)
+async function loadTimesheet(req, db = { query }, lock = false) {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id < 1 || id > 2147483647) throw new NotFoundError('Табель не найден')
+  const { rows } = await db.query(
+    `SELECT t.*, d.name AS department_name, d.manager_id
+     FROM timesheets t JOIN departments d ON d.id = t.department_id AND d.organization_id = t.organization_id
+     WHERE t.id = $1 AND ($2::int IS NULL OR t.organization_id = $2) ${excludeTest(req, 'd')}
+     ${lock ? 'FOR UPDATE OF t' : ''}`,
+    [id, currentOrgId(req)]
+  )
+  const sheet = rows[0]
+  if (!sheet) throw new NotFoundError('Табель не найден')
+  if (!req.canManageTimesheets && !(await getManagerDepartments(req, db)).some(d => d.id === sheet.department_id)) {
+    throw new ForbiddenError('Нет доступа к этому табелю')
+  }
+  return sheet
 }
 
-async function canAccessDepartment(user, departmentId, req) {
-  if (await hasPermission(req, 'timesheet:manage')) return true
-  return (await getManagerDepartmentIds(user.id, req)).includes(Number(departmentId))
+async function loadDay(db, sheet, date) {
+  const { rows } = await db.query('SELECT * FROM timesheet_days WHERE timesheet_id = $1 AND date = $2', [sheet.id, date])
+  return rows[0]
 }
 
-async function canAccessTimesheet(user, timesheetId, req) {
-  const { text, values } = orgScopedQuery(`SELECT department_id FROM timesheets WHERE id = $1`, [timesheetId], req)
-  const result = await query(text, values)
-  if (result.rows.length === 0) return false
-  return canAccessDepartment(user, result.rows[0].department_id, req)
+async function getRoster(db, sheet, day, req) {
+  if (day?.employee_ids.length) {
+    const { rows } = await db.query(
+      'SELECT id, first_name, last_name, middle_name FROM users WHERE id = ANY($1) AND ($2 OR NOT is_test)',
+      [day.employee_ids, testScopeAware(req)]
+    )
+    return rows
+  }
+  return getTimesheetEmployees(db, sheet, testScopeAware(req))
 }
+
+function groupEntries(entries, allowedDates) {
+  if (!Array.isArray(entries)) throw new ValidationError('Ожидается массив отметок')
+  const byDate = new Map()
+  for (const entry of entries) {
+    if (!allowedDates.includes(entry?.date)) throw new ValidationError('Дата отметки не входит в выбранный период')
+    if (!Number.isInteger(entry.employee_id) || entry.employee_id <= 0 || entry.employee_id > 2147483647) {
+      throw new ValidationError('Некорректный работник в отметке')
+    }
+    if (entry.code !== null && !ATTENDANCE_CODES.includes(entry.code)) throw new ValidationError('Недопустимый код посещаемости')
+    if (!byDate.has(entry.date)) byDate.set(entry.date, new Map())
+    const marks = byDate.get(entry.date)
+    if (marks.has(entry.employee_id)) throw new ValidationError('Отметка работника за эту дату указана дважды')
+    marks.set(entry.employee_id, entry.code)
+  }
+  return byDate
+}
+
+function checkEdits(edits, roster, date, calendar) {
+  const ids = new Set(roster.map(e => e.id))
+  for (const id of edits.keys()) {
+    if (!ids.has(id)) throw new ForbiddenError('Работник не входит в состав отдела для этой даты')
+    if (calendar.vacations.has(`${id}:${date}`)) throw new ConflictError('Отметка согласованного отпуска устанавливается автоматически')
+    if (calendar.nonWorkingDays.includes(date)) throw new ValidationError('За нерабочий день отметки заполняются автоматически')
+  }
+}
+
+async function saveMarks(db, sheet, date, marks, submitted) {
+  await db.query(
+    `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted, organization_id)
+     SELECT $1, employee_id, $2, code, $3, $4 FROM unnest($5::int[], $6::text[]) AS marks(employee_id, code)
+     ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
+     SET code = EXCLUDED.code, is_submitted = EXCLUDED.is_submitted, organization_id = EXCLUDED.organization_id`,
+    [sheet.id, date, submitted, sheet.organization_id, [...marks.keys()], [...marks.values()]]
+  )
+}
+
+function ensureWritable(sheet, day) {
+  if (sheet.status !== 'draft' || (day && day.status !== 'returned')) {
+    throw new ConflictError('Табель за эту дату уже отправлен и закрыт для редактирования')
+  }
+}
+
+/**
+ * @swagger
+ * /timesheet/auto-create:
+ *   post:
+ *     tags: [Timesheet]
+ *     summary: Создать месячные табели для отделов организации
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               year: { type: integer }
+ *               month: { type: integer }
+ *     responses:
+ *       200: { description: Все табели уже существуют }
+ *       201: { description: Табели созданы }
+ *       400: { description: Некорректный год или месяц }
+ *       403: { description: Нет доступа }
+ */
+router.post('/auto-create', requirePermission('timesheet:manage'), asyncHandler(async (req, res) => {
+  const now = new Date()
+  const [year, month] = period(req.body?.year ?? now.getFullYear(), req.body?.month ?? now.getMonth() + 1)
+  const { rows } = await query(...orgScopedQuery(`SELECT id, organization_id FROM departments WHERE 1=1 ${excludeTest(req, 'departments')}`, [], req))
+  const { rowCount: created } = await query(
+    `INSERT INTO timesheets (department_id, year, month, created_by, organization_id)
+     SELECT id, $2, $3, $4, organization_id FROM departments WHERE id = ANY($1)
+     ON CONFLICT (department_id, year, month) DO NOTHING`,
+    [rows.map(d => d.id), year, month, req.user.id]
+  )
+  res.status(created ? 201 : 200).json({
+    created,
+    total: rows.length,
+    alreadyExisted: rows.length - created,
+    message: created ? `Создано табелей: ${created}` : 'Все табели уже существуют',
+  })
+}))
 
 /**
  * @swagger
  * /timesheet/my-departments:
  *   get:
  *     tags: [Timesheet]
- *     summary: Отделы, табели которых ведёт текущий руководитель
- *     description: 'Все отделы, где пользователь указан руководителем (их может быть несколько); если таких нет — отдел самого руководителя. Для hr/admin — пустой список (им доступны все отделы).'
+ *     summary: Отделы текущего руководителя в активной организации
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: '[{ id, name }]' }
  */
-router.get('/my-departments', async (req, res) => {
-  try {
-    if (await hasPermission(req, 'timesheet:manage')) return res.json([])
-    res.json(await getManagerDepartments(req.user.id, req))
-  } catch (error) {
-    res.locals.errorCause = error
-    res.status(500).json({ error: 'Не удалось загрузить отделы' })
-  }
-})
+router.get('/my-departments', asyncHandler(async (req, res) => {
+  res.json(req.canManageTimesheets ? [] : await getManagerDepartments(req))
+}))
 
 /**
  * @swagger
  * /timesheet:
  *   get:
  *     tags: [Timesheet]
- *     summary: Получить список табелей
- *     description: 'Доступно для ролей: manager, hr, admin. Менеджер видит только свой отдел.'
- *     security:
- *       - bearerAuth: []
+ *     summary: Получить список месячных табелей
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: year, schema: { type: integer } }
+ *       - { in: query, name: month, schema: { type: integer } }
+ *       - { in: query, name: departmentId, schema: { type: integer } }
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 500 } }
  *     responses:
  *       200:
  *         description: Список табелей
@@ -138,59 +198,35 @@ router.get('/my-departments', async (req, res) => {
  *             schema:
  *               type: array
  *               items: { $ref: '#/components/schemas/Timesheet' }
+ *       400: { description: Некорректный фильтр }
  */
-router.get('/', async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page) || 1)
-    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 500))
-    const offset = (page - 1) * limit
-
-    let rows
-    if (await hasPermission(req, 'timesheet:manage')) {
-      let sql = `SELECT t.*, d.name as department_name FROM timesheets t JOIN departments d ON t.department_id = d.id `
-      const params = []
-      if (req.org) {
-        sql += `WHERE t.organization_id = $${params.length + 1} `
-        params.push(req.org.org_id)
-      }
-      sql += `ORDER BY t.year DESC, t.month DESC, d.name LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
-      params.push(limit, offset)
-      const result = await query(sql, params)
-      rows = result.rows
-    } else {
-      const deptIds = await getManagerDepartmentIds(req.user.id, req)
-      if (deptIds.length === 0) {
-        rows = []
-      } else {
-        let sql = `SELECT t.*, d.name as department_name FROM timesheets t JOIN departments d ON t.department_id = d.id WHERE t.department_id = ANY($1::int[]) `
-        const params = [deptIds]
-        if (req.org) {
-          sql += `AND t.organization_id = $${params.length + 1} `
-          params.push(req.org.org_id)
-        }
-        sql += `ORDER BY t.year DESC, t.month DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
-        params.push(limit, offset)
-        const result = await query(sql, params)
-        rows = result.rows
-      }
-    }
-    res.json(rows)
-  } catch (error) {
-    res.locals.errorCause = error
-    console.error('Error fetching timesheets:', error)
-    res.status(500).json({ error: 'Ошибка при получении табелей' })
+router.get('/', asyncHandler(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page) || 1)
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 500))
+  const scopedDepartments = req.canManageTimesheets ? null : (await getManagerDepartments(req)).map(d => d.id)
+  const filters = [req.query.year, req.query.month, req.query.departmentId].map(value => value === undefined ? null : Number(value))
+  if (filters.some(value => value !== null && (!Number.isInteger(value) || value < 1 || value > 2147483647))) {
+    throw new ValidationError('Некорректный фильтр табелей')
   }
-})
+  const { rows } = await query(
+    `SELECT t.*, d.name AS department_name FROM timesheets t
+     JOIN departments d ON d.id = t.department_id AND d.organization_id = t.organization_id
+     WHERE ($1::int IS NULL OR t.organization_id = $1) AND ($2::int[] IS NULL OR t.department_id = ANY($2))
+       AND ($3::int IS NULL OR t.year = $3) AND ($4::int IS NULL OR t.month = $4)
+       AND ($5::int IS NULL OR t.department_id = $5) ${excludeTest(req, 'd')}
+     ORDER BY t.year DESC, t.month DESC, d.name, t.id LIMIT $6 OFFSET $7`,
+    [currentOrgId(req), scopedDepartments, ...filters, limit, (page - 1) * limit]
+  )
+  res.json(rows)
+}))
 
 /**
  * @swagger
  * /timesheet:
  *   post:
  *     tags: [Timesheet]
- *     summary: Создать табель
- *     description: 'Доступно для ролей: manager, hr, admin'
- *     security:
- *       - bearerAuth: []
+ *     summary: Создать месячный табель
+ *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
@@ -199,87 +235,74 @@ router.get('/', async (req, res) => {
  *             type: object
  *             required: [year, month]
  *             properties:
- *               department_id: { type: integer, description: 'Автоматически для менеджера' }
+ *               department_id: { type: integer }
  *               year: { type: integer }
  *               month: { type: integer }
  *     responses:
- *       201:
- *         description: Табель создан
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Timesheet' }
+ *       201: { description: Табель создан }
+ *       400: { description: Не указан отдел или период }
+ *       403: { description: Нет доступа к отделу }
+ *       409: { description: Табель за этот месяц уже существует }
  */
-router.post('/', async (req, res) => {
-  let { department_id, year, month } = req.body
-
-  if (!department_id && !(await hasPermission(req, 'timesheet:manage'))) {
-    const deptIds = await getManagerDepartmentIds(req.user.id, req)
-    if (deptIds.length === 0) {
-      return res.status(400).json({ error: 'Вы не являетесь руководителем ни одного отдела' })
-    }
-    if (deptIds.length > 1) {
-      return res.status(400).json({ error: 'Вы руководите несколькими отделами — укажите отдел' })
-    }
-    department_id = deptIds[0]
+router.post('/', asyncHandler(async (req, res) => {
+  const [year, month] = period(req.body?.year, req.body?.month)
+  const isHR = req.canManageTimesheets
+  const departments = isHR ? [] : await getManagerDepartments(req)
+  const departmentId = Number(req.body?.department_id ?? (departments.length === 1 ? departments[0].id : undefined))
+  if (!Number.isInteger(departmentId) || departmentId < 1 || departmentId > 2147483647) {
+    throw new ValidationError(departments.length > 1 ? 'Вы руководите несколькими отделами. Укажите отдел' : 'Укажите отдел')
   }
+  if (!isHR && !departments.some(d => d.id === departmentId)) throw new ForbiddenError('Нет доступа к этому отделу')
+  const { rows: owners } = await query(
+    `SELECT organization_id FROM departments d
+     WHERE d.id = $1 AND ($2::int IS NULL OR d.organization_id = $2) ${excludeTest(req, 'd')}`,
+    [departmentId, currentOrgId(req)]
+  )
+  if (!owners.length) throw new ForbiddenError('Нет доступа к этому отделу')
+  const { rows } = await query(
+    `INSERT INTO timesheets (department_id, year, month, created_by, organization_id)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (department_id, year, month) DO NOTHING RETURNING *`,
+    [departmentId, year, month, req.user.id, owners[0].organization_id]
+  )
+  if (!rows.length) throw new ConflictError('Табель за этот месяц уже существует')
+  res.status(201).json(rows[0])
+}))
 
-  if (!department_id || !year || !month) {
-    return res.status(400).json({ error: 'Необходимо указать department_id, year, month' })
-  }
-
-  const yearNum = parseInt(year, 10)
-  const monthNum = parseInt(month, 10)
-  if (isNaN(yearNum) || yearNum < 2000 || yearNum > 2100 || isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
-    return res.status(400).json({ error: 'Некорректный год или месяц' })
-  }
-
-  if (!(await canAccessDepartment(req.user, department_id, req))) {
-    return res.status(403).json({ error: 'Нет доступа к данному отделу' })
-  }
-
-  const client = await getClient()
-  try {
-    await client.query('BEGIN')
-
-    const tsResult = await client.query(
-      `INSERT INTO timesheets (department_id, year, month, created_by, organization_id)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [department_id, yearNum, monthNum, req.user.id, currentOrgId(req)]
-    )
-    const timesheet = tsResult.rows[0]
-
-    await client.query('COMMIT')
-    res.status(201).json(timesheet)
-  } catch (error) {
-    res.locals.errorCause = error
-    await client.query('ROLLBACK')
-    if (error.code === '23505') {
-      return res.status(409).json({ error: 'Табель за этот месяц уже существует' })
-    }
-    console.error('Error creating timesheet:', error)
-    res.status(500).json({ error: 'Ошибка при создании табеля' })
-  } finally {
-    client.release()
-  }
-})
+/**
+ * @swagger
+ * /timesheet/days/submitted:
+ *   get:
+ *     tags: [Timesheet]
+ *     summary: Получить дневные табели на проверке по отделам
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Список отправленных дат с идентификатором табеля и отделом }
+ *       403: { description: Нет права согласования табелей }
+ */
+router.get('/days/submitted', requirePermission('timesheet:manage'), asyncHandler(async (req, res) => {
+  const { rows } = await query(
+    `SELECT td.date, td.revision, t.id AS timesheet_id, t.department_id, t.year, t.month, d.name AS department_name
+     FROM timesheet_days td JOIN timesheets t ON t.id = td.timesheet_id
+     JOIN departments d ON d.id = t.department_id AND d.organization_id = t.organization_id
+     WHERE td.status = 'submitted' AND ($1::int IS NULL OR t.organization_id = $1) ${excludeTest(req, 'd')}
+     ORDER BY td.date DESC, d.name, t.id`,
+    [currentOrgId(req)]
+  )
+  res.json(rows)
+}))
 
 /**
  * @swagger
  * /timesheet/{id}:
  *   get:
  *     tags: [Timesheet]
- *     summary: Получить табель с записями и работниками
- *     security:
- *       - bearerAuth: []
+ *     summary: Получить месячный табель, отметки и состояния дней
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: integer }
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
  *     responses:
  *       200:
- *         description: Табель с записями
+ *         description: Табель с работниками, отметками, состояниями дней и календарём
  *         content:
  *           application/json:
  *             schema:
@@ -287,255 +310,77 @@ router.post('/', async (req, res) => {
  *                 - $ref: '#/components/schemas/Timesheet'
  *                 - type: object
  *                   properties:
+ *                     today: { type: string, format: date }
+ *                     currentEmployeeIds: { type: array, items: { type: integer } }
+ *                     nonWorkingDays: { type: array, items: { type: string, format: date } }
  *                     entries: { type: array, items: { $ref: '#/components/schemas/TimesheetEntry' } }
  *                     employees: { type: array, items: { $ref: '#/components/schemas/User' } }
+ *                     days: { type: array, items: { $ref: '#/components/schemas/TimesheetDay' } }
+ *       403: { description: Нет доступа к табелю }
+ *       404: { description: Табель не найден }
  */
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    if (!(await canAccessTimesheet(req.user, id, req))) {
-      return res.status(403).json({ error: 'Нет доступа к этому табелю' })
-    }
-
-    const tsResult = await query(
-      `SELECT t.*, d.name as department_name
-       FROM timesheets t JOIN departments d ON t.department_id = d.id
-       WHERE t.id = $1${req.org ? ' AND t.organization_id = $2' : ''}`,
-      req.org ? [id, req.org.org_id] : [id]
-    )
-    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
-
-    const entriesResult = await query(
-      `SELECT te.*, u.first_name, u.last_name, u.middle_name
-       FROM timesheet_entries te
-       JOIN users u ON te.employee_id = u.id
-       WHERE te.timesheet_id = $1${req.org ? ' AND te.organization_id = $2' : ''}
-       ORDER BY u.last_name, u.first_name, te.date`,
-      req.org ? [id, req.org.org_id] : [id]
-    )
-
-    const empResult = await query(
-      `SELECT id, first_name, last_name, middle_name FROM users
-       WHERE department_id = $1 AND role IN ('employee', 'manager') ${excludeTest(req, 'users')}
-         AND (status <> 'inactive' OR id IN (SELECT employee_id FROM timesheet_entries WHERE timesheet_id = $2))
-       ORDER BY last_name, first_name`,
-      [tsResult.rows[0].department_id, id]
-    )
-
-    const ts = tsResult.rows[0]
-    const mm = String(ts.month).padStart(2, '0')
-    const daysInTs = new Date(ts.year, ts.month, 0).getDate()
-    const rangeStart = `${ts.year}-${mm}-01`
-    const rangeEnd = `${ts.year}-${mm}-${String(daysInTs).padStart(2, '0')}`
-
-    const vacations = await query(
-      `SELECT vr.user_id, vr.start_date, vr.end_date, vt.code as type_code
-       FROM vacation_requests vr
-       JOIN vacation_types vt ON vr.vacation_type_id = vt.id
-       JOIN request_statuses rs ON vr.status_id = rs.id
-       WHERE rs.code = 'approved'
-         AND vr.start_date <= $1
-         AND vr.end_date >= $2
-         AND vr.user_id = ANY($3)${req.org ? ' AND vr.organization_id = $4' : ''}`,
-      req.org ? [rangeEnd, rangeStart, empResult.rows.map(e => e.id), req.org.org_id] : [rangeEnd, rangeStart, empResult.rows.map(e => e.id)]
-    )
-
-    if (vacations.rows.length > 0) {
-      const empMap = Object.fromEntries(empResult.rows.map(e => [e.id, e]))
-      const entrySet = new Set(entriesResult.rows.map(e => `${e.employee_id}:${e.date}`))
-      const vacationEntries = []
-
-      for (const v of vacations.rows) {
-        const tsCode = vacationTypeRule(v.type_code).code
-        if (!tsCode || !empMap[v.user_id]) continue
-
-        const start = new Date(Math.max(new Date(v.start_date).getTime(), new Date(rangeStart).getTime()))
-        const end = new Date(Math.min(new Date(v.end_date).getTime(), new Date(rangeEnd).getTime()))
-
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const dow = d.getDay()
-          if (dow === 0 || dow === 6) continue
-          const dateStr = toLocalDateStr(d)
-          const key = `${v.user_id}:${dateStr}`
-          if (!entrySet.has(key)) {
-            vacationEntries.push([id, v.user_id, dateStr, tsCode, true, currentOrgId(req)])
-            entrySet.add(key)
-          }
-        }
-      }
-
-      if (vacationEntries.length > 0) {
-        const client = await getClient()
-        try {
-          await client.query('BEGIN')
-          const placeholders = vacationEntries.map((_, i) => {
-            const b = i * 6
-            return `($${b+1}, $${b+2}, $${b+3}, $${b+4}, $${b+5}, $${b+6})`
-          }).join(', ')
-          await client.query(
-            `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted, organization_id)
-             VALUES ${placeholders}
-             ON CONFLICT (timesheet_id, employee_id, date) DO NOTHING`,
-            vacationEntries.flat()
-          )
-          await client.query('COMMIT')
-
-          const refreshed = await query(
-            `SELECT te.*, u.first_name, u.last_name, u.middle_name
-             FROM timesheet_entries te
-             JOIN users u ON te.employee_id = u.id
-             WHERE te.timesheet_id = $1${req.org ? ' AND te.organization_id = $2' : ''}
-             ORDER BY u.last_name, u.first_name, te.date`,
-            req.org ? [id, req.org.org_id] : [id]
-          )
-          entriesResult.rows = refreshed.rows
-        } catch (err) {
-          await client.query('ROLLBACK')
-          console.error('Error inserting vacation entries:', err)
-        } finally {
-          client.release()
-        }
-      }
-    }
-
-    res.json({ ...tsResult.rows[0], entries: entriesResult.rows, employees: empResult.rows })
-  } catch (error) {
-    res.locals.errorCause = error
-    console.error('Error fetching timesheet:', error)
-    res.status(500).json({ error: 'Ошибка при получении табеля' })
-  }
-})
+router.get('/:id', asyncHandler(async (req, res) => {
+  const result = await inTransaction(async db => {
+    await db.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+    const sheet = await loadTimesheet(req, db)
+    return { ...sheet, ...await getTimesheetData(sheet, testScopeAware(req), db), today: toLocalDateStr(new Date()) }
+  })
+  res.json(result)
+}))
 
 /**
  * @swagger
  * /timesheet/{id}/entries:
  *   put:
  *     tags: [Timesheet]
- *     summary: Сохранить записи табеля
- *     security:
- *       - bearerAuth: []
+ *     summary: Сохранить отметки посещаемости в открытых днях
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: integer }
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [entries]
- *             properties:
- *               entries:
- *                 type: array
- *                 items: { $ref: '#/components/schemas/TimesheetEntry' }
+ *             type: array
+ *             minItems: 1
+ *             items: { $ref: '#/components/schemas/TimesheetEntry' }
  *     responses:
- *       200:
- *         description: Записи сохранены
+ *       200: { description: Отметки сохранены }
+ *       400: { description: Некорректные отметки или дата }
+ *       403: { description: Нет доступа к табелю или работнику }
+ *       404: { description: Табель не найден }
+ *       409: { description: День закрыт или отметку установил отпуск }
  */
-router.put('/:id/entries', async (req, res) => {
-  const { id } = req.params
-  const entries = req.body
-
-  if (!Array.isArray(entries) || entries.length === 0) {
-    return res.status(400).json({ error: 'Ожидается непустой массив записей' })
-  }
-
-  try {
-    const { text: tsText, values: tsVals } = orgScopedQuery(`SELECT * FROM timesheets WHERE id = $1`, [id], req)
-    const tsResult = await query(tsText, tsVals)
-    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
-    const timesheet = tsResult.rows[0]
-
-    if (!(await canAccessDepartment(req.user, timesheet.department_id, req))) {
-      return res.status(403).json({ error: 'Нет доступа к этому табелю' })
-    }
-
-    const mm = String(timesheet.month).padStart(2, '0')
-    const daysInTs = new Date(timesheet.year, timesheet.month, 0).getDate()
-    const rangeStart = `${timesheet.year}-${mm}-01`
-    const rangeEnd = `${timesheet.year}-${mm}-${String(daysInTs).padStart(2, '0')}`
+router.put('/:id/entries', asyncHandler(async (req, res) => {
+  if (req.canManageTimesheets) throw new ForbiddenError('Отметки заполняет начальник подразделения')
+  await inTransaction(async db => {
+    const sheet = await loadTimesheet(req, db, true)
+    const groups = groupEntries(req.body, timesheetDates(sheet))
+    if (!groups.size) throw new ValidationError('Нет отметок для сохранения')
     const today = toLocalDateStr(new Date())
-    const vacationCodes = VACATION_TIMESHEET_CODES
-
-    const employeeIds = [...new Set(entries.map(e => e.employee_id))]
-    const dates = [...new Set(entries.map(e => e.date))]
-    const existingResult = await query(
-      `SELECT employee_id, date, code FROM timesheet_entries
-       WHERE timesheet_id = $1 AND employee_id = ANY($2) AND date = ANY($3)${req.org ? ' AND organization_id = $4' : ''}`,
-      req.org ? [id, employeeIds, dates, req.org.org_id] : [id, employeeIds, dates]
-    )
-    const existingMap = new Map()
-    for (const row of existingResult.rows) {
-      existingMap.set(`${row.employee_id}_${row.date}`, row.code)
+    for (const [date, edits] of groups) {
+      if (date > today) throw new ValidationError('Нельзя заполнять будущие даты')
+      const day = await loadDay(db, sheet, date)
+      ensureWritable(sheet, day)
+      const roster = await getRoster(db, sheet, day, req)
+      checkEdits(edits, roster, date, await getTimesheetMarks(db, sheet, [date], roster.map(e => e.id)))
+      await saveMarks(db, sheet, date, edits, false)
     }
-
-    for (const e of entries) {
-      if (e.date < rangeStart || e.date > rangeEnd) {
-        return res.status(400).json({ error: `Дата ${e.date} не входит в диапазон табеля` })
-      }
-      if (e.date > today) {
-        return res.status(400).json({ error: `Нельзя редактировать будущие даты (${e.date})` })
-      }
-
-      const existingCode = existingMap.get(`${e.employee_id}_${e.date}`)
-      if (existingCode && vacationCodes.includes(existingCode)) {
-        return res.status(403).json({ error: `Нельзя редактировать записи отпуска (${e.date})` })
-      }
-    }
-
-    const normalizedEntries = entries.map(e => {
-      const dow = new Date(e.date).getDay()
-      return { ...e, code: (dow === 0 || dow === 6) ? 'В' : (e.code ?? null) }
-    })
-
-    const client = await getClient()
-    try {
-      await client.query('BEGIN')
-      const placeholders = normalizedEntries.map((_, i) => {
-        const base = i * 6
-        return `($${base+1}, $${base+2}, $${base+3}, $${base+4}, $${base+5}, $${base+6})`
-      }).join(', ')
-      await client.query(
-        `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted, organization_id)
-         VALUES ${placeholders}
-         ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
-           SET code = EXCLUDED.code, is_submitted = false`,
-        normalizedEntries.flatMap(e => [id, e.employee_id, e.date, e.code, false, currentOrgId(req)])
-      )
-      await client.query(
-        `UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2${req.org ? ' AND organization_id = $3' : ''}`,
-        req.org ? [req.user.id, id, req.org.org_id] : [req.user.id, id]
-      )
-      await client.query('COMMIT')
-      res.json({ success: true })
-    } catch (err) {
-      await client.query('ROLLBACK')
-      throw err
-    } finally {
-      client.release()
-    }
-  } catch (error) {
-    res.locals.errorCause = error
-    console.error('Error updating entries:', error)
-    res.status(500).json({ error: 'Ошибка при обновлении записей' })
-  }
-})
+    await db.query('UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2', [req.user.id, sheet.id])
+  })
+  res.json({ success: true })
+}))
 
 /**
  * @swagger
  * /timesheet/{id}/status:
  *   put:
  *     tags: [Timesheet]
- *     summary: Изменить статус табеля
- *     security:
- *       - bearerAuth: []
+ *     summary: Изменить состояние исторического месячного табеля без дневных отправок
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: integer }
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
  *     requestBody:
  *       required: true
  *       content:
@@ -546,117 +391,218 @@ router.put('/:id/entries', async (req, res) => {
  *             properties:
  *               status: { type: string, enum: [draft, submitted, approved] }
  *     responses:
- *       200:
- *         description: Статус обновлён
+ *       200: { description: Статус обновлён }
+ *       400: { description: Некорректный статус }
+ *       403: { description: Переход статуса недоступен }
+ *       404: { description: Табель не найден }
+ *       409: { description: Табель согласуется по дням }
  */
-router.put('/:id/status', async (req, res) => {
-  const { id } = req.params
-  const { status } = req.body
-
-  const allowedStatuses = ['draft', 'submitted', 'approved']
-  if (!allowedStatuses.includes(status)) {
-    return res.status(400).json({ error: 'Недопустимый статус' })
-  }
-
-  try {
-    const { text: tsText, values: tsVals } = orgScopedQuery(`SELECT * FROM timesheets WHERE id = $1`, [id], req)
-    const tsResult = await query(tsText, tsVals)
-    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
-    const timesheet = tsResult.rows[0]
-
-    if (!(await canAccessDepartment(req.user, timesheet.department_id, req))) {
-      return res.status(403).json({ error: 'Нет доступа к этому табелю' })
-    }
-
-    const current = timesheet.status
-    const isHR = await hasPermission(req, 'timesheet:manage')
-
-    const allowed =
-      (!isHR && current === 'draft' && status === 'submitted') ||
+router.put('/:id/status', asyncHandler(async (req, res) => {
+  const status = req.body?.status
+  if (!['draft', 'submitted', 'approved'].includes(status)) throw new ValidationError('Недопустимый статус')
+  const isHR = req.canManageTimesheets
+  const result = await inTransaction(async db => {
+    const sheet = await loadTimesheet(req, db, true)
+    const current = sheet.status
+    const allowed = (!isHR && current === 'draft' && status === 'submitted') ||
       (isHR && current === 'submitted' && status === 'approved') ||
       (isHR && current === 'approved' && status === 'submitted')
+    if (!allowed) throw new ForbiddenError('Переход статуса недоступен для вашей роли')
+    const { rowCount } = await db.query('SELECT 1 FROM timesheet_days WHERE timesheet_id = $1 LIMIT 1', [sheet.id])
+    if (rowCount || (current === 'draft' && timesheetDates(sheet).at(-1) >= toLocalDateStr(new Date()))) {
+      throw new ConflictError('Этот табель согласуется по дням')
+    }
+    const { rows } = await db.query(
+      'UPDATE timesheets SET status = $1, updated_by = $2, updated_at = NOW() WHERE id = $3 RETURNING *',
+      [status, req.user.id, sheet.id]
+    )
+    if (current === 'draft') {
+      await db.query('UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1 AND organization_id = $2', [sheet.id, sheet.organization_id])
+    }
+    return rows[0]
+  })
+  res.json(result)
+}))
 
-    if (!allowed) {
-      return res.status(403).json({ error: `Переход ${current}→${status} недопустим для вашей роли` })
+async function submitDay(req, res) {
+  if (req.canManageTimesheets) throw new ForbiddenError('День отправляет начальник подразделения')
+  const result = await inTransaction(async db => {
+    const sheet = await loadTimesheet(req, db, true)
+    const today = toLocalDateStr(new Date())
+    const date = req.params.date ?? today
+    if (!timesheetDates(sheet).includes(date)) throw new ValidationError('Дата не входит в период табеля')
+    const day = await loadDay(db, sheet, date)
+    ensureWritable(sheet, day)
+    if (date !== today && day?.status !== 'returned') throw new ValidationError('Можно отправить сегодняшний день или день, возвращённый на доработку')
+
+    const edits = groupEntries(req.body?.entries ?? [], [date]).get(date) ?? new Map()
+    const roster = await getRoster(db, sheet, day, req)
+    if (!roster.length) throw new ValidationError('В отделе нет работников для отправки табеля')
+    const ids = roster.map(e => e.id)
+    const calendar = await getTimesheetMarks(db, sheet, [date], ids)
+    checkEdits(edits, roster, date, calendar)
+    const { rows } = await db.query(
+      `SELECT employee_id, code FROM timesheet_entries
+       WHERE timesheet_id = $1 AND date = $2 AND organization_id = $3 AND employee_id = ANY($4)`,
+      [sheet.id, date, sheet.organization_id, ids]
+    )
+    const marks = new Map(rows.filter(row => ATTENDANCE_CODES.includes(row.code)).map(row => [row.employee_id, row.code]))
+    for (const [id, code] of edits) marks.set(id, code)
+    for (const id of ids) {
+      const code = calendar.vacations.get(`${id}:${date}`) ?? (calendar.nonWorkingDays.length ? 'В' : marks.get(id))
+      marks.set(id, code)
+    }
+    const missing = roster.filter(e => !marks.get(e.id))
+    if (missing.length) {
+      const names = missing.slice(0, 5).map(e => [e.last_name, e.first_name, e.middle_name].filter(Boolean).join(' '))
+      throw new ValidationError(`Заполните отметки за ${date}. Не заполнено: ${missing.length} (${names.join(', ')})`)
     }
 
-    const client = await getClient()
-    let result
-    try {
-      await client.query('BEGIN')
-      result = await client.query(
-        `UPDATE timesheets SET status = $1, updated_by = $2, updated_at = NOW()
-         WHERE id = $3${req.org ? ' AND organization_id = $4' : ''} RETURNING *`,
-        req.org ? [status, req.user.id, id, req.org.org_id] : [status, req.user.id, id]
-      )
-      if (status === 'submitted' && current === 'draft') {
-        await client.query(
-          `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1${req.org ? ' AND organization_id = $2' : ''}`,
-          req.org ? [id, req.org.org_id] : [id]
-        )
-      }
-      await client.query('COMMIT')
-    } catch (error) {
-      await client.query('ROLLBACK')
-      throw error
-    } finally {
-      client.release()
-    }
-
-    res.json(result.rows[0])
-  } catch (error) {
-    res.locals.errorCause = error
-    console.error('Error updating timesheet status:', error)
-    res.status(500).json({ error: 'Ошибка при изменении статуса' })
-  }
-})
+    await saveMarks(db, sheet, date, marks, true)
+    const { rows: submitted } = await db.query(
+      `INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, submitted_by)
+       VALUES ($1, $2, 'submitted', $3, $4)
+       ON CONFLICT (timesheet_id, date) DO UPDATE
+       SET status = 'submitted', revision = timesheet_days.revision + 1,
+           employee_ids = EXCLUDED.employee_ids, submitted_by = EXCLUDED.submitted_by, reason = NULL
+       RETURNING date, status, revision`,
+      [sheet.id, date, ids, req.user.id]
+    )
+    await db.query('UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2', [req.user.id, sheet.id])
+    return { ...submitted[0], success: true, updated: ids.length }
+  })
+  res.json(result)
+}
 
 /**
  * @swagger
  * /timesheet/{id}/submit-today:
  *   post:
  *     tags: [Timesheet]
- *     summary: Отправить записи за сегодняшний день
- *     security:
- *       - bearerAuth: []
+ *     summary: Отправить заполненный табель за сегодняшний день
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: integer }
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
  *     responses:
- *       200:
- *         description: Записи отправлены
+ *       200: { description: День отправлен на проверку }
+ *       400: { description: Дата вне периода или табель неполный }
+ *       403: { description: Нет доступа }
+ *       404: { description: Табель не найден }
+ *       409: { description: День уже закрыт или отметку установил отпуск }
  */
-router.post('/:id/submit-today', async (req, res) => {
-  const { id } = req.params
-  try {
-    if (!(await canAccessTimesheet(req.user, id, req))) {
-      return res.status(403).json({ error: 'Нет доступа к этому табелю' })
-    }
-    const { text: tsText, values: tsVals } = orgScopedQuery(`SELECT * FROM timesheets WHERE id = $1`, [id], req)
-    const tsResult = await query(tsText, tsVals)
-    if (tsResult.rows.length === 0) return res.status(404).json({ error: 'Табель не найден' })
+router.post('/:id/submit-today', asyncHandler(submitDay))
 
-    const today = toLocalDateStr(new Date())
-    const result = await query(
-      `UPDATE timesheet_entries SET is_submitted = true WHERE timesheet_id = $1 AND date = $2${req.org ? ' AND organization_id = $3' : ''}`,
-      req.org ? [id, today, req.org.org_id] : [id, today]
-    )
-    res.json({ success: true, updated: result.rowCount })
-  } catch (error) {
-    res.locals.errorCause = error
-    console.error('Error submitting today:', error)
-    res.status(500).json({ error: 'Ошибка при отправке' })
+/**
+ * @swagger
+ * /timesheet/{id}/days/{date}/submit:
+ *   post:
+ *     tags: [Timesheet]
+ *     summary: Отправить сегодняшний или возвращённый табель вместе с правками
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: path, name: date, required: true, schema: { type: string, format: date } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               entries: { type: array, items: { $ref: '#/components/schemas/TimesheetEntry' } }
+ *     responses:
+ *       200: { description: День отправлен на проверку }
+ *       400: { description: Дата недоступна или табель неполный }
+ *       403: { description: Нет доступа к табелю или работнику }
+ *       404: { description: Табель не найден }
+ *       409: { description: День уже закрыт или отметку установил отпуск }
+ */
+router.post('/:id/days/:date/submit', asyncHandler(submitDay))
+
+/**
+ * @swagger
+ * /timesheet/{id}/days/{date}/review:
+ *   put:
+ *     tags: [Timesheet]
+ *     summary: Принять день или вернуть начальнику на доработку
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: path, name: date, required: true, schema: { type: string, format: date } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status, revision]
+ *             properties:
+ *               status: { type: string, enum: [approved, returned] }
+ *               revision: { type: integer }
+ *               reason: { type: string, maxLength: 1000, description: Обязательна при возврате }
+ *     responses:
+ *       200: { description: Решение сохранено }
+ *       400: { description: Некорректное решение или дата }
+ *       403: { description: Нет права согласования табелей }
+ *       404: { description: Табель не найден }
+ *       409: { description: Отправка уже изменилась или нет получателя для возврата }
+ */
+router.put('/:id/days/:date/review', requirePermission('timesheet:manage'), asyncHandler(async (req, res) => {
+  const { date } = req.params
+  const { status, revision, reason } = req.body ?? {}
+  const message = typeof reason === 'string' ? reason.trim() : ''
+  if (!['approved', 'returned'].includes(status) || !Number.isInteger(revision) || revision < 1) {
+    throw new ValidationError('Укажите решение и версию отправки')
   }
-})
+  if (status === 'returned' && (!message || message.length > 1000)) {
+    throw new ValidationError('Укажите причину возврата до 1000 символов')
+  }
+
+  const result = await inTransaction(async db => {
+    const sheet = await loadTimesheet(req, db, true)
+    if (!timesheetDates(sheet).includes(date)) throw new ValidationError('Дата не входит в период табеля')
+    const day = await loadDay(db, sheet, date)
+    if (day?.status !== 'submitted' || day.revision !== revision) {
+      throw new ConflictError('Отправка изменилась. Обновите табель перед проверкой')
+    }
+    const { rows } = await db.query(
+      'UPDATE timesheet_days SET status = $1, reason = $2 WHERE timesheet_id = $3 AND date = $4 RETURNING date, status, revision, reason',
+      [status, status === 'returned' ? message : null, sheet.id, date]
+    )
+    if (status === 'returned') {
+      const { rows: recipients } = await db.query(
+        `SELECT u.id FROM users u JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $1 AND uo.is_active
+         WHERE u.status <> 'inactive' AND (u.id = $3
+           OR ((u.role = 'manager' OR uo.org_role = 'manager') AND COALESCE(uo.department_id, u.department_id) = $4
+             AND NOT EXISTS (SELECT 1 FROM departments d WHERE d.organization_id = $1 AND d.manager_id = u.id)))
+         ORDER BY (u.id = $3) DESC NULLS LAST, (u.id = $2) DESC NULLS LAST, u.id LIMIT 1`,
+        [sheet.organization_id, day.submitted_by, sheet.manager_id, sheet.department_id]
+      )
+      if (!recipients.length) throw new ConflictError('Назначьте действующего начальника отдела перед возвратом табеля')
+      await notify({
+        userId: recipients[0].id,
+        type: 'timesheet_returned',
+        channel: 'in_app',
+        data: {
+          subject: 'Табель возвращён на доработку',
+          message: `${sheet.department_name}, ${date}. ${message}`,
+          departmentId: sheet.department_id,
+          organizationId: sheet.organization_id,
+          date,
+        },
+        db,
+      })
+    }
+    return rows[0]
+  })
+  res.json(result)
+}))
 
 /**
  * @swagger
  * /timesheet/{id}/export/excel:
  *   get:
  *     tags: [Timesheet]
- *     summary: Экспортировать табель в Excel
+ *     summary: Экспортировать оформленный месячный табель в Excel
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -666,49 +612,28 @@ router.post('/:id/submit-today', async (req, res) => {
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: XLSX файл
+ *         description: XLSX с цветными отметками и закреплёнными заголовками
  *         content:
  *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
  *             schema:
  *               type: string
  *               format: binary
  */
-router.get('/:id/export/excel', async (req, res) => {
-  const { id } = req.params
+router.get('/:id/export/excel', asyncHandler(async (req, res) => {
   try {
-    if (!(await canAccessTimesheet(req.user, id, req))) {
-      return res.status(403).json({ error: 'Нет доступа' })
-    }
-    const data = await getTimesheetExportData(id)
-    if (!data) return res.status(404).json({ error: 'Табель не найден' })
-    const { timesheet, daysInMonth, byEmployee } = data
-
-    const workbook = new ExcelJS.Workbook()
-    const sheet = workbook.addWorksheet('Табель')
-
-    const header = ['Работник']
-    for (let d = 1; d <= daysInMonth; d++) header.push(String(d))
-    sheet.addRow(header)
-    sheet.getRow(1).font = { bold: true }
-
-    for (const emp of Object.values(byEmployee)) {
-      const row = [emp.name]
-      for (let d = 1; d <= daysInMonth; d++) {
-        const date = `${timesheet.year}-${String(timesheet.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-        row.push(emp.days[date] ?? '')
-      }
-      sheet.addRow(row)
-    }
-
+    const data = await inTransaction(async db => {
+      await db.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+      const sheet = await loadTimesheet(req, db)
+      return getTimesheetExportData(db, sheet, testScopeAware(req))
+    })
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    res.setHeader('Content-Disposition', `attachment; filename="timesheet-${timesheet.year}-${timesheet.month}.xlsx"`)
-    await workbook.xlsx.write(res)
+    res.setHeader('Content-Disposition', `attachment; filename="timesheet-${data.filename}.xlsx"`)
+    await createTimesheetWorkbook(data).xlsx.write(res)
   } catch (error) {
-    res.locals.errorCause = error
-    console.error('Error exporting Excel:', error)
-    res.status(500).json({ error: 'Ошибка при экспорте Excel' })
+    if (res.headersSent) return res.destroy(error)
+    throw error
   }
-})
+}))
 
 /**
  * @swagger
@@ -725,65 +650,27 @@ router.get('/:id/export/excel', async (req, res) => {
  *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: PDF файл
+ *         description: PDF с кириллицей и заголовком таблицы на каждой странице
  *         content:
  *           application/pdf:
  *             schema:
  *               type: string
  *               format: binary
  */
-router.get('/:id/export/pdf', async (req, res) => {
-  const { id } = req.params
+router.get('/:id/export/pdf', asyncHandler(async (req, res) => {
   try {
-    if (!(await canAccessTimesheet(req.user, id, req))) {
-      return res.status(403).json({ error: 'Нет доступа' })
-    }
-    const data = await getTimesheetExportData(id)
-    if (!data) return res.status(404).json({ error: 'Табель не найден' })
-    const { timesheet, daysInMonth, byEmployee } = data
-    const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
-
+    const data = await inTransaction(async db => {
+      await db.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+      const sheet = await loadTimesheet(req, db)
+      return getTimesheetExportData(db, sheet, testScopeAware(req))
+    })
     res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `attachment; filename="timesheet-${timesheet.year}-${timesheet.month}.pdf"`)
-
-    const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' })
-    doc.pipe(res)
-
-    doc.fontSize(14).text(
-      `Табель учёта рабочего времени — ${timesheet.department_name} — ${monthNames[timesheet.month - 1]} ${timesheet.year}`,
-      { align: 'center' }
-    )
-    doc.moveDown(0.5)
-
-    const colWidth = 20
-    const nameWidth = 120
-    const rowHeight = 16
-    let y = doc.y
-    const startX = 30
-
-    doc.fontSize(7).text('Работник', startX, y, { width: nameWidth, continued: false })
-    for (let d = 1; d <= daysInMonth; d++) {
-      doc.text(String(d), startX + nameWidth + (d - 1) * colWidth, y, { width: colWidth, align: 'center' })
-    }
-    y += rowHeight
-
-    for (const emp of Object.values(byEmployee)) {
-      doc.text(emp.name, startX, y, { width: nameWidth })
-      for (let d = 1; d <= daysInMonth; d++) {
-        const date = `${timesheet.year}-${String(timesheet.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-        const cx = startX + nameWidth + (d - 1) * colWidth
-        doc.text(emp.days[date] ?? '', cx, y, { width: colWidth, align: 'center' })
-      }
-      y += rowHeight
-      if (y > 500) { doc.addPage(); y = 30 }
-    }
-
-    doc.end()
+    res.setHeader('Content-Disposition', `attachment; filename="timesheet-${data.filename}.pdf"`)
+    writeTimesheetPdf(res, data)
   } catch (error) {
-    res.locals.errorCause = error
-    console.error('Error exporting PDF:', error)
-    res.status(500).json({ error: 'Ошибка при экспорте PDF' })
+    if (res.headersSent) return res.destroy(error)
+    throw error
   }
-})
+}))
 
 export default router

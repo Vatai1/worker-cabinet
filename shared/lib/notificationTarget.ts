@@ -55,6 +55,13 @@ export function getNotificationTarget(
       return { path: `/surveys?surveyId=${surveyId}` }
     }
 
+    case 'timesheet_returned': {
+      const departmentId = str(data.departmentId)
+      const date = str(data.date)
+      if (!departmentId || !date) return null
+      return { path: `/leader/timesheet?${new URLSearchParams({ departmentId, date })}` }
+    }
+
     case 'onboarding_task': {
       const taskId = str(data.taskId)
       if (!taskId) return null

@@ -5,7 +5,7 @@ import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
 import { getTravelState, assertTravelAllowed } from '../lib/travel.js'
 import { resolveApproverId, coApproverId } from '../lib/vacationApprover.js'
-import { vacationTypeRule, requestTypeCode, VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
+import { vacationTypeRule, requestTypeCode } from '../lib/vacationTypes.js'
 import { VACATION_REPORTS, buildReport, sendReportXlsx } from '../lib/vacationReports.js'
 import { getFromS3, uploadToS3, getPresignedUrl } from '../config/s3.js'
 import multer from 'multer'
@@ -19,6 +19,7 @@ import { resolveVacationDays, applyRuleToExistingBalances } from '../lib/vacatio
 import { getVisibleColleagueIds } from '../lib/colleagues.js'
 import { hasFullDepartmentAccess, managedDepartmentIds } from '../lib/departmentScope.js'
 import { requirePermission, hasPermission, isModuleEnabledForOrg } from '../lib/permissions.js'
+import { getWorkingCalendar } from '../lib/workingCalendar.js'
 import { genitiveTemplateData, departmentGenitive, positionGenitive } from '../lib/nameGenitive.js'
 
 const router = express.Router()
@@ -73,26 +74,9 @@ function todayISO() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
-const LAW_HOLIDAYS = ['01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08', '02-23', '03-08', '05-01', '05-09', '06-12', '11-04']
-
-async function nonWorkingChecker(from, to) {
-  const rows = (await query('SELECT day, kind FROM calendar_holidays WHERE day BETWEEN $1 AND $2', [from, to])).rows
-  const byDay = new Map(rows.map((r) => [r.day, r.kind]))
-  const years = []
-  for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) years.push(y)
-  const loadedYears = new Set((await query('SELECT DISTINCT year FROM calendar_holidays WHERE year = ANY($1)', [years])).rows.map((r) => r.year))
-  return (day) => {
-    const weekday = parseISODate(day).getUTCDay()
-    const weekend = weekday === 0 || weekday === 6
-    if (!loadedYears.has(Number(day.slice(0, 4)))) return weekend || LAW_HOLIDAYS.includes(day.slice(5))
-    const kind = byDay.get(day)
-    return kind === 'holiday' || kind === 'transfer' || (weekend && kind !== 'shortened')
-  }
-}
-
 async function nextWorkingDay(endDate) {
   const end = String(endDate).slice(0, 10)
-  const isNonWorking = await nonWorkingChecker(addDaysISO(end, 1), addDaysISO(end, 60))
+  const { isNonWorking } = await getWorkingCalendar(addDaysISO(end, 1), addDaysISO(end, 60))
   let day = end
   for (let i = 0; i < 60; i++) {
     day = addDaysISO(day, 1)
@@ -104,7 +88,7 @@ async function nextWorkingDay(endDate) {
 async function workingDaysBetween(startDate, endDate) {
   const start = String(startDate).slice(0, 10)
   const end = String(endDate).slice(0, 10)
-  const isNonWorking = await nonWorkingChecker(start, end)
+  const { isNonWorking } = await getWorkingCalendar(start, end)
   const days = []
   for (let day = start; day <= end; day = addDaysISO(day, 1)) {
     if (!isNonWorking(day)) days.push(day)
@@ -276,75 +260,6 @@ function notifyVacationChanged(req, requestId, action) {
   const orgId = currentOrgId(req)
   if (!orgId) return
   broadcastToOrg(orgId, 'vacation_changed', { requestId, action, actorId: req.user.id, organizationId: orgId })
-}
-
-async function vacationDatesByMonth(startDate, endDate) {
-  const byMonth = {}
-  const [sy, sm, sd] = startDate.split('-').map(Number)
-  const [ey, em, ed] = endDate.split('-').map(Number)
-  const endMs = new Date(ey, em - 1, ed).getTime()
-  for (let d = new Date(sy, sm - 1, sd); d.getTime() <= endMs; d.setDate(d.getDate() + 1)) {
-    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    const key = ds.slice(0, 7)
-    if (!byMonth[key]) byMonth[key] = { year: Number(ds.slice(0, 4)), month: Number(ds.slice(5, 7)), dates: [] }
-    byMonth[key].dates.push(ds)
-  }
-  return byMonth
-}
-
-async function fillVacationTimesheetEntries(client, userId, startDate, endDate, req, typeCode = 'annual_paid') {
-  const rule = vacationTypeRule(typeCode)
-  const dayOff = !!rule.workingDays
-  const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
-  const deptId = deptResult.rows[0]?.department_id
-  if (!deptId) return
-  const code = rule.code
-  const holidaysResult = await client.query("SELECT day FROM calendar_holidays WHERE day BETWEEN $1 AND $2 AND kind = 'holiday'", [startDate, endDate])
-  const holidaySet = new Set(holidaysResult.rows.map((r) => r.day))
-  const workingSet = dayOff ? new Set(await workingDaysBetween(startDate, endDate)) : null
-  const byMonth = await vacationDatesByMonth(startDate, endDate)
-  for (const { year, month, dates: allDates } of Object.values(byMonth)) {
-    const dates = allDates.filter((d) => (workingSet ? workingSet.has(d) : !rule.excludeHolidays || !holidaySet.has(d)))
-    if (dates.length === 0) continue
-    const tsOrgClause = req.org ? ' AND organization_id = $4' : ''
-    const tsResult = await client.query(
-      `SELECT id FROM timesheets WHERE department_id = $1 AND year = $2 AND month = $3 AND status != 'approved'${tsOrgClause}`,
-      req.org ? [deptId, year, month, req.org.org_id] : [deptId, year, month]
-    )
-    if (tsResult.rows.length === 0) continue
-    const tsId = tsResult.rows[0].id
-    const orgCol = req.org ? ', organization_id' : ''
-    const orgParam = req.org ? `, $${dates.length + 3}` : ''
-    const placeholders = dates.map((_, i) => `($1, $2, $${i + 3}, '${code}'${orgParam})`).join(', ')
-    await client.query(
-      `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code${orgCol})
-       VALUES ${placeholders}
-       ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE SET code = '${code}'`,
-      req.org ? [tsId, userId, ...dates, req.org.org_id] : [tsId, userId, ...dates]
-    )
-  }
-}
-
-async function clearVacationTimesheetEntries(client, userId, startDate, endDate, req) {
-  const deptResult = await client.query(`SELECT department_id FROM users WHERE id = $1`, [userId])
-  const deptId = deptResult.rows[0]?.department_id
-  if (!deptId) return
-  const byMonth = await vacationDatesByMonth(startDate, endDate)
-  for (const { year, month, dates } of Object.values(byMonth)) {
-    const tsOrgClause = req.org ? ' AND organization_id = $4' : ''
-    const tsResult = await client.query(
-      `SELECT id FROM timesheets WHERE department_id = $1 AND year = $2 AND month = $3 AND status != 'approved'${tsOrgClause}`,
-      req.org ? [deptId, year, month, req.org.org_id] : [deptId, year, month]
-    )
-    if (tsResult.rows.length === 0) continue
-    const tsId = tsResult.rows[0].id
-    const delOrgClause = req.org ? ' AND organization_id = $4' : ''
-    await client.query(
-      `DELETE FROM timesheet_entries
-       WHERE timesheet_id = $1 AND employee_id = $2 AND date = ANY($3) AND code = ANY($${req.org ? 5 : 4})${delOrgClause}`,
-      req.org ? [tsId, userId, dates, req.org.org_id, VACATION_TIMESHEET_CODES] : [tsId, userId, dates, VACATION_TIMESHEET_CODES]
-    )
-  }
 }
 
 function extractYear(date) {
@@ -1712,7 +1627,6 @@ router.post('/requests', authenticateToken, async (req, res) => {
       [request.id, userId, currentOrgId(req)]
     )
 
-    await fillVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req, vacationType)
 
     if (Array.isArray(substitute_ids) && substitute_ids.length > 0) {
       for (const subId of substitute_ids) {
@@ -2045,8 +1959,6 @@ router.put('/requests/:id', authenticateToken, async (req, res) => {
     )
     const updated = result.rows[0]
 
-    await clearVacationTimesheetEntries(client, userId, request.start_date, request.end_date, req)
-    await fillVacationTimesheetEntries(client, userId, updated.start_date, updated.end_date, req, vacationType)
 
     let addedSubs = []
     let removedSubs = []
@@ -2607,8 +2519,6 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
       [id, managerId, currentOrgId(req)]
     )
 
-    await clearVacationTimesheetEntries(client, originalRequest.user_id, originalRequest.start_date, originalRequest.end_date, req)
-    await fillVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date, req, await requestTypeCode(client, newRequest))
 
     await notify({
       userId: newRequest.user_id,
@@ -2884,7 +2794,6 @@ router.post('/requests/:id/transfer/cancel', authenticateToken, async (req, res)
       [id, userId, 'Отменено работником', currentOrgId(req)]
     )
 
-    await clearVacationTimesheetEntries(client, newRequest.user_id, newRequest.start_date, newRequest.end_date, req)
 
     await client.query('COMMIT')
 

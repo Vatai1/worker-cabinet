@@ -1,151 +1,178 @@
 import { useEffect, useState } from 'react'
-import { Clock } from 'lucide-react'
-import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
-import { getErrorMessage } from '@/shared/lib/utils'
-import { API_BASE_URL } from '@/shared/lib/api'
-import { TimesheetGrid, TimesheetEntry } from '@/shared/components/timesheet/TimesheetGrid'
+import { Button } from '@/shared/components/ui/Button'
+import { TimesheetGrid, TIMESHEET_DAY_LABELS } from '@/shared/components/timesheet/TimesheetGrid'
 import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
-import { useAuthStore } from '@/core/auth/store/authStore'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
 import { hasAnyRoleSync } from '@/shared/lib/permissions'
+import { formatDate, getErrorMessage } from '@/shared/lib/utils'
+import { apiGet, apiPost, apiPut } from '@/shared/lib/apiClient'
+import type { Timesheet, TimesheetDetails } from '@/shared/components/timesheet/TimesheetGrid'
 
-interface Department { id: number; name: string }
-interface Timesheet {
-  id: number
-  department_id: number
-  department_name: string
-  year: number
-  month: number
-  status: 'draft' | 'submitted' | 'approved'
-}
+type PendingDay = Pick<Timesheet, 'department_id' | 'department_name' | 'year' | 'month'> & { timesheet_id: number; date: string }
 
-const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
+const MONTH_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
 export function HRTimesheet() {
-  const user = useAuthStore(s => s.user)
   const now = new Date()
-  const departments = useDepartmentsStore(s => s.departments) as Department[]
-  const [selectedDept, setSelectedDept] = useState<number | null>(null)
+  const departments = useDepartmentsStore(s => s.departments)
+  const [departmentId, setDepartmentId] = useState<number | null>(null)
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
-  const [timesheet, setTimesheet] = useState<Timesheet | null>(null)
-  const [timesheetData, setTimesheetData] = useState<{ entries: TimesheetEntry[]; employees: { id: number; first_name: string; last_name: string }[] } | null>(null)
+  const [selectedDate, setSelectedDate] = useState('')
+  const [sheet, setSheet] = useState<TimesheetDetails | null>(null)
+  const [pending, setPending] = useState<PendingDay[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reviewing, setReviewing] = useState(false)
+  const [returning, setReturning] = useState(false)
+  const [reason, setReason] = useState('')
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
-    useDepartmentsStore.getState().fetchDepartments().then(() => {
-      const deps = useDepartmentsStore.getState().departments as Department[]
-      if (deps.length > 0) setSelectedDept(deps[0].id)
-    }).catch(err => setError(getErrorMessage(err)))
+    useDepartmentsStore.getState().fetchDepartments()
+      .then(() => setDepartmentId(previous => previous ?? useDepartmentsStore.getState().departments[0]?.id ?? null))
+      .catch(err => setError(getErrorMessage(err)))
   }, [])
 
-  async function loadTimesheet() {
-    if (!selectedDept) return
+  useEffect(() => {
+    let active = true
+    apiGet<PendingDay[]>('/timesheet/days/submitted')
+      .then(rows => { if (active) setPending(rows) })
+      .catch(err => { if (active) setError(getErrorMessage(err)) })
+    return () => { active = false }
+  }, [reload])
+
+  useEffect(() => {
+    if (!departmentId) return
+    let active = true
     setLoading(true)
+    setSheet(null)
+    const listPath = `/timesheet?departmentId=${departmentId}&year=${year}&month=${month}`
+    async function load() {
+      try {
+        let [found] = await apiGet<Timesheet[]>(listPath)
+        if (!active) return
+        if (!found && hasAnyRoleSync('admin')) {
+          await apiPost('/timesheet/auto-create', { year, month })
+          ;[found] = await apiGet<Timesheet[]>(listPath)
+        }
+        const data = found ? await apiGet<TimesheetDetails>(`/timesheet/${found.id}`) : null
+        if (active) setSheet(data)
+      } catch (err) {
+        if (active) setError(getErrorMessage(err))
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [departmentId, year, month, reload])
+
+  const currentSheet = sheet?.department_id === departmentId && sheet.year === year && sheet.month === month ? sheet : null
+  const day = currentSheet?.days.find(d => d.date === selectedDate)
+    ?? currentSheet?.days.find(d => d.status === 'submitted') ?? currentSheet?.days[0]
+  const years = [...new Set([now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1, year])].sort()
+
+  function selectDate(date: string) {
+    setSelectedDate(date)
+    setReturning(false)
+    setReason('')
+    setError(null)
+  }
+
+  async function review(status: 'approved' | 'returned') {
+    if (!currentSheet || !day) return
+    setReviewing(true)
     setError(null)
     try {
-      const res = await fetch(`${API_BASE_URL}/timesheet`, { headers: getAuthHeaders() })
-      if (!res.ok) throw new Error('Ошибка загрузки')
-      const list: Timesheet[] = await res.json()
-      let found = list.find(t => t.department_id === selectedDept && t.year === year && t.month === month) ?? null
-
-      if (!found && hasAnyRoleSync('admin')) {
-        try {
-          const createRes = await fetch(`${API_BASE_URL}/timesheet/auto-create`, {
-            method: 'POST',
-            headers: getAuthHeadersWithContentType(),
-            body: JSON.stringify({ year, month }),
-          })
-          if (createRes.ok || createRes.status === 201) {
-            const list2Res = await fetch(`${API_BASE_URL}/timesheet`, { headers: getAuthHeaders() })
-            if (list2Res.ok) {
-              const list2: Timesheet[] = await list2Res.json()
-              found = list2.find(t => t.department_id === selectedDept && t.year === year && t.month === month) ?? null
-            }
-          }
-        } catch {}
-      }
-
-      setTimesheet(found)
-      if (found) {
-        const res2 = await fetch(`${API_BASE_URL}/timesheet/${found.id}`, { headers: getAuthHeaders() })
-        if (!res2.ok) throw new Error('Ошибка загрузки данных')
-        setTimesheetData(await res2.json())
-      } else {
-        setTimesheetData(null)
-      }
-    } catch (err: unknown) {
+      await apiPut(`/timesheet/${currentSheet.id}/days/${day.date}/review`, { status, revision: day.revision, reason })
+      selectDate(day.date)
+      setReload(value => value + 1)
+    } catch (err) {
       setError(getErrorMessage(err))
     } finally {
-      setLoading(false)
+      setReviewing(false)
     }
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadTimesheet() }, [selectedDept, year, month])
-
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <select
-          value={selectedDept ?? ''}
-          onChange={e => setSelectedDept(Number(e.target.value))}
-          className="border border-border rounded-lg px-3 py-2 text-sm bg-card"
-        >
-          {departments.map(d => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
+      <section className="space-y-2" aria-labelledby="pending-timesheets">
+        <h2 id="pending-timesheets" className="font-semibold">Табели на проверке</h2>
+        {pending.length ? (
+          <ul className="flex flex-wrap gap-2">
+            {pending.map(item => (
+              <li key={`${item.timesheet_id}:${item.date}`}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={reviewing}
+                  onClick={() => {
+                    setDepartmentId(item.department_id)
+                    setYear(item.year)
+                    setMonth(item.month)
+                    selectDate(item.date)
+                  }}
+                >
+                  {item.department_name} · {formatDate(item.date)}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-sm text-muted-foreground">Нет табелей, ожидающих проверки</p>}
+      </section>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <select aria-label="Отдел" value={departmentId ?? ''} disabled={reviewing} onChange={e => { setDepartmentId(Number(e.target.value)); selectDate('') }} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
-        <select
-          value={month}
-          onChange={e => setMonth(Number(e.target.value))}
-          className="border border-border rounded-lg px-3 py-2 text-sm bg-card"
-        >
-          {MONTH_NAMES.map((name, i) => (
-            <option key={i + 1} value={i + 1}>{name}</option>
-          ))}
+        <select aria-label="Месяц" value={month} disabled={reviewing} onChange={e => { setMonth(Number(e.target.value)); selectDate('') }} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          {MONTH_NAMES.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
         </select>
-        <select
-          value={year}
-          onChange={e => setYear(Number(e.target.value))}
-          className="border border-border rounded-lg px-3 py-2 text-sm bg-card"
-        >
-          {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
-            <option key={y} value={y}>{y}</option>
-          ))}
+        <select aria-label="Год" value={year} disabled={reviewing} onChange={e => { setYear(Number(e.target.value)); selectDate('') }} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
+        {day && (
+          <select aria-label="Дата табеля" value={day.date} disabled={reviewing} onChange={e => selectDate(e.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+            {currentSheet?.days.map(d => <option key={d.date} value={d.date}>{formatDate(d.date)} · {TIMESHEET_DAY_LABELS[d.status]}</option>)}
+          </select>
+        )}
+        <Button variant="outline" size="sm" disabled={loading || reviewing} onClick={() => { setError(null); setReload(value => value + 1) }}>Обновить</Button>
       </div>
 
-      {error && <div className="text-sm text-destructive">{error}</div>}
-
+      {error && <div role="alert" className="text-sm text-destructive">{error}</div>}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-        </div>
-      ) : !timesheet ? (
-        <div className="flex flex-col items-center gap-4 py-16 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center">
-            <Clock className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <p className="text-muted-foreground">Табель не найден</p>
-        </div>
-      ) : (
+        <p role="status" className="py-8 text-center text-sm text-muted-foreground">Загрузка табеля…</p>
+      ) : currentSheet ? (
         <div className="space-y-4">
-          {timesheetData && (
-            <TimesheetGrid
-              timesheetId={timesheet.id}
-              entries={timesheetData.entries}
-              employees={timesheetData.employees}
-              year={year}
-              month={month}
-              role={user?.role}
-              onSave={loadTimesheet}
-            />
+          {day?.status === 'submitted' && (
+            <div className="flex flex-wrap items-end gap-2">
+              {returning ? (
+                <form
+                  className="flex w-full flex-wrap items-end gap-2"
+                  onSubmit={e => { e.preventDefault(); review('returned') }}
+                >
+                  <label className="flex min-w-[240px] flex-1 flex-col gap-1 text-sm">
+                    Причина возврата
+                    <textarea autoFocus required maxLength={1000} value={reason} onChange={e => setReason(e.target.value)} disabled={reviewing} className="rounded-lg border border-border bg-background px-3 py-2" />
+                  </label>
+                  <Button type="submit" disabled={reviewing || !reason.trim()}>Вернуть табель</Button>
+                  <Button type="button" variant="outline" disabled={reviewing} onClick={() => setReturning(false)}>Отмена</Button>
+                </form>
+              ) : (
+                <>
+                  <Button disabled={reviewing} onClick={() => review('approved')}>Принять табель</Button>
+                  <Button variant="outline" disabled={reviewing} onClick={() => setReturning(true)}>Вернуть на доработку</Button>
+                </>
+              )}
+            </div>
           )}
+          {day?.status === 'returned' && <p className="whitespace-pre-wrap text-sm text-muted-foreground">Причина возврата. {day.reason}</p>}
+          {!day && currentSheet.status !== 'draft' && <p className="text-sm text-muted-foreground">{currentSheet.status === 'approved' ? 'Месячный табель утверждён' : 'Месячный табель отправлен'}</p>}
+          <TimesheetGrid key={currentSheet.id} sheet={currentSheet} selectedDate={day?.date ?? ''} />
           <TimesheetLegend />
         </div>
-      )}
+      ) : <p className="py-8 text-center text-sm text-muted-foreground">Табель не найден</p>}
     </div>
   )
 }

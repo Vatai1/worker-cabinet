@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-export const BASE = 'http://localhost:5000/api'
+export const BASE = process.env.TEST_API_BASE_URL ?? 'http://localhost:5000/api'
 export const PASSWORD = 'password123'
 
 const CACHE_FILE = join(tmpdir(), 'worker-cabinet-test-tokens.json')

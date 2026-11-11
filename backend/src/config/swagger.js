@@ -183,7 +183,18 @@ const options = {
           properties: {
             employee_id: { type: 'integer' },
             date: { type: 'string', format: 'date' },
-            code: { type: 'string', description: 'Код Т-13 (Я, В, ОТ, Б, К, Н, ПР, РВ и т.д.)' },
+            code: { type: 'string', nullable: true, description: 'Ручные отметки: Я, К, Б или null. Отпуска и выходные рассчитываются автоматически.' },
+            is_submitted: { type: 'boolean', readOnly: true },
+          },
+        },
+        TimesheetDay: {
+          type: 'object',
+          properties: {
+            date: { type: 'string', format: 'date' },
+            status: { type: 'string', enum: ['submitted', 'approved', 'returned'] },
+            revision: { type: 'integer' },
+            employee_ids: { type: 'array', items: { type: 'integer' } },
+            reason: { type: 'string', nullable: true },
           },
         },
         PaginatedResponse: {

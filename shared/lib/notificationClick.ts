@@ -1,6 +1,8 @@
 import { getNotificationTarget, type NotificationLike } from '@/shared/lib/notificationTarget'
 import { markNotificationRead } from '@/shared/lib/notificationsApi'
 import { infoDialog } from '@/shared/components/ConfirmDialog'
+import { useOrgStore } from '@/shared/store/orgStore'
+import { setCookie } from '@/shared/lib/cookies'
 
 interface ClickableNotification extends NotificationLike {
   id: number
@@ -33,6 +35,16 @@ export async function openNotification(
     showBugReportNotification(n)
   } else {
     const target = getNotificationTarget(n, currentUserId)
+    if (target && n.type === 'timesheet_returned') {
+      const orgId = Number(n.data.organizationId)
+      const { currentOrgId, organizations } = useOrgStore.getState()
+      if (orgId !== currentOrgId && organizations.some(org => org.id === orgId)) {
+        const marked = !n.read_at && await markNotificationRead(n.id).then(() => true, () => false)
+        setCookie('active_org_id', String(orgId))
+        window.location.assign(target.path)
+        return marked
+      }
+    }
     if (target) navigate(target.path)
   }
   if (n.read_at) return false

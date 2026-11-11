@@ -20,28 +20,23 @@ modules/timesheet/
 
 ## API эндпоинты
 
-**Файл**: `backend/src/routes/timesheet.js` (591 строка)
+Обработчики находятся в `backend/src/routes/timesheet.js`.
 
-| Метод | Путь | Роли | Описание |
-|--------|------|------|----------|
-| GET | `/api/timesheet/` | manager, hr, admin | Список табелей (manager: свой отдел) |
-| POST | `/api/timesheet/` | manager, hr, admin | Создать табель (manager: авто-отдел) |
-| GET | `/api/timesheet/:id` | manager, hr, admin | Детали табеля |
-| PUT | `/api/timesheet/:id/entries` | manager, hr, admin | Обновить записи (без отпускных кодов) |
-| PUT | `/api/timesheet/:id/status` | manager, hr, admin | Изменить статус (manager: draft->submitted, HR: submitted->approved) |
-| POST | `/api/timesheet/:id/submit-today` | manager, hr, admin | Отметить сегодня |
-| GET | `/api/timesheet/:id/export/excel` | manager, hr, admin | Экспорт XLSX |
-| GET | `/api/timesheet/:id/export/pdf` | manager, hr, admin | Экспорт PDF |
+| Метод | Путь | Доступ | Назначение |
+|--------|------|--------|------------|
+| GET | `/api/timesheet` | Начальник, HR | Список месячных табелей. Начальник видит закреплённые отделы |
+| POST | `/api/timesheet` | Начальник, HR | Создать месячный табель |
+| GET | `/api/timesheet/:id` | Начальник, HR | Состав отдела, отметки и состояния дней |
+| PUT | `/api/timesheet/:id/entries` | Начальник | Сохранить отметки в открытом дне |
+| POST | `/api/timesheet/:id/days/:date/submit` | Начальник | Отправить сегодняшний или возвращённый день вместе с правками |
+| POST | `/api/timesheet/:id/submit-today` | Начальник | Отправить сохранённые отметки за сегодня |
+| GET | `/api/timesheet/days/submitted` | HR | Очередь отправленных дней по отделам |
+| PUT | `/api/timesheet/:id/days/:date/review` | HR | Принять день или вернуть начальнику с причиной |
+| PUT | `/api/timesheet/:id/status` | Начальник, HR | Переходы для исторических месячных табелей без дневных отправок |
+| GET | `/api/timesheet/:id/export/excel` | Начальник, HR | Экспорт XLSX |
+| GET | `/api/timesheet/:id/export/pdf` | Начальник, HR | Экспорт PDF |
 
-## Роли и доступ
-
-| Роль | Доступ |
-|------|--------|
-| employee | Нет доступа (ManagerRoute) |
-| manager | Табели своего отдела, draft -> submitted |
-| hr | Все табели, submitted -> approved, approved -> submitted |
-| admin | Все табели, полный контроль |
-| onboarding | Нет доступа |
+Начальник отправляет заполненный день на проверку. HR принимает его или возвращает с причиной. Отправленные и принятые дни закрыты для редактирования. Для возвращённого дня начальник получает уведомление и может исправить отметки даже после даты табеля.
 
 ## Зависимости
 

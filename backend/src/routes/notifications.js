@@ -48,7 +48,7 @@ const router = express.Router()
  *                       id: { type: integer }
  *                       type:
  *                         type: string
- *                         enum: [vacation_created, vacation_status_changed, vacation_substitution, vacation_substitution_removed, bug_report_new, bug_report_update, bug_report_reply, document_assigned, survey_assigned, onboarding_task, mailing, generic]
+ *                         enum: [vacation_created, vacation_status_changed, vacation_substitution, vacation_substitution_removed, bug_report_new, bug_report_update, bug_report_reply, document_assigned, survey_assigned, onboarding_task, timesheet_returned, mailing, generic]
  *                       channel: { type: string }
  *                       status: { type: string }
  *                       sent_at: { type: string, nullable: true }
@@ -56,7 +56,7 @@ const router = express.Router()
  *                       read_at: { type: string, nullable: true }
  *                       data:
  *                         type: object
- *                         description: 'Поля зависят от type. Содержит id сущности для клика-перехода: requestId (vacation_*), reportId (bug_report_*), documentId (document_assigned), surveyId (survey_assigned), taskId (onboarding_task).'
+ *                         description: 'Поля зависят от type. Содержит id сущности для клика-перехода: requestId (vacation_*), reportId (bug_report_*), documentId (document_assigned), surveyId (survey_assigned), taskId (onboarding_task), departmentId и date (timesheet_returned).'
  *                         properties:
  *                           subject: { type: string }
  *                           message: { type: string }
@@ -65,6 +65,9 @@ const router = express.Router()
  *                           documentId: { type: integer }
  *                           surveyId: { type: integer }
  *                           taskId: { type: integer }
+ *                           departmentId: { type: integer }
+ *                           organizationId: { type: integer }
+ *                           date: { type: string, format: date }
  *                 total: { type: integer }
  *                 page: { type: integer }
  *                 limit: { type: integer }
@@ -82,7 +85,7 @@ router.get('/my', authenticateToken, asyncHandler(async (req, res) => {
   }
 
   const result = await query(
-    `SELECT nq.id, nq.type, nq.channel, nq.data, nq.status, nq.sent_at, nq.created_at
+    `SELECT nq.id, nq.type, nq.channel, nq.data, nq.status, nq.sent_at, nq.created_at, nq.read_at
      FROM notification_queue nq
      ${whereClause}
      ORDER BY nq.created_at DESC

@@ -23,6 +23,7 @@ const TYPE_LABELS: Record<string, string> = {
   survey_assigned: 'Новый опрос',
   onboarding_task: 'Задача онбординга',
   mailing: 'Рассылка',
+  timesheet_returned: 'Табель возвращён',
   generic: 'Уведомление',
 }
 

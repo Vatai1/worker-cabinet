@@ -1,20 +1,16 @@
-﻿import { useState, useMemo, useEffect } from 'react'
+import { useMemo, useState } from 'react'
+import { Button } from '@/shared/components/ui/Button'
+import { Send } from 'lucide-react'
 import { TIMESHEET_CODES, CODE_COLORS, VACATION_CODES } from '@/shared/lib/timesheetCodes'
-import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
+import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
-import { Button } from '@/shared/components/ui/Button'
-import { hasAnyRole } from '@/shared/lib/permissions'
+import { apiPost, apiPut, fetchWithRetry } from '@/shared/lib/apiClient'
 
-export interface TimesheetEntry {
-  id: number
+interface TimesheetEntry {
   employee_id: number
   date: string
   code: string | null
-  is_submitted: boolean
-  first_name: string
-  last_name: string
-  middle_name?: string | null
 }
 
 interface Employee {
@@ -24,337 +20,218 @@ interface Employee {
   middle_name?: string | null
 }
 
-interface Props {
-  timesheetId: number
-  entries: TimesheetEntry[]
-  employees: Employee[]
+export interface TimesheetDay {
+  date: string
+  status: 'submitted' | 'approved' | 'returned'
+  revision: number
+  employee_ids: number[]
+  reason: string | null
+}
+
+export interface Timesheet {
+  id: number
+  department_id: number
+  department_name: string
   year: number
   month: number
-  role?: string
-  onSave: () => void
+  status: 'draft' | 'submitted' | 'approved'
+}
+
+export interface TimesheetDetails extends Timesheet {
+  today: string
+  entries: TimesheetEntry[]
+  employees: Employee[]
+  currentEmployeeIds: number[]
+  days: TimesheetDay[]
+  nonWorkingDays: string[]
+}
+
+interface Props {
+  sheet: TimesheetDetails
+  selectedDate: string
+  editable?: boolean
+  onSaved?: () => void
 }
 
 const WEEKDAY_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
-
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month, 0).getDate()
+const ATTENDANCE_CODES = TIMESHEET_CODES.filter(c => !VACATION_CODES.includes(c.code))
+export const TIMESHEET_DAY_LABELS = {
+  submitted: 'На проверке у HR',
+  approved: 'Принят',
+  returned: 'На доработке',
 }
 
-function dateStr(year: number, month: number, day: number) {
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-}
-
-function isWeekend(year: number, month: number, day: number) {
-  const dow = new Date(year, month - 1, day).getDay()
-  return dow === 0 || dow === 6
-}
-
-export function TimesheetGrid({ timesheetId, entries, employees, year, month, onSave }: Props) {
-  const totalDays = daysInMonth(year, month)
-
-  const [changes, setChanges] = useState<Record<string, { code: string | null }>>({})
-  const [saving, setSaving] = useState(false)
+export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }: Props) {
+  const { id, entries, employees, year, month, today, nonWorkingDays, days } = sheet
+  const [changes, setChanges] = useState<Record<number, string | null>>({})
+  const [working, setWorking] = useState<'saving' | 'submitting' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const entryMap = useMemo(() => new Map(entries.map(e => [`${e.employee_id}:${e.date}`, e.code])), [entries])
+  const dayMap = useMemo(() => new Map(days.map(d => [d.date, d])), [days])
+  const savedRoster = dayMap.get(selectedDate)?.employee_ids
+  const editableIds = new Set(savedRoster?.length ? savedRoster : sheet.currentEmployeeIds)
+  const workingDay = !nonWorkingDays.includes(selectedDate)
+  const dates = Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) =>
+    `${year}-${String(month).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`)
+  const hasChanges = Object.keys(changes).length > 0
 
-  useEffect(() => {
-    setChanges({})
-    setError(null)
-  }, [timesheetId])
-
-  const entryMap = useMemo(() => {
-    const map: Record<string, TimesheetEntry> = {}
-    for (const e of entries) map[`${e.employee_id}:${e.date}`] = e
-    return map
-  }, [entries])
-
-  const today = useMemo(() => {
-    const d = new Date()
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  }, [])
-
-  function isFutureDay(day: number) {
-    return new Date(year, month - 1, day) > today
+  function codeAt(employeeId: number, date: string) {
+    return date === selectedDate && Object.prototype.hasOwnProperty.call(changes, employeeId)
+      ? changes[employeeId]
+      : entryMap.get(`${employeeId}:${date}`) ?? null
   }
 
-  function isToday(day: number) {
-    const d = new Date(year, month - 1, day)
-    return d.getTime() === today.getTime()
+  function canEdit(employeeId: number, date: string) {
+    return editable && workingDay && date === selectedDate && editableIds.has(employeeId)
+      && !VACATION_CODES.includes(entryMap.get(`${employeeId}:${date}`) ?? '')
   }
 
-  function getCell(empId: number, day: number) {
-    if (isWeekend(year, month, day)) return { code: 'В', submitted: true }
-    const date = dateStr(year, month, day)
-    const key = `${empId}:${date}`
-    if (changes[key] !== undefined) return { ...changes[key], submitted: false }
-    const e = entryMap[key]
-    return e ? { code: e.code, submitted: e.is_submitted } : { code: null, submitted: false }
-  }
-
-  function setCell(empId: number, day: number, code: string | null) {
-    if (!isToday(day)) return
-    const date = dateStr(year, month, day)
-    const cell = getCell(empId, day)
-    if (cell.submitted) return
-    const vacationCodes = VACATION_CODES
-    if (cell.code && vacationCodes.includes(cell.code)) return
-    setChanges(prev => ({ ...prev, [`${empId}:${date}`]: { code } }))
-  }
-
-  function fillEmployeeAttendance(empId: number) {
-    const todayDay = today.getDate()
-    const todayMonth = today.getMonth() + 1
-    const todayYear = today.getFullYear()
-    
-    if (todayYear !== year || todayMonth !== month) return
-    
-    setChanges(prev => {
-      const next = { ...prev }
-      const date = dateStr(year, month, todayDay)
-      const cell = getCell(empId, todayDay)
-      if (cell.code || cell.submitted) return prev
-      next[`${empId}:${date}`] = { code: 'Я' }
-      return next
-    })
-  }
-
-  function fillAllAttendance() {
-    const todayDay = today.getDate()
-    const todayMonth = today.getMonth() + 1
-    const todayYear = today.getFullYear()
-    
-    if (todayYear !== year || todayMonth !== month) return
-    
-    setChanges(prev => {
-      const next = { ...prev }
-      const date = dateStr(year, month, todayDay)
-      for (const emp of employees) {
-        const cell = getCell(emp.id, todayDay)
-        if (cell.code || cell.submitted) continue
-        next[`${emp.id}:${date}`] = { code: 'Я' }
+  function fillAttendance(ids: number[]) {
+    setChanges(previous => {
+      const next = { ...previous }
+      for (const employeeId of ids) {
+        if (canEdit(employeeId, selectedDate) && !codeAt(employeeId, selectedDate)) next[employeeId] = 'Я'
       }
       return next
     })
   }
 
-  function countCode(empId: number, code: string) {
-    let n = 0
-    for (let d = 1; d <= totalDays; d++) {
-      if (getCell(empId, d).code === code) n++
-    }
-    return n
-  }
-
-  async function handleSave() {
-    setSaving(true)
+  async function save(submit: boolean) {
+    setWorking(submit ? 'submitting' : 'saving')
     setError(null)
+    const marks = Object.entries(changes).map(([employeeId, code]) => ({
+      employee_id: Number(employeeId),
+      date: selectedDate,
+      code,
+    }))
     try {
-      const vacationCodes = VACATION_CODES
-      const body = Object.entries(changes)
-        .map(([key, val]) => {
-          const colonIdx = key.indexOf(':')
-          const empId = key.slice(0, colonIdx)
-          const date = key.slice(colonIdx + 1)
-          return { employee_id: Number(empId), date, code: val.code }
-        })
-        .filter(entry => {
-          const cell = entryMap[`${entry.employee_id}:${entry.date}`]
-          if (!cell) return true
-          if (cell.code && vacationCodes.includes(cell.code)) return false
-          return true
-        })
-      const res = await fetch(`${API_BASE_URL}/timesheet/${timesheetId}/entries`, {
-        method: 'PUT',
-        headers: getAuthHeadersWithContentType(),
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Ошибка сохранения')
-      }
+      if (submit) await apiPost(`/timesheet/${id}/days/${selectedDate}/submit`, { entries: marks })
+      else await apiPut(`/timesheet/${id}/entries`, marks)
       setChanges({})
-      onSave()
-    } catch (err: unknown) {
+      onSaved?.()
+    } catch (err) {
       setError(getErrorMessage(err))
     } finally {
-      setSaving(false)
+      setWorking(null)
     }
   }
 
   async function handleExport(format: 'excel' | 'pdf') {
     try {
-      const res = await fetch(`${API_BASE_URL}/timesheet/${timesheetId}/export/${format}`, {
-        headers: getAuthHeaders(),
-      })
+      const res = await fetchWithRetry(`${API_BASE_URL}/timesheet/${id}/export/${format}`, { headers: getAuthHeaders() })
       if (!res.ok) throw new Error('Ошибка экспорта')
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `timesheet-${year}-${month}.${format === 'excel' ? 'xlsx' : 'pdf'}`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      const url = URL.createObjectURL(await res.blob())
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `timesheet-${year}-${month}.${format === 'excel' ? 'xlsx' : 'pdf'}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
       setTimeout(() => URL.revokeObjectURL(url), 100)
-    } catch (err: unknown) {
+    } catch (err) {
       setError(getErrorMessage(err))
     }
   }
 
-  const days = Array.from({ length: totalDays }, (_, i) => i + 1)
-  const hasChanges = Object.keys(changes).length > 0
-
   return (
     <div className="space-y-3">
-      {error && <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">{error}</div>}
-
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        {!hasAnyRole('hr', 'admin') && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-muted-foreground font-medium">Массовые действия:</span>
-            <Button variant="outline" size="sm" onClick={fillAllAttendance}>
-              Явка всем
-            </Button>
-          </div>
+      {error && <div role="alert" className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">{error}</div>}
+      <div className="flex flex-wrap items-center gap-2">
+        {editable && workingDay && (
+          <Button variant="outline" size="sm" disabled={!!working} onClick={() => fillAttendance(sheet.employees.map(e => e.id))}>
+            Явка всем
+          </Button>
         )}
-        <div className="flex items-center gap-2 flex-wrap ml-auto">
-          {hasChanges && (
-            <Button onClick={handleSave} disabled={saving} size="sm">
-              {saving ? 'Сохранение...' : `Сохранить изменения`}
+        {editable && hasChanges && (
+          <>
+            <Button variant="outline" size="sm" disabled={!!working} onClick={() => save(false)}>
+              {working === 'saving' ? 'Сохранение…' : 'Сохранить изменения'}
             </Button>
-          )}
-          {hasChanges && (
-            <Button variant="outline" size="sm" onClick={() => setChanges({})}>
-              Сбросить
-            </Button>
-          )}
+            <Button variant="ghost" size="sm" disabled={!!working} onClick={() => setChanges({})}>Сбросить</Button>
+          </>
+        )}
+        {editable && (
+          <Button size="sm" disabled={!!working || editableIds.size === 0} onClick={() => save(true)}>
+            <Send className="h-4 w-4" />
+            {working === 'submitting' ? 'Отправка…' : 'Отправить на проверку'}
+          </Button>
+        )}
+        <div className="flex gap-2 ml-auto">
           <Button variant="outline" size="sm" onClick={() => handleExport('excel')}>Excel</Button>
           <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}>PDF</Button>
         </div>
       </div>
-
       {hasChanges && (
-        <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 rounded-lg">
-          Есть несохранённые изменения — {Object.keys(changes).length} ячеек
+        <div className="rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs text-foreground">
+          Есть несохранённые изменения. При отправке они будут включены в табель.
         </div>
       )}
-
       <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
-        <table className="text-xs border-collapse" style={{ minWidth: 'max-content', width: '100%' }}>
+        <table className="w-full min-w-max border-collapse text-xs">
           <thead>
             <tr>
-              <th className="sticky left-0 z-20 bg-muted border-b border-r border-border px-3 py-2 text-left font-semibold min-w-[180px] text-sm">
-                Работник
-              </th>
-              {days.map(d => {
-                const weekend = isWeekend(year, month, d)
-                const todayDay = isToday(d)
+              <th scope="col" className="sticky left-0 z-20 min-w-[180px] border-b border-r bg-muted px-3 py-2 text-left text-sm">Работник</th>
+              {dates.map(date => {
+                const day = dayMap.get(date)
+                const status = day ? TIMESHEET_DAY_LABELS[day.status] : undefined
                 return (
                   <th
-                    key={d}
-                    className={[
-                      'border-b border-r border-border px-0 py-1 text-center min-w-[42px] select-none',
-                      weekend ? 'bg-red-50 dark:bg-red-950/40' : 'bg-muted',
-                      todayDay ? 'ring-2 ring-inset ring-primary' : '',
-                    ].join(' ')}
+                    key={date}
+                    scope="col"
+                    title={status}
+                    className={`min-w-[42px] border-b border-r px-1 py-1 text-center ${nonWorkingDays.includes(date) ? 'bg-red-500/10' : 'bg-muted'} ${date === selectedDate ? 'ring-2 ring-inset ring-primary' : ''}`}
                   >
-                    <div className="font-bold text-sm leading-tight">{d}</div>
-                    <div className={`text-[10px] font-normal leading-tight ${weekend ? 'text-red-500 dark:text-red-400' : 'text-muted-foreground'}`}>
-                      {WEEKDAY_SHORT[new Date(year, month - 1, d).getDay()]}
-                    </div>
+                    <div className="text-sm">{Number(date.slice(-2))}</div>
+                    <div className="font-normal text-muted-foreground">{WEEKDAY_SHORT[new Date(date).getUTCDay()]}</div>
+                    {status && <div aria-label={status} className="text-primary">{day?.status === 'returned' ? '↶' : day?.status === 'approved' ? '✓' : '•'}</div>}
                   </th>
                 )
               })}
-              <th className="border-b border-r border-border px-2 py-2 text-center bg-muted font-semibold min-w-[52px] text-xs">
-                Я
-              </th>
-              <th className="border-b border-border px-2 py-2 text-center bg-muted font-semibold min-w-[52px] text-xs">
-                ОТ
-              </th>
-              {!hasAnyRole('hr', 'admin') && (
-                <th className="sticky right-0 z-20 border-b border-l border-border px-2 py-2 text-center bg-muted font-semibold min-w-[64px] text-xs">
-                  Действия
-                </th>
-              )}
+              <th scope="col" className="border-b border-r bg-muted px-2">Я</th>
+              <th scope="col" className="border-b bg-muted px-2">ОТ</th>
+              {editable && workingDay && <th scope="col" className="sticky right-0 border-b border-l bg-muted px-2">Действия</th>}
             </tr>
           </thead>
           <tbody>
-            {employees.map((emp, idx) => (
-              <tr
-                key={emp.id}
-                className={[
-                  'group transition-colors',
-                  idx % 2 === 0 ? 'bg-card' : 'bg-muted/20',
-                  'hover:bg-primary/5',
-                ].join(' ')}
-              >
-                <td className="sticky left-0 z-10 border-r border-b border-border px-3 py-2 font-medium bg-inherit whitespace-nowrap">
-                  {personName(emp.last_name, emp.first_name, emp.middle_name)}
-                </td>
-                {days.map(day => {
-                  const cell = getCell(emp.id, day)
-                  const colorClass = cell.code ? (CODE_COLORS[cell.code] ?? '') : ''
-                  const weekend = isWeekend(year, month, day)
-                  const future = isFutureDay(day)
-                  const todayDay = isToday(day)
-                  const vacationCodes = VACATION_CODES
-                  const isVacation = cell.code && vacationCodes.includes(cell.code)
-                  const cellReadonly = !todayDay || weekend || isVacation || cell.submitted
-                  return (
-                    <td
-                      key={day}
-                      className={[
-                        'border-r border-b border-border p-0 text-center transition-colors relative',
-                        colorClass || (weekend && !cell.code ? 'bg-red-50/60 dark:bg-red-950/20' : ''),
-                        future ? 'opacity-35' : '',
-                        todayDay && !colorClass ? 'ring-2 ring-inset ring-primary/40' : '',
-                      ].join(' ')}
-                    >
-                      {cellReadonly ? (
-                        <span className="block py-2 px-1 font-semibold text-center leading-none">
-                          {cell.code ?? ''}
-                          {!cell.submitted && cell.code && !future && (
-                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" title="Не отправлено" />
-                          )}
-                        </span>
-                      ) : (
-                        <span className="relative">
+            {employees.map((employee, index) => {
+              const name = personName(employee.last_name, employee.first_name, employee.middle_name)
+              const codes = dates.map(date => codeAt(employee.id, date))
+              return (
+                <tr key={employee.id} className={index % 2 ? 'bg-muted/20' : 'bg-card'}>
+                  <th scope="row" className="sticky left-0 z-10 whitespace-nowrap border-b border-r bg-card px-3 py-2 text-left font-medium">{name}</th>
+                  {dates.map((date, i) => {
+                    const code = codes[i]
+                    const color = code ? CODE_COLORS[code] : ''
+                    return (
+                      <td key={date} className={`border-b border-r text-center ${color ?? ''} ${date > today ? 'opacity-60' : ''}`}>
+                        {canEdit(employee.id, date) ? (
                           <select
-                            value={cell.code ?? ''}
-                            onChange={e => setCell(emp.id, day, e.target.value || null)}
-                            className="w-full h-full bg-transparent text-center text-xs focus:outline-none cursor-pointer py-2 px-0 font-medium"
+                            aria-label={`Отметка за ${date} — ${name}`}
+                            value={code ?? ''}
+                            disabled={!!working}
+                            onChange={e => setChanges(previous => ({ ...previous, [employee.id]: e.target.value || null }))}
+                            className="w-full cursor-pointer bg-transparent py-2 text-center font-medium"
                           >
-                            <option value=""></option>
-                            {TIMESHEET_CODES.filter(c => hasAnyRole('hr', 'admin') || !VACATION_CODES.includes(c.code)).map(c => (
-                              <option key={c.code} value={c.code}>{c.code}</option>
-                            ))}
+                            <option value="">—</option>
+                            {ATTENDANCE_CODES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
                           </select>
-                          {!cell.submitted && cell.code && (
-                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" title="Не отправлено" />
-                          )}
-                        </span>
+                        ) : <span className="block py-2 font-semibold">{code ?? ''}</span>}
+                      </td>
+                    )
+                  })}
+                  {['Я', 'ОТ'].map(code => (
+                    <td key={code} className="border-b border-r px-2 text-center font-bold">{codes.filter(mark => mark === code).length || ''}</td>
+                  ))}
+                  {editable && workingDay && (
+                    <td className="sticky right-0 border-b border-l bg-card px-2 text-center">
+                      {canEdit(employee.id, selectedDate) && !codeAt(employee.id, selectedDate) && (
+                        <Button variant="ghost" size="sm" disabled={!!working} onClick={() => fillAttendance([employee.id])}>Явка</Button>
                       )}
                     </td>
-                  )
-                })}
-                <td className="border-r border-b border-border px-2 py-2 text-center font-bold text-blue-600 dark:text-blue-400">
-                  {countCode(emp.id, 'Я') || ''}
-                </td>
-                <td className="border-b border-border px-2 py-2 text-center font-bold text-blue-400 dark:text-blue-300">
-                  {countCode(emp.id, 'ОТ') || ''}
-                </td>
-                {!hasAnyRole('hr', 'admin') && (
-                  <td className="sticky right-0 z-10 border-l border-b border-border px-2 py-1.5 text-center bg-inherit">
-                    <button
-                      onClick={() => fillEmployeeAttendance(emp.id)}
-                      className="text-[10px] px-2 py-1 rounded bg-muted hover:bg-primary hover:text-primary-foreground transition-colors font-medium whitespace-nowrap"
-                      title="Заполнить явкой"
-                    >
-                      Явка
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
+                  )}
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

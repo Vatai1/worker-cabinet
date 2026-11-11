@@ -1,6 +1,6 @@
 import { query } from './database.js'
 
-const NO_PUSH_TYPES = ['mailing', 'generic']
+const NO_PUSH_TYPES = ['mailing', 'generic', 'timesheet_returned']
 
 async function isModuleEnabled(db) {
   const result = await db.query("SELECT is_enabled FROM modules WHERE code = 'notifications'")
@@ -23,7 +23,7 @@ function deliveryState(type, channel) {
 }
 
 export async function notify({ userId, type, data, channel = 'email', db = { query } }) {
-  if (!(await isModuleEnabled(db))) return null
+  if (type !== 'timesheet_returned' && !(await isModuleEnabled(db))) return null
   const { status, pushStatus } = deliveryState(type, channel)
   const result = await db.query(
     `INSERT INTO notification_queue (user_id, type, channel, data, status, push_status)
