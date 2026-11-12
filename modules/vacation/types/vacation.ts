@@ -88,6 +88,7 @@ export interface VacationRequest {
   userGender?: 'male' | 'female' | 'other'
   departmentManagerId?: string
   approverId?: string
+  canReview?: boolean
   
   startDate: string
   endDate: string

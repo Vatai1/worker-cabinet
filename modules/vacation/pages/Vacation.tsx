@@ -186,7 +186,6 @@ export function Vacation() {
 
   const isManager = hasAnyRole('manager', 'hr', 'admin')
   const isAdminOrSuperAdmin = hasAnyRole('admin')
-  const isDepartmentManager = hasAnyRole('manager', 'hr', 'admin') || departmentRequests.some((r) => String(r.departmentManagerId) === user?.id || String(r.approverId) === user?.id)
 
   useEffect(() => {
     setBalance(null)
@@ -753,13 +752,8 @@ export function Vacation() {
     return mySubstitutions.some((s) => s.status === 'approved' && s.start_date <= today && s.end_date >= today)
   }, [mySubstitutions])
 
-  const isMyApproval = (r: VacationRequest) => r.userId !== user?.id &&
-    (String(r.approverId) === user?.id || String(r.departmentManagerId) === user?.id)
-  const isAssignedApprover = departmentRequests.some((r) => r.status === VacationRequestStatus.ON_APPROVAL && isMyApproval(r))
-  const canApprove = isManager || hasActiveSubstitution || isAssignedApprover
-
-  const pendingApprovals = departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL &&
-    (isManager || hasActiveSubstitution || isMyApproval(r)))
+  const pendingApprovals = departmentRequests.filter((r) => r.status === VacationRequestStatus.ON_APPROVAL && r.canReview)
+  const canApprove = isManager || hasActiveSubstitution || pendingApprovals.length > 0
 
   const filteredPendingApprovals = useMemo(() => {
     if (!isAdminOrSuperAdmin) return pendingApprovals
@@ -1729,8 +1723,8 @@ export function Vacation() {
           isOpen={showDetailModal}
           request={detailRequest}
           onClose={handleCloseDetailModal}
-          onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isDepartmentManager ? handleApprove : undefined}
-          onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && isDepartmentManager ? handleReject : undefined}
+          onApprove={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && detailRequest.canReview ? handleApprove : undefined}
+          onReject={detailRequest?.status === VacationRequestStatus.ON_APPROVAL && detailRequest.canReview ? handleReject : undefined}
           loading={loading}
           checkRestrictions={!!user && !!detailRequest && (
             detailRequest.userId === user.id || isManager || detailRequest.approverId === user.id || detailRequest.departmentManagerId === user.id

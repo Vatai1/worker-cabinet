@@ -2055,6 +2055,43 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(await approverOf(created.data.id), childMgr.id)
     })
 
+    it('начальник отдела организации видит и согласует ранее поданную заявку', async () => {
+      await query('UPDATE user_organizations SET department_id = $1 WHERE user_id = $2 AND org_id = $3', [parentDeptId, emp.id, orgId])
+      const old = await mkVacation({
+        userId: emp.id, start: ahead(10), end: ahead(14), duration: 5, orgId, approverId: headUser.id,
+      })
+      const token = await tokenFor(parentMgr)
+      const list = await call('GET', '/vacation/requests', token, undefined, orgId)
+      assert.strictEqual(list.status, 200, JSON.stringify(list.data))
+      const request = list.data.find((item) => item.id === old.id)
+      assert.strictEqual(request?.approver_id, parentMgr.id)
+      assert.strictEqual(request.can_review, true)
+      const denied = await call('POST', `/vacation/requests/${old.id}/approve`, await tokenFor(headUser), {}, orgId)
+      assert.strictEqual(denied.status, 403)
+      const reviewPath = `/vacation/requests/${old.id}/approve`
+      const reviews = await Promise.all([call('POST', reviewPath, token, {}, orgId), call('POST', reviewPath, token, {}, orgId)])
+      assert.deepStrictEqual(reviews.map((review) => review.status).sort(), [200, 400])
+      assert.strictEqual((await balanceOf(emp.id, yearOf(ahead(10)), orgId)).used_days, 5)
+      const created = await postOwn(emp, 30)
+      assert.strictEqual(created.data.approver_id, parentMgr.id)
+    })
+
+    it('персональный руководитель согласует заявку при скрытой видимости отпусков', async () => {
+      await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [childMgr.id, childDeptId])
+      await query('UPDATE users SET manager_id = $1, vac_parent_sees_child = false WHERE id = $2', [parentMgr.id, emp.id])
+      const created = await postOwn(emp)
+      assert.strictEqual(created.status, 201, JSON.stringify(created.data))
+      assert.strictEqual(created.data.approver_id, parentMgr.id)
+      const token = await tokenFor(parentMgr)
+      const list = await call('GET', '/vacation/requests', token, undefined, orgId)
+      assert.strictEqual(list.status, 200, JSON.stringify(list.data))
+      assert.strictEqual(list.data.find((item) => item.id === created.data.id)?.can_review, true)
+      const denied = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(childMgr), {}, orgId)
+      assert.strictEqual(denied.status, 403)
+      const approved = await call('POST', `/vacation/requests/${created.data.id}/approve`, token, {}, orgId)
+      assert.strictEqual(approved.status, 200, JSON.stringify(approved.data))
+    })
+
     it('частичный PUT true→false на существующей связи: эффект применился к новым заявкам', async () => {
       await saveHierarchy([linkEdge({ parentApproves: true })], 0)
       const first = await postOwn(emp, 10)
@@ -2082,7 +2119,7 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(await approverOf(head.data.id), parentMgr.id)
       const approved = await call('POST', `/vacation/requests/${head.data.id}/approve`, await tokenFor(parentMgr), {}, orgId)
       assert.strictEqual(approved.status, 200)
-      const third = await postOwn(emp, 50)
+      const third = await postOwn(emp, 20)
       assert.strictEqual(third.status, 201, JSON.stringify(third.data))
       const byChild = await call('POST', `/vacation/requests/${third.data.id}/approve`, await tokenFor(childMgr), {}, orgId)
       assert.strictEqual(byChild.status, 200, JSON.stringify(byChild.data))

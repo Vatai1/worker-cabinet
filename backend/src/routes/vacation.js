@@ -4,7 +4,7 @@ import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
 import { getTravelState, assertTravelAllowed } from '../lib/travel.js'
-import { resolveApproverId, coApproverId } from '../lib/vacationApprover.js'
+import { resolveVacationApprovers, vacationApproversSql } from '../lib/vacationApprover.js'
 import { vacationTypeRule, requestTypeCode } from '../lib/vacationTypes.js'
 import { VACATION_REPORTS, buildReport, sendReportXlsx } from '../lib/vacationReports.js'
 import { getFromS3, uploadToS3, getPresignedUrl } from '../config/s3.js'
@@ -188,13 +188,30 @@ async function getApproverIds(approverId, req) {
   return [approverId]
 }
 
-async function canReviewVacation(vacationRequest, req) {
-  if (['hr', 'admin', 'superadmin'].includes(req.user.role)) return true
-  if (!vacationRequest.approver_id) return false
-  if (vacationRequest.approver_id === req.user.id) return true
-  const approverIds = await getApproverIds(vacationRequest.approver_id, req)
-  if (approverIds.includes(req.user.id)) return true
-  return vacationRequest.user_id != null && await coApproverId(vacationRequest.user_id) === req.user.id
+function lockVacationRequestForReview(db, id, transferOnly = false) {
+  return db.query(
+    `WITH locked AS MATERIALIZED (
+       SELECT * FROM vacation_requests
+       WHERE id = $1 AND (NOT $2::boolean OR transferred_from_id IS NOT NULL)
+       FOR UPDATE
+     )
+     SELECT locked.*, rs.code AS status
+     FROM locked JOIN request_statuses rs ON rs.id = locked.status_id`,
+    [id, transferOnly]
+  )
+}
+
+async function canReviewVacation(request, req, db) {
+  const orgId = currentOrgId(req)
+  if (orgId !== null && request.organization_id !== orgId) return false
+  if (hasFullDepartmentAccess(req)) return true
+  if (request.user_id === req.user.id) return false
+  const result = await db.query(
+    `SELECT ${assignedReviewerSql('$3::int', '$2::int')} AS allowed
+     FROM (${vacationApproversSql('$1::int', '$2::int')}) approval`,
+    [request.user_id, request.organization_id, req.user.id]
+  )
+  return result.rows[0]?.allowed === true
 }
 
 const childSeesParentVacations = (n) => `EXISTS (
@@ -213,18 +230,21 @@ const userParentSeesChildVacations = (n) => `vr.user_id IN (SELECT id FROM users
 const sameDepartmentPending = (n) => `(rs.code = 'on_approval' AND u.department_id = (SELECT department_id FROM users WHERE id = $${n}))`
 const userChildSeesParentVacations = (n) => `(vr.user_id = (SELECT manager_id FROM users WHERE id = $${n}) AND (SELECT vac_child_sees_parent FROM users WHERE id = $${n}) AND rs.code = 'approved')`
 
-const substExistsClause = (n) => `EXISTS (
+const assignedReviewerSql = (reviewerId, orgId) => `(
+  ${reviewerId} IN (approval.approver_id, approval.co_approver_id) OR EXISTS (
   SELECT 1
   FROM vacation_substitutions vs
   JOIN vacation_requests mvr ON vs.vacation_request_id = mvr.id
   JOIN request_statuses mrs ON mvr.status_id = mrs.id
-  WHERE vr.approver_id = mvr.user_id
-    AND vs.substitute_user_id = $${n}
+  WHERE approval.approver_id = mvr.user_id
+    AND mvr.organization_id = ${orgId}
+    AND vs.organization_id = ${orgId}
+    AND vs.substitute_user_id = ${reviewerId}
     AND mrs.code = 'approved'
     AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
-)`
+))`
 
-async function notifyVacationCreated(request, employeeId, req, db = { query }) {
+async function notifyVacationCreated(request, employeeId, coApprover, req, db = { query }) {
   const empName = await getEmpName(employeeId)
   const payload = {
     requestId: request.id,
@@ -235,9 +255,8 @@ async function notifyVacationCreated(request, employeeId, req, db = { query }) {
     days: request.duration,
     link: '/vacation'
   }
-  if (request.approver_id) {
+  if (request.approver_id || coApprover) {
     const approverIds = await getApproverIds(request.approver_id, req)
-    const coApprover = await coApproverId(employeeId, db)
     if (coApprover && !approverIds.includes(coApprover)) approverIds.push(coApprover)
     for (const mid of approverIds) {
       await notify({ userId: mid, type: 'vacation_created', data: payload, db })
@@ -503,6 +522,11 @@ router.get('/requests', authenticateToken, async (req, res) => {
       whereClause += ' AND vr.organization_id = $' + (params.length + 1)
       params.push(req.org.org_id)
     }
+    params.push(user.id)
+    const reviewer = `$${params.length}::int`
+    const canReview = `(rs.code = 'on_approval' AND (
+      ${hasFullDepartmentAccess(req)} OR (vr.user_id <> ${reviewer} AND COALESCE(${assignedReviewerSql(reviewer, 'vr.organization_id')}, false))
+    ))`
     whereClause += ' ' + excludeTest(req, 'u')
     if (!userId) whereClause += " AND u.status <> 'inactive'"
 
@@ -533,12 +557,12 @@ router.get('/requests', authenticateToken, async (req, res) => {
         params.push(departmentId)
       }
     } else {
-      const substExists = ` OR ${substExistsClause(params.length + 1)}`
+      const reviewVisibility = ` OR ${canReview}`
       if (user.role === 'employee') {
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR ${sameDepartmentPending(params.length + 1)} OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)}${substExists})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR ${sameDepartmentPending(params.length + 1)} OR (rs.code <> 'on_approval' AND vr.approver_id = $${params.length + 1}) OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${childSeesParentVacations(params.length + 1)} OR ${userParentSeesChildVacations(params.length + 1)} OR ${userChildSeesParentVacations(params.length + 1)}${reviewVisibility})`
         params.push(user.id)
       } else if (user.role === 'manager') {
-        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR ${sameDepartmentPending(params.length + 1)} OR vr.approver_id = $${params.length + 1} OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userParentSeesChildVacations(params.length + 1)}${substExists})`
+        whereClause += ` AND (vr.user_id = $${params.length + 1} OR rs.code = 'approved' OR ${sameDepartmentPending(params.length + 1)} OR (rs.code <> 'on_approval' AND vr.approver_id = $${params.length + 1}) OR u.department_id IN (SELECT id FROM departments WHERE parent_user_id = $${params.length + 1} AND vac_parent_sees_child) OR ${userParentSeesChildVacations(params.length + 1)}${reviewVisibility})`
         params.push(user.id)
       }
     }
@@ -579,9 +603,11 @@ router.get('/requests', authenticateToken, async (req, res) => {
         u.position,
         u.avatar,
         u.gender,
-        u.department_id,
+        d.id AS department_id,
         d.name as department_name,
         d.manager_id as department_manager_id,
+        approval.approver_id AS current_approver_id,
+        ${canReview} AS can_review,
         COALESCE(
           json_agg(
             json_build_object(
@@ -600,12 +626,15 @@ router.get('/requests', authenticateToken, async (req, res) => {
       JOIN users u ON vr.user_id = u.id
       JOIN request_statuses rs ON vr.status_id = rs.id
       LEFT JOIN vacation_types vt ON vr.vacation_type_id = vt.id
-      LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN user_organizations membership ON membership.user_id = u.id AND membership.org_id = vr.organization_id
+      LEFT JOIN departments d ON d.id = COALESCE(membership.department_id, u.department_id)
+        AND (vr.organization_id IS NULL OR d.organization_id = vr.organization_id)
+      LEFT JOIN LATERAL (${vacationApproversSql("CASE WHEN rs.code = 'on_approval' THEN vr.user_id END", 'vr.organization_id')}) approval ON true
       LEFT JOIN vacation_request_status_history vrsh ON vr.id = vrsh.request_id
       LEFT JOIN request_statuses vrsh_rs ON vrsh.status_id = vrsh_rs.id
       LEFT JOIN users hu ON vrsh.changed_by = hu.id
       ${whereClause}
-      GROUP BY vr.id, u.id, d.id, rs.id, vt.id
+      GROUP BY vr.id, u.id, d.id, rs.id, vt.id, approval.approver_id, approval.co_approver_id
       ORDER BY vr.created_at DESC
     `
 
@@ -613,7 +642,7 @@ router.get('/requests', authenticateToken, async (req, res) => {
 
     const requestIds = result.rows.map((r) => r.id)
     let subsByRequest = {}
-    let delegatedByUser = {}
+    const delegatedByRequest = {}
     if (requestIds.length > 0) {
       const subsResult = await query(
         `SELECT vs.vacation_request_id, u.id, u.first_name, u.last_name, u.middle_name, u.position, u.avatar
@@ -630,26 +659,25 @@ router.get('/requests', authenticateToken, async (req, res) => {
         })
       }
 
-      const onApprovalUserIds = result.rows
-        .filter((r) => r.status === 'on_approval')
-        .map((r) => r.user_id)
-      if (onApprovalUserIds.length > 0) {
+      const approvalRequests = result.rows
+        .filter((r) => r.current_approver_id !== null)
+        .map(({ id, organization_id, current_approver_id }) => ({ id, organization_id, current_approver_id }))
+      if (approvalRequests.length > 0) {
         const delegationResult = await query(
-          `SELECT DISTINCT u.id as user_id, sub.id as delegate_id,
+          `SELECT DISTINCT ON (pending.id) pending.id AS request_id, sub.id AS delegate_id,
                   sub.first_name, sub.last_name, sub.middle_name, sub.position, sub.avatar
-           FROM users u
-           JOIN departments d ON u.department_id = d.id
-           JOIN vacation_requests mvr ON mvr.user_id = d.manager_id
-           JOIN request_statuses mrs ON mvr.status_id = mrs.id
-           JOIN vacation_substitutions mvs ON mvs.vacation_request_id = mvr.id
+           FROM jsonb_to_recordset($1::jsonb) AS pending(id int, organization_id int, current_approver_id int)
+           JOIN vacation_requests mvr ON mvr.user_id = pending.current_approver_id AND mvr.organization_id = pending.organization_id
+           JOIN request_statuses mrs ON mrs.id = mvr.status_id
+           JOIN vacation_substitutions mvs ON mvs.vacation_request_id = mvr.id AND mvs.organization_id = pending.organization_id
            JOIN users sub ON mvs.substitute_user_id = sub.id
-           WHERE u.id = ANY($1)
-             AND mrs.code = 'approved'
-             AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE`,
-          [onApprovalUserIds]
+           WHERE mrs.code = 'approved'
+             AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
+           ORDER BY pending.id, sub.id`,
+          [JSON.stringify(approvalRequests)]
         )
         for (const row of delegationResult.rows) {
-          delegatedByUser[row.user_id] = {
+          delegatedByRequest[row.request_id] = {
             id: row.delegate_id, first_name: row.first_name, last_name: row.last_name, middle_name: row.middle_name,
             position: row.position, avatar: row.avatar
           }
@@ -657,14 +685,15 @@ router.get('/requests', authenticateToken, async (req, res) => {
       }
     }
 
-    const requests = result.rows.map((request) => ({
+    const requests = result.rows.map(({ current_approver_id: currentApproverId, ...request }) => ({
       ...request,
+      approver_id: request.status === 'on_approval' ? currentApproverId : request.approver_id,
       status_code: request.status,
       vacation_type_code: request.vacation_type,
       statusHistory: request.status_history,
       departmentManagerId: request.department_manager_id,
       substitutes: subsByRequest[request.id] || [],
-      delegated_to: delegatedByUser[request.user_id] || null,
+      delegated_to: delegatedByRequest[request.id] || null,
     }))
 
     res.json(requests)
@@ -1583,7 +1612,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
     const travelChildrenJson = JSON.stringify(travelChildrenParsed)
     const travelChildrenCount = travelChildrenParsed.length
 
-    const approverId = await resolveApproverId(userId, currentOrgId(req))
+    const { approver_id: approverId, co_approver_id: coApprover } = await resolveVacationApprovers(userId, currentOrgId(req), client)
 
     const result = await client.query(
       `INSERT INTO vacation_requests
@@ -1638,7 +1667,7 @@ router.post('/requests', authenticateToken, async (req, res) => {
       }
     }
 
-    await notifyVacationCreated(request, userId, req, client)
+    await notifyVacationCreated(request, userId, coApprover, req, client)
 
     if (Array.isArray(substitute_ids) && substitute_ids.length > 0) {
       const empName = await getEmpName(userId)
@@ -2017,11 +2046,11 @@ router.post('/requests/:id/approve', authenticateToken, async (req, res) => {
   const client = await getClient()
   try {
     await client.query('BEGIN')
-    const request = await client.query(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id])
+    const request = await lockVacationRequestForReview(client, id)
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
-    if (!(await canReviewVacation(request.rows[0], req))) {
+    if (!(await canReviewVacation(request.rows[0], req, client))) {
       await client.query('ROLLBACK')
       return res.status(403).json({ error: 'Нет прав на согласование этой заявки' })
     }
@@ -2079,11 +2108,11 @@ router.post('/requests/:id/reject', authenticateToken, async (req, res) => {
   const client = await getClient()
   try {
     await client.query('BEGIN')
-    const request = await client.query(`SELECT vr.*, rs.code as status FROM vacation_requests vr JOIN request_statuses rs ON vr.status_id = rs.id WHERE vr.id = $1`, [id])
+    const request = await lockVacationRequestForReview(client, id)
     if (request.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }) }
     if (request.rows[0].status !== 'on_approval') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Заявка не на согласовании' }) }
 
-    if (!(await canReviewVacation(request.rows[0], req))) {
+    if (!(await canReviewVacation(request.rows[0], req, client))) {
       await client.query('ROLLBACK')
       return res.status(403).json({ error: 'Нет прав на согласование этой заявки' })
     }
@@ -2349,7 +2378,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     const travelChildrenJson = JSON.stringify(travelChildrenParsed)
     const travelChildrenCount = travelChildrenParsed.length
 
-    const approverId = await resolveApproverId(original.user_id, currentOrgId(req))
+    const { approver_id: approverId, co_approver_id: coApprover } = await resolveVacationApprovers(original.user_id, currentOrgId(req), client)
 
     const insertResult = await client.query(
       `INSERT INTO vacation_requests
@@ -2391,7 +2420,7 @@ router.post('/requests/:id/transfer', authenticateToken, async (req, res) => {
     )
 
     const newReq = fullResult.rows[0]
-    await notifyVacationCreated(newReq, userId, req, client)
+    await notifyVacationCreated(newReq, userId, coApprover, req, client)
 
     await client.query('COMMIT')
 
@@ -2437,15 +2466,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
 
     await client.query('BEGIN')
 
-    const newRequestResult = await client.query(
-      `SELECT vr.*, rs.code as status, d.manager_id
-       FROM vacation_requests vr
-       JOIN request_statuses rs ON vr.status_id = rs.id
-       JOIN users u ON vr.user_id = u.id
-       LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
-      [id]
-    )
+    const newRequestResult = await lockVacationRequestForReview(client, id, true)
 
     if (newRequestResult.rows.length === 0) {
       await client.query('ROLLBACK')
@@ -2459,7 +2480,7 @@ router.post('/requests/:id/transfer/approve', authenticateToken, async (req, res
       return res.status(400).json({ error: 'Можно одобрить только заявку на согласовании' })
     }
 
-    if (!(await canReviewVacation(newRequest, req))) {
+    if (!(await canReviewVacation(newRequest, req, client))) {
       await client.query('ROLLBACK')
       return res.status(403).json({ error: 'Нет прав на согласование этой заявки' })
     }
@@ -2597,15 +2618,7 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
 
     await client.query('BEGIN')
 
-    const newRequestResult = await client.query(
-      `SELECT vr.*, rs.code as status, d.manager_id
-       FROM vacation_requests vr
-       JOIN request_statuses rs ON vr.status_id = rs.id
-       JOIN users u ON vr.user_id = u.id
-       LEFT JOIN departments d ON u.department_id = d.id
-       WHERE vr.id = $1 AND vr.transferred_from_id IS NOT NULL`,
-      [id]
-    )
+    const newRequestResult = await lockVacationRequestForReview(client, id, true)
 
     if (newRequestResult.rows.length === 0) {
       await client.query('ROLLBACK')
@@ -2619,7 +2632,7 @@ router.post('/requests/:id/transfer/reject', authenticateToken, async (req, res)
       return res.status(400).json({ error: 'Можно отклонить только заявку на согласовании' })
     }
 
-    if (!(await canReviewVacation(newRequest, req))) {
+    if (!(await canReviewVacation(newRequest, req, client))) {
       await client.query('ROLLBACK')
       return res.status(403).json({ error: 'Нет прав на согласование этой заявки' })
     }
