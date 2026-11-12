@@ -79,7 +79,7 @@ export function CreateVacationModal({
   useModalOpen(isOpen)
   const vacationDuration = useVacationDuration(startDate, endDate)
   const returnDate = useReturnToWork(endDate)
-  const allowOverBalance = useAllowOverBalance()
+  const allowOverBalance = useAllowOverBalance(isOpen)
   const user = useAuthStore(s => s.user)
   const [vacationType, setVacationType] = useState<VacationType>(dayOffOnly ? VacationType.DAY_OFF : VacationType.ANNUAL_PAID)
   const [hasTravel, setHasTravel] = useState(false)

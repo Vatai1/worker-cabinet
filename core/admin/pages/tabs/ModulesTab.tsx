@@ -158,7 +158,7 @@ export function TimesheetSettingsModal({ onClose }: { onClose: () => void }) {
           <div className="flex items-center justify-between p-4 rounded-xl border border-border/50">
             <div>
               <p className="font-medium text-sm">Автосоздание табелей</p>
-              <p className="text-xs text-muted-foreground">Автоматически создавать табели для всех отделов за текущий месяц при первом обращении</p>
+              <p className="text-xs text-muted-foreground">Создавать табели для всех отделов первого числа месяца в 00:05 по времени сервера</p>
             </div>
             <Switch
               checked={tsAutoOn}

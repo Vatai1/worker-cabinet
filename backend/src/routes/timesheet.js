@@ -316,6 +316,15 @@ router.get('/days/submitted', requirePermission('timesheet:manage'), asyncHandle
  *                     entries: { type: array, items: { $ref: '#/components/schemas/TimesheetEntry' } }
  *                     employees: { type: array, items: { $ref: '#/components/schemas/User' } }
  *                     days: { type: array, items: { $ref: '#/components/schemas/TimesheetDay' } }
+ *                     transfers:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           employee_id: { type: integer }
+ *                           start_date: { type: string, format: date }
+ *                           end_date: { type: string, format: date }
+ *                           label: { type: string }
  *       403: { description: Нет доступа к табелю }
  *       404: { description: Табель не найден }
  */

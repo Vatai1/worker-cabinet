@@ -26,7 +26,7 @@ export function VacationTransferModal({ isOpen, request, onClose, onSubmit, load
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [availableDays, setAvailableDays] = useState<number | null>(null)
-  const allowOverBalance = useAllowOverBalance()
+  const allowOverBalance = useAllowOverBalance(isOpen)
 
   useEffect(() => {
     if (!isOpen || !request) return

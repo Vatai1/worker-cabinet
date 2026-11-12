@@ -10,10 +10,7 @@ import type {
 } from '@/shared/types'
 import { VacationRequestStatus, VacationType } from '@/shared/types'
 import { vacationApi } from '@/modules/vacation/services/vacationApi'
-import {
-  calculateVacationDuration,
-  checkDateOverlap,
-} from '@/modules/vacation/data/mockVacationData'
+import { checkDateOverlap } from '@/modules/vacation/data/mockVacationData'
 
 const errorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message ? error.message : fallback
@@ -190,22 +187,7 @@ export const useVacationStore = create<VacationStore>()((set, get) => ({
           })
         }
         
-        const duration = calculateVacationDuration(startDate, endDate)
         const balance = get().balances[userId]
-        const vacationTypeInfo = Object.values(VacationType).find(
-          (vt) => vt === vacationType
-        )
-        
-        if (balance && vacationTypeInfo) {
-          const availableDays = balance.availableDays
-          if (duration > availableDays) {
-            errors.push({
-              field: 'balance',
-              message: `Недостаточно дней на счётчике. Доступно: ${availableDays}, требуется: ${duration}`,
-              details: { available: availableDays, required: duration },
-            })
-          }
-        }
         
         const userRequests = get().requests.filter(
           (r) => r.userId === userId && r.status === VacationRequestStatus.ON_APPROVAL

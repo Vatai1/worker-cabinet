@@ -1373,6 +1373,7 @@ async function runMigrations() {
     console.log('  ✓ system_settings')
 
     const settings = [
+      { key: 'timesheet_auto_create', value: 'false', desc: 'Фоновое создание табелей первого числа месяца' },
       { key: 'vacation_default_days', value: '28', desc: 'Количество дней отпуска по умолчанию' },
       { key: 'session_duration_days', value: '7', desc: 'Длительность сессии (дни)' },
       { key: 'password_min_length', value: '8', desc: 'Минимальная длина пароля' },
@@ -1741,6 +1742,131 @@ async function runMigrations() {
     }
     console.log('  ✓ multi-tenancy indexes created')
     console.log('✅ Multi-tenancy migration completed')
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS department_transfers (
+        id BIGSERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        from_department_id INTEGER,
+        to_department_id INTEGER,
+        to_department_name TEXT,
+        to_organization_name TEXT,
+        transferred_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+      );
+      CREATE INDEX IF NOT EXISTS idx_department_transfers_from
+        ON department_transfers (from_department_id, user_id, transferred_at);
+      CREATE INDEX IF NOT EXISTS idx_department_transfers_to
+        ON department_transfers (to_department_id, user_id, id);
+
+      CREATE OR REPLACE FUNCTION record_department_transfer() RETURNS TRIGGER AS $$
+      DECLARE
+        employee_id INTEGER;
+        membership_org INTEGER;
+      BEGIN
+        IF TG_TABLE_NAME = 'users' THEN
+          employee_id := NEW.id;
+        ELSE
+          employee_id := NEW.user_id;
+          membership_org := NEW.org_id;
+        END IF;
+        INSERT INTO department_transfers (
+          user_id, from_department_id, to_department_id, to_department_name, to_organization_name
+        )
+        SELECT employee_id, OLD.department_id, d.id, d.name, o.name
+        FROM departments d JOIN organizations o ON o.id = d.organization_id
+        WHERE d.id = NEW.department_id
+          AND (membership_org IS NULL OR (
+            d.organization_id = membership_org
+            AND EXISTS (SELECT 1 FROM departments source WHERE source.id = OLD.department_id AND source.organization_id = d.organization_id)
+          ));
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS record_user_department_transfer ON users;
+      CREATE TRIGGER record_user_department_transfer AFTER UPDATE OF department_id ON users
+        FOR EACH ROW WHEN (
+          OLD.department_id IS NOT NULL AND NEW.department_id IS NOT NULL
+          AND OLD.department_id <> NEW.department_id
+        ) EXECUTE FUNCTION record_department_transfer();
+
+      DROP TRIGGER IF EXISTS record_membership_department_transfer ON user_organizations;
+      CREATE TRIGGER record_membership_department_transfer AFTER UPDATE OF department_id ON user_organizations
+        FOR EACH ROW WHEN (
+          OLD.is_active AND NEW.is_active AND OLD.department_id IS NOT NULL AND NEW.department_id IS NOT NULL
+          AND OLD.department_id <> NEW.department_id
+        ) EXECUTE FUNCTION record_department_transfer();
+
+      CREATE OR REPLACE FUNCTION record_department_membership_exit() RETURNS TRIGGER AS $$
+      BEGIN
+        INSERT INTO department_transfers (
+          user_id, from_department_id, to_department_id, to_department_name, to_organization_name
+        )
+        SELECT u.id, source.id, destination.id, destination.name, destination.organization_name
+        FROM users u JOIN departments source
+          ON source.id = COALESCE(OLD.department_id, u.department_id) AND source.organization_id = OLD.org_id
+        LEFT JOIN LATERAL (
+          SELECT d.id, d.name, o.name AS organization_name
+          FROM user_organizations m JOIN departments d
+            ON d.id = COALESCE(m.department_id, u.department_id) AND d.organization_id = m.org_id
+          JOIN organizations o ON o.id = m.org_id
+          WHERE m.user_id = u.id AND m.is_active AND m.org_id <> OLD.org_id
+          ORDER BY m.is_primary DESC NULLS LAST, (d.id = u.department_id) DESC NULLS LAST, m.id
+          LIMIT 1
+        ) destination ON true
+        WHERE u.id = OLD.user_id AND NOT EXISTS (
+          SELECT 1 FROM department_transfers exit
+          WHERE exit.user_id = u.id AND exit.from_department_id = source.id
+            AND exit.id > COALESCE(
+              (SELECT max(arrival.id) FROM department_transfers arrival
+               WHERE arrival.user_id = u.id AND arrival.to_department_id = source.id), 0
+            )
+        );
+        RETURN NULL;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS record_membership_deactivation ON user_organizations;
+      CREATE TRIGGER record_membership_deactivation AFTER UPDATE OF is_active ON user_organizations
+        FOR EACH ROW WHEN (OLD.is_active AND NEW.is_active IS NOT TRUE)
+        EXECUTE FUNCTION record_department_membership_exit();
+
+      DROP TRIGGER IF EXISTS record_membership_removal ON user_organizations;
+      CREATE TRIGGER record_membership_removal AFTER DELETE ON user_organizations
+        FOR EACH ROW WHEN (OLD.is_active)
+        EXECUTE FUNCTION record_department_membership_exit();
+
+      CREATE OR REPLACE FUNCTION record_department_membership_return() RETURNS TRIGGER AS $$
+      BEGIN
+        INSERT INTO department_transfers (
+          user_id, to_department_id, to_department_name, to_organization_name
+        )
+        SELECT u.id, d.id, d.name, o.name
+        FROM users u JOIN departments d
+          ON d.id = COALESCE(NEW.department_id, u.department_id) AND d.organization_id = NEW.org_id
+        JOIN organizations o ON o.id = d.organization_id
+        WHERE u.id = NEW.user_id AND EXISTS (
+          SELECT 1 FROM department_transfers exit
+          WHERE exit.user_id = u.id AND exit.from_department_id = d.id
+            AND exit.id > COALESCE(
+              (SELECT max(arrival.id) FROM department_transfers arrival
+               WHERE arrival.user_id = u.id AND arrival.to_department_id = d.id), 0
+            )
+        );
+        RETURN NULL;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS record_membership_reinstatement ON user_organizations;
+      CREATE TRIGGER record_membership_reinstatement AFTER UPDATE OF is_active ON user_organizations
+        FOR EACH ROW WHEN (OLD.is_active IS NOT TRUE AND NEW.is_active)
+        EXECUTE FUNCTION record_department_membership_return();
+
+      DROP TRIGGER IF EXISTS record_membership_addition ON user_organizations;
+      CREATE TRIGGER record_membership_addition AFTER INSERT ON user_organizations
+        FOR EACH ROW WHEN (NEW.is_active)
+        EXECUTE FUNCTION record_department_membership_return();
+    `)
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS timesheet_days (

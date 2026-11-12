@@ -17,7 +17,7 @@ const MARK_COLORS = {
 const VACATION_COLOR = { background: 'DFEBFA', text: '1D4B82' }
 
 export async function getTimesheetExportData(db, timesheet, includeTest) {
-  const { entries, employees, nonWorkingDays } = await getTimesheetData(timesheet, includeTest, db)
+  const { entries, employees, nonWorkingDays, transfers } = await getTimesheetData(timesheet, includeTest, db)
   const dates = timesheetDates(timesheet)
   const marks = new Map(entries.map(e => [`${e.employee_id}:${e.date}`, e.code]))
   return {
@@ -29,6 +29,9 @@ export async function getTimesheetExportData(db, timesheet, includeTest) {
     employees: employees.map(e => ({
       name: [e.last_name, e.first_name, e.middle_name].filter(Boolean).join(' '),
       marks: dates.map(date => marks.get(`${e.id}:${date}`) ?? ''),
+      transfers: transfers.filter(span => span.employee_id === e.id).map(span => ({
+        first: dates.indexOf(span.start_date), last: dates.indexOf(span.end_date), label: span.label,
+      })),
     })),
   }
 }
@@ -77,7 +80,7 @@ export function createTimesheetWorkbook({ department, period, dates, nonWorkingD
     })
   }
 
-  employees.forEach(({ name, marks }, index) => {
+  employees.forEach(({ name, marks, transfers = [] }, index) => {
     const row = sheet.addRow([name, ...marks])
     row.height = Math.max(21, 13 * Math.ceil(name.length / 40) + 5)
     row.eachCell({ includeEmpty: true }, (cell, column) => {
@@ -90,6 +93,15 @@ export function createTimesheetWorkbook({ department, period, dates, nonWorkingD
         ? { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true }
         : { vertical: 'middle', horizontal: 'center' }
     })
+    for (const { first, last, label } of transfers) {
+      if (first < last) sheet.mergeCells(row.number, first + 2, row.number, last + 2)
+      const cell = row.getCell(first + 2)
+      cell.value = label
+      cell.fill = excelFill('EBEFF5')
+      cell.font = { name: 'Arial', size: 9, color: excelColor('485872') }
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+      row.height = Math.max(row.height, Math.min(409, 12 * Math.ceil(label.length / ((last - first + 1) * 4)) + 6))
+    }
   })
 
   sheet.addRow([]).height = 8
@@ -124,18 +136,30 @@ export function writeTimesheetPdf(stream, { department, period, dates, employees
   }
 
   let y = drawHeader()
-  employees.forEach(({ name, marks }, index) => {
+  employees.forEach(({ name, marks, transfers = [] }, index) => {
     doc.fontSize(8)
-    const rowHeight = Math.max(18, doc.heightOfString(name, nameOptions) + 8)
+    const nameLines = [name]
+    const labels = transfers.map(({ first, last, label }) => {
+      const width = (last - first + 1) * dayWidth
+      if (width < 80) nameLines.push(`${Number(dates[first].slice(-2))}. ${label}`)
+      return { x: left + nameWidth + first * dayWidth, label: width < 80 ? '→' : label, options: { width, align: 'center' } }
+    })
+    const nameText = nameLines.join('\n')
+    const rowHeight = Math.max(18, doc.heightOfString(nameText, nameOptions) + 8,
+      ...labels.map(({ label, options }) => doc.heightOfString(label, options) + 8))
     if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
       doc.addPage()
       y = drawHeader()
     }
     if (index % 2) doc.rect(left, y, tableWidth, rowHeight).fill('#F0F3F7')
-    doc.fillColor(`#${INK}`).text(name, left + 6, y + 4, nameOptions)
+    doc.fillColor(`#${INK}`).text(nameText, left + 6, y + 4, nameOptions)
     marks.forEach((mark, day) => {
       if (mark) doc.text(mark, left + nameWidth + day * dayWidth, y + 4, { width: dayWidth, align: 'center' })
     })
+    for (const { x, label, options } of labels) {
+      doc.rect(x, y, options.width, rowHeight).fill('#EBEFF5')
+      doc.fillColor('#485872').text(label, x, y + 4, options)
+    }
     y += rowHeight
   })
   doc.end()

@@ -20,6 +20,13 @@ interface Employee {
   middle_name?: string | null
 }
 
+interface TransferSpan {
+  employee_id: number
+  start_date: string
+  end_date: string
+  label: string
+}
+
 export interface TimesheetDay {
   date: string
   status: 'submitted' | 'approved' | 'returned'
@@ -44,6 +51,7 @@ export interface TimesheetDetails extends Timesheet {
   currentEmployeeIds: number[]
   days: TimesheetDay[]
   nonWorkingDays: string[]
+  transfers: TransferSpan[]
 }
 
 interface Props {
@@ -62,12 +70,21 @@ export const TIMESHEET_DAY_LABELS = {
 }
 
 export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }: Props) {
-  const { id, entries, employees, year, month, today, nonWorkingDays, days } = sheet
+  const { id, entries, employees, year, month, today, nonWorkingDays, days, transfers } = sheet
   const [changes, setChanges] = useState<Record<number, string | null>>({})
   const [working, setWorking] = useState<'saving' | 'submitting' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const entryMap = useMemo(() => new Map(entries.map(e => [`${e.employee_id}:${e.date}`, e.code])), [entries])
   const dayMap = useMemo(() => new Map(days.map(d => [d.date, d])), [days])
+  const transfersByEmployee = useMemo(() => {
+    const grouped = new Map<number, TransferSpan[]>()
+    for (const span of transfers) {
+      const row = grouped.get(span.employee_id) ?? []
+      row.push(span)
+      grouped.set(span.employee_id, row)
+    }
+    return grouped
+  }, [transfers])
   const savedRoster = dayMap.get(selectedDate)?.employee_ids
   const editableIds = new Set(savedRoster?.length ? savedRoster : sheet.currentEmployeeIds)
   const workingDay = !nonWorkingDays.includes(selectedDate)
@@ -84,6 +101,7 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
   function canEdit(employeeId: number, date: string) {
     return editable && workingDay && date === selectedDate && editableIds.has(employeeId)
       && !VACATION_CODES.includes(entryMap.get(`${employeeId}:${date}`) ?? '')
+      && !transfersByEmployee.get(employeeId)?.some(span => date >= span.start_date && date <= span.end_date)
   }
 
   function fillAttendance(ids: number[]) {
@@ -196,10 +214,23 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
             {employees.map((employee, index) => {
               const name = personName(employee.last_name, employee.first_name, employee.middle_name)
               const codes = dates.map(date => codeAt(employee.id, date))
+              const transferSpans = transfersByEmployee.get(employee.id) ?? []
               return (
                 <tr key={employee.id} className={index % 2 ? 'bg-muted/20' : 'bg-card'}>
                   <th scope="row" className="sticky left-0 z-10 whitespace-nowrap border-b border-r bg-card px-3 py-2 text-left font-medium">{name}</th>
                   {dates.map((date, i) => {
+                    const span = transferSpans.find(item => date >= item.start_date && date <= item.end_date)
+                    if (span) {
+                      return date === span.start_date && (
+                        <td
+                          key={date}
+                          colSpan={dates.indexOf(span.end_date) - i + 1}
+                          className="border-b border-r bg-muted/50 px-2 py-2 text-center text-muted-foreground"
+                        >
+                          <span className="block max-w-64 whitespace-normal break-words mx-auto">{span.label}</span>
+                        </td>
+                      )
+                    }
                     const code = codes[i]
                     const color = code ? CODE_COLORS[code] : ''
                     return (

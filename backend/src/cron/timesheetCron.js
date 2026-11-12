@@ -6,6 +6,7 @@ export async function runDailyTimesheetJob(date = new Date()) {
   const { rowCount } = await query(
     `INSERT INTO timesheets (department_id, year, month, organization_id)
      SELECT id, $1, $2, organization_id FROM departments
+     WHERE EXISTS (SELECT 1 FROM system_settings WHERE key = 'timesheet_auto_create' AND value = 'true')
      ON CONFLICT (department_id, year, month) DO NOTHING`,
     [date.getFullYear(), date.getMonth() + 1]
   )

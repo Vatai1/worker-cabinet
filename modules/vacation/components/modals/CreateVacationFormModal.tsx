@@ -144,7 +144,7 @@ export function CreateVacationFormModal({
 
   const vacationDuration = useVacationDuration(startDate, endDate)
   const returnDate = useReturnToWork(endDate)
-  const allowOverBalance = useAllowOverBalance()
+  const allowOverBalance = useAllowOverBalance(isOpen)
 
   if (!isOpen) return null
 

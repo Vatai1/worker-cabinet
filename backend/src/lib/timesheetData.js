@@ -1,6 +1,7 @@
 import { query } from '../config/database.js'
 import { getWorkingCalendar } from './workingCalendar.js'
 import { vacationTypeRule, VACATION_TIMESHEET_CODES } from './vacationTypes.js'
+import { toLocalDateStr } from './dateUtils.js'
 
 export function timesheetDates({ year, month }) {
   const prefix = `${year}-${String(month).padStart(2, '0')}`
@@ -61,9 +62,11 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
      LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = te.organization_id
      WHERE te.timesheet_id = $1 AND te.organization_id = $2 AND ($4 OR NOT u.is_test)
        AND CASE WHEN cardinality(td.employee_ids) > 0 THEN te.employee_id = ANY(td.employee_ids)
-           ELSE uo.user_id IS NOT NULL AND COALESCE(uo.department_id, u.department_id) = $3 END
+           ELSE (uo.user_id IS NOT NULL AND ($5 OR COALESCE(uo.department_id, u.department_id) = $3))
+             OR EXISTS (SELECT 1 FROM department_transfers tr
+                        WHERE tr.user_id = te.employee_id AND tr.from_department_id = $3) END
      ORDER BY u.last_name, u.first_name, te.date`,
-    [sheet.id, sheet.organization_id, sheet.department_id, includeTest]
+    [sheet.id, sheet.organization_id, sheet.department_id, includeTest, sheet.status === 'approved']
   )
   const currentEmployeeIds = employees.map(e => e.id)
   const employeeById = new Map(employees.map(e => [e.id, e]))
@@ -71,12 +74,69 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
     if (!employeeById.has(id)) employeeById.set(id, { id, first_name, last_name, middle_name })
   }
   const dates = timesheetDates(sheet)
+  const { rows: recordedTransfers } = await db.query(
+    `SELECT tr.user_id, u.first_name, u.last_name, u.middle_name, tr.transferred_at,
+            tr.to_department_name, tr.to_organization_name,
+            (SELECT arrival.transferred_at FROM department_transfers arrival
+             WHERE arrival.user_id = tr.user_id AND arrival.to_department_id = $1 AND arrival.id > tr.id
+             ORDER BY arrival.id LIMIT 1) AS returned_at
+     FROM department_transfers tr JOIN users u ON u.id = tr.user_id
+     WHERE tr.from_department_id = $1 AND tr.transferred_at >= $2 AND tr.transferred_at < $3
+       AND ($4 OR NOT u.is_test)
+     ORDER BY tr.id`,
+    [sheet.department_id, new Date(sheet.year, sheet.month - 1, 1), new Date(sheet.year, sheet.month, 1), includeTest]
+  )
+  const transferDates = new Map()
+  for (const tr of recordedTransfers) {
+    const start = toLocalDateStr(tr.transferred_at)
+    const end = tr.returned_at && toLocalDateStr(tr.returned_at)
+    if (end && end <= start) continue
+    const label = tr.to_department_name
+      ? `Переведён в «${tr.to_organization_name}», отдел «${tr.to_department_name}»`
+      : 'Выбыл из подразделения'
+    if (!employeeById.has(tr.user_id)) {
+      employeeById.set(tr.user_id, { id: tr.user_id, first_name: tr.first_name, last_name: tr.last_name, middle_name: tr.middle_name })
+    }
+    for (const date of dates) {
+      if (date >= start && (!end || date < end)) transferDates.set(`${tr.user_id}:${date}`, label)
+    }
+  }
+  if (sheet.status === 'approved') {
+    const lastMarks = new Map()
+    for (const entry of stored) {
+      if (entry.code && entry.code !== 'В' && entry.date > (lastMarks.get(entry.employee_id) ?? '')) {
+        lastMarks.set(entry.employee_id, entry.date)
+      }
+    }
+    const formerIds = [...lastMarks.keys()].filter(id => !currentEmployeeIds.includes(id) && lastMarks.get(id) < dates.at(-1))
+    if (formerIds.length) {
+      const { rows: destinations } = await db.query(
+        `SELECT DISTINCT ON (uo.user_id) uo.user_id, d.name AS department_name, o.name AS organization_name
+         FROM user_organizations uo JOIN users u ON u.id = uo.user_id
+         JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id) AND d.organization_id = uo.org_id
+         JOIN organizations o ON o.id = uo.org_id
+         WHERE uo.user_id = ANY($1) AND uo.is_active AND d.id <> $2
+           AND NOT EXISTS (SELECT 1 FROM department_transfers tr
+                           WHERE tr.user_id = uo.user_id AND tr.from_department_id = $2)
+         ORDER BY uo.user_id, (d.id = u.department_id) DESC NULLS LAST, uo.is_primary DESC NULLS LAST, uo.id`,
+        [formerIds, sheet.department_id]
+      )
+      for (const destination of destinations) {
+        const label = `Переведён в «${destination.organization_name}», отдел «${destination.department_name}» (дата перевода неизвестна)`
+        for (const date of dates) {
+          if (date > lastMarks.get(destination.user_id)) transferDates.set(`${destination.user_id}:${date}`, label)
+        }
+      }
+    }
+  }
   const { nonWorkingDays, vacations } = await getTimesheetMarks(db, sheet, dates, [...employeeById.keys()])
   const dayByDate = new Map(days.map(d => [d.date, d]))
   const isLocked = date => sheet.status !== 'draft' || ['submitted', 'approved'].includes(dayByDate.get(date)?.status)
   const entries = new Map()
   for (const entry of stored) {
     const key = `${entry.employee_id}:${entry.date}`
+    const transferred = transferDates.has(key) && !dayByDate.get(entry.date)?.employee_ids.includes(entry.employee_id)
+    if (transferred && (!isLocked(entry.date) || entry.code === 'В')) continue
     if (isLocked(entry.date) || !VACATION_TIMESHEET_CODES.includes(entry.code)) entries.set(key, entry)
   }
   if (sheet.status === 'draft') {
@@ -87,6 +147,7 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
       for (const id of roster) {
         if (!employeeById.has(id)) continue
         const key = `${id}:${date}`
+        if (transferDates.has(key) && !day?.employee_ids.includes(id)) continue
         const code = vacations.get(key) ?? (nonWorkingDays.includes(date) ? 'В' : null)
         if (code) {
           const { first_name, last_name, middle_name } = employeeById.get(id)
@@ -95,9 +156,25 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
       }
     }
   }
+  const transfers = []
+  for (const id of employeeById.keys()) {
+    let span
+    for (const date of dates) {
+      const key = `${id}:${date}`
+      const label = entries.get(key)?.code || dayByDate.get(date)?.employee_ids.includes(id) ? null : transferDates.get(key)
+      if (!label) {
+        span = undefined
+      } else if (span?.label === label) {
+        span.end_date = date
+      } else {
+        span = { employee_id: id, start_date: date, end_date: date, label }
+        transfers.push(span)
+      }
+    }
+  }
   return {
     employees: [...employeeById.values()], currentEmployeeIds, entries: [...entries.values()],
     days: days.map(day => ({ ...day, employee_ids: day.employee_ids.filter(id => employeeById.has(id)) })),
-    nonWorkingDays,
+    nonWorkingDays, transfers,
   }
 }

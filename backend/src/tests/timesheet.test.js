@@ -223,15 +223,88 @@ describe('Дневной табель', () => {
     assert.match(pdf, /\/ToUnicode \d+ 0 R/)
   })
 
-  it('фоновое создание сохраняет организацию отдела', async () => {
+  it('сохраняет старые отметки работника и заполняет остаток месяца подписью о переводе', async () => {
+    const former = await addUser('Переведённый', 'employee', department, 1)
+    const { rows: [archive] } = await query(
+      "INSERT INTO timesheets (department_id, year, month, status, organization_id) VALUES ($1, 2077, 6, 'approved', 1) RETURNING id",
+      [department]
+    )
+    await query(
+      `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, is_submitted, organization_id)
+       VALUES ($1, $2, '2077-06-04', 'Я', true, 1), ($1, $2, '2077-06-07', 'В', true, 1)`,
+      [archive.id, former.id]
+    )
+    await query(
+      "INSERT INTO user_organizations (user_id, org_id, org_role, department_id) VALUES ($1, $2, 'employee', $3)",
+      [former.id, orgId, foreignDepartment]
+    )
+    await query('UPDATE users SET department_id = $1 WHERE id = $2', [foreignDepartment, former.id])
+    await query('UPDATE user_organizations SET is_active = false WHERE user_id = $1 AND org_id = 1', [former.id])
+    const path = `/timesheet/${archive.id}`
+    const fetchRow = async () => {
+      const result = await call('GET', path, hr)
+      assert.equal(result.status, 200)
+      assert.ok(result.data.employees.some(e => e.id === former.id))
+      assert.deepEqual(result.data.entries.filter(e => e.employee_id === former.id && e.code === 'Я').map(e => e.date), ['2077-06-04'])
+      return result.data.transfers.find(span => span.employee_id === former.id)
+    }
+    const recorded = await query('SELECT id FROM department_transfers WHERE user_id = $1 AND from_department_id = $2', [former.id, department])
+    assert.equal(recorded.rowCount, 1)
+    await query('UPDATE department_transfers SET transferred_at = $1 WHERE id = $2', [new Date(2077, 5, 5, 12), recorded.rows[0].id])
+    const span = await fetchRow()
+    assert.equal(span.start_date, '2077-06-05')
+    assert.equal(span.end_date, '2077-06-30')
+    assert.match(span.label, /Переведён в «Учреждение .*», отдел «Чужой отдел .*»/)
+
+    const xlsx = await fetch(`${BASE}${path}/export/excel`, {
+      headers: { Authorization: `Bearer ${hr.token}`, 'x-organization-id': '1' },
+    })
+    assert.equal(xlsx.status, 200)
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(Buffer.from(await xlsx.arrayBuffer()))
+    const worksheet = workbook.getWorksheet('Табель')
+    const row = worksheet.getColumn(1).values.findIndex(name => String(name).includes('Переведённый'))
+    assert.equal(worksheet.getCell(row, 5).value, 'Я')
+    assert.equal(worksheet.getCell(row, 6).value, span.label)
+    assert.equal(worksheet.getCell(row, 31).master.address, worksheet.getCell(row, 6).address)
+
+    await query('DELETE FROM department_transfers WHERE user_id = $1', [former.id])
+    const inferred = await fetchRow()
+    assert.equal(inferred.start_date, '2077-06-05')
+    assert.match(inferred.label, /дата перевода неизвестна/)
+
+    await query('UPDATE user_organizations SET is_active = true WHERE user_id = $1 AND org_id = 1', [former.id])
+    await query('DELETE FROM user_organizations WHERE user_id = $1 AND org_id = 1', [former.id])
+    await query('UPDATE department_transfers SET transferred_at = $1 WHERE user_id = $2', [new Date(2077, 5, 5, 12), former.id])
+    assert.deepEqual(await fetchRow(), span)
+
+    await query(
+      "INSERT INTO user_organizations (user_id, org_id, org_role, department_id) VALUES ($1, 1, 'employee', $2)",
+      [former.id, department]
+    )
+    await query(
+      'UPDATE department_transfers SET transferred_at = $1 WHERE user_id = $2 AND to_department_id = $3',
+      [new Date(2077, 5, 10, 12), former.id, department]
+    )
+    assert.deepEqual(await fetchRow(), { ...span, end_date: '2077-06-09' })
+  })
+
+  it('фоновое создание учитывает переключатель и сохраняет организацию отдела', async () => {
     const date = new Date(2088, 0, 1)
+    const setting = (await query("SELECT value FROM system_settings WHERE key = 'timesheet_auto_create'")).rows[0]
     try {
+      await query("UPDATE system_settings SET value = 'false' WHERE key = 'timesheet_auto_create'")
+      await runDailyTimesheetJob(date)
+      const disabled = await call('GET', '/timesheet?year=2088&month=1', foreignManager)
+      assert.ok(disabled.data.every(t => t.department_id !== foreignDepartment))
+      await query("UPDATE system_settings SET value = 'true' WHERE key = 'timesheet_auto_create'")
       await runDailyTimesheetJob(date)
       const own = await call('GET', '/timesheet?year=2088&month=1', foreignManager)
       assert.ok(own.data.some(t => t.department_id === foreignDepartment))
       const visible = await call('GET', '/timesheet?year=2088&month=1', hr)
       assert.ok(visible.data.every(t => t.department_id !== foreignDepartment))
     } finally {
+      await query("UPDATE system_settings SET value = $1 WHERE key = 'timesheet_auto_create'", [setting.value])
       await query('DELETE FROM timesheets WHERE year = 2088 AND month = 1 AND created_by IS NULL AND created_at >= to_timestamp($1 / 1000.0)', [stamp])
     }
   })

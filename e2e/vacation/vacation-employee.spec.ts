@@ -121,17 +121,36 @@ test.describe('Отпуск: работник', () => {
     await expect(link).toHaveAttribute('target', '_blank')
   })
 
-  test('не хватает дней: предупреждение и неактивная кнопка', async ({ page }) => {
+  test('при нулевом остатке подача заявки зависит от настройки организации', async ({ page }) => {
     const year = Number(T_SHORT.s.slice(0, 4))
-    await world.ok('PATCH', `/vacation/balances/${world.users.emp.id}`, { year, total_days: 1 })
+    const employee = world.users.emp
+    const balancePath = `/vacation/balance/${employee.id}?year=${year}`
+    const balance = await world.ok<{ total_days: number; used_days: number; reserved_days: number }>('GET', balancePath, undefined, employee.token)
+    await world.ok('PATCH', `/vacation/balances/${employee.id}`, { year, total_days: balance.used_days + balance.reserved_days })
+    let requestId: number | undefined
     try {
       await world.loginPage(page, 'emp')
       await openVacationPage(page)
       await selectRange(page, T_SHORT.s, T_SHORT.e)
       await expect(page.getByText('⚠️ Недостаточно дней')).toBeVisible({ timeout: 10000 })
       await expect(page.getByRole('button', { name: 'Создать заявку' })).toBeDisabled()
+      await page.getByRole('button', { name: 'Отмена', exact: true }).click()
+
+      await world.ok('PUT', '/vacation/settings', { allowOverBalance: true })
+      await selectRange(page, T_SHORT.s, T_SHORT.e)
+      await expect(page.getByText(/отпуск будет оформлен сверх баланса/)).toBeVisible()
+      const created = page.waitForResponse(r => r.url().endsWith('/vacation/requests') && r.request().method() === 'POST')
+      await page.getByRole('button', { name: 'Создать заявку' }).click()
+      const response = await created
+      expect(response.status()).toBe(201)
+      const request = await response.json()
+      requestId = request.id
+      const after = await world.ok<{ available_days: number }>('GET', balancePath, undefined, employee.token)
+      expect(after.available_days).toBe(-request.duration)
     } finally {
-      await world.ok('PATCH', `/vacation/balances/${world.users.emp.id}`, { year, total_days: 40 })
+      if (requestId) await world.call('POST', `/vacation/requests/${requestId}/cancel`, {}, employee.token)
+      await world.ok('PUT', '/vacation/settings', { allowOverBalance: false })
+      await world.ok('PATCH', `/vacation/balances/${employee.id}`, { year, total_days: balance.total_days })
     }
   })
 
