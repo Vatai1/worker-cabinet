@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { query, getClient } from '../config/database.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { asyncHandler, ValidationError, NotFoundError } from '../middleware/errors.js'
-import { getTravelState, assertTravelAllowed } from '../lib/travel.js'
+import { getTravelState, assertTravelAllowed, periodBounds, periodIndex } from '../lib/travel.js'
 import { resolveVacationApprovers, vacationApproversSql } from '../lib/vacationApprover.js'
 import { vacationTypeRule, requestTypeCode } from '../lib/vacationTypes.js'
 import { VACATION_REPORTS, buildReport, sendReportXlsx } from '../lib/vacationReports.js'
@@ -21,6 +21,7 @@ import { hasFullDepartmentAccess, managedDepartmentIds } from '../lib/department
 import { requirePermission, hasPermission, isModuleEnabledForOrg } from '../lib/permissions.js'
 import { getWorkingCalendar } from '../lib/workingCalendar.js'
 import { genitiveTemplateData, departmentGenitive, positionGenitive } from '../lib/nameGenitive.js'
+import { toLocalDateStr } from '../lib/dateUtils.js'
 
 const router = express.Router()
 
@@ -304,6 +305,33 @@ async function institutionHeadData(req) {
     head_short_name: [h.last_name, initials].filter(Boolean).join(' '),
     head_initials_name: [initials, h.last_name].filter(Boolean).join(' '),
     head_position: h.position || '',
+  }
+}
+
+const DOCUMENT_MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+
+function formatDocumentDate(isoDate) {
+  return isoDate.split('-').reverse().join('.')
+}
+
+function documentDateFields(prefix, isoDate) {
+  const [year, month, day] = isoDate.split('-')
+  return {
+    [prefix]: formatDocumentDate(isoDate),
+    [`${prefix}_day`]: day,
+    [`${prefix}_month`]: month,
+    [`${prefix}_month_name`]: DOCUMENT_MONTHS[Number(month) - 1],
+    [`${prefix}_year`]: year,
+  }
+}
+
+function documentTravelPeriod(hireDate, tripEnd) {
+  if (!hireDate || !tripEnd) return { travel_period_start: '', travel_period_end: '' }
+  const hire = parseISODate(hireDate)
+  const { start, end } = periodBounds(hire, periodIndex(hire, parseISODate(tripEnd)))
+  return {
+    travel_period_start: formatDocumentDate(formatISODate(start)),
+    travel_period_end: formatDocumentDate(formatISODate(end)),
   }
 }
 
@@ -3016,44 +3044,14 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
     const initials = [u.first_name?.[0], u.middle_name?.[0]].filter(Boolean).map(c => c + '.').join('')
     const shortName = [u.last_name, initials].filter(Boolean).join(' ')
 
-    const formatDate = (d) => {
-      if (!d) return ''
-      const dt = new Date(d)
-      return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    }
-
-    const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
-    const dateParts = (d) => {
-      if (!d) return {}
-      const dt = new Date(d)
-      const day = dt.getDate()
-      const month = dt.getMonth() + 1
-      const year = dt.getFullYear()
-      return {
-        day: String(day).padStart(2, '0'),
-        month: String(month).padStart(2, '0'),
-        month_name: MONTHS_GENITIVE[month - 1],
-        year: String(year),
-      }
-    }
-
     const vacations = vacResult.rows.map((v, i, arr) => {
-      const sp = dateParts(v.start_date)
-      const ep = dateParts(v.end_date)
       return {
         num: String(i + 1),
         is_last: i === arr.length - 1,
         type: v.vacation_type_name,
-        start: formatDate(v.start_date),
-        start_day: sp.day,
-        start_month: sp.month,
-        start_month_name: sp.month_name,
-        start_year: sp.year,
-        end: formatDate(v.end_date),
-        end_day: ep.day,
-        end_month: ep.month,
-        end_month_name: ep.month_name,
-        end_year: ep.year,
+        ...documentDateFields('start', v.start_date),
+        ...documentDateFields('end', v.end_date),
+        ...documentTravelPeriod(u.hire_date, v.has_travel ? v.end_date : null),
         days: String(v.duration),
         has_travel: v.has_travel || false,
         has_children: Array.isArray(v.travel_children) && v.travel_children.length > 0,
@@ -3083,10 +3081,9 @@ router.post('/generate-application', authenticateToken, async (req, res) => {
       year: String(year),
       selected_year: String(year),
       next_year: String(year + 1),
-      date_today: formatDate(today),
+      date_today: formatDocumentDate(toLocalDateStr(today)),
       ...(await institutionHeadData(req)),
-      travel_period_start: u.hire_date ? formatDate(u.hire_date) : '',
-      travel_period_end: u.hire_date ? formatDate(new Date(u.hire_date).setFullYear(new Date(u.hire_date).getFullYear() + 2)) : '',
+      ...documentTravelPeriod(u.hire_date, vacResult.rows.find((v) => v.has_travel)?.end_date),
       vacations,
       vacations_count: String(vacations.length),
       total_days: String(vacations.reduce((s, v) => s + Number(v.days), 0)),
@@ -3159,18 +3156,18 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       [templateId], req
     )
     const { text: gtTrText, values: gtTrValues } = req.org
-      ? { text: `SELECT nr.id, nr.start_date as new_start, nr.duration as new_days, nr.transfer_note as note,
+      ? { text: `SELECT nr.id, nr.start_date as new_start, nr.end_date as new_end, nr.duration as new_days, nr.transfer_note as note,
                 nr.has_travel, nr.travel_destination, nr.travel_children, nr.travel_children_count,
-                orig.start_date as original_start, orig.duration as original_days,
+                orig.start_date as original_start, orig.end_date as original_end, orig.duration as original_days,
                 rs.code as status
          FROM vacation_requests nr
          JOIN vacation_requests orig ON nr.transferred_from_id = orig.id
          JOIN request_statuses rs ON nr.status_id = rs.id
          WHERE nr.id = ANY($1) AND nr.user_id = $2 AND nr.organization_id = $3 AND rs.code = 'approved'
          ORDER BY orig.start_date`, values: [transferIds, userId, req.org.org_id] }
-      : { text: `SELECT nr.id, nr.start_date as new_start, nr.duration as new_days, nr.transfer_note as note,
+      : { text: `SELECT nr.id, nr.start_date as new_start, nr.end_date as new_end, nr.duration as new_days, nr.transfer_note as note,
                 nr.has_travel, nr.travel_destination, nr.travel_children, nr.travel_children_count,
-                orig.start_date as original_start, orig.duration as original_days,
+                orig.start_date as original_start, orig.end_date as original_end, orig.duration as original_days,
                 rs.code as status
          FROM vacation_requests nr
          JOIN vacation_requests orig ON nr.transferred_from_id = orig.id
@@ -3197,27 +3194,6 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
     const initials = [u.first_name?.[0], u.middle_name?.[0]].filter(Boolean).map(c => c + '.').join('')
     const shortName = [u.last_name, initials].filter(Boolean).join(' ')
 
-    const formatDate = (d) => {
-      if (!d) return ''
-      const dt = new Date(d)
-      return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    }
-
-    const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
-    const dateParts = (d) => {
-      if (!d) return {}
-      const dt = new Date(d)
-      const day = dt.getDate()
-      const month = dt.getMonth() + 1
-      const year = dt.getFullYear()
-      return {
-        day: String(day).padStart(2, '0'),
-        month: String(month).padStart(2, '0'),
-        month_name: MONTHS_GENITIVE[month - 1],
-        year: String(year),
-      }
-    }
-
     const today = new Date()
     const data = {
       full_name: fullName,
@@ -3230,70 +3206,20 @@ router.post('/generate-transfer-application', authenticateToken, async (req, res
       position_gen: positionGenitive(u.position, u.position_genitive),
       department: u.hide_department_in_documents ? '' : u.department_name || '',
       department_gen: !u.hide_department_in_documents && u.department_name ? departmentGenitive({ name: u.department_name, name_genitive: u.department_name_genitive }) : '',
-      date_today: formatDate(today),
+      date_today: formatDocumentDate(toLocalDateStr(today)),
       year: String(today.getFullYear()),
       next_year: String(today.getFullYear() + 1),
-      travel_period_start: u.hire_date ? formatDate(u.hire_date) : '',
-      travel_period_end: u.hire_date ? formatDate(new Date(u.hire_date).setFullYear(new Date(u.hire_date).getFullYear() + 2)) : '',
+      ...documentTravelPeriod(u.hire_date, transfersResult.rows.find((t) => t.has_travel)?.new_end),
       transfers: transfersResult.rows.map(t => {
         const delta = t.new_days - t.original_days
-        const osp = dateParts(t.original_start)
-        const nsp = dateParts(t.new_start)
         return {
-          original_start: formatDate(t.original_start),
-          original_start_day: osp.day,
-          original_start_month: osp.month,
-          original_start_month_name: osp.month_name,
-          original_start_year: osp.year,
+          ...documentDateFields('original_start', t.original_start),
+          ...documentDateFields('original_end', t.original_end),
           original_days: String(t.original_days),
-          original_end: (() => {
-            if (!t.original_start) return ''
-            const d = new Date(t.original_start)
-            d.setDate(d.getDate() + t.original_days - 1)
-            return formatDate(d)
-          })(),
-          original_end_day: (() => {
-            const d = new Date(t.original_start)
-            d.setDate(d.getDate() + t.original_days - 1)
-            return String(d.getDate()).padStart(2, '0')
-          })(),
-          original_end_month_name: (() => {
-            const d = new Date(t.original_start)
-            d.setDate(d.getDate() + t.original_days - 1)
-            return MONTHS_GENITIVE[d.getMonth()]
-          })(),
-          original_end_year: (() => {
-            const d = new Date(t.original_start)
-            d.setDate(d.getDate() + t.original_days - 1)
-            return String(d.getFullYear())
-          })(),
-          new_start: formatDate(t.new_start),
-          new_start_day: nsp.day,
-          new_start_month: nsp.month,
-          new_start_month_name: nsp.month_name,
-          new_start_year: nsp.year,
+          ...documentDateFields('new_start', t.new_start),
+          ...documentDateFields('new_end', t.new_end),
           new_days: String(t.new_days),
-          new_end: (() => {
-            if (!t.new_start) return ''
-            const d = new Date(t.new_start)
-            d.setDate(d.getDate() + t.new_days - 1)
-            return formatDate(d)
-          })(),
-          new_end_day: (() => {
-            const d = new Date(t.new_start)
-            d.setDate(d.getDate() + t.new_days - 1)
-            return String(d.getDate()).padStart(2, '0')
-          })(),
-          new_end_month_name: (() => {
-            const d = new Date(t.new_start)
-            d.setDate(d.getDate() + t.new_days - 1)
-            return MONTHS_GENITIVE[d.getMonth()]
-          })(),
-          new_end_year: (() => {
-            const d = new Date(t.new_start)
-            d.setDate(d.getDate() + t.new_days - 1)
-            return String(d.getFullYear())
-          })(),
+          ...documentTravelPeriod(u.hire_date, t.has_travel ? t.new_end : null),
           has_travel: Boolean(t.has_travel),
           travel_destination: t.travel_destination || '',
           travel_children_count: String(t.travel_children_count || 0),

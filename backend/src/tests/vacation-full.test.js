@@ -137,11 +137,11 @@ async function cleanupFixtures({ deptIds = [], templateNames = [] } = {}) {
   }
 }
 
-function minimalDocx() {
+function minimalDocx(text = 'wc test') {
   const zip = new PizZip()
   zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')
   zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
-  zip.file('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>wc test</w:t></w:r></w:p></w:body></w:document>')
+  zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`)
   return zip.generate({ type: 'nodebuffer' })
 }
 
@@ -1422,8 +1422,10 @@ describe('Модуль отпусков — user stories', () => {
         await mkBalance(emp.id, year)
       }
       const hrToken = await tokenFor(hrUser)
-      templateA = (await createDocTemplate(hrToken, 'vac-full gen A', 'vacation_template')).data
-      templateT = (await createDocTemplate(hrToken, 'vac-full gen T', 'vacation_transfer_template')).data
+      const application = minimalDocx('{#vacations}{start} – {end} ({end_day} {end_month_name} {end_year}) [{travel_period_start} – {travel_period_end}]{/vacations}')
+      const transfer = minimalDocx('{#transfers}{original_start} – {original_end} ({original_end_month}) → {new_start} – {new_end} ({new_end_day} {new_end_month_name} {new_end_year}) [{travel_period_start} – {travel_period_end}]{/transfers}')
+      templateA = (await createDocTemplate(hrToken, 'vac-full gen A', 'vacation_template', application)).data
+      templateT = (await createDocTemplate(hrToken, 'vac-full gen T', 'vacation_transfer_template', transfer)).data
     })
 
     afterEach(async () => {
@@ -1444,6 +1446,17 @@ describe('Модуль отпусков — user stories', () => {
       assert.ok(res.contentType.includes('wordprocessingml.document'))
       assert.strictEqual(res.data[0], 0x50)
       assert.strictEqual(res.data[1], 0x4b)
+    })
+
+    it('DOCX содержит даты заявок и периоды проезда каждой строки', async () => {
+      const first = await mkVacation({ userId: emp.id, start: '2025-12-01', end: '2025-12-05', duration: 5, status: 'approved' })
+      const second = await mkVacation({ userId: emp.id, start: '2025-12-30', end: '2026-01-05', duration: 2, status: 'approved' })
+      await query('UPDATE vacation_requests SET has_travel = true WHERE id = ANY($1)', [[first.id, second.id]])
+      const res = await call('POST', '/vacation/generate-application', await tokenFor(emp), { year: 2025, templateId: templateA.id })
+      assert.strictEqual(res.status, 200)
+      const doc = new PizZip(res.data).file('word/document.xml').asText().replace(/<[^>]*>/g, '')
+      assert.ok(doc.includes('01.12.2025 – 05.12.2025 (05 декабря 2025) [01.01.2024 – 31.12.2025]'), doc)
+      assert.ok(doc.includes('30.12.2025 – 05.01.2026 (05 января 2026) [01.01.2026 – 31.12.2027]'), doc)
     })
 
     it('POST /generate-application без согласованных отпусков за выбранный год → 409', async () => {
@@ -1483,6 +1496,16 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(res.status, 200)
       assert.ok(res.contentType.includes('wordprocessingml.document'))
       assert.strictEqual(res.data[0], 0x50)
+    })
+
+    it('DOCX переноса берёт обе даты окончания из заявок при исключённых праздниках', async () => {
+      const original = await mkVacation({ userId: emp.id, start: '2026-01-01', end: '2026-01-13', duration: 5, status: 'approved' })
+      const transfer = await mkVacation({ userId: emp.id, start: '2026-05-08', end: '2026-05-12', duration: 4, status: 'approved' })
+      await query('UPDATE vacation_requests SET transferred_from_id = $1, has_travel = true WHERE id = $2', [original.id, transfer.id])
+      const res = await call('POST', '/vacation/generate-transfer-application', await tokenFor(emp), { templateId: templateT.id, transferIds: [transfer.id] })
+      assert.strictEqual(res.status, 200)
+      const doc = new PizZip(res.data).file('word/document.xml').asText().replace(/<[^>]*>/g, '')
+      assert.ok(doc.includes('01.01.2026 – 13.01.2026 (01) → 08.05.2026 – 12.05.2026 (12 мая 2026) [01.01.2026 – 31.12.2027]'), doc)
     })
 
     it('transfer: пустой transferIds → 400; несуществующий шаблон → 404', async () => {
