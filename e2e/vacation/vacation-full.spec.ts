@@ -252,13 +252,13 @@ async function submitRequest(page: Page, comment: string) {
 const myCard = (page: Page, text: string) => page.getByText(text, { exact: true }).locator('xpath=../..').first()
 
 async function ensureCardExpanded(page: Page, text: string) {
-  const card = page.getByText(text, { exact: true }).locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]').first()
+  const dates = page.getByText(text, { exact: true })
+  const card = page.getByTestId('my-request-card').filter({ has: dates }).first()
   await card.waitFor({ state: 'visible', timeout: 10000 })
-  const probe = card.getByText('Тип: ')
-  if (!(await probe.isVisible().catch(() => false))) {
-    await page.getByText(text, { exact: true }).locator('xpath=../..').click()
-    await expect(probe).toBeVisible({ timeout: 5000 })
+  if (await card.getAttribute('data-expanded') !== 'true') {
+    await card.getByText(text, { exact: true }).click()
   }
+  await expect(card).toHaveAttribute('data-expanded', 'true')
   return card
 }
 
@@ -412,15 +412,31 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
 
   test.describe('US-11. Работник генерирует заявление', () => {
     test('скачивает заявление .docx по шаблону', async ({ page }) => {
+      const [startDate, endDate] = span(95)
+      const year = startDate.slice(0, 4)
+      const created = await api.post(`${API}/vacation/requests`, {
+        headers: { ...ORG, Authorization: `Bearer ${empToken}` },
+        data: { startDate, endDate, vacationType: 'annual_paid', comment: 'e2e-vf заявление' },
+      })
+      expect(created.ok(), await created.text()).toBe(true)
+      const { id } = await created.json()
+      const approved = await api.post(`${API}/vacation/requests/${id}/approve`, {
+        headers: { ...ORG, Authorization: `Bearer ${admToken}` },
+        data: {},
+      })
+      expect(approved.ok(), await approved.text()).toBe(true)
+
       await openVacation(page, 'employee')
       await page.getByRole('button', { name: 'Заявления', exact: true }).click()
       await page.getByRole('button', { name: /Заявление на отпуск/ }).click()
       await expect(page.getByRole('heading', { name: 'Заявление на отпуск' })).toBeVisible({ timeout: 5000 })
+      await page.getByRole('button', { name: year, exact: true }).click()
       const templateCard = page.locator('button', { hasText: TEMPLATE_NAME }).first()
       await templateCard.waitFor({ state: 'visible', timeout: 10000 })
       await templateCard.click()
       const download = page.getByRole('button', { name: 'Скачать .docx' })
       await expect(download).toBeEnabled()
+      const downloaded = page.waitForEvent('download')
       await download.click()
       const nameDialog = page.getByRole('dialog', { name: 'Как склоняется ваше ФИО?' })
       const done = page.getByText('Заявление сформировано')
@@ -430,16 +446,18 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
         await nameDialog.getByRole('button', { name: 'Сохранить и продолжить' }).click()
       }
       await expect(done).toBeVisible({ timeout: 15000 })
+      expect((await downloaded).suggestedFilename()).toBe(`Заявление_${year}.docx`)
     })
   })
 
   test.describe('US-5. Замещающий согласовывает заявку', () => {
-    test('заместитель видит заявку в очереди; кнопки согласования в модалке ему не показываются (известная проблема)', async ({ page }) => {
+    test('заместитель видит заявку в очереди и согласовывает её из карточки', async ({ page }) => {
       const created = await api.post(`${API}/vacation/requests`, {
         headers: { ...ORG, Authorization: `Bearer ${empToken}` },
         data: { startDate: D_S, endDate: D_E, vacationType: 'annual_paid', comment: 'e2e-vf D' },
       })
       if (!created.ok()) throw new Error(`создание заявки D упало: ${created.status()}`)
+      const { id } = await created.json()
 
       await loginAsEmail(page, 'kuznetsov@crct.ru')
       await page.context().addCookies([
@@ -454,14 +472,12 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
       await card.getByRole('button').first().click()
       await expect(page.getByRole('heading', { name: 'Детали отпуска' })).toBeVisible({ timeout: 5000 })
       const modal = page.getByTestId('vacation-detail-modal')
-      await expect(modal.getByRole('button', { name: 'Согласовать' })).toHaveCount(0)
-      await expect(modal.getByRole('button', { name: 'Отклонить', exact: true })).toHaveCount(0)
-
-      const approved = await api.post(`${API}/vacation/requests/${(await created.json()).id}/approve`, {
-        headers: { ...ORG, Authorization: `Bearer ${admToken}` },
-        data: {},
-      })
-      if (!approved.ok()) throw new Error(`approve заявки D через API упал: ${approved.status()}`)
+      await expect(modal.getByRole('button', { name: 'Отклонить', exact: true })).toBeVisible()
+      const approval = page.waitForResponse((res) => res.url().endsWith(`/vacation/requests/${id}/approve`))
+      await modal.getByRole('button', { name: 'Согласовать' }).click()
+      const approved = await approval
+      expect(approved.ok(), await approved.text()).toBe(true)
+      await expect(card).toHaveCount(0, { timeout: 15000 })
     })
   })
 
