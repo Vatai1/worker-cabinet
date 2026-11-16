@@ -4,6 +4,9 @@
   "description": "Backend for Worker Cabinet",
   "main": "src/server.js",
   "type": "module",
+  "engines": {
+    "node": "26.x"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
