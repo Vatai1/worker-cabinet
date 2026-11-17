@@ -100,7 +100,7 @@ export function ManagerTimesheet() {
   const years = [...new Set([now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1, year])].sort()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-timesheet-page>
       <PageBanner
         icon={Sparkles}
         eyebrow="Табель"

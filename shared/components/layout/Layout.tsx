@@ -18,7 +18,7 @@ export function Layout() {
           <Header />
         </div>
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl p-6 lg:p-12">
+          <div className="mx-auto max-w-7xl p-6 lg:p-12 has-[[data-timesheet-page]]:max-w-none has-[[data-timesheet-page]]:px-3 lg:has-[[data-timesheet-page]]:px-6">
             <Outlet />
           </div>
         </main>

@@ -184,11 +184,11 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
           Есть несохранённые изменения. При отправке они будут включены в табель.
         </div>
       )}
-      <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
-        <table className="w-full min-w-max border-collapse text-xs">
+      <div role="region" aria-label="Табель за месяц" tabIndex={0} className="overflow-x-auto overscroll-x-contain rounded-xl border border-border shadow-sm focus-visible:ring-2 focus-visible:ring-primary">
+        <table className="w-full min-w-[54rem] table-fixed border-collapse text-xs tabular-nums">
           <thead>
             <tr>
-              <th scope="col" className="sticky left-0 z-20 min-w-[180px] border-b border-r bg-muted px-3 py-2 text-left text-sm">Работник</th>
+              <th scope="col" className="sticky left-0 z-20 w-36 border-b border-r bg-muted px-3 py-2 text-left text-sm xl:w-40 2xl:w-56">Работник</th>
               {dates.map(date => {
                 const day = dayMap.get(date)
                 const status = day ? TIMESHEET_DAY_LABELS[day.status] : undefined
@@ -197,17 +197,17 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                     key={date}
                     scope="col"
                     title={status}
-                    className={`min-w-[42px] border-b border-r px-1 py-1 text-center ${nonWorkingDays.includes(date) ? 'bg-red-500/10' : 'bg-muted'} ${date === selectedDate ? 'ring-2 ring-inset ring-primary' : ''}`}
+                    className={`border-b border-r py-1 text-center ${nonWorkingDays.includes(date) ? 'bg-red-500/10' : 'bg-muted'} ${date === selectedDate ? 'ring-2 ring-inset ring-primary' : ''}`}
                   >
                     <div className="text-sm">{Number(date.slice(-2))}</div>
-                    <div className="font-normal text-muted-foreground">{WEEKDAY_SHORT[new Date(date).getUTCDay()]}</div>
+                    <div className="text-[10px] font-normal text-muted-foreground">{WEEKDAY_SHORT[new Date(date).getUTCDay()]}</div>
                     {status && <div aria-label={status} className="text-primary">{day?.status === 'returned' ? '↶' : day?.status === 'approved' ? '✓' : '•'}</div>}
                   </th>
                 )
               })}
-              <th scope="col" className="border-b border-r bg-muted px-2">Я</th>
-              <th scope="col" className="border-b bg-muted px-2">ОТ</th>
-              {editable && workingDay && <th scope="col" className="sticky right-0 border-b border-l bg-muted px-2">Действия</th>}
+              <th scope="col" className="w-8 border-b border-r bg-muted">Я</th>
+              <th scope="col" className="w-8 border-b bg-muted">ОТ</th>
+              {editable && workingDay && <th scope="col" className="sticky right-0 w-[4.5rem] border-b border-l bg-muted">Действия</th>}
             </tr>
           </thead>
           <tbody>
@@ -217,7 +217,7 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
               const transferSpans = transfersByEmployee.get(employee.id) ?? []
               return (
                 <tr key={employee.id} className={index % 2 ? 'bg-muted/20' : 'bg-card'}>
-                  <th scope="row" className="sticky left-0 z-10 whitespace-nowrap border-b border-r bg-card px-3 py-2 text-left font-medium">{name}</th>
+                  <th scope="row" className="sticky left-0 z-10 break-words border-b border-r bg-card px-3 py-2 text-left font-medium">{name}</th>
                   {dates.map((date, i) => {
                     const span = transferSpans.find(item => date >= item.start_date && date <= item.end_date)
                     if (span) {
@@ -225,7 +225,7 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                         <td
                           key={date}
                           colSpan={dates.indexOf(span.end_date) - i + 1}
-                          className="border-b border-r bg-muted/50 px-2 py-2 text-center text-muted-foreground"
+                          className="border-b border-r bg-muted/50 px-1 py-2 text-center text-muted-foreground"
                         >
                           <span className="block max-w-64 whitespace-normal break-words mx-auto">{span.label}</span>
                         </td>
@@ -241,7 +241,7 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                             value={code ?? ''}
                             disabled={!!working}
                             onChange={e => setChanges(previous => ({ ...previous, [employee.id]: e.target.value || null }))}
-                            className="w-full cursor-pointer bg-transparent py-2 text-center font-medium"
+                            className="w-full cursor-pointer appearance-none bg-transparent py-2 text-center font-medium hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                           >
                             <option value="">—</option>
                             {ATTENDANCE_CODES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
@@ -251,10 +251,10 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                     )
                   })}
                   {['Я', 'ОТ'].map(code => (
-                    <td key={code} className="border-b border-r px-2 text-center font-bold">{codes.filter(mark => mark === code).length || ''}</td>
+                    <td key={code} className="border-b border-r text-center font-bold">{codes.filter(mark => mark === code).length || ''}</td>
                   ))}
                   {editable && workingDay && (
-                    <td className="sticky right-0 border-b border-l bg-card px-2 text-center">
+                    <td className="sticky right-0 border-b border-l bg-card text-center">
                       {canEdit(employee.id, selectedDate) && !codeAt(employee.id, selectedDate) && (
                         <Button variant="ghost" size="sm" disabled={!!working} onClick={() => fillAttendance([employee.id])}>Явка</Button>
                       )}

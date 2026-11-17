@@ -50,6 +50,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
           position: data.position,
           department: data.department,
           departmentId: data.departmentId?.toString(),
+          managesDepartment: data.managesDepartment === true,
           phone: data.phone,
           birthDate: data.birthDate,
           hireDate: data.hireDate,

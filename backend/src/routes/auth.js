@@ -5,12 +5,13 @@ import { authLimiter } from '../middleware/rateLimiter.js'
 import { validateLogin, validateRegister, sanitizeInput } from '../middleware/validation.js'
 import { asyncHandler, ValidationError, UnauthorizedError, ForbiddenError } from '../middleware/errors.js'
 import { authenticateToken, verifyKeycloakToken, findOrCreateUser, keycloakOrgSource, ACCOUNT_DISABLED_MESSAGE } from '../middleware/auth.js'
-import { isRealSuperadmin, signValue, testCookieOptions, TEST_PREVIEW_ROLES, getTestDataState } from '../utils/testScope.js'
+import { isRealSuperadmin, signValue, testCookieOptions, TEST_PREVIEW_ROLES, getTestDataState, excludeTest } from '../utils/testScope.js'
 import { personName } from '../utils/personName.js'
 import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl, kcLog, kcErr } from '../config/keycloak.js'
 import { getAuthSettings } from '../config/authSettings.js'
 import { signAccessToken, createSession, findActiveSessionByToken, isRecentlyRotatedToken, rotateSession, revokeSessionByToken } from '../lib/sessionTokens.js'
 import { permissionsFor } from '../lib/permissions.js'
+import { currentOrgId } from '../lib/orgQuery.js'
 import { extractLdapDn, dnOus } from '../lib/ldapDn.js'
 
 const router = express.Router()
@@ -485,16 +486,39 @@ router.post('/test/impersonate', authenticateToken, requireRealSuper, asyncHandl
   res.json({ success: true, userId })
 }))
 
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Получить профиль и права текущего пользователя
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Профиль пользователя в активной организации
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 managesDepartment: { type: boolean, description: Назначен начальником отдела в активной организации }
+ *                 permissions: { type: array, items: { type: string } }
+ *       401: { description: Пользователь не авторизован }
+ */
 router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
   const result = await query(
     `SELECT u.id, u.email, u.first_name, u.last_name, u.middle_name,
        u.position, u.department_id, u.phone, u.birth_date, u.hire_date,
        u.status, u.role, u.manager_id, u.avatar, u.is_test,
-       d.name as department_name
+       d.name as department_name,
+       EXISTS (
+         SELECT 1 FROM departments managed
+         WHERE managed.manager_id = u.id AND managed.organization_id = $2 ${excludeTest(req, 'managed')}
+       ) AS manages_department
      FROM users u
      LEFT JOIN departments d ON u.department_id = d.id
      WHERE u.id = $1`,
-    [req.user.id]
+    [req.user.id, currentOrgId(req)]
   )
 
   if (result.rows.length === 0) throw new UnauthorizedError('Пользователь не найден')
@@ -505,6 +529,7 @@ router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
     id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name,
     middleName: user.middle_name, position: user.position, department: user.department_name,
     departmentId: user.department_id, phone: user.phone, birthDate: user.birth_date,
+    managesDepartment: user.manages_department,
     hireDate: user.hire_date, status: user.status,
     role: req.previewRole || user.role,
     managerId: user.manager_id, avatar: user.avatar,

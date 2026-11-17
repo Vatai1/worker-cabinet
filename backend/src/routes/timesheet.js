@@ -36,7 +36,7 @@ async function getManagerDepartments(req, db = { query }) {
      ORDER BY d.name`,
     [req.user.id, orgId]
   )
-  if (rows.length > 0) return rows
+  if (rows.length > 0 || req.canManageTimesheets) return rows
 
   const fallback = await db.query(
     `SELECT d.id, d.name FROM users u
@@ -48,7 +48,7 @@ async function getManagerDepartments(req, db = { query }) {
   return fallback.rows
 }
 
-async function loadTimesheet(req, db = { query }, lock = false) {
+async function loadTimesheet(req, db, { lock = false, forDepartmentHead = false } = {}) {
   const id = Number(req.params.id)
   if (!Number.isInteger(id) || id < 1 || id > 2147483647) throw new NotFoundError('Табель не найден')
   const { rows } = await db.query(
@@ -60,6 +60,9 @@ async function loadTimesheet(req, db = { query }, lock = false) {
   )
   const sheet = rows[0]
   if (!sheet) throw new NotFoundError('Табель не найден')
+  if (forDepartmentHead && req.canManageTimesheets && (!currentOrgId(req) || sheet.manager_id !== req.user.id)) {
+    throw new ForbiddenError('Табель ведёт начальник этого подразделения')
+  }
   if (!req.canManageTimesheets && !(await getManagerDepartments(req, db)).some(d => d.id === sheet.department_id)) {
     throw new ForbiddenError('Нет доступа к этому табелю')
   }
@@ -169,12 +172,13 @@ router.post('/auto-create', requirePermission('timesheet:manage'), asyncHandler(
  *   get:
  *     tags: [Timesheet]
  *     summary: Отделы текущего руководителя в активной организации
+ *     description: Включает назначенные отделы пользователя с правом согласования табелей.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: '[{ id, name }]' }
  */
 router.get('/my-departments', asyncHandler(async (req, res) => {
-  res.json(req.canManageTimesheets ? [] : await getManagerDepartments(req))
+  res.json(await getManagerDepartments(req))
 }))
 
 /**
@@ -342,7 +346,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
  * /timesheet/{id}/entries:
  *   put:
  *     tags: [Timesheet]
- *     summary: Сохранить отметки посещаемости в открытых днях
+ *     summary: Сохранить отметки посещаемости в открытых днях своего отдела
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: integer } }
@@ -362,9 +366,8 @@ router.get('/:id', asyncHandler(async (req, res) => {
  *       409: { description: День закрыт или отметку установил отпуск }
  */
 router.put('/:id/entries', asyncHandler(async (req, res) => {
-  if (req.canManageTimesheets) throw new ForbiddenError('Отметки заполняет начальник подразделения')
   await inTransaction(async db => {
-    const sheet = await loadTimesheet(req, db, true)
+    const sheet = await loadTimesheet(req, db, { lock: true, forDepartmentHead: true })
     const groups = groupEntries(req.body, timesheetDates(sheet))
     if (!groups.size) throw new ValidationError('Нет отметок для сохранения')
     const today = toLocalDateStr(new Date())
@@ -411,7 +414,7 @@ router.put('/:id/status', asyncHandler(async (req, res) => {
   if (!['draft', 'submitted', 'approved'].includes(status)) throw new ValidationError('Недопустимый статус')
   const isHR = req.canManageTimesheets
   const result = await inTransaction(async db => {
-    const sheet = await loadTimesheet(req, db, true)
+    const sheet = await loadTimesheet(req, db, { lock: true })
     const current = sheet.status
     const allowed = (!isHR && current === 'draft' && status === 'submitted') ||
       (isHR && current === 'submitted' && status === 'approved') ||
@@ -434,9 +437,8 @@ router.put('/:id/status', asyncHandler(async (req, res) => {
 }))
 
 async function submitDay(req, res) {
-  if (req.canManageTimesheets) throw new ForbiddenError('День отправляет начальник подразделения')
   const result = await inTransaction(async db => {
-    const sheet = await loadTimesheet(req, db, true)
+    const sheet = await loadTimesheet(req, db, { lock: true, forDepartmentHead: true })
     const today = toLocalDateStr(new Date())
     const date = req.params.date ?? today
     if (!timesheetDates(sheet).includes(date)) throw new ValidationError('Дата не входит в период табеля')
@@ -488,7 +490,7 @@ async function submitDay(req, res) {
  * /timesheet/{id}/submit-today:
  *   post:
  *     tags: [Timesheet]
- *     summary: Отправить заполненный табель за сегодняшний день
+ *     summary: Отправить заполненный табель своего отдела за сегодняшний день
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: integer } }
@@ -506,7 +508,7 @@ router.post('/:id/submit-today', asyncHandler(submitDay))
  * /timesheet/{id}/days/{date}/submit:
  *   post:
  *     tags: [Timesheet]
- *     summary: Отправить сегодняшний или возвращённый табель вместе с правками
+ *     summary: Отправить сегодняшний или возвращённый табель своего отдела вместе с правками
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: integer } }
@@ -551,7 +553,7 @@ router.post('/:id/days/:date/submit', asyncHandler(submitDay))
  *     responses:
  *       200: { description: Решение сохранено }
  *       400: { description: Некорректное решение или дата }
- *       403: { description: Нет права согласования табелей }
+ *       403: { description: Нет права согласования или табель отправлен текущим пользователем }
  *       404: { description: Табель не найден }
  *       409: { description: Отправка уже изменилась или нет получателя для возврата }
  */
@@ -567,12 +569,13 @@ router.put('/:id/days/:date/review', requirePermission('timesheet:manage'), asyn
   }
 
   const result = await inTransaction(async db => {
-    const sheet = await loadTimesheet(req, db, true)
+    const sheet = await loadTimesheet(req, db, { lock: true })
     if (!timesheetDates(sheet).includes(date)) throw new ValidationError('Дата не входит в период табеля')
     const day = await loadDay(db, sheet, date)
     if (day?.status !== 'submitted' || day.revision !== revision) {
       throw new ConflictError('Отправка изменилась. Обновите табель перед проверкой')
     }
+    if (day.submitted_by === req.user.id) throw new ForbiddenError('Табель должен проверить другой согласующий')
     const { rows } = await db.query(
       'UPDATE timesheet_days SET status = $1, reason = $2 WHERE timesheet_id = $3 AND date = $4 RETURNING date, status, revision, reason',
       [status, status === 'returned' ? message : null, sheet.id, date]

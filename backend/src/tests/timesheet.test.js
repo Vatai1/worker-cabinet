@@ -110,6 +110,29 @@ describe('Дневной табель', () => {
     })).status, 403)
   })
 
+  it('администратор ведёт и отправляет табель назначенного отдела', async () => {
+    const managedDepartment = await addDepartment('Отдел администратора', 1)
+    const admin = await addUser('Администратор отдела', 'admin', managedDepartment, 1)
+    await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [admin.id, managedDepartment])
+
+    assert.equal((await call('GET', '/auth/me', admin)).data.managesDepartment, true)
+    assert.deepEqual((await call('GET', '/timesheet/my-departments', admin)).data.map(d => d.id), [managedDepartment])
+    assert.deepEqual((await call('GET', '/timesheet/my-departments', hr)).data, [])
+    assert.equal((await call('PUT', `/timesheet/${sheet.id}/entries`, admin, [entry(manager)])).status, 403)
+    assert.equal((await call('POST', `/timesheet/${sheet.id}/submit-today`, admin)).status, 403)
+
+    const created = await call('POST', '/timesheet', admin, { department_id: managedDepartment, year: sheet.year, month: sheet.month })
+    assert.equal(created.status, 201)
+    const path = `/timesheet/${created.data.id}`
+    const daily = path + `/days/${today}`
+    assert.equal((await call('PUT', path + '/entries', admin, [entry(admin)])).status, 200)
+    const submitted = await call('POST', daily + '/submit', admin)
+    assert.equal(submitted.status, 200)
+    const review = { status: 'approved', revision: submitted.data.revision }
+    assert.equal((await call('PUT', daily + '/review', admin, review)).status, 403)
+    assert.equal((await call('PUT', daily + '/review', hr, review)).status, 200)
+  })
+
   it('показывает согласованный отпуск поверх явки и отклоняет неполную отправку без записи правок', async () => {
     const path = `/timesheet/${sheet.id}`
     vacation = await setVacation(worker.id, 'on_approval')

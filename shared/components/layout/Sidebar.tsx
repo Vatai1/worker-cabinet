@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { useUIStore } from '@/shared/store/uiStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
+import { useOrgStore } from '@/shared/store/orgStore'
 import { useThemeStore } from '@/shared/theme/themeStore'
 import { cn, personName } from '@/shared/lib/utils'
 import {
@@ -18,7 +19,6 @@ import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
 import { Logo } from '@/shared/components/brand/Logo'
 import { generateAvatarUrl } from '@/shared/lib/avatar'
-import { hasAnyRole, isSuperAdmin } from '@/shared/lib/permissions'
 import { getCookie, setCookie } from '@/shared/lib/cookies'
 import { BugReportButton } from '@/shared/components/BugReportButton'
 import { TestSwitcher, stopImpersonation } from '@/shared/components/TestSwitcher'
@@ -181,10 +181,10 @@ const roleLabels: Record<string, string> = {
   superadmin: 'Супер-админ',
 }
 
-function withGrantedSections(nav: NavItem[], has: (code: string) => boolean): NavItem[] {
+function withGrantedSections(nav: NavItem[], has: (code: string) => boolean, managesDepartment?: boolean): NavItem[] {
   const result = [...nav]
   const hasHref = (href: string) => result.some((i) => i.href === href)
-  if (has('timesheet:view') && !has('timesheet:manage') && !hasHref('/leader/timesheet')) {
+  if (has('timesheet:view') && (managesDepartment || !has('timesheet:manage')) && !hasHref('/leader/timesheet')) {
     result.push({ name: 'Табель', href: '/leader/timesheet', icon: Calendar, module: 'timesheet', section: 'Управление', permission: 'timesheet:view' })
   }
   if (has('hr:access') && !result.some((i) => i.section === 'HR')) result.push(...getHRSectionItems())
@@ -195,22 +195,25 @@ function withGrantedSections(nav: NavItem[], has: (code: string) => boolean): Na
 }
 
 export function useNavigation(): NavItem[] {
-  const { user } = useAuthStore()
-  const permissions = useAuthStore((s) => s.permissions)
+  const { user, permissions, previewRole } = useAuthStore()
+  const orgRole = useOrgStore((s) => s.currentOrg()?.org_role)
+  const effectiveOrgRole = previewRole ?? orgRole
   const { isModuleEnabled, modulesLoaded } = useModulesStore()
-  const isSuper = isSuperAdmin()
-  const isAdminRole = hasAnyRole('admin')
 
   return useMemo(() => {
+    const isSuper = user?.role === 'superadmin'
+    const hasRole = (role: string) => isSuper || user?.role === role || effectiveOrgRole === role
+    const isAdminRole = hasRole('admin')
     const has = (code: string) => permissions.includes(code)
     const rawNavigation = withGrantedSections(
       user?.role === 'onboarding' ? getOnboardingNavigation() :
       isSuper ? getAdminNavigation(user?.id, true) :
       isAdminRole ? getAdminNavigation(user?.id, false) :
-      hasAnyRole('hr') ? getHRNavigation(user?.id) :
-      user?.role === 'manager' || hasAnyRole('manager') ? getManagerNavigation(user?.id) :
+      hasRole('hr') ? getHRNavigation(user?.id) :
+      hasRole('manager') ? getManagerNavigation(user?.id) :
       getEmployeeNavigation(user?.id),
       has,
+      user?.managesDepartment,
     )
 
     return (!modulesLoaded ? [] : rawNavigation)
@@ -229,7 +232,7 @@ export function useNavigation(): NavItem[] {
         return { ...item, children: filteredChildren }
       })
       .filter(Boolean) as NavItem[]
-  }, [modulesLoaded, isSuper, isAdminRole, isModuleEnabled, user?.role, user?.id, permissions])
+  }, [modulesLoaded, isModuleEnabled, user?.role, user?.id, user?.managesDepartment, effectiveOrgRole, permissions])
 }
 
 export function Sidebar() {
@@ -305,13 +308,12 @@ export function Sidebar() {
   }
 
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 1024 && useUIStore.getState().sidebarOpen) {
-        useUIStore.setState({ sidebarOpen: false })
-      }
+    const desktop = window.matchMedia('(min-width: 1024px)')
+    const handleBreakpointChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) useUIStore.setState({ sidebarOpen: false })
     }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    desktop.addEventListener('change', handleBreakpointChange)
+    return () => desktop.removeEventListener('change', handleBreakpointChange)
   }, [])
 
   useEffect(() => {
@@ -393,6 +395,7 @@ export function Sidebar() {
             <div key={sectionName} className="mb-3">
               <button
                 type="button"
+                aria-expanded={isSectionExpanded}
                 onClick={() => toggleSection(sectionName)}
                 className="flex w-full items-center justify-between px-3 pt-3 pb-1.5 group"
               >
@@ -408,7 +411,7 @@ export function Sidebar() {
               </button>
               <div className={cn(
                 'grid transition-all duration-300 ease-out',
-                isSectionExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                isSectionExpanded ? 'grid-rows-[1fr] opacity-100' : 'invisible grid-rows-[0fr] opacity-0'
               )}>
               <div className="overflow-hidden">
               <div className="space-y-0.5">

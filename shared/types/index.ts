@@ -9,6 +9,7 @@ export interface User {
   position: string
   department: string
   departmentId?: string
+  managesDepartment?: boolean
   avatar?: string
   phone?: string
   birthDate?: string
