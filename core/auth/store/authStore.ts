@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { User, AuthState } from '@/shared/types'
-import { deleteCookie } from '@/shared/lib/cookies'
+import { deleteCookie, getCookie, setCookie } from '@/shared/lib/cookies'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { fetchWithRetry, setSessionExpiredHandler } from '@/shared/lib/apiClient'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
@@ -28,6 +28,17 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   loading: true,
   checkAuth: async () => {
     try {
+      const linkedOrgId = Number(new URLSearchParams(window.location.search).get('organizationId'))
+      if (window.location.pathname === '/leader/timesheet' && Number.isInteger(linkedOrgId) && linkedOrgId > 0 && linkedOrgId !== Number(getCookie('active_org_id'))) {
+        const orgResponse = await fetchWithRetry(`${API_BASE_URL}/organizations`, { credentials: 'include', headers: getAuthHeaders() })
+        if (orgResponse.ok) {
+          const organizations: { id: number }[] = await orgResponse.json()
+          if (organizations.some(org => org.id === linkedOrgId)) {
+            setCookie('active_org_id', String(linkedOrgId))
+            useOrgStore.setState({ currentOrgId: linkedOrgId, loaded: false })
+          }
+        }
+      }
       const response = await fetchWithRetry(`${API_BASE_URL}/auth/me`, {
         credentials: 'include',
         headers: getAuthHeaders(),

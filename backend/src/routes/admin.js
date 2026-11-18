@@ -624,6 +624,8 @@ router.put('/settings', requirePermission('admin:settings'), asyncHandler(async 
   if (req.user.role !== 'superadmin') throw new ForbiddenError('Системные настройки общие для всех учреждений — их меняет суперадминистратор')
 
   const valid = settings.filter(s => typeof s?.key === 'string' && s.key.trim() && s.value !== undefined)
+  if (valid.some(s => s.key === 'timesheet_reminder_time' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(s.value)))) throw new ValidationError('Время напоминания о табеле должно быть в формате ЧЧ:ММ')
+  if (valid.some(s => ['timesheet_reminder_enabled', 'timesheet_auto_create'].includes(s.key) && !['true', 'false'].includes(String(s.value)))) throw new ValidationError('Некорректное значение переключателя табеля')
   if (valid.some(s => INTERNAL_SETTING_KEYS.includes(s.key))) throw new ValidationError('Служебные настройки изменять нельзя')
   if (valid.length > 0) {
     const placeholders = []

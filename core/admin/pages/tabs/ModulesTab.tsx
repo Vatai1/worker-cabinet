@@ -89,9 +89,9 @@ export function TimesheetSettingsModal({ onClose }: { onClose: () => void }) {
       const res = await fetchWithRetry(`${API_BASE_URL}/admin/settings`, { headers: getAuthHeaders() })
       if (res.ok) {
         const all = await res.json()
-        setSettings(all.filter((s: SystemSetting) => s.key === 'timesheet_auto_create'))
-      }
-    } catch {} finally { setLoading(false) }
+        setSettings(all.filter((s: SystemSetting) => ['timesheet_auto_create', 'timesheet_reminder_enabled', 'timesheet_reminder_time'].includes(s.key)))
+      } else throw new Error('Не удалось загрузить настройки табеля')
+    } catch (err) { setError(getErrorMessage(err)) } finally { setLoading(false) }
   }
 
   const saveSettings = async () => {
@@ -172,6 +172,14 @@ export function TimesheetSettingsModal({ onClose }: { onClose: () => void }) {
             />
           </div>
 
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-4 text-sm">
+            Напоминать руководителям по почте, если табель не отправлен HR
+            <Switch checked={settings.find(s => s.key === 'timesheet_reminder_enabled')?.value === 'true'} onCheckedChange={value => updateValue('timesheet_reminder_enabled', String(value))} />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm">
+            Время напоминания (по времени сервера)
+            <input type="time" required value={settings.find(s => s.key === 'timesheet_reminder_time')?.value ?? '09:00'} onChange={e => updateValue('timesheet_reminder_time', e.target.value)} className="rounded-lg border border-border bg-background px-3 py-2" />
+          </label>
           <div className="flex items-center gap-3">
             <Button onClick={handleAutoCreateTimesheets} disabled={tsCreating} variant={tsAutoOn ? 'default' : 'outline'}>
               {tsCreating ? (

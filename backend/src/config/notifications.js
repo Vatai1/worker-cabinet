@@ -1,6 +1,6 @@
 import { query } from './database.js'
 
-const NO_PUSH_TYPES = ['mailing', 'generic', 'timesheet_returned']
+const NO_PUSH_TYPES = ['mailing', 'generic', 'timesheet_returned', 'timesheet_reminder']
 
 async function isModuleEnabled(db) {
   const result = await db.query("SELECT is_enabled FROM modules WHERE code = 'notifications'")

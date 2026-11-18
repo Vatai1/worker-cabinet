@@ -1244,7 +1244,7 @@ async function runMigrations() {
 `)
 
     await db.query(`
-  ALTER TABLE timesheet_entries DROP COLUMN IF EXISTS hours
+  ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS minutes INTEGER CHECK (minutes BETWEEN 0 AND 1440)
  `)
 
     await db.query(`
@@ -1991,6 +1991,7 @@ async function runMigrations() {
     await migrateInstructionVideos(db)
     await migrateMembershipDepartmentSync(db)
     await migrateVacationSettings(db)
+    await migrateTimesheetFeatures(db)
     await migrateDayOffs(db)
     await migrateVacationTypeRules(db)
     await migratePermissionsMatrix(db)
@@ -2497,4 +2498,100 @@ async function migrateVacationSettings(db) {
   } catch (e) {
     console.log('  - vacation_settings:', e.message)
   }
+}
+
+async function migrateTimesheetFeatures(db) {
+  await db.query(`
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS number VARCHAR(64);
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS document_date DATE DEFAULT CURRENT_DATE;
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'original' CHECK (kind IN ('original', 'correction'));
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS period VARCHAR(16) NOT NULL DEFAULT 'month' CHECK (period IN ('half', 'month'));
+    ALTER TABLE timesheets DROP CONSTRAINT IF EXISTS timesheets_department_id_year_month_key;
+    CREATE UNIQUE INDEX IF NOT EXISTS timesheets_version_key ON timesheets (department_id, year, month, version);
+    CREATE TABLE IF NOT EXISTS timesheet_employee_settings (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      staff_number VARCHAR(64),
+      hourly BOOLEAN NOT NULL DEFAULT false,
+      PRIMARY KEY (user_id, organization_id),
+      UNIQUE (organization_id, staff_number)
+    );
+    CREATE TABLE IF NOT EXISTS timesheet_managers (
+      department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      assigned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      PRIMARY KEY (department_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS timesheet_audit (
+      id BIGSERIAL PRIMARY KEY,
+      department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+      timesheet_id INTEGER REFERENCES timesheets(id) ON DELETE CASCADE,
+      actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      action TEXT NOT NULL,
+      data JSONB NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS timesheet_audit_department ON timesheet_audit(department_id, id DESC);
+    CREATE TABLE IF NOT EXISTS timesheet_reminder_deliveries (
+      department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date DATE NOT NULL,
+      PRIMARY KEY (department_id, user_id, date)
+    );
+    INSERT INTO system_settings (key, value, description) VALUES
+      ('timesheet_reminder_enabled', 'false', 'Почтовые напоминания о незаполненном табеле'),
+      ('timesheet_reminder_time', '09:00', 'Время напоминания о табеле по времени сервера')
+    ON CONFLICT (key) DO NOTHING;
+    CREATE OR REPLACE FUNCTION audit_timesheet_entry() RETURNS TRIGGER AS $fn$
+    BEGIN
+      IF TG_OP = 'INSERT' OR NEW.code IS DISTINCT FROM OLD.code OR NEW.minutes IS DISTINCT FROM OLD.minutes THEN
+        INSERT INTO timesheet_audit (department_id, timesheet_id, actor_id, action, data)
+        SELECT t.department_id, t.id, NULLIF(current_setting('app.timesheet_actor', true), '')::integer,
+          'Отметка', jsonb_build_object('employee_id', NEW.employee_id, 'date', NEW.date,
+            'before', CASE WHEN TG_OP = 'UPDATE' THEN jsonb_build_object('code', OLD.code, 'minutes', OLD.minutes) ELSE NULL END,
+            'after', jsonb_build_object('code', NEW.code, 'minutes', NEW.minutes))
+        FROM timesheets t WHERE t.id = NEW.timesheet_id;
+      END IF;
+      RETURN NEW;
+    END;
+    $fn$ LANGUAGE plpgsql;
+    CREATE OR REPLACE FUNCTION audit_timesheet_document() RETURNS TRIGGER AS $fn$
+    BEGIN
+      IF TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status THEN
+        INSERT INTO timesheet_audit (department_id, timesheet_id, actor_id, action, data)
+        VALUES (NEW.department_id, NEW.id, COALESCE(NEW.updated_by, NEW.created_by),
+          CASE WHEN TG_OP = 'INSERT' THEN 'Создание табеля' ELSE 'Статус месяца' END,
+          jsonb_build_object('before', CASE WHEN TG_OP = 'UPDATE' THEN OLD.status ELSE NULL END, 'after', NEW.status));
+      END IF;
+      RETURN NEW;
+    END;
+    $fn$ LANGUAGE plpgsql;
+    DROP TRIGGER IF EXISTS timesheet_document_audit ON timesheets;
+    CREATE TRIGGER timesheet_document_audit AFTER INSERT OR UPDATE ON timesheets
+      FOR EACH ROW EXECUTE FUNCTION audit_timesheet_document();
+    CREATE OR REPLACE FUNCTION audit_timesheet_substitution() RETURNS TRIGGER AS $fn$
+    DECLARE
+      substitution vacation_substitutions%ROWTYPE;
+    BEGIN
+      IF TG_OP = 'INSERT' THEN substitution := NEW; ELSE substitution := OLD; END IF;
+      INSERT INTO timesheet_audit (department_id, actor_id, action, data)
+      SELECT d.id, CASE WHEN TG_OP = 'INSERT' THEN substitution.assigned_by ELSE NULL END,
+        CASE WHEN TG_OP = 'INSERT' THEN 'Назначение замещения' ELSE 'Отмена замещения' END,
+        jsonb_build_object('employee_id', substitution.substitute_user_id,
+          'reason', CONCAT_WS(' ', owner.last_name, owner.first_name, owner.middle_name) || ': ' || vr.start_date || ' — ' || vr.end_date)
+      FROM vacation_requests vr JOIN users owner ON owner.id = vr.user_id
+      JOIN departments d ON d.organization_id = vr.organization_id AND (d.manager_id = vr.user_id
+        OR EXISTS (SELECT 1 FROM timesheet_managers tm WHERE tm.department_id = d.id AND tm.user_id = vr.user_id))
+      WHERE vr.id = substitution.vacation_request_id;
+      RETURN NULL;
+    END;
+    $fn$ LANGUAGE plpgsql;
+    DROP TRIGGER IF EXISTS timesheet_substitution_audit ON vacation_substitutions;
+    CREATE TRIGGER timesheet_substitution_audit AFTER INSERT OR DELETE ON vacation_substitutions
+      FOR EACH ROW EXECUTE FUNCTION audit_timesheet_substitution();
+    DROP TRIGGER IF EXISTS timesheet_entry_audit ON timesheet_entries;
+    CREATE TRIGGER timesheet_entry_audit AFTER INSERT OR UPDATE ON timesheet_entries
+      FOR EACH ROW EXECUTE FUNCTION audit_timesheet_entry();
+  `)
 }

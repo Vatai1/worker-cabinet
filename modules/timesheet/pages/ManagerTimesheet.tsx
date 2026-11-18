@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { TimesheetGrid, TIMESHEET_DAY_LABELS } from '@/shared/components/timesheet/TimesheetGrid'
+import { TimesheetTools } from '@/shared/components/timesheet/TimesheetTools'
 import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
 import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
 import { Sparkles, Users } from 'lucide-react'
@@ -14,6 +15,7 @@ export function ManagerTimesheet() {
   const [params] = useSearchParams()
   const { key: navigationKey } = useLocation()
   const linkedDate = params.get('date') ?? ''
+  const linkedVersion = Number(params.get('timesheetId'))
   const linkedDepartment = Number(params.get('departmentId'))
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
@@ -22,6 +24,8 @@ export function ManagerTimesheet() {
   const [departments, setDepartments] = useState<{ id: number; name: string }[]>([])
   const [selectedDate, setSelectedDate] = useState('')
   const [sheet, setSheet] = useState<TimesheetDetails | null>(null)
+  const [versions, setVersions] = useState<Timesheet[]>([])
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
@@ -42,6 +46,7 @@ export function ManagerTimesheet() {
           return
         }
         setDepartmentId(linked?.id ?? list[0]?.id ?? null)
+        if (linkedVersion) setSelectedVersion(linkedVersion)
         if (linked && /^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(linkedDate)) {
           setYear(Number(linkedDate.slice(0, 4)))
           setMonth(Number(linkedDate.slice(5, 7)))
@@ -56,7 +61,7 @@ export function ManagerTimesheet() {
         setLoading(false)
       })
     return () => { active = false }
-  }, [linkedDate, linkedDepartment, navigationKey])
+  }, [linkedDate, linkedDepartment, linkedVersion, navigationKey])
 
   useEffect(() => {
     if (!departmentId) return
@@ -67,7 +72,9 @@ export function ManagerTimesheet() {
     setSheet(null)
     async function load() {
       try {
-        let [found] = await apiGet<Timesheet[]>(listPath)
+        let list = await apiGet<Timesheet[]>(listPath)
+        if (!active) return
+        let found = list.find(item => item.id === selectedVersion) ?? list[0]
         if (!active) return
         if (!found) {
           try {
@@ -79,6 +86,8 @@ export function ManagerTimesheet() {
             found = existing
           }
         }
+        if (found && !list.some(item => item.id === found.id)) list = [found, ...list]
+        setVersions(list)
         const data = await apiGet<TimesheetDetails>(`/timesheet/${found.id}`)
         if (active) setSheet(data)
       } catch (err) {
@@ -89,10 +98,10 @@ export function ManagerTimesheet() {
     }
     load()
     return () => { active = false }
-  }, [departmentId, year, month, reload])
+  }, [departmentId, year, month, reload, selectedVersion])
 
   const currentSheet = sheet?.department_id === departmentId && sheet.year === year && sheet.month === month ? sheet : null
-  const today = currentSheet?.today.startsWith(`${year}-${String(month).padStart(2, '0')}-`) ? currentSheet.today : ''
+  const today = currentSheet?.today.startsWith(`${year}-${String(month).padStart(2, '0')}-`) && (currentSheet.period !== 'half' || Number(currentSheet.today.slice(-2)) <= 15) ? currentSheet.today : ''
   const dates = [...new Set([today, ...(currentSheet?.days.map(d => d.date) ?? [])].filter(Boolean))].sort().reverse()
   const date = dates.includes(selectedDate) ? selectedDate : currentSheet?.days.find(d => d.status === 'returned')?.date ?? today
   const day = currentSheet?.days.find(d => d.date === date)
@@ -142,6 +151,7 @@ export function ManagerTimesheet() {
           </div>
           {day?.status === 'returned' && <p role="status" className="whitespace-pre-wrap rounded-lg bg-amber-500/10 p-3 text-sm">HR вернул табель на доработку. {day.reason}</p>}
           <TimesheetGrid key={`${currentSheet.id}:${date}`} sheet={currentSheet} selectedDate={date} editable={editable} onSaved={() => setReload(value => value + 1)} />
+          <TimesheetTools sheet={currentSheet} versions={versions} departmentId={departmentId} onSelect={setSelectedVersion} onChanged={() => setReload(value => value + 1)} />
           <TimesheetLegend />
         </div>
       ) : !error && <p className="text-sm text-muted-foreground">За вами не закреплены подразделения.</p>}

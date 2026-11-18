@@ -10,6 +10,7 @@ export const TIMESHEET_CODES = [
   { code: 'НВ', label: 'Отгул (день отдыха)' },
   { code: 'К',  label: 'Командировка' },
   { code: 'Б',  label: 'Больничный' },
+  { code: 'НН', label: 'Неявка по невыясненным причинам' },
 ] as const
 
 export const VACATION_CODES: string[] = ['ОТ', 'ОД', 'У', 'Р', 'ОЖ', 'ДО', 'ОЗ', 'НВ']
@@ -26,5 +27,6 @@ export const CODE_COLORS: Record<string, string> = {
   'НВ': 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300',
   'К':  'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300',
   'Б':  'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300',
+  'НН': 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
   'В':  'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 }

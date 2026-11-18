@@ -76,6 +76,8 @@ function period(data) {
 }
 
 const SPECIAL = {
+  timesheet_reminder: (d) => ({ subject: d.subject, body: `<p>${paragraphs(d.message)}</p>`, text: d.message }),
+  timesheet_returned: (d) => ({ subject: d.subject, body: `<p>${paragraphs(d.message)}</p>`, text: d.message }),
   vacation_created: (d) => ({
     subject: 'Новая заявка на отпуск',
     body: `<p>${esc(d.employeeName)} подал(а) заявку на отпуск.</p>${period(d)}`,

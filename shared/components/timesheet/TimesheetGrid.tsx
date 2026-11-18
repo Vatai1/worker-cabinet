@@ -11,6 +11,7 @@ interface TimesheetEntry {
   employee_id: number
   date: string
   code: string | null
+  minutes?: number | null
 }
 
 interface Employee {
@@ -18,6 +19,8 @@ interface Employee {
   first_name: string
   last_name: string
   middle_name?: string | null
+  staff_number?: string | null
+  hourly?: boolean
 }
 
 interface TransferSpan {
@@ -42,6 +45,11 @@ export interface Timesheet {
   year: number
   month: number
   status: 'draft' | 'submitted' | 'approved'
+  version: number
+  number: string | null
+  document_date: string
+  kind: 'original' | 'correction'
+  period: 'half' | 'month'
 }
 
 export interface TimesheetDetails extends Timesheet {
@@ -71,10 +79,10 @@ export const TIMESHEET_DAY_LABELS = {
 
 export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }: Props) {
   const { id, entries, employees, year, month, today, nonWorkingDays, days, transfers } = sheet
-  const [changes, setChanges] = useState<Record<number, string | null>>({})
+  const [changes, setChanges] = useState<Record<number, { code: string | null; minutes: number | null }>>({})
   const [working, setWorking] = useState<'saving' | 'submitting' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const entryMap = useMemo(() => new Map(entries.map(e => [`${e.employee_id}:${e.date}`, e.code])), [entries])
+  const entryMap = useMemo(() => new Map(entries.map(e => [`${e.employee_id}:${e.date}`, e])), [entries])
   const dayMap = useMemo(() => new Map(days.map(d => [d.date, d])), [days])
   const transfersByEmployee = useMemo(() => {
     const grouped = new Map<number, TransferSpan[]>()
@@ -88,19 +96,19 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
   const savedRoster = dayMap.get(selectedDate)?.employee_ids
   const editableIds = new Set(savedRoster?.length ? savedRoster : sheet.currentEmployeeIds)
   const workingDay = !nonWorkingDays.includes(selectedDate)
-  const dates = Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) =>
+  const dates = Array.from({ length: sheet.period === 'half' ? 15 : new Date(year, month, 0).getDate() }, (_, i) =>
     `${year}-${String(month).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`)
   const hasChanges = Object.keys(changes).length > 0
 
   function codeAt(employeeId: number, date: string) {
     return date === selectedDate && Object.prototype.hasOwnProperty.call(changes, employeeId)
-      ? changes[employeeId]
-      : entryMap.get(`${employeeId}:${date}`) ?? null
+      ? changes[employeeId].code
+      : entryMap.get(`${employeeId}:${date}`)?.code ?? null
   }
 
   function canEdit(employeeId: number, date: string) {
     return editable && workingDay && date === selectedDate && editableIds.has(employeeId)
-      && !VACATION_CODES.includes(entryMap.get(`${employeeId}:${date}`) ?? '')
+      && !VACATION_CODES.includes(entryMap.get(`${employeeId}:${date}`)?.code ?? '')
       && !transfersByEmployee.get(employeeId)?.some(span => date >= span.start_date && date <= span.end_date)
   }
 
@@ -108,19 +116,31 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
     setChanges(previous => {
       const next = { ...previous }
       for (const employeeId of ids) {
-        if (canEdit(employeeId, selectedDate) && !codeAt(employeeId, selectedDate)) next[employeeId] = 'Я'
+        if (canEdit(employeeId, selectedDate) && !codeAt(employeeId, selectedDate)) next[employeeId] = { code: 'Я', minutes: null }
       }
       return next
     })
   }
 
+  function minutesAt(employeeId: number, date: string) {
+    return date === selectedDate && changes[employeeId] ? changes[employeeId].minutes : entryMap.get(`${employeeId}:${date}`)?.minutes ?? null
+  }
+
+  function changeCode(employeeId: number, code: string | null) {
+    setChanges(previous => ({ ...previous, [employeeId]: { code, minutes: code === 'Я' ? minutesAt(employeeId, selectedDate) : null } }))
+  }
+
+  function changeTime(employeeId: number, hours: number, minutes: number) {
+    setChanges(previous => ({ ...previous, [employeeId]: { code: 'Я', minutes: hours * 60 + minutes } }))
+  }
+
   async function save(submit: boolean) {
     setWorking(submit ? 'submitting' : 'saving')
     setError(null)
-    const marks = Object.entries(changes).map(([employeeId, code]) => ({
+    const marks = Object.entries(changes).map(([employeeId, mark]) => ({
       employee_id: Number(employeeId),
       date: selectedDate,
-      code,
+      ...mark,
     }))
     try {
       if (submit) await apiPost(`/timesheet/${id}/days/${selectedDate}/submit`, { entries: marks })
@@ -207,6 +227,7 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
               })}
               <th scope="col" className="w-8 border-b border-r bg-muted">Я</th>
               <th scope="col" className="w-8 border-b bg-muted">ОТ</th>
+              <th scope="col" className="w-16 border-b border-r bg-muted">Часы</th>
               {editable && workingDay && <th scope="col" className="sticky right-0 w-[4.5rem] border-b border-l bg-muted">Действия</th>}
             </tr>
           </thead>
@@ -232,27 +253,35 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                       )
                     }
                     const code = codes[i]
+                    const minutes = minutesAt(employee.id, date)
                     const color = code ? CODE_COLORS[code] : ''
                     return (
                       <td key={date} className={`border-b border-r text-center ${color ?? ''} ${date > today ? 'opacity-60' : ''}`}>
                         {canEdit(employee.id, date) ? (
+                          <>
                           <select
                             aria-label={`Отметка за ${date} — ${name}`}
                             value={code ?? ''}
                             disabled={!!working}
-                            onChange={e => setChanges(previous => ({ ...previous, [employee.id]: e.target.value || null }))}
+                            onChange={e => changeCode(employee.id, e.target.value || null)}
                             className="w-full cursor-pointer appearance-none bg-transparent py-2 text-center font-medium hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                           >
                             <option value="">—</option>
                             {ATTENDANCE_CODES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
                           </select>
-                        ) : <span className="block py-2 font-semibold">{code ?? ''}</span>}
+                          {employee.hourly && code === 'Я' && <div className="flex flex-col gap-1 pb-1">
+                            <input type="number" min={0} max={24} aria-label={`Часы за ${date} — ${name}`} placeholder="ч" value={minutes == null ? '' : Math.floor(minutes / 60)} disabled={!!working} onChange={e => changeTime(employee.id, Number(e.target.value), (minutes ?? 0) % 60)} className="w-full bg-background text-center" />
+                            <input type="number" min={0} max={59} aria-label={`Минуты за ${date} — ${name}`} placeholder="м" value={minutes == null ? '' : minutes % 60} disabled={!!working} onChange={e => changeTime(employee.id, Math.floor((minutes ?? 0) / 60), Number(e.target.value))} className="w-full bg-background text-center" />
+                          </div>}
+                          </>
+                        ) : <span className="block py-2 font-semibold">{code ?? ''}{minutes != null && <span className="block text-[9px] font-normal">{Math.floor(minutes / 60)}:{String(minutes % 60).padStart(2, '0')}</span>}</span>}
                       </td>
                     )
                   })}
                   {['Я', 'ОТ'].map(code => (
                     <td key={code} className="border-b border-r text-center font-bold">{codes.filter(mark => mark === code).length || ''}</td>
                   ))}
+                  <td className="border-b border-r text-center font-bold">{(() => { const total = dates.reduce((sum, date) => sum + (minutesAt(employee.id, date) ?? 0), 0); return total ? `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}` : '—' })()}</td>
                   {editable && workingDay && (
                     <td className="sticky right-0 border-b border-l bg-card text-center">
                       {canEdit(employee.id, selectedDate) && !codeAt(employee.id, selectedDate) && (

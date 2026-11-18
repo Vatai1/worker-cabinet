@@ -10,6 +10,7 @@ const WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 const INK = '172B46'
 const MARK_COLORS = {
   'Я': { background: 'E2F3EC', text: '145744' },
+  'НН': { background: 'FCE5E5', text: '8C2020' },
   'Б': { background: 'FFF1D8', text: '794709' },
   'К': { background: 'EEE8F8', text: '51337E' },
   'В': { background: 'EBEFF5', text: '485872' },
@@ -19,22 +20,25 @@ const VACATION_COLOR = { background: 'DFEBFA', text: '1D4B82' }
 export async function getTimesheetExportData(db, timesheet, includeTest) {
   const { entries, employees, nonWorkingDays, transfers } = await getTimesheetData(timesheet, includeTest, db)
   const dates = timesheetDates(timesheet)
-  const marks = new Map(entries.map(e => [`${e.employee_id}:${e.date}`, e.code]))
+  const marks = new Map(entries.map(e => [`${e.employee_id}:${e.date}`, e]))
   return {
-    filename: `${timesheet.year}-${timesheet.month}`,
+    filename: `${timesheet.year}-${timesheet.month}-v${timesheet.version ?? 1}`,
     department: timesheet.department_name,
-    period: PERIOD_FORMAT.format(new Date(Date.UTC(timesheet.year, timesheet.month - 1, 1))),
+    period: `${PERIOD_FORMAT.format(new Date(Date.UTC(timesheet.year, timesheet.month - 1, 1)))} · Версия ${timesheet.version ?? 1}${timesheet.number ? ` № ${timesheet.number}` : ''} · ${timesheet.kind === 'correction' ? 'Корректирующий' : 'Первичный'} · ${timesheet.period === 'half' ? '1–15' : 'Месяц'}${timesheet.document_date ? ` · ${timesheet.document_date}` : ''}`,
     dates,
     nonWorkingDays: new Set(nonWorkingDays),
     employees: employees.map(e => ({
       name: [e.last_name, e.first_name, e.middle_name].filter(Boolean).join(' '),
-      marks: dates.map(date => marks.get(`${e.id}:${date}`) ?? ''),
+      marks: dates.map(date => marks.get(`${e.id}:${date}`)?.code ?? ''),
+      minutes: dates.map(date => marks.get(`${e.id}:${date}`)?.minutes ?? null),
       transfers: transfers.filter(span => span.employee_id === e.id).map(span => ({
         first: dates.indexOf(span.start_date), last: dates.indexOf(span.end_date), label: span.label,
       })),
     })),
   }
 }
+
+const timeText = minutes => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`
 
 const excelColor = rgb => ({ argb: `FF${rgb}` })
 const excelFill = rgb => ({ type: 'pattern', pattern: 'solid', fgColor: excelColor(rgb) })
@@ -52,7 +56,7 @@ export function createTimesheetWorkbook({ department, period, dates, nonWorkingD
       margins: { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.15, footer: 0.15 },
     },
   })
-  sheet.columns = [{ width: 42 }, ...dates.map(() => ({ width: 4.5 }))]
+  sheet.columns = [{ width: 42 }, ...dates.map(() => ({ width: 5.5 })), { width: 12 }]
   sheet.properties.defaultRowHeight = 21
 
   const title = sheet.addRow(['Табель посещаемости'])
@@ -62,12 +66,12 @@ export function createTimesheetWorkbook({ department, period, dates, nonWorkingD
   subtitle.font = { name: 'Arial', size: 10, color: excelColor('485872') }
   subtitle.getCell(1).alignment = { vertical: 'middle', wrapText: true }
   subtitle.height = Math.max(21, 13 * Math.ceil(department.length / 40) + 5)
-  sheet.mergeCells(2, 2, 2, 8)
+  sheet.mergeCells(2, 2, 2, dates.length + 2)
   sheet.getCell('B2').alignment = { vertical: 'middle', horizontal: 'left' }
   sheet.addRow([]).height = 8
 
-  const dayRow = sheet.addRow(['Работник', ...dates.map(date => Number(date.slice(-2)))])
-  const weekdayRow = sheet.addRow(['', ...dates.map(date => WEEKDAYS[new Date(date).getUTCDay()])])
+  const dayRow = sheet.addRow(['Работник', ...dates.map(date => Number(date.slice(-2))), 'Часы'])
+  const weekdayRow = sheet.addRow(['', ...dates.map(date => WEEKDAYS[new Date(date).getUTCDay()]), ''])
   sheet.mergeCells(dayRow.number, 1, weekdayRow.number, 1)
   sheet.views = [{ state: 'frozen', xSplit: 1, ySplit: weekdayRow.number, showGridLines: false }]
   dayRow.height = 22
@@ -80,9 +84,10 @@ export function createTimesheetWorkbook({ department, period, dates, nonWorkingD
     })
   }
 
-  employees.forEach(({ name, marks, transfers = [] }, index) => {
-    const row = sheet.addRow([name, ...marks])
-    row.height = Math.max(21, 13 * Math.ceil(name.length / 40) + 5)
+  employees.forEach(({ name, marks, minutes = [], transfers = [] }, index) => {
+    const total = minutes.reduce((sum, value) => sum + (value ?? 0), 0)
+    const row = sheet.addRow([name, ...marks.map((mark, day) => minutes[day] == null ? mark : `${mark}\n${timeText(minutes[day])}`), total ? timeText(total) : ''])
+    row.height = Math.max(minutes.some(value => value != null) ? 32 : 21, 13 * Math.ceil(name.length / 40) + 5)
     row.eachCell({ includeEmpty: true }, (cell, column) => {
       const mark = marks[column - 2]
       const color = MARK_COLORS[mark] ?? (VACATION_TIMESHEET_CODES.includes(mark) ? VACATION_COLOR : undefined)
@@ -91,7 +96,7 @@ export function createTimesheetWorkbook({ department, period, dates, nonWorkingD
       cell.font = { name: 'Arial', size: 10, color: excelColor(color?.text ?? INK), bold: Boolean(color) }
       cell.alignment = column === 1
         ? { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true }
-        : { vertical: 'middle', horizontal: 'center' }
+        : { vertical: 'middle', horizontal: 'center', wrapText: true }
     })
     for (const { first, last, label } of transfers) {
       if (first < last) sheet.mergeCells(row.number, first + 2, row.number, last + 2)
@@ -105,8 +110,8 @@ export function createTimesheetWorkbook({ department, period, dates, nonWorkingD
   })
 
   sheet.addRow([]).height = 8
-  const legend = sheet.addRow(['Я — явка   Б — больничный   К — командировка   В — нерабочий день   ОТ — основной отпуск'])
-  sheet.mergeCells(legend.number, 1, legend.number, dates.length + 1)
+  const legend = sheet.addRow(['Я — явка   НН — неявка   Б — больничный   К — командировка   В — нерабочий день   ОТ — основной отпуск'])
+  sheet.mergeCells(legend.number, 1, legend.number, dates.length + 2)
   legend.font = { name: 'Arial', size: 9, color: excelColor('485872') }
   legend.alignment = { vertical: 'middle', horizontal: 'left' }
   return workbook
@@ -118,7 +123,8 @@ export function writeTimesheetPdf(stream, { department, period, dates, employees
   const left = doc.page.margins.left
   const tableWidth = doc.page.width - left - doc.page.margins.right
   const nameWidth = 174
-  const dayWidth = (tableWidth - nameWidth) / dates.length
+  const totalWidth = 42
+  const dayWidth = (tableWidth - nameWidth - totalWidth) / dates.length
   const nameOptions = { width: nameWidth - 12, lineGap: 2 }
 
   function drawHeader() {
@@ -132,11 +138,12 @@ export function writeTimesheetPdf(stream, { department, period, dates, employees
     dates.forEach((date, index) => {
       doc.text(String(Number(date.slice(-2))), left + nameWidth + index * dayWidth, y + 6, { width: dayWidth, align: 'center' })
     })
+    doc.text('Часы', left + tableWidth - totalWidth, y + 6, { width: totalWidth, align: 'center' })
     return y + 22
   }
 
   let y = drawHeader()
-  employees.forEach(({ name, marks, transfers = [] }, index) => {
+  employees.forEach(({ name, marks, minutes = [], transfers = [] }, index) => {
     doc.fontSize(8)
     const nameLines = [name]
     const labels = transfers.map(({ first, last, label }) => {
@@ -145,7 +152,7 @@ export function writeTimesheetPdf(stream, { department, period, dates, employees
       return { x: left + nameWidth + first * dayWidth, label: width < 80 ? '→' : label, options: { width, align: 'center' } }
     })
     const nameText = nameLines.join('\n')
-    const rowHeight = Math.max(18, doc.heightOfString(nameText, nameOptions) + 8,
+    const rowHeight = Math.max(minutes.some(value => value != null) ? 30 : 18, doc.heightOfString(nameText, nameOptions) + 8,
       ...labels.map(({ label, options }) => doc.heightOfString(label, options) + 8))
     if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
       doc.addPage()
@@ -154,12 +161,14 @@ export function writeTimesheetPdf(stream, { department, period, dates, employees
     if (index % 2) doc.rect(left, y, tableWidth, rowHeight).fill('#F0F3F7')
     doc.fillColor(`#${INK}`).text(nameText, left + 6, y + 4, nameOptions)
     marks.forEach((mark, day) => {
-      if (mark) doc.text(mark, left + nameWidth + day * dayWidth, y + 4, { width: dayWidth, align: 'center' })
+      if (mark) doc.text(minutes[day] == null ? mark : `${mark}\n${timeText(minutes[day])}`, left + nameWidth + day * dayWidth, y + 4, { width: dayWidth, align: 'center' })
     })
     for (const { x, label, options } of labels) {
       doc.rect(x, y, options.width, rowHeight).fill('#EBEFF5')
       doc.fillColor('#485872').text(label, x, y + 4, options)
     }
+    const total = minutes.reduce((sum, value) => sum + (value ?? 0), 0)
+    if (total) doc.fillColor(`#${INK}`).text(timeText(total), left + tableWidth - totalWidth, y + 4, { width: totalWidth, align: 'center' })
     y += rowHeight
   })
   doc.end()

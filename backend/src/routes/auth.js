@@ -11,6 +11,7 @@ import keycloakConfig, { getTokenEndpoint, getPublicAuthUrl, getPublicLogoutUrl,
 import { getAuthSettings } from '../config/authSettings.js'
 import { signAccessToken, createSession, findActiveSessionByToken, isRecentlyRotatedToken, rotateSession, revokeSessionByToken } from '../lib/sessionTokens.js'
 import { permissionsFor } from '../lib/permissions.js'
+import { timesheetDepartments } from '../lib/timesheetAccess.js'
 import { currentOrgId } from '../lib/orgQuery.js'
 import { extractLdapDn, dnOus } from '../lib/ldapDn.js'
 
@@ -529,7 +530,7 @@ router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
     id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name,
     middleName: user.middle_name, position: user.position, department: user.department_name,
     departmentId: user.department_id, phone: user.phone, birthDate: user.birth_date,
-    managesDepartment: user.manages_department,
+    managesDepartment: user.manages_department || (await timesheetDepartments(req.user.id, currentOrgId(req))).length > 0,
     hireDate: user.hire_date, status: user.status,
     role: req.previewRole || user.role,
     managerId: user.manager_id, avatar: user.avatar,

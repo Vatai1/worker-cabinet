@@ -21,6 +21,7 @@ const TYPE_LABELS: Record<string, string> = {
   vacation_created: 'Заявка на отпуск',
   vacation_status_changed: 'Статус отпуска',
   vacation_substitution: 'Замещение на отпуске',
+  timesheet_reminder: 'Напоминание о табеле',
   vacation_substitution_removed: 'Замещение отменено',
   bug_report_new: 'Баг-репорт',
   bug_report_update: 'Статус баг-репорта',

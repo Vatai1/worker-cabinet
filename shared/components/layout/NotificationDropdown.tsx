@@ -24,6 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
   onboarding_task: 'Задача онбординга',
   mailing: 'Рассылка',
   timesheet_returned: 'Табель возвращён',
+  timesheet_reminder: 'Напоминание о табеле',
   generic: 'Уведомление',
 }
 

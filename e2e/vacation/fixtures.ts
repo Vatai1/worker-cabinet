@@ -1,6 +1,6 @@
 import { expect, request as pwRequest, type APIRequestContext, type Page } from '@playwright/test'
 
-export const API = 'http://localhost:5000/api'
+export const API = process.env.TEST_API_BASE_URL ?? 'http://localhost:5000/api'
 export const PASSWORD = 'password123'
 export const THIS_YEAR = new Date().getFullYear()
 export const RU_MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']

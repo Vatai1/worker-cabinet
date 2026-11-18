@@ -55,11 +55,12 @@ export function getNotificationTarget(
       return { path: `/surveys?surveyId=${surveyId}` }
     }
 
+    case 'timesheet_reminder':
     case 'timesheet_returned': {
       const departmentId = str(data.departmentId)
       const date = str(data.date)
       if (!departmentId || !date) return null
-      return { path: `/leader/timesheet?${new URLSearchParams({ departmentId, date })}` }
+      return { path: `/leader/timesheet?${new URLSearchParams({ departmentId, date, ...(data.timesheetId ? { timesheetId: String(data.timesheetId) } : {}) })}` }
     }
 
     case 'onboarding_task': {

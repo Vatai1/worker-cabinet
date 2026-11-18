@@ -144,6 +144,9 @@ describe('Дневной табель', () => {
     await query("UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved') WHERE id = $1", [vacation])
     const onLeave = await call('GET', path, manager)
     assert.equal(onLeave.data.entries.find(e => e.employee_id === worker.id && e.date === today).code, 'ОТ')
+    const report = await call('GET', `/timesheet/report?date=${today}`, hr)
+    assert.equal(report.data.find(row => row.id === worker.id).code, 'ОТ')
+    assert.equal(report.data.find(row => row.id === otherWorker.id).code, null)
     const incomplete = await call('POST', path + `/days/${today}/submit`, manager, { entries: [entry(manager)] })
     assert.equal(incomplete.status, 400)
     const persisted = await query('SELECT 1 FROM timesheet_entries WHERE timesheet_id = $1 AND employee_id = $2 AND date = $3', [sheet.id, manager.id, today])
@@ -186,6 +189,21 @@ describe('Дневной табель', () => {
     const approved = await call('GET', path, hr)
     assert.equal(approved.data.days.find(d => d.date === today).status, 'approved')
     assert.equal(approved.data.entries.find(e => e.employee_id === manager.id && e.date === today).code, 'Б')
+  })
+
+  it('возвращает отметки активного учреждения и работников без табеля', async () => {
+    const unassigned = await addUser('Без подразделения', 'employee', null, 1)
+    const path = `/timesheet/report?date=${today}`
+    assert.equal((await call('GET', path, manager)).status, 403)
+    assert.equal((await call('GET', '/timesheet/report?date=2026-02-30', hr)).status, 400)
+    const report = await call('GET', path, hr)
+    assert.equal(report.status, 200)
+    const codes = new Map(report.data.map(row => [row.id, row.code]))
+    assert.equal(codes.get(worker.id), 'Я')
+    assert.equal(codes.get(manager.id), 'Б')
+    assert.equal(codes.get(unassigned.id), null)
+    assert.equal(codes.has(foreign.id), false)
+    assert.equal(codes.size, report.data.length)
   })
 
   it('позволяет переотправить возвращённый день, когда дата уже прошла', async () => {

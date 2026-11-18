@@ -1,3 +1,4 @@
+import { timesheetDepartments } from './timesheetAccess.js'
 import { query } from '../config/database.js'
 import { FULL_ACCESS_ROLES, PERMISSIONS, PERMISSION_CODES } from './permissionCatalog.js'
 
@@ -34,6 +35,7 @@ export async function permissionsFor(user, org) {
   const map = await loadGrants()
   const result = new Set()
   for (const role of roles) for (const code of map.get(role) ?? []) result.add(code)
+  if (user?.id && org?.org_id && (await timesheetDepartments(user.id, org.org_id)).length) result.add('timesheet:view')
   return result
 }
 

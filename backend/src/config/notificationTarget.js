@@ -53,6 +53,10 @@ export function getNotificationUrl(type, data, userId) {
       return `/onboarding?taskId=${taskId}`
     }
 
+    case 'timesheet_reminder':
+    case 'timesheet_returned':
+      return `/leader/timesheet?departmentId=${encodeURIComponent(d.departmentId || '')}&date=${encodeURIComponent(d.date || '')}${d.timesheetId ? `&timesheetId=${encodeURIComponent(d.timesheetId)}` : ''}${d.organizationId ? `&organizationId=${encodeURIComponent(d.organizationId)}` : ''}`
+
     case 'mailing':
     case 'generic':
     default:

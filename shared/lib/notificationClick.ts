@@ -35,7 +35,7 @@ export async function openNotification(
     showBugReportNotification(n)
   } else {
     const target = getNotificationTarget(n, currentUserId)
-    if (target && n.type === 'timesheet_returned') {
+    if (target && ['timesheet_returned', 'timesheet_reminder'].includes(n.type)) {
       const orgId = Number(n.data.organizationId)
       const { currentOrgId, organizations } = useOrgStore.getState()
       if (orgId !== currentOrgId && organizations.some(org => org.id === orgId)) {

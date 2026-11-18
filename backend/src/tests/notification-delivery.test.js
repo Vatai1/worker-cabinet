@@ -4,6 +4,7 @@ import net from 'node:net'
 import bcrypt from 'bcryptjs'
 import { query, inTransaction } from '../config/database.js'
 import { notify, notifyBatch, getUnreadCount } from '../config/notifications.js'
+import { renderEmail } from '../lib/notificationEmail.js'
 import { listen, NOTIFICATION_CHANNEL } from '../lib/pgListen.js'
 
 const STAMP = Date.now()
@@ -127,6 +128,19 @@ describe('Доставка уведомлений', () => {
     const mail = received.find((m) => m.to === users[0].email)
     assert.ok(mail, 'письмо не дошло до SMTP')
     assert.match(mail.message, /cabinet\.example\.test\/vacation/)
+  })
+
+  it('напоминание о табеле доходит до SMTP с текстом и ссылкой на нужное учреждение, без push', async () => {
+    const data = { subject: 'Отправьте табель посещаемости', message: 'Табель ещё не отправлен HR', departmentId: 7, organizationId: 3, date: '2026-11-18' }
+    const id = await notify({ userId: users[0].id, type: 'timesheet_reminder', data })
+    const notice = (await query('SELECT * FROM notification_queue WHERE id = $1', [id])).rows[0]
+    assert.strictEqual(notice.push_status, null)
+    const rendered = renderEmail(notice)
+    assert.match(rendered.text, /Табель ещё не отправлен HR/)
+    assert.match(rendered.text, /organizationId=3/)
+    const delivered = await deliverUntil(id, row => row.status === 'sent')
+    assert.strictEqual(delivered.status, 'sent')
+    assert.ok(received.some(mail => mail.to === users[0].email && mail.message.includes('/leader/timesheet')))
   })
 
   it('сбой SMTP — повтор с паузой, после лимита попыток — окончательная неудача; счётчик непрочитанных не зависит от доставки', async () => {

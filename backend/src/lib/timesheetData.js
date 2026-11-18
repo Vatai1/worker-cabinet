@@ -3,16 +3,17 @@ import { getWorkingCalendar } from './workingCalendar.js'
 import { vacationTypeRule, VACATION_TIMESHEET_CODES } from './vacationTypes.js'
 import { toLocalDateStr } from './dateUtils.js'
 
-export function timesheetDates({ year, month }) {
+export function timesheetDates({ year, month, period }) {
   const prefix = `${year}-${String(month).padStart(2, '0')}`
-  return Array.from({ length: new Date(year, month, 0).getDate() }, (_, i) =>
+  return Array.from({ length: period === 'half' ? 15 : new Date(year, month, 0).getDate() }, (_, i) =>
     `${prefix}-${String(i + 1).padStart(2, '0')}`)
 }
 
 export async function getTimesheetEmployees(db, sheet, includeTest) {
   const { rows } = await db.query(
-    `SELECT u.id, u.first_name, u.last_name, u.middle_name
+    `SELECT u.id, u.first_name, u.last_name, u.middle_name, settings.staff_number, COALESCE(settings.hourly, false) AS hourly
      FROM users u JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $1
+     LEFT JOIN timesheet_employee_settings settings ON settings.user_id = u.id AND settings.organization_id = uo.org_id
      WHERE COALESCE(uo.department_id, u.department_id) = $2 AND uo.is_active AND u.status <> 'inactive'
        AND ($3 OR NOT u.is_test)
      ORDER BY u.last_name, u.first_name, u.id`,
@@ -56,10 +57,11 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
     [sheet.id]
   )
   const { rows: stored } = await db.query(
-    `SELECT te.*, u.first_name, u.last_name, u.middle_name
+    `SELECT te.*, u.first_name, u.last_name, u.middle_name, settings.staff_number, COALESCE(settings.hourly, false) AS hourly
      FROM timesheet_entries te JOIN users u ON u.id = te.employee_id
      LEFT JOIN timesheet_days td ON td.timesheet_id = te.timesheet_id AND td.date = te.date
      LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = te.organization_id
+     LEFT JOIN timesheet_employee_settings settings ON settings.user_id = u.id AND settings.organization_id = te.organization_id
      WHERE te.timesheet_id = $1 AND te.organization_id = $2 AND ($4 OR NOT u.is_test)
        AND CASE WHEN cardinality(td.employee_ids) > 0 THEN te.employee_id = ANY(td.employee_ids)
            ELSE (uo.user_id IS NOT NULL AND ($5 OR COALESCE(uo.department_id, u.department_id) = $3))
@@ -70,8 +72,8 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
   )
   const currentEmployeeIds = employees.map(e => e.id)
   const employeeById = new Map(employees.map(e => [e.id, e]))
-  for (const { employee_id: id, first_name, last_name, middle_name } of stored) {
-    if (!employeeById.has(id)) employeeById.set(id, { id, first_name, last_name, middle_name })
+  for (const { employee_id: id, first_name, last_name, middle_name, staff_number, hourly } of stored) {
+    if (!employeeById.has(id)) employeeById.set(id, { id, first_name, last_name, middle_name, staff_number, hourly })
   }
   const dates = timesheetDates(sheet)
   const { rows: recordedTransfers } = await db.query(

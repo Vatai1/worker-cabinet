@@ -108,6 +108,7 @@ app.use((req, res, next) => {
   next()
 })
 
+app.use('/api/timesheet/employees/settings', express.json({ limit: '256kb' }))
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())

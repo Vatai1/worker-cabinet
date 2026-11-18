@@ -824,7 +824,7 @@ export function Vacation() {
         <div className="page-header">
           <h1 className="text-xl font-semibold tracking-tight">Мои замещения</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Работники, которых вы замещаете на время отпуска
+            Работники, которых вы замещаете на время отпуска. Замещение руководителя даёт доступ к его табелю только на срок согласованного отпуска.
           </p>
         </div>
 

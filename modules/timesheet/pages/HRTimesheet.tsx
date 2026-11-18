@@ -1,18 +1,69 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/shared/components/ui/Button'
+import { TimesheetEmployees } from '@/modules/timesheet/components/TimesheetEmployees'
+import { TimesheetReport } from '@/modules/timesheet/components/TimesheetReport'
+import { TimesheetAuditLog } from '@/shared/components/timesheet/TimesheetAuditLog'
 import { TimesheetGrid, TIMESHEET_DAY_LABELS } from '@/shared/components/timesheet/TimesheetGrid'
+import { TimesheetTools } from '@/shared/components/timesheet/TimesheetTools'
 import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
 import { useDepartmentsStore } from '@/shared/store/departmentsStore'
-import { hasAnyRoleSync } from '@/shared/lib/permissions'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
-import { apiGet, apiPost, apiPut } from '@/shared/lib/apiClient'
+import { ApiError, apiGet, apiPost, apiPut } from '@/shared/lib/apiClient'
 import type { Timesheet, TimesheetDetails } from '@/shared/components/timesheet/TimesheetGrid'
 
-type PendingDay = Pick<Timesheet, 'department_id' | 'department_name' | 'year' | 'month'> & { timesheet_id: number; date: string }
+type PendingDay = Pick<Timesheet, 'department_id' | 'department_name' | 'year' | 'month' | 'version' | 'number'> & { timesheet_id: number; date: string }
 
 const MONTH_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 
+const TABS = [
+  { id: 'review', label: 'Табель' },
+  { id: 'report', label: 'Отчёт' },
+  { id: 'employees', label: 'Сотрудники' },
+  { id: 'audit', label: 'Журнал' },
+] as const
+
 export function HRTimesheet() {
+  const [tab, setTab] = useState<typeof TABS[number]['id']>('review')
+  const [settingsRevision, setSettingsRevision] = useState(0)
+  const [journal, setJournal] = useState(false)
+
+  function selectTab(value: typeof TABS[number]['id']) {
+    setTab(value)
+    if (value === 'review' || value === 'audit') setJournal(value === 'audit')
+  }
+
+  return (
+    <div className="space-y-4" data-timesheet-page>
+      <div
+        role="tablist"
+        aria-label="Разделы табеля"
+        className="inline-flex flex-wrap gap-1.5 rounded-2xl bg-muted/50 p-1.5"
+        onKeyDown={event => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+          event.preventDefault()
+          const index = TABS.findIndex(item => item.id === tab)
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1
+            : (index + (event.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length
+          selectTab(TABS[next].id)
+          event.currentTarget.querySelectorAll('button')[next]?.focus()
+        }}
+      >
+        {TABS.map(item => <Button key={item.id} id={`timesheet-${item.id}-tab`} type="button" role="tab" size="lg" className="text-base" variant={tab === item.id ? 'secondary' : 'ghost'} aria-selected={tab === item.id} aria-controls={`timesheet-${item.id === 'review' || item.id === 'audit' ? 'sheet' : item.id}-panel`} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)}>{item.label}</Button>)}
+      </div>
+      <div id="timesheet-sheet-panel" role="tabpanel" aria-labelledby={journal ? 'timesheet-audit-tab' : 'timesheet-review-tab'} hidden={tab !== 'review' && tab !== 'audit'}>
+        <TimesheetReview settingsRevision={settingsRevision} journal={journal} />
+      </div>
+      <div id="timesheet-report-panel" role="tabpanel" aria-labelledby="timesheet-report-tab" hidden={tab !== 'report'}>
+        {tab === 'report' && <TimesheetReport />}
+      </div>
+      <div id="timesheet-employees-panel" role="tabpanel" aria-labelledby="timesheet-employees-tab" hidden={tab !== 'employees'}>
+        <TimesheetEmployees onSaved={() => setSettingsRevision(value => value + 1)} />
+      </div>
+    </div>
+  )
+}
+
+function TimesheetReview({ settingsRevision, journal }: { settingsRevision: number; journal: boolean }) {
   const now = new Date()
   const departments = useDepartmentsStore(s => s.departments)
   const [departmentId, setDepartmentId] = useState<number | null>(null)
@@ -20,6 +71,8 @@ export function HRTimesheet() {
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [selectedDate, setSelectedDate] = useState('')
   const [sheet, setSheet] = useState<TimesheetDetails | null>(null)
+  const [versions, setVersions] = useState<Timesheet[]>([])
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null)
   const [pending, setPending] = useState<PendingDay[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,12 +103,21 @@ export function HRTimesheet() {
     const listPath = `/timesheet?departmentId=${departmentId}&year=${year}&month=${month}`
     async function load() {
       try {
-        let [found] = await apiGet<Timesheet[]>(listPath)
+        let list = await apiGet<Timesheet[]>(listPath)
         if (!active) return
-        if (!found && hasAnyRoleSync('admin')) {
-          await apiPost('/timesheet/auto-create', { year, month })
-          ;[found] = await apiGet<Timesheet[]>(listPath)
+        let found = list.find(item => item.id === selectedVersion) ?? list[0]
+        if (!active) return
+        if (!found && !journal) {
+          try {
+            found = await apiPost<Timesheet>('/timesheet', { department_id: departmentId, year, month })
+          } catch (err) {
+            if (!(err instanceof ApiError) || err.status !== 409) throw err
+            list = await apiGet<Timesheet[]>(listPath)
+            found = list[0]
+          }
         }
+        if (found && !list.some(item => item.id === found.id)) list = [found, ...list]
+        setVersions(list)
         const data = found ? await apiGet<TimesheetDetails>(`/timesheet/${found.id}`) : null
         if (active) setSheet(data)
       } catch (err) {
@@ -66,7 +128,7 @@ export function HRTimesheet() {
     }
     load()
     return () => { active = false }
-  }, [departmentId, year, month, reload])
+  }, [departmentId, year, month, reload, selectedVersion, settingsRevision, journal])
 
   const currentSheet = sheet?.department_id === departmentId && sheet.year === year && sheet.month === month ? sheet : null
   const day = currentSheet?.days.find(d => d.date === selectedDate)
@@ -96,8 +158,8 @@ export function HRTimesheet() {
   }
 
   return (
-    <div className="space-y-4" data-timesheet-page>
-      <section className="space-y-2" aria-labelledby="pending-timesheets">
+    <div className="space-y-4">
+      {!journal && <section className="space-y-2" aria-labelledby="pending-timesheets">
         <h2 id="pending-timesheets" className="font-semibold">Табели на проверке</h2>
         {pending.length ? (
           <ul className="flex flex-wrap gap-2">
@@ -111,16 +173,17 @@ export function HRTimesheet() {
                     setDepartmentId(item.department_id)
                     setYear(item.year)
                     setMonth(item.month)
+                    setSelectedVersion(item.timesheet_id)
                     selectDate(item.date)
                   }}
                 >
-                  {item.department_name} · {formatDate(item.date)}
+                  {item.department_name} · {formatDate(item.date)} · версия {item.version}{item.number ? ` № ${item.number}` : ''}
                 </Button>
               </li>
             ))}
           </ul>
         ) : <p className="text-sm text-muted-foreground">Нет табелей, ожидающих проверки</p>}
-      </section>
+      </section>}
 
       <div className="flex flex-wrap items-center gap-2">
         <select aria-label="Отдел" value={departmentId ?? ''} disabled={reviewing} onChange={e => { setDepartmentId(Number(e.target.value)); selectDate('') }} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
@@ -132,7 +195,7 @@ export function HRTimesheet() {
         <select aria-label="Год" value={year} disabled={reviewing} onChange={e => { setYear(Number(e.target.value)); selectDate('') }} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        {day && (
+        {!journal && day && (
           <select aria-label="Дата табеля" value={day.date} disabled={reviewing} onChange={e => selectDate(e.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
             {currentSheet?.days.map(d => <option key={d.date} value={d.date}>{formatDate(d.date)} · {TIMESHEET_DAY_LABELS[d.status]}</option>)}
           </select>
@@ -140,10 +203,13 @@ export function HRTimesheet() {
         <Button variant="outline" size="sm" disabled={loading || reviewing} onClick={() => { setError(null); setReload(value => value + 1) }}>Обновить</Button>
       </div>
 
+      <TimesheetTools sheet={currentSheet} versions={versions} departmentId={departmentId} manage journal={journal} onSelect={setSelectedVersion} onChanged={(id, importedYear, importedMonth) => { if (id) setSelectedVersion(id); if (importedYear) setYear(importedYear); if (importedMonth) setMonth(importedMonth); setReload(value => value + 1) }} />
       {error && <div role="alert" className="text-sm text-destructive">{error}</div>}
       {loading ? (
         <p role="status" className="py-8 text-center text-sm text-muted-foreground">Загрузка табеля…</p>
-      ) : currentSheet ? (
+      ) : currentSheet ? journal ? (
+        <TimesheetAuditLog key={currentSheet.id} sheetId={currentSheet.id} refreshKey={reload} />
+      ) : (
         <div className="space-y-4">
           {day?.status === 'submitted' && (
             <div className="flex flex-wrap items-end gap-2">
@@ -169,10 +235,10 @@ export function HRTimesheet() {
           )}
           {day?.status === 'returned' && <p className="whitespace-pre-wrap text-sm text-muted-foreground">Причина возврата. {day.reason}</p>}
           {!day && currentSheet.status !== 'draft' && <p className="text-sm text-muted-foreground">{currentSheet.status === 'approved' ? 'Месячный табель утверждён' : 'Месячный табель отправлен'}</p>}
-          <TimesheetGrid key={currentSheet.id} sheet={currentSheet} selectedDate={day?.date ?? ''} />
+          <TimesheetGrid key={`${currentSheet.id}:${reload}`} sheet={currentSheet} selectedDate={day?.date ?? ''} />
           <TimesheetLegend />
         </div>
-      ) : <p className="py-8 text-center text-sm text-muted-foreground">Табель не найден</p>}
+      ) : <p className="py-8 text-center text-sm text-muted-foreground">{journal ? 'За выбранный период нет табелей' : 'Табель не найден'}</p>}
     </div>
   )
 }
