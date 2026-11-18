@@ -38,6 +38,7 @@ export const test = base.extend<{ scenario: Scenario }>({
         if (await intro.isVisible()) await intro.click()
         if (role === 'hr') {
           await target.getByRole('combobox', { name: 'Отдел', exact: true }).selectOption(String(world.departments.dept))
+          await expect(target.getByRole('combobox', { name: 'Версия табеля', exact: true })).toHaveValue(String(sheet.id))
         }
       }
       await world.loginPage(page, 'mgr')

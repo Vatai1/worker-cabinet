@@ -175,15 +175,15 @@ async function getEmpName(userId) {
 
 async function getApproverIds(approverId, req) {
   if (!approverId) return []
-  const orgClause = req.org ? ' AND vs.organization_id = $2' : ''
+  const orgClause = req.org ? ' AND vs.organization_id = $3' : ''
   const r = await query(
     `SELECT vs.substitute_user_id
      FROM vacation_substitutions vs
      JOIN vacation_requests vr ON vs.vacation_request_id = vr.id
      JOIN request_statuses rs ON vr.status_id = rs.id
      WHERE vr.user_id = $1 AND rs.code = 'approved'
-       AND vr.start_date <= CURRENT_DATE AND vr.end_date >= CURRENT_DATE${orgClause}`,
-    req.org ? [approverId, req.org.org_id] : [approverId]
+       AND $2::date BETWEEN vr.start_date AND vr.end_date${orgClause}`,
+    req.org ? [approverId, todayISO(), req.org.org_id] : [approverId, todayISO()]
   )
   if (r.rows.length > 0) return [approverId, ...r.rows.map((row) => row.substitute_user_id)]
   return [approverId]
@@ -208,9 +208,9 @@ async function canReviewVacation(request, req, db) {
   if (hasFullDepartmentAccess(req)) return true
   if (request.user_id === req.user.id) return false
   const result = await db.query(
-    `SELECT ${assignedReviewerSql('$3::int', '$2::int')} AS allowed
+    `SELECT ${assignedReviewerSql('$3::int', '$2::int', '$4::date')} AS allowed
      FROM (${vacationApproversSql('$1::int', '$2::int')}) approval`,
-    [request.user_id, request.organization_id, req.user.id]
+    [request.user_id, request.organization_id, req.user.id, todayISO()]
   )
   return result.rows[0]?.allowed === true
 }
@@ -231,7 +231,7 @@ const userParentSeesChildVacations = (n) => `vr.user_id IN (SELECT id FROM users
 const sameDepartmentPending = (n) => `(rs.code = 'on_approval' AND u.department_id = (SELECT department_id FROM users WHERE id = $${n}))`
 const userChildSeesParentVacations = (n) => `(vr.user_id = (SELECT manager_id FROM users WHERE id = $${n}) AND (SELECT vac_child_sees_parent FROM users WHERE id = $${n}) AND rs.code = 'approved')`
 
-const assignedReviewerSql = (reviewerId, orgId) => `(
+const assignedReviewerSql = (reviewerId, orgId, today) => `(
   ${reviewerId} IN (approval.approver_id, approval.co_approver_id) OR EXISTS (
   SELECT 1
   FROM vacation_substitutions vs
@@ -242,7 +242,7 @@ const assignedReviewerSql = (reviewerId, orgId) => `(
     AND vs.organization_id = ${orgId}
     AND vs.substitute_user_id = ${reviewerId}
     AND mrs.code = 'approved'
-    AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
+    AND ${today} BETWEEN mvr.start_date AND mvr.end_date
 ))`
 
 async function notifyVacationCreated(request, employeeId, coApprover, req, db = { query }) {
@@ -502,7 +502,7 @@ router.delete('/production-calendar/:day', authenticateToken, requirePermission(
  *   get:
  *     tags: [Vacation]
  *     summary: Получить список заявок на отпуск
- *     description: 'Работник видит свои заявки, approved-заявки всей организации и заявки по связям иерархии (кураторства, родители, подчинённые); руководитель — также заявки, которые согласовывает'
+ *     description: 'Работник видит свои заявки, approved-заявки всей организации и заявки по связям иерархии (кураторства, родители, подчинённые); руководитель — также заявки, которые согласовывает. Активность замещения определяется по местной дате сервера.'
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -552,8 +552,10 @@ router.get('/requests', authenticateToken, async (req, res) => {
     }
     params.push(user.id)
     const reviewer = `$${params.length}::int`
+    params.push(todayISO())
+    const currentDay = `$${params.length}::date`
     const canReview = `(rs.code = 'on_approval' AND (
-      ${hasFullDepartmentAccess(req)} OR (vr.user_id <> ${reviewer} AND COALESCE(${assignedReviewerSql(reviewer, 'vr.organization_id')}, false))
+      ${hasFullDepartmentAccess(req)} OR (vr.user_id <> ${reviewer} AND COALESCE(${assignedReviewerSql(reviewer, 'vr.organization_id', currentDay)}, false))
     ))`
     whereClause += ' ' + excludeTest(req, 'u')
     if (!userId) whereClause += " AND u.status <> 'inactive'"
@@ -700,9 +702,9 @@ router.get('/requests', authenticateToken, async (req, res) => {
            JOIN vacation_substitutions mvs ON mvs.vacation_request_id = mvr.id AND mvs.organization_id = pending.organization_id
            JOIN users sub ON mvs.substitute_user_id = sub.id
            WHERE mrs.code = 'approved'
-             AND mvr.start_date <= CURRENT_DATE AND mvr.end_date >= CURRENT_DATE
+             AND $2::date BETWEEN mvr.start_date AND mvr.end_date
            ORDER BY pending.id, sub.id`,
-          [JSON.stringify(approvalRequests)]
+          [JSON.stringify(approvalRequests), todayISO()]
         )
         for (const row of delegationResult.rows) {
           delegatedByRequest[row.request_id] = {
@@ -4146,6 +4148,18 @@ router.post('/check-restrictions', authenticateToken, async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /vacation/my-substitutions:
+ *   get:
+ *     tags: [Vacation]
+ *     summary: Замещения пользователя, не завершённые по местной дате сервера
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Список замещаемых работников и периодов отпуска }
+ *       401: { description: Требуется авторизация }
+ *       500: { description: Не удалось получить замещения }
+ */
 router.get('/my-substitutions', authenticateToken, async (req, res) => {
   try {
     const result = await query(
@@ -4157,10 +4171,10 @@ router.get('/my-substitutions', authenticateToken, async (req, res) => {
        JOIN vacation_requests vr ON vs.vacation_request_id = vr.id
        JOIN request_statuses rs ON vr.status_id = rs.id
        JOIN users u ON vr.user_id = u.id
-       WHERE vs.substitute_user_id = $1 AND vr.end_date >= CURRENT_DATE
-         ${req.org ? 'AND vs.organization_id = $2' : ''}
+       WHERE vs.substitute_user_id = $1 AND vr.end_date >= $2::date
+         ${req.org ? 'AND vs.organization_id = $3' : ''}
        ORDER BY vr.start_date ASC`,
-      req.org ? [req.user.id, req.org.org_id] : [req.user.id]
+      req.org ? [req.user.id, todayISO(), req.org.org_id] : [req.user.id, todayISO()]
     )
     res.json(result.rows)
   } catch (error) {

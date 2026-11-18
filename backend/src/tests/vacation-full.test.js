@@ -554,6 +554,20 @@ describe('Модуль отпусков — user stories', () => {
       assert.strictEqual(await statusOf(created.data.id), 'approved')
     })
 
+    it('замещение начинается сегодня по местной дате сервера: уведомление, очередь и согласование доступны', async () => {
+      await query("UPDATE vacation_requests SET start_date = $1 WHERE user_id = $2 AND status_id = (SELECT id FROM request_statuses WHERE code = 'approved')", [shift(0), mgr.id])
+      const created = await postVacation(emp, { startDate: ahead(10), endDate: ahead(14), vacationType: 'annual_paid' })
+      assert.strictEqual(created.status, 201)
+      assert.ok(await waitNotification(sub.id, 'vacation_created'))
+      const queue = await call('GET', '/vacation/requests', await tokenFor(sub))
+      assert.strictEqual(queue.status, 200)
+      assert.strictEqual(queue.data.find(request => request.id === created.data.id)?.can_review, true)
+      const own = await call('GET', '/vacation/requests', await tokenFor(emp))
+      assert.strictEqual(own.data.find(request => request.id === created.data.id)?.delegated_to?.id, sub.id)
+      const reviewed = await call('POST', `/vacation/requests/${created.data.id}/approve`, await tokenFor(sub), {})
+      assert.strictEqual(reviewed.status, 200)
+    })
+
     it('посторонний работник → 403', async () => {
       const created = await postVacation(emp2, { startDate: ahead(10), endDate: ahead(14), vacationType: 'annual_paid' })
       assert.strictEqual(created.status, 201)
