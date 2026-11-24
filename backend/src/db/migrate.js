@@ -1248,7 +1248,8 @@ async function runMigrations() {
  `)
 
     await db.query(`
-  ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS is_submitted BOOLEAN NOT NULL DEFAULT false
+  ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS is_submitted BOOLEAN NOT NULL DEFAULT false;
+  ALTER TABLE timesheet_entries ADD COLUMN IF NOT EXISTS is_automatic BOOLEAN NOT NULL DEFAULT false
  `)
 
     await db.query(`
@@ -1903,10 +1904,10 @@ async function runMigrations() {
       JOIN users u ON u.id = te.employee_id
       JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = t.organization_id
         AND COALESCE(uo.department_id, u.department_id) = t.department_id
-      WHERE t.status = 'draft' AND te.is_submitted AND te.code <> ALL($1::text[])
+      WHERE t.status = 'draft' AND te.is_submitted AND NOT te.is_automatic AND te.code <> ALL($1::text[])
         AND EXTRACT(YEAR FROM te.date) = t.year AND EXTRACT(MONTH FROM te.date) = t.month
       ON CONFLICT (timesheet_id, date) DO NOTHING
-    `, [[...VACATION_TIMESHEET_CODES, 'В']])
+    `, [[...VACATION_TIMESHEET_CODES, 'ОТ', 'ОД', 'У', 'ОЖ', 'В']])
 
 
     console.log('Creating module_overrides table...')
@@ -1994,6 +1995,7 @@ async function runMigrations() {
     await migrateTimesheetFeatures(db)
     await migrateDayOffs(db)
     await migrateVacationTypeRules(db)
+    await migrateTimesheetCodes(db)
     await migratePermissionsMatrix(db)
     await migrateNotificationDelivery(db)
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name_genitive JSONB')
@@ -2481,6 +2483,27 @@ async function migrateVacationTypeRules(db) {
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`
   )
   console.log(`  ✓ vacation type rules: ${balances.rowCount} balances fixed, ${entries.rowCount} timesheet entries recoded`)
+}
+
+async function migrateTimesheetCodes(db) {
+  await db.query(`
+    WITH migration AS (
+      INSERT INTO system_settings (key, value, description)
+      VALUES ('timesheet_codes_v2', 'true', 'Переход на классификатор кодов табеля')
+      ON CONFLICT (key) DO NOTHING
+      RETURNING key
+    )
+    UPDATE timesheet_entries
+    SET code = CASE
+        WHEN code IN ('ОТ', 'ОД') THEN 'О'
+        WHEN code = 'У' THEN 'ОУ'
+        WHEN code = 'Р' THEN 'Б'
+        WHEN code = 'ОЖ' THEN 'Р'
+        ELSE code
+      END, is_automatic = true
+    WHERE code IN ('ОТ', 'ОД', 'У', 'Р', 'ОЖ')
+      AND EXISTS (SELECT 1 FROM migration)
+  `)
 }
 
 async function migrateVacationSettings(db) {

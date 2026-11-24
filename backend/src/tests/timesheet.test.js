@@ -42,14 +42,14 @@ const addUser = async (name, role, departmentId, orgId) => {
   return { ...user, orgId, token: jwt.sign({ id: user.id }, process.env.JWT_SECRET) }
 }
 
-async function setVacation(userId, status) {
+async function setVacation(userId, status, type = 'annual_paid') {
   const { rows } = await query(
     `INSERT INTO vacation_requests (user_id, start_date, end_date, duration, vacation_type_id, status_id, organization_id)
      SELECT $1, $2, $2, 1, vt.id, rs.id, 1
      FROM vacation_types vt CROSS JOIN request_statuses rs
-     WHERE vt.code = 'annual_paid' AND vt.organization_id = 1 AND rs.code = $3
+     WHERE vt.code = $4 AND vt.organization_id = 1 AND rs.code = $3
      RETURNING id`,
-    [userId, today, status]
+    [userId, today, status, type]
   )
   assert.equal(rows.length, 1)
   return rows[0].id
@@ -133,6 +133,54 @@ describe('Дневной табель', () => {
     assert.equal((await call('PUT', daily + '/review', hr, review)).status, 200)
   })
 
+  it('различает ручную отметку Б и автоматическую отметку по беременности и родам', async () => {
+    const dept = await addDepartment('Отдел отметок Б', 1)
+    const head = await addUser('Начальник', 'manager', dept, 1)
+    const employee = await addUser('Работница', 'employee', dept, 1)
+    await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [head.id, dept])
+    const created = await call('POST', '/timesheet', head, { department_id: dept, year: sheet.year, month: sheet.month })
+    assert.equal(created.status, 201)
+    const path = `/timesheet/${created.data.id}`
+    const leave = await setVacation(employee.id, 'approved', 'maternity')
+    assert.equal((await call('POST', path + '/submit-today', head, { entries: [entry(head, 'Б')] })).status, 200)
+    const locked = await call('GET', path, head)
+    const mark = (detail, user) => detail.data.entries.find(e => e.employee_id === user.id && e.date === today)
+    assert.equal(mark(locked, head).code, 'Б')
+    assert.equal(mark(locked, head).is_automatic, false)
+    assert.equal(mark(locked, employee).code, 'Б')
+    assert.equal(mark(locked, employee).is_automatic, true)
+    await query("UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'rejected') WHERE id = $1", [leave])
+    const reviewed = await call('PUT', path + `/days/${today}/review`, hr, { status: 'returned', revision: 1, reason: 'Уточнение' })
+    assert.equal(reviewed.status, 200)
+    const returned = await call('GET', path, head)
+    assert.equal(mark(returned, head).code, 'Б')
+    assert.equal(mark(returned, employee), undefined)
+    assert.equal((await call('POST', path + '/submit-today', head, { entries: [entry(employee, 'Г')] })).status, 200)
+  })
+
+  it('работа в выходной РП сохраняет время в табеле и отчёте', async () => {
+    const dept = await addDepartment('Работа в выходной', 1)
+    const head = await addUser('Начальник', 'manager', dept, 1)
+    await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [head.id, dept])
+    const created = await call('POST', '/timesheet', head, { department_id: dept, year: sheet.year, month: sheet.month })
+    assert.equal(created.status, 201)
+    const path = `/timesheet/${created.data.id}`
+    await query("UPDATE calendar_holidays SET kind = 'transfer' WHERE day = $1", [today])
+    try {
+      const edit = { ...entry(head, 'РП'), minutes: 185 }
+      assert.equal((await call('PUT', path + '/entries', head, [edit])).status, 200)
+      const detail = await call('GET', path, head)
+      assert.ok(detail.data.entries.some(e => e.date === today && e.code === 'РП' && e.minutes === 185 && !e.is_automatic))
+      const report = await call('GET', `/timesheet/report?date=${today}`, hr)
+      assert.equal(report.data.find(e => e.id === head.id).code, 'РП')
+      assert.equal((await call('POST', path + '/submit-today', head)).status, 200)
+      const submitted = await call('GET', path, head)
+      assert.ok(submitted.data.entries.some(e => e.date === today && e.code === 'РП' && e.minutes === 185 && e.is_submitted))
+    } finally {
+      await query("UPDATE calendar_holidays SET kind = 'shortened' WHERE day = $1", [today])
+    }
+  })
+
   it('показывает согласованный отпуск поверх явки и отклоняет неполную отправку без записи правок', async () => {
     const path = `/timesheet/${sheet.id}`
     vacation = await setVacation(worker.id, 'on_approval')
@@ -143,9 +191,9 @@ describe('Дневной табель', () => {
     assert.equal(draft.data.entries.find(e => e.employee_id === worker.id && e.date === today).code, 'Я')
     await query("UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'approved') WHERE id = $1", [vacation])
     const onLeave = await call('GET', path, manager)
-    assert.equal(onLeave.data.entries.find(e => e.employee_id === worker.id && e.date === today).code, 'ОТ')
+    assert.equal(onLeave.data.entries.find(e => e.employee_id === worker.id && e.date === today).code, 'О')
     const report = await call('GET', `/timesheet/report?date=${today}`, hr)
-    assert.equal(report.data.find(row => row.id === worker.id).code, 'ОТ')
+    assert.equal(report.data.find(row => row.id === worker.id).code, 'О')
     assert.equal(report.data.find(row => row.id === otherWorker.id).code, null)
     const incomplete = await call('POST', path + `/days/${today}/submit`, manager, { entries: [entry(manager)] })
     assert.equal(incomplete.status, 400)
@@ -170,7 +218,7 @@ describe('Дневной табель', () => {
     assert.equal((await call('PUT', daily + '/review', manager, { status: 'approved', revision: 1 })).status, 403)
     await query("UPDATE vacation_requests SET status_id = (SELECT id FROM request_statuses WHERE code = 'rejected') WHERE id = $1", [vacation])
     const locked = await call('GET', path, hr)
-    assert.equal(locked.data.entries.find(e => e.employee_id === worker.id && e.date === today).code, 'ОТ')
+    assert.equal(locked.data.entries.find(e => e.employee_id === worker.id && e.date === today).code, 'О')
     assert.equal((await call('PUT', daily + '/review', hr, { status: 'returned', revision: 1 })).status, 400)
     const returned = await call('PUT', daily + '/review', hr, { status: 'returned', revision: 1, reason: 'Уточните явку' })
     assert.equal(returned.status, 200)

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { TimesheetAuditLog } from '@/shared/components/timesheet/TimesheetAuditLog'
 import { Button } from '@/shared/components/ui/Button'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
@@ -14,7 +15,7 @@ interface Props {
   manage?: boolean
   journal?: boolean
   onSelect: (id: number) => void
-  onChanged: (id?: number, year?: number, month?: number) => void
+  onChanged: (id?: number, year?: number, month?: number, departmentId?: number) => void
 }
 interface Manager { id: number; name: string; primary: boolean; assigned: boolean }
 
@@ -28,6 +29,7 @@ export function TimesheetTools({ sheet, versions, departmentId, manage = false, 
   const [documentDate, setDocumentDate] = useState('')
   const [kind, setKind] = useState('correction')
   const [period, setPeriod] = useState('')
+  const [importScope, setImportScope] = useState('organization')
 
   useEffect(() => { setManagers(null); setAuditOpen(false); setError('') }, [departmentId, sheet?.id])
 
@@ -44,26 +46,35 @@ export function TimesheetTools({ sheet, versions, departmentId, manage = false, 
         </select>
         {!manage && <Button variant="outline" size="sm" onClick={() => setAuditOpen(value => !value)}>{auditOpen ? 'Закрыть журнал' : 'Журнал'}</Button>}
       </>}
-      {!journal && manage && departmentId && <>
+      {!journal && manage && <>
+        <select aria-label="Область импорта табеля" disabled={busy} value={importScope} onChange={event => setImportScope(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          <option value="organization">По отделам учреждения</option>
+          <option value="department" disabled={!departmentId}>В выбранный отдел</option>
+        </select>
         <label className={`rounded-lg border border-border px-3 py-2 text-sm ${busy ? 'opacity-50' : 'cursor-pointer'}`}>
           Импорт 0504421 (XLSX)
-          <input type="file" accept=".xlsx" disabled={busy} className="sr-only" aria-label="Импорт формы 0504421" onChange={event => {
+          <input type="file" accept=".xlsx" disabled={busy || (importScope === 'department' && !departmentId)} className="sr-only" aria-label="Импорт формы 0504421" onChange={event => {
             const file = event.target.files?.[0]
             event.target.value = ''
             if (!file) return
             run(async () => {
-              const body = new FormData(); body.append('file', file); body.append('department_id', String(departmentId))
+              const body = new FormData()
+              body.append('file', file)
+              if (importScope === 'department' && departmentId) body.append('department_id', String(departmentId))
               const response = await fetchWithRetry(`${API_BASE_URL}/timesheet/import`, { method: 'POST', headers: getAuthHeaders(), body })
               const data = await response.json()
               if (!response.ok) throw new Error(data.error || 'Ошибка импорта')
-              onChanged(data.id, data.year, data.month)
+              const sheets: Timesheet[] = data.sheets ?? [data]
+              const target = sheets.find(version => version.department_id === departmentId) ?? sheets[0]
+              onChanged(target.id, target.year, target.month, target.department_id)
+              toast.success(`Импортировано табелей: ${sheets.length}`)
             })
           }} />
         </label>
-        <Button hidden className="hidden" variant="outline" size="sm" disabled={busy} onClick={() => run(async () => {
+        {departmentId && <Button hidden className="hidden" variant="outline" size="sm" disabled={busy} onClick={() => run(async () => {
           const data = await apiGet<{ candidates: Manager[] }>(`/timesheet/departments/${departmentId}/managers`)
           setManagers(data.candidates); setSelected(data.candidates.filter(u => u.assigned).map(u => u.id))
-        })}>Руководители табеля</Button>
+        })}>Руководители табеля</Button>}
       </>}
     </div>
     {!journal && manage && sheet && <details className="rounded-lg border border-border p-3 text-sm">

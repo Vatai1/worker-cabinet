@@ -1,21 +1,44 @@
 import ExcelJS from 'exceljs'
 import PizZip from 'pizzip'
 import { ValidationError } from '../middleware/errors.js'
-import { VACATION_TIMESHEET_CODES } from './vacationTypes.js'
+import { MINUTE_CODES, TIMESHEET_CODES } from './timesheetCodes.js'
 import { timesheetDates } from './timesheetData.js'
 
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 const COLUMNS = ['H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'Z', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AO']
-const CODES = ['Я', 'К', 'Б', 'НН', 'В', ...VACATION_TIMESHEET_CODES]
+const CODES = new Set(TIMESHEET_CODES.map(item => item.code))
+
+function removeWorksheetDrawings(zip) {
+  const graphics = /^(?:xl\/drawings\/|xl\/media\/)/
+  for (const part of Object.values(zip.files)) {
+    if (graphics.test(part.name)) {
+      zip.remove(part.name)
+    } else if (/^xl\/worksheets\/sheet\d+\.xml$/.test(part.name)) {
+      zip.file(part.name, part.asText().replace(/<(?:\w+:)?(?:drawing|legacyDrawing|legacyDrawingHF)\b[^>]*\/\s*>/g, ''))
+    } else if (/^xl\/worksheets\/_rels\/sheet\d+\.xml\.rels$/.test(part.name)) {
+      const drawingRelationship = /<(?:\w+:)?Relationship\b(?=[^>]*\bType\s*=\s*["'][^"']*\/(?:drawing|vmlDrawing)["'])[^>]*\/\s*>/g
+      zip.file(part.name, part.asText().replace(drawingRelationship, ''))
+    }
+  }
+}
 
 export async function parseTimesheetImport(buffer) {
   const workbook = new ExcelJS.Workbook()
+  let zip
   try {
-    const zip = new PizZip(buffer)
-    const expandedSize = Object.values(zip.files).reduce((sum, file) => sum + (file._data?.uncompressedSize ?? 0), 0)
-    if (expandedSize > 30 * 1024 * 1024 || Object.keys(zip.files).length > 500) throw new Error('size')
-    await workbook.xlsx.load(buffer)
-  } catch { throw new ValidationError('Не удалось прочитать XLSX-файл или распакованный файл больше 30 МБ') }
+    zip = new PizZip(buffer)
+  } catch {
+    throw new ValidationError('Не удалось прочитать XLSX-файл')
+  }
+  const parts = Object.values(zip.files)
+  const expandedSize = parts.reduce((sum, file) => sum + (file._data?.uncompressedSize ?? 0), 0)
+  if (expandedSize > 30 * 1024 * 1024 || parts.length > 500) throw new ValidationError('Распакованный XLSX-файл больше 30 МБ или содержит слишком много частей')
+  try {
+    removeWorksheetDrawings(zip)
+    await workbook.xlsx.load(zip.generate({ type: 'nodebuffer' }))
+  } catch {
+    throw new ValidationError('Не удалось прочитать данные листа XLSX')
+  }
   const sheet = workbook.worksheets[0]
   if (!sheet || sheet.rowCount > 10000 || sheet.columnCount > 100) throw new ValidationError('Некорректная форма 0504421 или слишком большой файл')
   const text = address => sheet.getCell(address).text.trim().replace(/\s+/g, ' ')
@@ -42,12 +65,23 @@ export async function parseTimesheetImport(buffer) {
   const employees = []
   const numbers = new Set()
   const dates = timesheetDates(metadata)
-  for (let row = 15; row <= sheet.rowCount; row += 2) {
+  for (let row = 15; row <= sheet.rowCount; row++) {
+    const label = text(`A${row}`)
+    if (/^(?:Ответственный|Исполнитель)$/iu.test(label)) break
+    if (/^Фамилия, имя, отчество$/iu.test(label) || /^(?:уч[её]тный|табельный) номер$/iu.test(text(`D${row}`))) {
+      row += 2
+      continue
+    }
+    const nameCell = sheet.getCell(`C${row}`)
+    if (nameCell.type === ExcelJS.ValueType.Merge) continue
     const name = text(`C${row}`)
-    const staffNumber = text(`D${row}`)
+    const numberCell = sheet.getCell(`D${row}`)
+    const staffNumber = Number.isSafeInteger(numberCell.value) && /^0+$/.test(numberCell.numFmt ?? '')
+      ? String(numberCell.value).padStart(numberCell.numFmt.length, '0')
+      : text(`D${row}`)
+    if (!name && !staffNumber) continue
     if (!staffNumber) {
       if (name && text(`F${row}`)) throw new ValidationError(`Нет табельного номера в строке ${row}`)
-      if (!name) row--
       continue
     }
     if (!name || staffNumber.length > 64 || numbers.has(staffNumber)) throw new ValidationError(`Некорректный или повторный табельный номер в строке ${row}`)
@@ -57,13 +91,14 @@ export async function parseTimesheetImport(buffer) {
       const value = text(`${COLUMNS[index]}${row}`)
       const hours = value ? Number(value.replace(',', '.')) : null
       const minutes = hours === null ? null : Math.round(hours * 60)
-      if ((code && !CODES.includes(code)) || (value && (!Number.isFinite(hours) || hours < 0 || hours > 24 || Math.abs(hours * 60 - minutes) > 0.001))) {
+      if ((code && !CODES.has(code)) || (value && (!Number.isFinite(hours) || hours < 0 || hours > 24))) {
         throw new ValidationError(`Некорректная отметка или часы в ${COLUMNS[index]}${row}: ${staffNumber}`)
       }
-      if (minutes > 0 && code !== 'Я') throw new ValidationError(`Часы без явки в строке ${row}: ${staffNumber}`)
-      return { date: day, code, minutes: code === 'Я' ? minutes : null }
+      if (minutes > 0 && !MINUTE_CODES.includes(code)) throw new ValidationError(`Часы не допускаются для отметки ${code ?? 'без кода'} в строке ${row}: ${staffNumber}`)
+      return { date: day, code, minutes: MINUTE_CODES.includes(code) ? minutes : null }
     })
     employees.push({ staffNumber, name, entries })
+    row++
   }
   if (!employees.length) throw new ValidationError('В файле нет работников с табельными номерами (колонка D, начиная со строки 15)')
   return { ...metadata, employees }

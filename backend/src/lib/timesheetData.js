@@ -50,6 +50,12 @@ export async function getTimesheetMarks(db, sheet, dates, employeeIds) {
   return { nonWorkingDays, vacations }
 }
 
+export function automaticTimesheetCode(calendar, employeeId, date, manualCode) {
+  const vacation = calendar.vacations.get(`${employeeId}:${date}`)
+  if (vacation) return vacation
+  return calendar.nonWorkingDays.includes(date) && manualCode !== 'РП' ? 'В' : null
+}
+
 export async function getTimesheetData(sheet, includeTest, db = { query }) {
   const employees = await getTimesheetEmployees(db, sheet, includeTest)
   const { rows: days } = await db.query(
@@ -131,7 +137,8 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
       }
     }
   }
-  const { nonWorkingDays, vacations } = await getTimesheetMarks(db, sheet, dates, [...employeeById.keys()])
+  const calendar = await getTimesheetMarks(db, sheet, dates, [...employeeById.keys()])
+  const { nonWorkingDays } = calendar
   const dayByDate = new Map(days.map(d => [d.date, d]))
   const isLocked = date => sheet.status !== 'draft' || ['submitted', 'approved'].includes(dayByDate.get(date)?.status)
   const entries = new Map()
@@ -139,7 +146,7 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
     const key = `${entry.employee_id}:${entry.date}`
     const transferred = transferDates.has(key) && !dayByDate.get(entry.date)?.employee_ids.includes(entry.employee_id)
     if (transferred && (!isLocked(entry.date) || entry.code === 'В')) continue
-    if (isLocked(entry.date) || !VACATION_TIMESHEET_CODES.includes(entry.code)) entries.set(key, entry)
+    if (isLocked(entry.date) || (!entry.is_automatic && !VACATION_TIMESHEET_CODES.includes(entry.code))) entries.set(key, entry)
   }
   if (sheet.status === 'draft') {
     for (const date of dates) {
@@ -150,10 +157,10 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
         if (!employeeById.has(id)) continue
         const key = `${id}:${date}`
         if (transferDates.has(key) && !day?.employee_ids.includes(id)) continue
-        const code = vacations.get(key) ?? (nonWorkingDays.includes(date) ? 'В' : null)
+        const code = automaticTimesheetCode(calendar, id, date, entries.get(key)?.code)
         if (code) {
           const { first_name, last_name, middle_name } = employeeById.get(id)
-          entries.set(key, { employee_id: id, date, code, is_submitted: false, first_name, last_name, middle_name })
+          entries.set(key, { employee_id: id, date, code, is_automatic: true, is_submitted: false, first_name, last_name, middle_name })
         }
       }
     }

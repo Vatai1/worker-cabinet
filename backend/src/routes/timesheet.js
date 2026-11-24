@@ -8,13 +8,13 @@ import { asyncHandler, ConflictError, ForbiddenError, NotFoundError, ValidationE
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest, testScopeAware } from '../utils/testScope.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
-import { getTimesheetData, getTimesheetEmployees, getTimesheetMarks, timesheetDates } from '../lib/timesheetData.js'
+import { automaticTimesheetCode, getTimesheetData, getTimesheetEmployees, getTimesheetMarks, timesheetDates } from '../lib/timesheetData.js'
 import { createTimesheetWorkbook, getTimesheetExportData, writeTimesheetPdf } from '../lib/timesheetExport.js'
 import { requirePermission, hasPermission } from '../lib/permissions.js'
+import { MANUAL_CODES, MINUTE_CODES } from '../lib/timesheetCodes.js'
 import { VACATION_TIMESHEET_CODES } from '../lib/vacationTypes.js'
 
 const router = express.Router()
-const ATTENDANCE_CODES = ['Я', 'К', 'Б', 'НН']
 
 router.use(authenticateToken, requirePermission('timesheet:view'), asyncHandler(async (req, res, next) => {
   req.canManageTimesheets = await hasPermission(req, 'timesheet:manage')
@@ -96,12 +96,12 @@ function groupEntries(entries, allowedDates) {
     if (!Number.isInteger(entry.employee_id) || entry.employee_id <= 0 || entry.employee_id > 2147483647) {
       throw new ValidationError('Некорректный работник в отметке')
     }
-    if (entry.code !== null && !ATTENDANCE_CODES.includes(entry.code)) throw new ValidationError('Недопустимый код посещаемости')
+    if (entry.code !== null && !MANUAL_CODES.includes(entry.code)) throw new ValidationError('Недопустимый код посещаемости')
     if (!byDate.has(entry.date)) byDate.set(entry.date, new Map())
     const marks = byDate.get(entry.date)
     if (marks.has(entry.employee_id)) throw new ValidationError('Отметка работника за эту дату указана дважды')
-    if (entry.minutes != null && (!Number.isInteger(entry.minutes) || entry.minutes < 0 || entry.minutes > 1440 || entry.code !== 'Я')) {
-      throw new ValidationError('Время должно быть целым числом минут от 0 до 1440 и указываться только при явке')
+    if (entry.minutes != null && (!Number.isInteger(entry.minutes) || entry.minutes < 0 || entry.minutes > 1440 || !MINUTE_CODES.includes(entry.code))) {
+      throw new ValidationError('Время должно быть целым числом минут от 0 до 1440 и указываться только для отметки с учётом времени')
     }
     marks.set(entry.employee_id, { code: entry.code, minutes: entry.minutes ?? null })
   }
@@ -110,21 +110,24 @@ function groupEntries(entries, allowedDates) {
 
 function checkEdits(edits, roster, date, calendar) {
   const ids = new Set(roster.map(e => e.id))
-  for (const id of edits.keys()) {
+  for (const [id, mark] of edits) {
     if (!ids.has(id)) throw new ForbiddenError('Работник не входит в состав отдела для этой даты')
     if (calendar.vacations.has(`${id}:${date}`)) throw new ConflictError('Отметка согласованного отпуска устанавливается автоматически')
-    if (calendar.nonWorkingDays.includes(date)) throw new ValidationError('За нерабочий день отметки заполняются автоматически')
+    if (calendar.nonWorkingDays.includes(date) && mark.code !== 'РП' && mark.code !== null) {
+      throw new ValidationError('В нерабочий день можно указать только работу в выходной или праздничный день (РП)')
+    }
   }
 }
 
 async function saveMarks(db, sheet, date, marks, submitted, actorId) {
   await db.query("SELECT set_config('app.timesheet_actor', $1, true)", [String(actorId)])
   await db.query(
-    `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, minutes, is_submitted, organization_id)
-     SELECT $1, employee_id, $2, code, minutes, $3, $4 FROM unnest($5::int[], $6::text[], $7::int[]) AS marks(employee_id, code, minutes)
+    `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, minutes, is_submitted, organization_id, is_automatic)
+     SELECT $1, employee_id, $2, code, minutes, $3, $4, is_automatic
+     FROM unnest($5::int[], $6::text[], $7::int[], $8::boolean[]) AS marks(employee_id, code, minutes, is_automatic)
      ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
-     SET code = EXCLUDED.code, minutes = EXCLUDED.minutes, is_submitted = EXCLUDED.is_submitted, organization_id = EXCLUDED.organization_id`,
-    [sheet.id, date, submitted, sheet.organization_id, [...marks.keys()], [...marks.values()].map(m => m.code), [...marks.values()].map(m => m.minutes)]
+     SET code = EXCLUDED.code, minutes = EXCLUDED.minutes, is_submitted = EXCLUDED.is_submitted, organization_id = EXCLUDED.organization_id, is_automatic = EXCLUDED.is_automatic`,
+    [sheet.id, date, submitted, sheet.organization_id, [...marks.keys()], [...marks.values()].map(m => m.code), [...marks.values()].map(m => m.minutes), [...marks.values()].map(m => m.is_automatic ?? false)]
   )
 }
 
@@ -341,7 +344,7 @@ router.get('/report', requirePermission('timesheet:manage'), asyncHandler(async 
     await db.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
     const result = await db.query(
       `SELECT u.id, CONCAT_WS(' ', u.last_name, u.first_name, u.middle_name) AS name, d.name AS department,
-              te.code, t.status = 'draft' AND (td.status IS NULL OR td.status = 'returned')
+              te.code, te.is_automatic, t.status = 'draft' AND (td.status IS NULL OR td.status = 'returned')
                 AND (COALESCE(cardinality(td.employee_ids), 0) = 0 OR u.id = ANY(td.employee_ids)) AS open_day
        FROM user_organizations uo JOIN users u ON u.id = uo.user_id
        LEFT JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id) AND d.organization_id = uo.org_id ${excludeTest(req, 'd')}
@@ -357,10 +360,10 @@ router.get('/report', requirePermission('timesheet:manage'), asyncHandler(async 
     )
     const openIds = result.rows.filter(row => row.open_day).map(row => row.id)
     const marks = openIds.length ? await getTimesheetMarks(db, { organization_id: orgId }, [date], openIds) : null
-    return result.rows.map(({ id, name, department, code, open_day }) => ({
+    return result.rows.map(({ id, name, department, code, is_automatic, open_day }) => ({
       id, name, department,
       code: open_day && marks
-        ? marks.vacations.get(`${id}:${date}`) ?? (marks.nonWorkingDays.length ? 'В' : VACATION_TIMESHEET_CODES.includes(code) ? null : code)
+        ? automaticTimesheetCode(marks, id, date, code) ?? (is_automatic || VACATION_TIMESHEET_CODES.includes(code) ? null : code)
         : code,
     }))
   })
@@ -526,15 +529,15 @@ async function submitDay(req, res) {
     const calendar = await getTimesheetMarks(db, sheet, [date], ids)
     checkEdits(edits, roster, date, calendar)
     const { rows } = await db.query(
-      `SELECT employee_id, code, minutes FROM timesheet_entries
+      `SELECT employee_id, code, minutes, is_automatic FROM timesheet_entries
        WHERE timesheet_id = $1 AND date = $2 AND organization_id = $3 AND employee_id = ANY($4)`,
       [sheet.id, date, sheet.organization_id, ids]
     )
-    const marks = new Map(rows.filter(row => ATTENDANCE_CODES.includes(row.code)).map(row => [row.employee_id, { code: row.code, minutes: row.minutes }]))
+    const marks = new Map(rows.filter(row => !row.is_automatic && MANUAL_CODES.includes(row.code)).map(row => [row.employee_id, { code: row.code, minutes: row.minutes }]))
     for (const [id, mark] of edits) marks.set(id, mark)
     for (const id of ids) {
-      const automatic = calendar.vacations.get(`${id}:${date}`) ?? (calendar.nonWorkingDays.length ? 'В' : null)
-      if (automatic) marks.set(id, { code: automatic, minutes: null })
+      const automatic = automaticTimesheetCode(calendar, id, date, marks.get(id)?.code)
+      if (automatic) marks.set(id, { code: automatic, minutes: null, is_automatic: true })
     }
     const missing = roster.filter(e => !marks.get(e.id)?.code)
     if (missing.length) {
@@ -542,7 +545,7 @@ async function submitDay(req, res) {
       throw new ValidationError(`Заполните отметки за ${date}. Не заполнено: ${missing.length} (${names.join(', ')})`)
     }
 
-    const withoutHours = roster.filter(e => e.hourly && marks.get(e.id)?.code === 'Я' && !marks.get(e.id)?.minutes)
+    const withoutHours = roster.filter(e => e.hourly && MINUTE_CODES.includes(marks.get(e.id)?.code) && !marks.get(e.id)?.minutes)
     if (withoutHours.length) throw new ValidationError('Заполните часы явки для работников с почасовым учётом')
     await saveMarks(db, sheet, date, marks, true, req.user.id)
     await auditTimesheet(db, sheet, req.user.id, 'Отправка', { date })

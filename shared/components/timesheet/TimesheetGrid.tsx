@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/shared/components/ui/Button'
 import { Send } from 'lucide-react'
-import { TIMESHEET_CODES, CODE_COLORS, VACATION_CODES } from '@/shared/lib/timesheetCodes'
+import { ATTENDANCE_CODES, CODE_COLORS, MINUTE_CODES } from '@/shared/lib/timesheetCodes'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { getErrorMessage, personName } from '@/shared/lib/utils'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -12,6 +12,7 @@ interface TimesheetEntry {
   date: string
   code: string | null
   minutes?: number | null
+  is_automatic?: boolean
 }
 
 interface Employee {
@@ -70,7 +71,6 @@ interface Props {
 }
 
 const WEEKDAY_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
-const ATTENDANCE_CODES = TIMESHEET_CODES.filter(c => !VACATION_CODES.includes(c.code))
 export const TIMESHEET_DAY_LABELS = {
   submitted: 'На проверке у HR',
   approved: 'Принят',
@@ -96,6 +96,7 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
   const savedRoster = dayMap.get(selectedDate)?.employee_ids
   const editableIds = new Set(savedRoster?.length ? savedRoster : sheet.currentEmployeeIds)
   const workingDay = !nonWorkingDays.includes(selectedDate)
+  const allowedCodes = workingDay ? ATTENDANCE_CODES : ATTENDANCE_CODES.filter(item => item.code === 'РП')
   const dates = Array.from({ length: sheet.period === 'half' ? 15 : new Date(year, month, 0).getDate() }, (_, i) =>
     `${year}-${String(month).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`)
   const hasChanges = Object.keys(changes).length > 0
@@ -107,8 +108,9 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
   }
 
   function canEdit(employeeId: number, date: string) {
-    return editable && workingDay && date === selectedDate && editableIds.has(employeeId)
-      && !VACATION_CODES.includes(entryMap.get(`${employeeId}:${date}`)?.code ?? '')
+    const entry = entryMap.get(`${employeeId}:${date}`)
+    return editable && date === selectedDate && editableIds.has(employeeId)
+      && (!entry?.is_automatic || (!workingDay && entry.code === 'В'))
       && !transfersByEmployee.get(employeeId)?.some(span => date >= span.start_date && date <= span.end_date)
   }
 
@@ -127,11 +129,12 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
   }
 
   function changeCode(employeeId: number, code: string | null) {
-    setChanges(previous => ({ ...previous, [employeeId]: { code, minutes: code === 'Я' ? minutesAt(employeeId, selectedDate) : null } }))
+    setChanges(previous => ({ ...previous, [employeeId]: { code, minutes: code && MINUTE_CODES.includes(code) ? minutesAt(employeeId, selectedDate) : null } }))
   }
 
   function changeTime(employeeId: number, hours: number, minutes: number) {
-    setChanges(previous => ({ ...previous, [employeeId]: { code: 'Я', minutes: hours * 60 + minutes } }))
+    const code = codeAt(employeeId, selectedDate)
+    setChanges(previous => ({ ...previous, [employeeId]: { code, minutes: hours * 60 + minutes } }))
   }
 
   async function save(submit: boolean) {
@@ -226,7 +229,7 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                 )
               })}
               <th scope="col" className="w-8 border-b border-r bg-muted">Я</th>
-              <th scope="col" className="w-8 border-b bg-muted">ОТ</th>
+              <th scope="col" className="w-8 border-b bg-muted">О</th>
               <th scope="col" className="w-16 border-b border-r bg-muted">Часы</th>
               {editable && workingDay && <th scope="col" className="sticky right-0 w-[4.5rem] border-b border-l bg-muted">Действия</th>}
             </tr>
@@ -261,15 +264,15 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                           <>
                           <select
                             aria-label={`Отметка за ${date} — ${name}`}
-                            value={code ?? ''}
+                            value={code === 'В' && !workingDay ? '' : code ?? ''}
                             disabled={!!working}
                             onChange={e => changeCode(employee.id, e.target.value || null)}
                             className="w-full cursor-pointer appearance-none bg-transparent py-2 text-center font-medium hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                           >
-                            <option value="">—</option>
-                            {ATTENDANCE_CODES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                            <option value="">{workingDay ? '—' : 'В'}</option>
+                            {allowedCodes.map(c => <option key={c.code} value={c.code} title={c.label}>{c.code}</option>)}
                           </select>
-                          {employee.hourly && code === 'Я' && <div className="flex flex-col gap-1 pb-1">
+                          {code && MINUTE_CODES.includes(code) && (employee.hourly || code !== 'Я') && <div className="flex flex-col gap-1 pb-1">
                             <input type="number" min={0} max={24} aria-label={`Часы за ${date} — ${name}`} placeholder="ч" value={minutes == null ? '' : Math.floor(minutes / 60)} disabled={!!working} onChange={e => changeTime(employee.id, Number(e.target.value), (minutes ?? 0) % 60)} className="w-full bg-background text-center" />
                             <input type="number" min={0} max={59} aria-label={`Минуты за ${date} — ${name}`} placeholder="м" value={minutes == null ? '' : minutes % 60} disabled={!!working} onChange={e => changeTime(employee.id, Math.floor((minutes ?? 0) / 60), Number(e.target.value))} className="w-full bg-background text-center" />
                           </div>}
@@ -278,7 +281,7 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                       </td>
                     )
                   })}
-                  {['Я', 'ОТ'].map(code => (
+                  {['Я', 'О'].map(code => (
                     <td key={code} className="border-b border-r text-center font-bold">{codes.filter(mark => mark === code).length || ''}</td>
                   ))}
                   <td className="border-b border-r text-center font-bold">{(() => { const total = dates.reduce((sum, date) => sum + (minutesAt(employee.id, date) ?? 0), 0); return total ? `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}` : '—' })()}</td>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { Button } from '@/shared/components/ui/Button'
 import { cn, getErrorMessage } from '@/shared/lib/utils'
+import { MINUTE_CODES } from '@/shared/lib/timesheetCodes'
 import { apiGet } from '@/shared/lib/apiClient'
 
 interface Worker {
@@ -38,7 +39,7 @@ export function TimesheetReport() {
   const workers = rows ?? []
   const groups = { absent: [], missing: [], present: [], all: workers } as Record<typeof CATEGORIES[number]['id'], Worker[]>
   for (const worker of workers) {
-    groups[worker.code === 'Я' ? 'present' : worker.code ? 'absent' : 'missing'].push(worker)
+    groups[!worker.code ? 'missing' : MINUTE_CODES.includes(worker.code) ? 'present' : 'absent'].push(worker)
   }
 
   return (

@@ -11,7 +11,7 @@ test('UC-01: руководитель отправляет день с отпу�
   await world.approve(vacation.id)
   await open(page, 'mgr')
   const leaveRow = page.getByRole('row').filter({ hasText: 'Отпусков Пётр' })
-  await expect(leaveRow.getByRole('cell').nth(Number(today.slice(-2)) - 1)).toHaveText('ОТ')
+  await expect(leaveRow.getByRole('cell').nth(Number(today.slice(-2)) - 1)).toHaveText('О')
   await expect(page.getByRole('combobox', { name: `Отметка за ${today} — Отпусков Пётр`, exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Отправить на проверку', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Заполните отметки')
@@ -47,7 +47,7 @@ test('UC-01: руководитель отправляет день с отпу�
     const accepted = await world.ok<{ entries: { employee_id: number; date: string; code: string }[]; days: { date: string; status: string; revision: number }[] }>('GET', `/timesheet/${sheet.id}`)
     expect(accepted.days.find(day => day.date === today)).toMatchObject({ status: 'approved', revision: 2 })
     expect(accepted.entries.find(entry => entry.employee_id === world.users.worker.id && entry.date === today)?.code).toBe('НН')
-    expect(accepted.entries.find(entry => entry.employee_id === world.users.leave.id && entry.date === today)?.code).toBe('ОТ')
+    expect(accepted.entries.find(entry => entry.employee_id === world.users.leave.id && entry.date === today)?.code).toBe('О')
   } finally {
     await hrPage.close()
   }
@@ -124,7 +124,7 @@ test('UC-03: HR импортирует только известных сотр�
   const upload = { name: '0504421.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(await book.xlsx.writeBuffer()) }
   await open(page, 'hr')
   await page.getByLabel('Импорт формы 0504421', { exact: true }).setInputFiles(upload)
-  await expect(page.getByRole('alert')).toContainText(`Не найдены работники отдела с табельными номерами: ${staffNumber}`)
+  await expect(page.getByRole('alert')).toContainText(`Не найдены работники учреждения с табельными номерами: ${staffNumber}`)
   await world.ok('PUT', '/timesheet/employees/settings', [{ employee_id: world.users.worker.id, staff_number: staffNumber, hourly: true }])
   await page.getByLabel('Импорт формы 0504421', { exact: true }).setInputFiles(upload)
   await expect(page.getByRole('combobox', { name: 'Год', exact: true })).toHaveValue('2020')

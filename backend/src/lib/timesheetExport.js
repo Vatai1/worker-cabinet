@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import ExcelJS from 'exceljs'
 import PDFDocument from 'pdfkit'
 import { getTimesheetData, timesheetDates } from './timesheetData.js'
+import { TIMESHEET_CODES } from './timesheetCodes.js'
 import { VACATION_TIMESHEET_CODES } from './vacationTypes.js'
 
 const PDF_FONT = fileURLToPath(new URL('../assets/fonts/LiberationSans-Regular.ttf', import.meta.url))
@@ -110,10 +111,14 @@ export function createTimesheetWorkbook({ department, period, dates, nonWorkingD
   })
 
   sheet.addRow([]).height = 8
-  const legend = sheet.addRow(['Я — явка   НН — неявка   Б — больничный   К — командировка   В — нерабочий день   ОТ — основной отпуск'])
-  sheet.mergeCells(legend.number, 1, legend.number, dates.length + 2)
-  legend.font = { name: 'Arial', size: 9, color: excelColor('485872') }
-  legend.alignment = { vertical: 'middle', horizontal: 'left' }
+  const usedCodes = new Set(employees.flatMap(employee => employee.marks))
+  for (const { code, label } of TIMESHEET_CODES) {
+    if (!usedCodes.has(code)) continue
+    const legend = sheet.addRow([`${code} — ${label}`])
+    sheet.mergeCells(legend.number, 1, legend.number, dates.length + 2)
+    legend.font = { name: 'Arial', size: 9, color: excelColor('485872') }
+    legend.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true }
+  }
   return workbook
 }
 

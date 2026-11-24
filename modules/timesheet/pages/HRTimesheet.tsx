@@ -203,7 +203,16 @@ function TimesheetReview({ settingsRevision, journal }: { settingsRevision: numb
         <Button variant="outline" size="sm" disabled={loading || reviewing} onClick={() => { setError(null); setReload(value => value + 1) }}>Обновить</Button>
       </div>
 
-      <TimesheetTools sheet={currentSheet} versions={versions} departmentId={departmentId} manage journal={journal} onSelect={setSelectedVersion} onChanged={(id, importedYear, importedMonth) => { if (id) setSelectedVersion(id); if (importedYear) setYear(importedYear); if (importedMonth) setMonth(importedMonth); setReload(value => value + 1) }} />
+      <TimesheetTools sheet={currentSheet} versions={versions} departmentId={departmentId} manage journal={journal} onSelect={setSelectedVersion} onChanged={(id, importedYear, importedMonth, importedDepartment) => {
+        if (id) setSelectedVersion(id)
+        if (importedYear) setYear(importedYear)
+        if (importedMonth) setMonth(importedMonth)
+        if (importedDepartment) {
+          setDepartmentId(importedDepartment)
+          selectDate('')
+        }
+        setReload(value => value + 1)
+      }} />
       {error && <div role="alert" className="text-sm text-destructive">{error}</div>}
       {loading ? (
         <p role="status" className="py-8 text-center text-sm text-muted-foreground">Загрузка табеля…</p>

@@ -5,6 +5,7 @@
 .git
 dist
 backend
+!backend/src/lib/timesheetCodes.json
 docker
 deploy/ssl
 scripts

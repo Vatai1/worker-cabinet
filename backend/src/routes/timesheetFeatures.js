@@ -7,15 +7,16 @@ import { currentOrgId } from '../lib/orgQuery.js'
 import { testScopeAware } from '../utils/testScope.js'
 import { auditTimesheet } from '../lib/timesheetAccess.js'
 import { parseTimesheetImport } from '../lib/timesheetImport.js'
-import { getTimesheetData, getTimesheetEmployees, timesheetDates } from '../lib/timesheetData.js'
+import { getTimesheetData, timesheetDates } from '../lib/timesheetData.js'
 import { saveTimesheetEmployeeSettings } from '../lib/timesheetEmployeeSettings.js'
+import { MINUTE_CODES } from '../lib/timesheetCodes.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 1 } })
 const uploadFile = (req, res, next) => upload.single('file')(req, res, error => {
   if (!error) return next()
   if (error.code === 'LIMIT_FILE_SIZE') return next(new AppError('Файл больше 5 МБ', 413, 'FILE_TOO_LARGE'))
-  next(new ValidationError('Ожидается один XLSX-файл и отдел'))
+  next(new ValidationError('Ожидается один XLSX-файл. Отдел можно указать отдельно'))
 })
 
 export function timesheetFeatures({ loadTimesheet, saveMarks }) {
@@ -255,8 +256,8 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
         WHERE department_id = $1 AND year = $3 AND month = $4 RETURNING *`, [sheet.department_id, sheet.organization_id, sheet.year, sheet.month, req.body?.number?.trim() || null, req.body?.period ?? sheet.period, req.user.id, documentDate, req.body?.kind ?? 'correction'])
       const sourceIds = (await getTimesheetData(sheet, testScopeAware(req), db)).employees.map(e => e.id)
       await db.query("SELECT set_config('app.timesheet_actor', $1, true)", [String(req.user.id)])
-      await db.query(`INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, minutes, organization_id)
-        SELECT $1,employee_id,date,code,minutes,organization_id FROM timesheet_entries WHERE timesheet_id = $2 AND date = ANY($3::date[]) AND employee_id = ANY($4::int[])`, [created.id, sheet.id, timesheetDates(created), sourceIds])
+      await db.query(`INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, minutes, organization_id, is_automatic)
+        SELECT $1,employee_id,date,code,minutes,organization_id,is_automatic FROM timesheet_entries WHERE timesheet_id = $2 AND date = ANY($3::date[]) AND employee_id = ANY($4::int[])`, [created.id, sheet.id, timesheetDates(created), sourceIds])
       await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, reason)
         SELECT $1,date,'returned',employee_ids,'Новая версия табеля' FROM timesheet_days WHERE timesheet_id = $2 AND date = ANY($3::date[])`, [created.id, sheet.id, timesheetDates(created)])
       await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, reason)
@@ -274,8 +275,8 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
    * /timesheet/import:
    *   post:
    *     tags: [Timesheet]
-   *     summary: Импорт XLSX формы 0504421 в новую версию (HR)
-   *     description: Сопоставление только с действующими работниками отдела по табельному номеру. Неизвестные номера отклоняются. Заполненные прошедшие дни отправляются на проверку; будущие отметки и неполные дни не допускаются.
+   *     summary: Импорт XLSX формы 0504421 в новые версии табеля (HR)
+   *     description: Работники сопоставляются по табельному номеру в выбранном учреждении. Если отдел не указан, для каждого отдела из файла создаётся отдельная версия. Заполненные дни отправляются на проверку с отметками из файла, в том числе пустыми ячейками отдельных работников. Будущие отметки не допускаются. Любая ошибка отменяет импорт во все отделы.
    *     security: [{ bearerAuth: [] }]
    *     requestBody:
    *       required: true
@@ -283,51 +284,83 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
    *         multipart/form-data:
    *           schema:
    *             type: object
-   *             required: [file, department_id]
+   *             required: [file]
    *             properties:
    *               file: { type: string, format: binary }
    *               department_id: { type: integer }
    *     responses:
-   *       201: { description: Импортированная версия табеля }
-   *       400: { description: Ошибка формы или неизвестные работники }
+   *       201: { description: 'Первая импортированная версия и массив всех версий в поле sheets' }
+   *       400: { description: Ошибка формы или работники не найдены или без отдела }
    *       403: { description: Нет доступа }
    *       413: { description: Файл больше 5 МБ }
    */
   router.post('/import', requirePermission('timesheet:manage'), uploadFile, asyncHandler(async (req, res) => {
     if (!req.file || !req.file.originalname.toLowerCase().endsWith('.xlsx')) throw new ValidationError('Выберите XLSX формы 0504421, не более 5 МБ')
+    const orgId = currentOrgId(req)
+    if (!orgId) throw new ValidationError('Выберите учреждение')
     const imported = await parseTimesheetImport(req.file.buffer)
-    const result = await inTransaction(async db => {
-      const dept = await department(req, db)
-      const roster = await getTimesheetEmployees(db, { organization_id: dept.organization_id, department_id: dept.id }, testScopeAware(req))
-      const byNumber = new Map(roster.filter(e => e.staff_number).map(e => [e.staff_number, e]))
+    const sheets = await inTransaction(async db => {
+      const dept = req.body.department_id === undefined ? null : await department(req, db)
+      const includeTest = testScopeAware(req)
+      const { rows: roster } = await db.query(
+        `SELECT s.user_id AS id, s.staff_number, s.hourly, d.id AS department_id
+         FROM timesheet_employee_settings s
+         JOIN users u ON u.id = s.user_id
+         JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = s.organization_id
+         LEFT JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id)
+           AND d.organization_id = s.organization_id AND ($3 OR NOT d.is_test)
+         WHERE s.organization_id = $1 AND s.staff_number = ANY($2::text[])
+           AND uo.is_active AND u.status <> 'inactive' AND ($3 OR NOT u.is_test)
+           AND ($4::int IS NULL OR d.id = $4)`,
+        [orgId, imported.employees.map(e => e.staffNumber), includeTest, dept?.id ?? null]
+      )
+      const byNumber = new Map(roster.map(e => [e.staff_number, e]))
       const unknown = imported.employees.filter(e => !byNumber.has(e.staffNumber))
-      if (unknown.length) throw new ValidationError(`Не найдены работники отдела с табельными номерами: ${unknown.map(e => e.staffNumber).join(', ')}`)
-      const dates = timesheetDates(imported)
+      if (unknown.length) throw new ValidationError(`Не найдены работники ${dept ? 'отдела' : 'учреждения'} с табельными номерами: ${unknown.map(e => e.staffNumber).join(', ')}`)
+      const withoutDepartment = roster.filter(e => !e.department_id)
+      if (withoutDepartment.length) throw new ValidationError(`Не указан отдел для работников с табельными номерами: ${withoutDepartment.map(e => e.staff_number).join(', ')}`)
       const today = toLocalDateStr(new Date())
-      const ids = imported.employees.map(e => byNumber.get(e.staffNumber).id)
-      const marks = new Map(dates.map(date => [date, new Map()]))
+      const groups = new Map()
+      const filledDays = new Set()
       for (const employee of imported.employees) {
         const known = byNumber.get(employee.staffNumber)
+        if (!groups.has(known.department_id)) groups.set(known.department_id, { ids: [], marks: new Map() })
+        const group = groups.get(known.department_id)
+        group.ids.push(known.id)
         for (const entry of employee.entries) {
-          if (entry.date > today && entry.code) throw new ValidationError(`В файле заполнена будущая дата ${entry.date}`)
-          if (entry.date <= today && !entry.code) throw new ValidationError(`Пустая отметка ${employee.staffNumber} за ${entry.date}`)
-          if (known.hourly && entry.code === 'Я' && !entry.minutes) throw new ValidationError(`Заполните часы ${employee.staffNumber} за ${entry.date}`)
-          if (entry.date <= today) marks.get(entry.date).set(known.id, entry)
+          if (entry.date > today) {
+            if (entry.code) throw new ValidationError(`В файле заполнена будущая дата ${entry.date}`)
+            continue
+          }
+          if (known.hourly && MINUTE_CODES.includes(entry.code) && !entry.minutes) throw new ValidationError(`Заполните часы ${employee.staffNumber} за ${entry.date}`)
+          if (!group.marks.has(entry.date)) group.marks.set(entry.date, new Map())
+          group.marks.get(entry.date).set(known.id, entry)
+          if (entry.code) filledDays.add(entry.date)
         }
       }
-      const { rows: [created] } = await db.query(`INSERT INTO timesheets (department_id, organization_id, year, month, version, number, document_date, kind, period, created_by)
-        SELECT $1,$2,$3,$4,COALESCE(MAX(version),0)+1,$5,$6,$7,$8,$9 FROM timesheets
-        WHERE department_id = $1 AND year = $3 AND month = $4 RETURNING *`,
-        [dept.id, dept.organization_id, imported.year, imported.month, imported.number, imported.document_date, imported.kind, imported.period, req.user.id])
-      for (const [date, entries] of marks) {
-        if (!entries.size) continue
-        await saveMarks(db, created, date, entries, true, req.user.id)
-        await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, submitted_by) VALUES ($1,$2,'submitted',$3,$4)`, [created.id, date, ids, req.user.id])
+      if (!filledDays.size) throw new ValidationError('В файле нет заполненных отметок')
+      const { rows: departments } = await db.query(
+        'SELECT id FROM departments WHERE organization_id = $1 AND id = ANY($2::int[]) AND ($3 OR NOT is_test) ORDER BY id FOR UPDATE',
+        [orgId, [...groups.keys()], includeTest]
+      )
+      if (departments.length !== groups.size) throw new ValidationError('Состав отделов изменился. Повторите импорт')
+      const createdSheets = []
+      for (const { id } of departments) {
+        const { ids, marks } = groups.get(id)
+        const { rows: [created] } = await db.query(`INSERT INTO timesheets (department_id, organization_id, year, month, version, number, document_date, kind, period, created_by)
+          SELECT $1,$2,$3,$4,COALESCE(MAX(version),0)+1,$5,$6,$7,$8,$9 FROM timesheets
+          WHERE department_id = $1 AND year = $3 AND month = $4 RETURNING *`,
+          [id, orgId, imported.year, imported.month, imported.number, imported.document_date, imported.kind, imported.period, req.user.id])
+        for (const date of filledDays) {
+          await saveMarks(db, created, date, marks.get(date), true, req.user.id)
+          await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, submitted_by) VALUES ($1,$2,'submitted',$3,$4)`, [created.id, date, ids, req.user.id])
+        }
+        await auditTimesheet(db, created, req.user.id, 'Импорт', { filename: req.file.originalname, number: imported.number, employees: ids.length })
+        createdSheets.push(created)
       }
-      await auditTimesheet(db, created, req.user.id, 'Импорт', { filename: req.file.originalname, number: imported.number, employees: ids.length })
-      return created
+      return createdSheets
     })
-    res.status(201).json(result)
+    res.status(201).json({ ...sheets[0], sheets })
   }))
 
   return router
