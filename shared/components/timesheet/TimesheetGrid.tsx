@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/shared/components/ui/Button'
+import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { Send } from 'lucide-react'
 import { ATTENDANCE_CODES, CODE_COLORS, MINUTE_CODES } from '@/shared/lib/timesheetCodes'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
@@ -71,6 +72,7 @@ interface Props {
 }
 
 const WEEKDAY_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
+const formatTime = (minutes: number) => `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`
 export const TIMESHEET_DAY_LABELS = {
   submitted: 'На проверке у HR',
   approved: 'Принят',
@@ -82,6 +84,13 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
   const [changes, setChanges] = useState<Record<number, { code: string | null; minutes: number | null }>>({})
   const [working, setWorking] = useState<'saving' | 'submitting' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [focusHoursFor, setFocusHoursFor] = useState<number | null>(null)
+  const hoursInput = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (focusHoursFor === null) return
+    hoursInput.current?.focus()
+    setFocusHoursFor(null)
+  }, [focusHoursFor])
   const entryMap = useMemo(() => new Map(entries.map(e => [`${e.employee_id}:${e.date}`, e])), [entries])
   const dayMap = useMemo(() => new Map(days.map(d => [d.date, d])), [days])
   const transfersByEmployee = useMemo(() => {
@@ -97,6 +106,16 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
   const editableIds = new Set(savedRoster?.length ? savedRoster : sheet.currentEmployeeIds)
   const workingDay = !nonWorkingDays.includes(selectedDate)
   const allowedCodes = workingDay ? ATTENDANCE_CODES : ATTENDANCE_CODES.filter(item => item.code === 'РП')
+  const markOptions = [
+    { value: '', label: workingDay ? 'Без отметки' : 'В — Выходной', shortLabel: workingDay ? '—' : 'В' },
+    ...allowedCodes.map(item => ({ value: item.code, label: `${item.code} — ${item.label}`, shortLabel: item.code })),
+  ]
+  const hourlyMarkOptions = markOptions.map(option => option.value === 'Я'
+    ? { ...option, label: 'Указать часы работы', shortLabel: 'Часы' }
+    : option)
+  const attendanceIds = employees.filter(employee => !employee.hourly).map(employee => employee.id)
+  const hasHourlyEmployees = attendanceIds.length < employees.length
+  const editableColumnWidth = hasHourlyEmployees ? 'w-16' : 'w-12'
   const dates = Array.from({ length: sheet.period === 'half' ? 15 : new Date(year, month, 0).getDate() }, (_, i) =>
     `${year}-${String(month).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`)
   const hasChanges = Object.keys(changes).length > 0
@@ -130,6 +149,11 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
 
   function changeCode(employeeId: number, code: string | null) {
     setChanges(previous => ({ ...previous, [employeeId]: { code, minutes: code && MINUTE_CODES.includes(code) ? minutesAt(employeeId, selectedDate) : null } }))
+  }
+
+  function editHours(employeeId: number) {
+    changeCode(employeeId, 'Я')
+    setFocusHoursFor(employeeId)
   }
 
   function changeTime(employeeId: number, hours: number, minutes: number) {
@@ -178,9 +202,9 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
     <div className="space-y-3">
       {error && <div role="alert" className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">{error}</div>}
       <div className="flex flex-wrap items-center gap-2">
-        {editable && workingDay && (
-          <Button variant="outline" size="sm" disabled={!!working} onClick={() => fillAttendance(sheet.employees.map(e => e.id))}>
-            Явка всем
+        {editable && workingDay && attendanceIds.length > 0 && (
+          <Button variant="outline" size="sm" disabled={!!working} onClick={() => fillAttendance(attendanceIds)}>
+            {hasHourlyEmployees ? 'Явка всем с обычным учётом' : 'Явка всем'}
           </Button>
         )}
         {editable && hasChanges && (
@@ -198,8 +222,8 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
           </Button>
         )}
         <div className="flex gap-2 ml-auto">
-          <Button variant="outline" size="sm" onClick={() => handleExport('excel')}>Excel</Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}>PDF</Button>
+          <Button variant="outline" size="sm" disabled={!!working} onClick={() => handleExport('excel')}>Excel</Button>
+          <Button variant="outline" size="sm" disabled={!!working} onClick={() => handleExport('pdf')}>PDF</Button>
         </div>
       </div>
       {hasChanges && (
@@ -220,7 +244,7 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                     key={date}
                     scope="col"
                     title={status}
-                    className={`border-b border-r py-1 text-center ${nonWorkingDays.includes(date) ? 'bg-red-500/10' : 'bg-muted'} ${date === selectedDate ? 'ring-2 ring-inset ring-primary' : ''}`}
+                    className={`border-b border-r py-1 text-center ${nonWorkingDays.includes(date) ? 'bg-red-500/10' : 'bg-muted'} ${date === selectedDate ? 'ring-2 ring-inset ring-primary' : ''} ${editable && date === selectedDate ? editableColumnWidth : ''}`}
                   >
                     <div className="text-sm">{Number(date.slice(-2))}</div>
                     <div className="text-[10px] font-normal text-muted-foreground">{WEEKDAY_SHORT[new Date(date).getUTCDay()]}</div>
@@ -258,37 +282,46 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                     const code = codes[i]
                     const minutes = minutesAt(employee.id, date)
                     const color = code ? CODE_COLORS[code] : ''
+                    const hourlyAttendance = employee.hourly && code === 'Я'
                     return (
                       <td key={date} className={`border-b border-r text-center ${color ?? ''} ${date > today ? 'opacity-60' : ''}`}>
                         {canEdit(employee.id, date) ? (
                           <>
-                          <select
+                          <SelectDropdown
                             aria-label={`Отметка за ${date} — ${name}`}
+                            floating
+                            options={employee.hourly ? hourlyMarkOptions : markOptions}
+                            placeholder={code ?? '—'}
                             value={code === 'В' && !workingDay ? '' : code ?? ''}
                             disabled={!!working}
-                            onChange={e => changeCode(employee.id, e.target.value || null)}
-                            className="w-full cursor-pointer appearance-none bg-transparent py-2 text-center font-medium hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-                          >
-                            <option value="">{workingDay ? '—' : 'В'}</option>
-                            {allowedCodes.map(c => <option key={c.code} value={c.code} title={c.label}>{c.code}</option>)}
-                          </select>
+                            onChange={value => {
+                              if (value === 'Я' && employee.hourly) editHours(employee.id)
+                              else changeCode(employee.id, value || null)
+                            }}
+                            className="mx-auto h-7 w-[calc(100%-0.25rem)] min-w-0 justify-center gap-0.5 rounded-md border-border/70 bg-card/70 px-0.5 py-0 text-xs font-semibold text-current [&_svg]:size-2.5"
+                          />
                           {code && MINUTE_CODES.includes(code) && (employee.hourly || code !== 'Я') && <div className="flex flex-col gap-1 pb-1">
-                            <input type="number" min={0} max={24} aria-label={`Часы за ${date} — ${name}`} placeholder="ч" value={minutes == null ? '' : Math.floor(minutes / 60)} disabled={!!working} onChange={e => changeTime(employee.id, Number(e.target.value), (minutes ?? 0) % 60)} className="w-full bg-background text-center" />
+                            <input ref={focusHoursFor === employee.id ? hoursInput : undefined} type="number" min={0} max={24} aria-label={`Часы за ${date} — ${name}`} placeholder="ч" value={minutes == null ? '' : Math.floor(minutes / 60)} disabled={!!working} onChange={e => changeTime(employee.id, Number(e.target.value), (minutes ?? 0) % 60)} className="w-full bg-background text-center" />
                             <input type="number" min={0} max={59} aria-label={`Минуты за ${date} — ${name}`} placeholder="м" value={minutes == null ? '' : minutes % 60} disabled={!!working} onChange={e => changeTime(employee.id, Math.floor((minutes ?? 0) / 60), Number(e.target.value))} className="w-full bg-background text-center" />
                           </div>}
                           </>
-                        ) : <span className="block py-2 font-semibold">{code ?? ''}{minutes != null && <span className="block text-[9px] font-normal">{Math.floor(minutes / 60)}:{String(minutes % 60).padStart(2, '0')}</span>}</span>}
+                        ) : <span className="block py-2 font-semibold">
+                          {hourlyAttendance && minutes != null ? formatTime(minutes) : code ?? ''}
+                          {!hourlyAttendance && minutes != null && <span className="block text-[9px] font-normal">{formatTime(minutes)}</span>}
+                        </span>}
                       </td>
                     )
                   })}
                   {['Я', 'О'].map(code => (
                     <td key={code} className="border-b border-r text-center font-bold">{codes.filter(mark => mark === code).length || ''}</td>
                   ))}
-                  <td className="border-b border-r text-center font-bold">{(() => { const total = dates.reduce((sum, date) => sum + (minutesAt(employee.id, date) ?? 0), 0); return total ? `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}` : '—' })()}</td>
+                  <td className="border-b border-r text-center font-bold">{(() => { const total = dates.reduce((sum, date) => sum + (minutesAt(employee.id, date) ?? 0), 0); return total ? formatTime(total) : '—' })()}</td>
                   {editable && workingDay && (
                     <td className="sticky right-0 border-b border-l bg-card text-center">
                       {canEdit(employee.id, selectedDate) && !codeAt(employee.id, selectedDate) && (
-                        <Button variant="ghost" size="sm" disabled={!!working} onClick={() => fillAttendance([employee.id])}>Явка</Button>
+                        employee.hourly
+                          ? <Button variant="ghost" size="sm" aria-label={`Указать часы — ${name}`} disabled={!!working} onClick={() => editHours(employee.id)}>Часы</Button>
+                          : <Button variant="ghost" size="sm" disabled={!!working} onClick={() => fillAttendance([employee.id])}>Явка</Button>
                       )}
                     </td>
                   )}

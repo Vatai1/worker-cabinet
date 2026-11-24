@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/shared/components/ui/Button'
 import { TableCard, TableEmptyRow, TableFrame, TableHeadRow, TableSearch, TableSkeleton, TD, TH, TR } from '@/shared/components/ui/DataTable'
+import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { Users } from 'lucide-react'
 import { cn, getErrorMessage } from '@/shared/lib/utils'
 import { apiGet, apiPut } from '@/shared/lib/apiClient'
@@ -103,16 +104,31 @@ export function TimesheetEmployees({ onSaved }: { onSaved: () => void }) {
   return <TableCard icon={Users} title="Сотрудники" subtitle="Табельные номера и режим учёта в выбранном учреждении">
     <div className="flex flex-wrap items-center gap-2">
       <TableSearch value={search} onChange={value => { setSearch(value); setSelected([]) }} placeholder="Поиск по ФИО, должности или табельному номеру" />
-      <select aria-label="Отдел сотрудников" value={department} disabled={saving} onChange={event => { setDepartment(event.target.value); setSelected([]) }} className="h-9 rounded-lg border border-border bg-card px-3 text-sm">
-        <option value="all">Все отделы</option>
-        {departments.map(([id, name]) => <option key={id} value={String(id)}>{name}</option>)}
-        <option value="none">Без отдела</option>
-      </select>
-      <select aria-label="Режим учёта сотрудников" value={mode} disabled={saving} onChange={event => { setMode(event.target.value); setSelected([]) }} className="h-9 rounded-lg border border-border bg-card px-3 text-sm">
-        <option value="all">Любой режим учёта</option>
-        <option value="hourly">Почасовой учёт</option>
-        <option value="attendance">По отметкам</option>
-      </select>
+      <SelectDropdown
+        aria-label="Отдел сотрудников"
+        floating
+        options={[
+          { value: 'all', label: 'Все отделы' },
+          ...departments.map(([id, label]) => ({ value: String(id), label })),
+          { value: 'none', label: 'Без отдела' },
+        ]}
+        value={department}
+        disabled={saving}
+        className="max-w-64"
+        onChange={value => { setDepartment(value); setSelected([]) }}
+      />
+      <SelectDropdown
+        aria-label="Режим учёта сотрудников"
+        floating
+        options={[
+          { value: 'all', label: 'Любой режим учёта' },
+          { value: 'hourly', label: 'Почасовой учёт' },
+          { value: 'attendance', label: 'Без почасового учёта' },
+        ]}
+        value={mode}
+        disabled={saving}
+        onChange={value => { setMode(value); setSelected([]) }}
+      />
       <Button variant="outline" disabled={saving || loading || changedCount > 0} onClick={() => { setSelected([]); setSuccess(''); setReload(value => value + 1) }}>Обновить</Button>
     </div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -150,7 +166,7 @@ export function TimesheetEmployees({ onSaved }: { onSaved: () => void }) {
               <th scope="row" className={cn(TD, 'text-left')}><div className="font-medium">{employee.name}</div><div className="text-xs font-normal text-muted-foreground">{employee.position}</div></th>
               <td className={cn(TD, 'text-muted-foreground')}>{employee.department_name ?? 'Без отдела'}</td>
               <td className={TD}><input aria-label={`Табельный номер — ${employee.name}`} value={current.staff_number ?? ''} maxLength={64} disabled={saving} placeholder="Не указан" onChange={event => changeSettings([employee.id], { staff_number: event.target.value })} className="h-9 w-40 rounded-lg border border-border bg-background px-3 text-sm" /></td>
-              <td className={TD}><label className="inline-flex cursor-pointer items-center gap-2"><input type="checkbox" aria-label={`Почасовой учёт — ${employee.name}`} checked={current.hourly} disabled={saving} onChange={event => changeSettings([employee.id], { hourly: event.target.checked })} /><span className="text-xs">{current.hourly ? 'Почасовой' : 'По отметкам'}</span></label></td>
+              <td className={TD}><label className="inline-flex cursor-pointer items-center gap-2"><input type="checkbox" aria-label={`Почасовой учёт — ${employee.name}`} checked={current.hourly} disabled={saving} onChange={event => changeSettings([employee.id], { hourly: event.target.checked })} /><span className="text-xs">Почасовой</span></label></td>
             </tr>
           })}
         </tbody>

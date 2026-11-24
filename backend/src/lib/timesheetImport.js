@@ -1,12 +1,76 @@
 import ExcelJS from 'exceljs'
 import PizZip from 'pizzip'
-import { ValidationError } from '../middleware/errors.js'
+import { ConflictError, ValidationError } from '../middleware/errors.js'
 import { MINUTE_CODES, TIMESHEET_CODES } from './timesheetCodes.js'
 import { timesheetDates } from './timesheetData.js'
 
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 const COLUMNS = ['H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'Z', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AO']
 const CODES = new Set(TIMESHEET_CODES.map(item => item.code))
+
+function normalizeEmployeeText(value) {
+  return value.normalize('NFC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('ru-RU').replace(/ё/gu, 'е')
+}
+
+export async function resolveTimesheetImportEmployees(db, employees, { orgId, departmentId, includeTest }) {
+  const { rows: roster } = await db.query(
+    `SELECT u.id, CONCAT_WS(' ', u.last_name, u.first_name, u.middle_name) AS name, u.position,
+            settings.staff_number, COALESCE(settings.hourly, false) AS hourly, d.id AS department_id
+     FROM user_organizations uo JOIN users u ON u.id = uo.user_id
+     LEFT JOIN timesheet_employee_settings settings ON settings.user_id = u.id AND settings.organization_id = uo.org_id
+     LEFT JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id)
+       AND d.organization_id = uo.org_id AND ($2 OR NOT d.is_test)
+     WHERE uo.org_id = $1 AND uo.is_active AND u.status <> 'inactive' AND ($2 OR NOT u.is_test)
+       AND ($3::int IS NULL OR d.id = $3)`,
+    [orgId, includeTest, departmentId]
+  )
+  const byNumber = new Map(roster.filter(employee => employee.staff_number).map(employee => [employee.staff_number, employee]))
+  const byName = Map.groupBy(roster, employee => normalizeEmployeeText(employee.name))
+  const unmatchedNumbers = employees.filter(employee => !byNumber.has(employee.staffNumber)).map(employee => employee.staffNumber)
+  if (unmatchedNumbers.length) {
+    const { rows: [used] } = await db.query(
+      'SELECT staff_number FROM timesheet_employee_settings WHERE organization_id = $1 AND staff_number = ANY($2::text[]) LIMIT 1',
+      [orgId, unmatchedNumbers]
+    )
+    if (used) throw new ConflictError(`Табельный номер «${used.staff_number}» уже занят в учреждении`)
+  }
+
+  const matches = new Map()
+  const assignments = []
+  const unknown = []
+  const employeeIds = new Set()
+  for (const { staffNumber, name, position } of employees) {
+    const sameName = byName.get(normalizeEmployeeText(name)) ?? []
+    const numbered = byNumber.get(staffNumber)
+    if (numbered && sameName.length && !sameName.some(employee => employee.id === numbered.id)) {
+      throw new ConflictError(`Табельный номер «${staffNumber}» закреплён за другим сотрудником. Проверьте ФИО «${name}»`)
+    }
+    const job = normalizeEmployeeText(position)
+    const samePosition = !numbered && sameName.length > 1 && job
+      ? sameName.filter(employee => normalizeEmployeeText(employee.position ?? '') === job)
+      : []
+    const named = samePosition.length ? samePosition : sameName
+    if (!numbered && named.length > 1) {
+      throw new ConflictError(`Найдено несколько сотрудников с ФИО «${name}». Проверьте должность в файле или назначьте номер «${staffNumber}» на вкладке «Сотрудники»`)
+    }
+    const employee = numbered ?? named[0]
+    if (!employee) {
+      unknown.push(staffNumber)
+      continue
+    }
+    if (employeeIds.has(employee.id)) throw new ConflictError(`Сотрудник «${name}» указан в файле с несколькими табельными номерами`)
+    if (!numbered) {
+      if (employee.staff_number) throw new ConflictError(`У сотрудника «${name}» уже указан другой табельный номер. Проверьте номер «${staffNumber}» в файле`)
+      assignments.push({ employee_id: employee.id, staff_number: staffNumber })
+    }
+    matches.set(staffNumber, employee)
+    employeeIds.add(employee.id)
+  }
+  if (unknown.length) throw new ValidationError(`Не найдены работники ${departmentId ? 'отдела' : 'учреждения'} с табельными номерами: ${unknown.join(', ')}`)
+  const withoutDepartment = [...matches].filter(([, employee]) => !employee.department_id).map(([staffNumber]) => staffNumber)
+  if (withoutDepartment.length) throw new ValidationError(`Не указан отдел для работников с табельными номерами: ${withoutDepartment.join(', ')}`)
+  return { matches, assignments }
+}
 
 function removeWorksheetDrawings(zip) {
   const graphics = /^(?:xl\/drawings\/|xl\/media\/)/
@@ -75,13 +139,14 @@ export async function parseTimesheetImport(buffer) {
     const nameCell = sheet.getCell(`C${row}`)
     if (nameCell.type === ExcelJS.ValueType.Merge) continue
     const name = text(`C${row}`)
+    const position = text(`F${row}`)
     const numberCell = sheet.getCell(`D${row}`)
     const staffNumber = Number.isSafeInteger(numberCell.value) && /^0+$/.test(numberCell.numFmt ?? '')
       ? String(numberCell.value).padStart(numberCell.numFmt.length, '0')
       : text(`D${row}`)
     if (!name && !staffNumber) continue
     if (!staffNumber) {
-      if (name && text(`F${row}`)) throw new ValidationError(`Нет табельного номера в строке ${row}`)
+      if (name && position) throw new ValidationError(`Нет табельного номера в строке ${row}`)
       continue
     }
     if (!name || staffNumber.length > 64 || numbers.has(staffNumber)) throw new ValidationError(`Некорректный или повторный табельный номер в строке ${row}`)
@@ -97,7 +162,7 @@ export async function parseTimesheetImport(buffer) {
       if (minutes > 0 && !MINUTE_CODES.includes(code)) throw new ValidationError(`Часы не допускаются для отметки ${code ?? 'без кода'} в строке ${row}: ${staffNumber}`)
       return { date: day, code, minutes: MINUTE_CODES.includes(code) ? minutes : null }
     })
-    employees.push({ staffNumber, name, entries })
+    employees.push({ staffNumber, name, position, entries })
     row++
   }
   if (!employees.length) throw new ValidationError('В файле нет работников с табельными номерами (колонка D, начиная со строки 15)')

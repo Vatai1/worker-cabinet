@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { TimesheetAuditLog } from '@/shared/components/timesheet/TimesheetAuditLog'
 import { Button } from '@/shared/components/ui/Button'
+import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { API_BASE_URL } from '@/shared/lib/api'
@@ -18,6 +19,7 @@ interface Props {
   onChanged: (id?: number, year?: number, month?: number, departmentId?: number) => void
 }
 interface Manager { id: number; name: string; primary: boolean; assigned: boolean }
+type ImportResult = Timesheet & { sheets?: Timesheet[]; assigned_staff_numbers?: number; error?: string }
 
 export function TimesheetTools({ sheet, versions, departmentId, manage = false, journal = false, onSelect, onChanged }: Props) {
   const [busy, setBusy] = useState(false)
@@ -41,16 +43,38 @@ export function TimesheetTools({ sheet, versions, departmentId, manage = false, 
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center gap-2">
       {sheet && <>
-        <select aria-label="Версия табеля" disabled={busy} value={sheet.id} onChange={e => onSelect(Number(e.target.value))} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
-          {versions.map(version => <option key={version.id} value={version.id}>Версия {version.version} · {version.number ? `№ ${version.number}` : 'Без номера'} · {version.document_date ? formatDate(version.document_date) : ''} · {version.kind === 'correction' ? 'Корректирующий' : 'Первичный'} · {version.period === 'half' ? '1–15' : 'Месяц'}</option>)}
-        </select>
+        <SelectDropdown
+          aria-label="Версия табеля"
+          floating
+          options={versions.map(version => ({
+            value: String(version.id),
+            label: [
+              `Версия ${version.version}`,
+              version.number ? `№ ${version.number}` : 'Без номера',
+              version.document_date && formatDate(version.document_date),
+              version.kind === 'correction' ? 'Корректирующий' : 'Первичный',
+              version.period === 'half' ? '1–15' : 'Месяц',
+            ].filter(Boolean).join(' · '),
+          }))}
+          value={String(sheet.id)}
+          disabled={busy}
+          className="max-w-[min(28rem,calc(100vw-2rem))]"
+          onChange={value => onSelect(Number(value))}
+        />
         {!manage && <Button variant="outline" size="sm" onClick={() => setAuditOpen(value => !value)}>{auditOpen ? 'Закрыть журнал' : 'Журнал'}</Button>}
       </>}
       {!journal && manage && <>
-        <select aria-label="Область импорта табеля" disabled={busy} value={importScope} onChange={event => setImportScope(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
-          <option value="organization">По отделам учреждения</option>
-          <option value="department" disabled={!departmentId}>В выбранный отдел</option>
-        </select>
+        <SelectDropdown
+          aria-label="Область импорта табеля"
+          floating
+          options={[
+            { value: 'organization', label: 'По отделам учреждения' },
+            { value: 'department', label: 'В выбранный отдел', disabled: !departmentId },
+          ]}
+          value={importScope}
+          disabled={busy}
+          onChange={setImportScope}
+        />
         <label className={`rounded-lg border border-border px-3 py-2 text-sm ${busy ? 'opacity-50' : 'cursor-pointer'}`}>
           Импорт 0504421 (XLSX)
           <input type="file" accept=".xlsx" disabled={busy || (importScope === 'department' && !departmentId)} className="sr-only" aria-label="Импорт формы 0504421" onChange={event => {
@@ -62,12 +86,14 @@ export function TimesheetTools({ sheet, versions, departmentId, manage = false, 
               body.append('file', file)
               if (importScope === 'department' && departmentId) body.append('department_id', String(departmentId))
               const response = await fetchWithRetry(`${API_BASE_URL}/timesheet/import`, { method: 'POST', headers: getAuthHeaders(), body })
-              const data = await response.json()
+              const data: ImportResult = await response.json()
               if (!response.ok) throw new Error(data.error || 'Ошибка импорта')
               const sheets: Timesheet[] = data.sheets ?? [data]
               const target = sheets.find(version => version.department_id === departmentId) ?? sheets[0]
               onChanged(target.id, target.year, target.month, target.department_id)
-              toast.success(`Импортировано табелей: ${sheets.length}`)
+              toast.success(`Импортировано табелей: ${sheets.length}`, {
+                description: data.assigned_staff_numbers ? `Присвоено табельных номеров: ${data.assigned_staff_numbers}` : undefined,
+              })
             })
           }} />
         </label>
@@ -87,8 +113,28 @@ export function TimesheetTools({ sheet, versions, departmentId, manage = false, 
       }}>
         <label className="space-y-1">Номер<input aria-label="Номер новой версии" value={number} maxLength={64} onChange={e => setNumber(e.target.value)} className="block rounded border border-border bg-background p-2" /></label>
         <label className="space-y-1">Дата (пусто — сегодня)<input type="date" min="2000-01-01" max="2100-12-31" value={documentDate} onChange={e => setDocumentDate(e.target.value)} className="block rounded border border-border bg-background p-2" /></label>
-        <label className="space-y-1">Тип<select value={kind} onChange={e => setKind(e.target.value)} className="block rounded border border-border bg-background p-2"><option value="original">Первичный</option><option value="correction">Корректирующий</option></select></label>
-        <label className="space-y-1">Период<select value={period || sheet.period} onChange={e => setPeriod(e.target.value)} className="block rounded border border-border bg-background p-2"><option value="half">Первая половина</option><option value="month">Месяц</option></select></label>
+        <div className="space-y-1">
+          <span className="block">Тип</span>
+          <SelectDropdown
+            aria-label="Тип новой версии"
+            floating
+            options={[{ value: 'original', label: 'Первичный' }, { value: 'correction', label: 'Корректирующий' }]}
+            value={kind}
+            disabled={busy}
+            onChange={setKind}
+          />
+        </div>
+        <div className="space-y-1">
+          <span className="block">Период</span>
+          <SelectDropdown
+            aria-label="Период новой версии"
+            floating
+            options={[{ value: 'half', label: 'Первая половина' }, { value: 'month', label: 'Месяц' }]}
+            value={period || sheet.period}
+            disabled={busy}
+            onChange={setPeriod}
+          />
+        </div>
         <Button size="sm" disabled={busy}>Создать версию</Button>
       </form>
       <p className="mt-2 text-xs text-muted-foreground">Отметки копируются, отправленные дни возвращаются на доработку в новой версии. Предыдущая версия сохраняется.</p>

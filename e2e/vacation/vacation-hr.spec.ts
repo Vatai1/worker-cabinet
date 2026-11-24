@@ -164,7 +164,7 @@ test.describe('Отпуск: HR', () => {
     await card.locator(`[data-day="${THIS_YEAR}-01-15"]`).click()
     await card.locator('input[type="date"]').fill(CUSTOM_DAY)
     await card.getByTitle('Праздник (не входит в отпуск)').click()
-    await card.getByRole('button', { name: 'Выходной (входит в отпуск)', exact: true }).click()
+    await card.getByRole('option', { name: 'Выходной (входит в отпуск)', exact: true }).click()
     await card.getByPlaceholder('Например, День города').fill('e2e-vhr день')
     await card.getByRole('button', { name: 'Сохранить' }).click()
 

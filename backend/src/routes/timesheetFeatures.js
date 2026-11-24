@@ -6,7 +6,7 @@ import { requirePermission } from '../lib/permissions.js'
 import { currentOrgId } from '../lib/orgQuery.js'
 import { testScopeAware } from '../utils/testScope.js'
 import { auditTimesheet } from '../lib/timesheetAccess.js'
-import { parseTimesheetImport } from '../lib/timesheetImport.js'
+import { parseTimesheetImport, resolveTimesheetImportEmployees } from '../lib/timesheetImport.js'
 import { getTimesheetData, timesheetDates } from '../lib/timesheetData.js'
 import { saveTimesheetEmployeeSettings } from '../lib/timesheetEmployeeSettings.js'
 import { MINUTE_CODES } from '../lib/timesheetCodes.js'
@@ -276,7 +276,7 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
    *   post:
    *     tags: [Timesheet]
    *     summary: Импорт XLSX формы 0504421 в новые версии табеля (HR)
-   *     description: Работники сопоставляются по табельному номеру в выбранном учреждении. Если отдел не указан, для каждого отдела из файла создаётся отдельная версия. Заполненные дни отправляются на проверку с отметками из файла, в том числе пустыми ячейками отдельных работников. Будущие отметки не допускаются. Любая ошибка отменяет импорт во все отделы.
+   *     description: Работники сопоставляются по табельному номеру в выбранном учреждении. Если номер ещё не задан, он берётся из файла при однозначном совпадении ФИО. Для полных тёзок дополнительно проверяется должность. Если отдел не указан, для каждого отдела из файла создаётся отдельная версия. Заполненные дни отправляются на проверку с отметками из файла, в том числе пустыми ячейками отдельных работников. Будущие отметки не допускаются. Любая ошибка отменяет назначение номеров и импорт во все отделы.
    *     security: [{ bearerAuth: [] }]
    *     requestBody:
    *       required: true
@@ -289,9 +289,10 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
    *               file: { type: string, format: binary }
    *               department_id: { type: integer }
    *     responses:
-   *       201: { description: 'Первая импортированная версия и массив всех версий в поле sheets' }
+   *       201: { description: 'Первая импортированная версия, массив версий в поле sheets и число присвоенных номеров в assigned_staff_numbers' }
    *       400: { description: Ошибка формы или работники не найдены или без отдела }
    *       403: { description: Нет доступа }
+   *       409: { description: Конфликт табельного номера или несколько работников с таким ФИО }
    *       413: { description: Файл больше 5 МБ }
    */
   router.post('/import', requirePermission('timesheet:manage'), uploadFile, asyncHandler(async (req, res) => {
@@ -299,31 +300,18 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
     const orgId = currentOrgId(req)
     if (!orgId) throw new ValidationError('Выберите учреждение')
     const imported = await parseTimesheetImport(req.file.buffer)
-    const sheets = await inTransaction(async db => {
+    const { sheets, assignedCount } = await inTransaction(async db => {
+      await db.query('SELECT id FROM organizations WHERE id = $1 FOR UPDATE', [orgId])
       const dept = req.body.department_id === undefined ? null : await department(req, db)
       const includeTest = testScopeAware(req)
-      const { rows: roster } = await db.query(
-        `SELECT s.user_id AS id, s.staff_number, s.hourly, d.id AS department_id
-         FROM timesheet_employee_settings s
-         JOIN users u ON u.id = s.user_id
-         JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = s.organization_id
-         LEFT JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id)
-           AND d.organization_id = s.organization_id AND ($3 OR NOT d.is_test)
-         WHERE s.organization_id = $1 AND s.staff_number = ANY($2::text[])
-           AND uo.is_active AND u.status <> 'inactive' AND ($3 OR NOT u.is_test)
-           AND ($4::int IS NULL OR d.id = $4)`,
-        [orgId, imported.employees.map(e => e.staffNumber), includeTest, dept?.id ?? null]
-      )
-      const byNumber = new Map(roster.map(e => [e.staff_number, e]))
-      const unknown = imported.employees.filter(e => !byNumber.has(e.staffNumber))
-      if (unknown.length) throw new ValidationError(`Не найдены работники ${dept ? 'отдела' : 'учреждения'} с табельными номерами: ${unknown.map(e => e.staffNumber).join(', ')}`)
-      const withoutDepartment = roster.filter(e => !e.department_id)
-      if (withoutDepartment.length) throw new ValidationError(`Не указан отдел для работников с табельными номерами: ${withoutDepartment.map(e => e.staff_number).join(', ')}`)
+      const { matches, assignments } = await resolveTimesheetImportEmployees(db, imported.employees, {
+        orgId, departmentId: dept?.id ?? null, includeTest,
+      })
       const today = toLocalDateStr(new Date())
       const groups = new Map()
       const filledDays = new Set()
       for (const employee of imported.employees) {
-        const known = byNumber.get(employee.staffNumber)
+        const known = matches.get(employee.staffNumber)
         if (!groups.has(known.department_id)) groups.set(known.department_id, { ids: [], marks: new Map() })
         const group = groups.get(known.department_id)
         group.ids.push(known.id)
@@ -344,6 +332,9 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
         [orgId, [...groups.keys()], includeTest]
       )
       if (departments.length !== groups.size) throw new ValidationError('Состав отделов изменился. Повторите импорт')
+      for (let offset = 0; offset < assignments.length; offset += 1000) {
+        await saveTimesheetEmployeeSettings(db, req, assignments.slice(offset, offset + 1000))
+      }
       const createdSheets = []
       for (const { id } of departments) {
         const { ids, marks } = groups.get(id)
@@ -358,9 +349,9 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
         await auditTimesheet(db, created, req.user.id, 'Импорт', { filename: req.file.originalname, number: imported.number, employees: ids.length })
         createdSheets.push(created)
       }
-      return createdSheets
+      return { sheets: createdSheets, assignedCount: assignments.length }
     })
-    res.status(201).json({ ...sheets[0], sheets })
+    res.status(201).json({ ...sheets[0], sheets, assigned_staff_numbers: assignedCount })
   }))
 
   return router

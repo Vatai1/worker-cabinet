@@ -4,12 +4,14 @@ import { TimesheetGrid, TIMESHEET_DAY_LABELS } from '@/shared/components/timeshe
 import { TimesheetTools } from '@/shared/components/timesheet/TimesheetTools'
 import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
 import { PageBanner, BannerPill } from '@/shared/components/PageBanner'
+import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { Sparkles, Users } from 'lucide-react'
 import { getErrorMessage, formatDate } from '@/shared/lib/utils'
 import { ApiError, apiGet, apiPost } from '@/shared/lib/apiClient'
 import type { Timesheet, TimesheetDetails } from '@/shared/components/timesheet/TimesheetGrid'
 
 const MONTH_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+const MONTH_OPTIONS = MONTH_NAMES.map((label, index) => ({ value: String(index + 1), label }))
 
 export function ManagerTimesheet() {
   const [params] = useSearchParams()
@@ -119,16 +121,31 @@ export function ManagerTimesheet() {
         extra={
           <div className="flex flex-wrap gap-2">
             {departments.length > 1 && (
-              <select aria-label="Отдел" value={departmentId ?? ''} onChange={e => { setDepartmentId(Number(e.target.value)); setSelectedDate('') }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              <SelectDropdown
+                aria-label="Отдел"
+                floating
+                placeholder="Выберите отдел"
+                options={departments.map(department => ({ value: String(department.id), label: department.name }))}
+                value={String(departmentId ?? '')}
+                className="max-w-64"
+                onChange={value => { setDepartmentId(Number(value)); setSelectedDate('') }}
+              />
             )}
-            <select aria-label="Месяц" value={month} onChange={e => { setMonth(Number(e.target.value)); setSelectedDate('') }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
-              {MONTH_NAMES.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
-            </select>
-            <select aria-label="Год" value={year} onChange={e => { setYear(Number(e.target.value)); setSelectedDate('') }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
-              {years.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
+            <SelectDropdown
+              aria-label="Месяц"
+              floating
+              options={MONTH_OPTIONS}
+              value={String(month)}
+              onChange={value => { setMonth(Number(value)); setSelectedDate('') }}
+            />
+            <SelectDropdown
+              aria-label="Год"
+              floating
+              options={years.map(item => ({ value: String(item), label: String(item) }))}
+              value={String(year)}
+              className="min-w-24"
+              onChange={value => { setYear(Number(value)); setSelectedDate('') }}
+            />
           </div>
         }
       />
@@ -140,12 +157,17 @@ export function ManagerTimesheet() {
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-medium">{currentSheet.department_name}</span>
             {dates.length > 0 && (
-              <select aria-label="Дата табеля" value={date} onChange={e => setSelectedDate(e.target.value)} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                {dates.map(d => {
-                  const status = currentSheet.days.find(item => item.date === d)?.status
-                  return <option key={d} value={d}>{formatDate(d)} · {status ? TIMESHEET_DAY_LABELS[status] : 'Черновик'}</option>
+              <SelectDropdown
+                aria-label="Дата табеля"
+                floating
+                placeholder="Выберите дату"
+                options={dates.map(item => {
+                  const status = currentSheet.days.find(day => day.date === item)?.status
+                  return { value: item, label: `${formatDate(item)} · ${status ? TIMESHEET_DAY_LABELS[status] : 'Черновик'}` }
                 })}
-              </select>
+                value={date}
+                onChange={setSelectedDate}
+              />
             )}
             {currentSheet.status !== 'draft' && <span className="text-sm text-muted-foreground">{currentSheet.status === 'approved' ? 'Месячный табель утверждён' : 'Месячный табель отправлен'}</span>}
           </div>
