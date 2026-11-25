@@ -1993,6 +1993,7 @@ async function runMigrations() {
     await migrateMembershipDepartmentSync(db)
     await migrateVacationSettings(db)
     await migrateTimesheetFeatures(db)
+    await migrateTimesheetStaffNumbers(db)
     await migrateDayOffs(db)
     await migrateVacationTypeRules(db)
     await migrateTimesheetCodes(db)
@@ -2523,6 +2524,40 @@ async function migrateVacationSettings(db) {
   }
 }
 
+async function migrateTimesheetStaffNumbers(db) {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS timesheet_staff_numbers (
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      staff_number VARCHAR(64) NOT NULL,
+      PRIMARY KEY (organization_id, staff_number)
+    );
+    CREATE INDEX IF NOT EXISTS timesheet_staff_numbers_user ON timesheet_staff_numbers (organization_id, user_id);
+    DO $migration$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'timesheet_entries'::regclass AND attname = 'staff_number' AND NOT attisdropped) THEN
+        ALTER TABLE timesheet_entries ADD COLUMN staff_number VARCHAR(64);
+        ALTER TABLE timesheet_days ADD COLUMN staff_rows JSONB NOT NULL DEFAULT '[]';
+        INSERT INTO timesheet_staff_numbers (organization_id, user_id, staff_number)
+        SELECT organization_id, user_id, staff_number FROM timesheet_employee_settings WHERE staff_number IS NOT NULL
+        ON CONFLICT DO NOTHING;
+        UPDATE timesheet_entries te SET staff_number = s.staff_number
+        FROM timesheet_employee_settings s
+        WHERE s.organization_id = te.organization_id AND s.user_id = te.employee_id AND s.staff_number IS NOT NULL;
+        UPDATE timesheet_days td SET staff_rows = (
+          SELECT COALESCE(jsonb_agg(jsonb_build_object('employee_id', person.id, 'staff_number', s.staff_number)), '[]')
+          FROM unnest(td.employee_ids) person(id)
+          LEFT JOIN timesheet_employee_settings s ON s.user_id = person.id AND s.organization_id = t.organization_id
+        )
+        FROM timesheets t WHERE td.timesheet_id = t.id AND cardinality(td.employee_ids) > 0;
+        ALTER TABLE timesheet_entries DROP CONSTRAINT IF EXISTS timesheet_entries_timesheet_id_employee_id_date_key;
+        CREATE UNIQUE INDEX timesheet_entries_staff_row_key
+          ON timesheet_entries (timesheet_id, employee_id, date, staff_number) NULLS NOT DISTINCT;
+      END IF;
+    END $migration$;
+  `)
+}
+
 async function migrateTimesheetFeatures(db) {
   await db.query(`
     ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
@@ -2571,7 +2606,7 @@ async function migrateTimesheetFeatures(db) {
       IF TG_OP = 'INSERT' OR NEW.code IS DISTINCT FROM OLD.code OR NEW.minutes IS DISTINCT FROM OLD.minutes THEN
         INSERT INTO timesheet_audit (department_id, timesheet_id, actor_id, action, data)
         SELECT t.department_id, t.id, NULLIF(current_setting('app.timesheet_actor', true), '')::integer,
-          'Отметка', jsonb_build_object('employee_id', NEW.employee_id, 'date', NEW.date,
+          'Отметка', jsonb_build_object('employee_id', NEW.employee_id, 'date', NEW.date, 'staff_number', NEW.staff_number,
             'before', CASE WHEN TG_OP = 'UPDATE' THEN jsonb_build_object('code', OLD.code, 'minutes', OLD.minutes) ELSE NULL END,
             'after', jsonb_build_object('code', NEW.code, 'minutes', NEW.minutes))
         FROM timesheets t WHERE t.id = NEW.timesheet_id;

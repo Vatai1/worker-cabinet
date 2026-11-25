@@ -10,6 +10,7 @@ interface Worker {
   name: string
   department: string | null
   code: string | null
+  marks?: { staff_number: string | null; code: string | null }[]
 }
 
 const CATEGORIES = [
@@ -39,7 +40,9 @@ export function TimesheetReport() {
   const workers = rows ?? []
   const groups = { absent: [], missing: [], present: [], all: workers } as Record<typeof CATEGORIES[number]['id'], Worker[]>
   for (const worker of workers) {
-    groups[!worker.code ? 'missing' : MINUTE_CODES.includes(worker.code) ? 'present' : 'absent'].push(worker)
+    const codes = worker.marks?.map(mark => mark.code).filter((code): code is string => code !== null)
+      ?? (worker.code ? [worker.code] : [])
+    groups[codes.some(code => MINUTE_CODES.includes(code)) ? 'present' : codes.length ? 'absent' : 'missing'].push(worker)
   }
 
   return (
@@ -93,7 +96,12 @@ export function TimesheetReport() {
                   <ul aria-labelledby="timesheet-report-list" tabIndex={0} className="max-h-96 divide-y divide-border overflow-y-auto text-sm">
                     {groups[expanded].map(worker => (
                       <li key={worker.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-2.5">
-                        <span>{worker.name}</span>
+                        <div>
+                          <span>{worker.name}</span>
+                          {worker.marks?.some(mark => mark.staff_number) && <p className="mt-1 text-xs text-muted-foreground">
+                            {worker.marks.map(mark => `${mark.staff_number ?? 'Без номера'} · ${mark.code ?? '—'}`).join(', ')}
+                          </p>}
+                        </div>
                         {worker.department && <span className="text-muted-foreground">{worker.department}</span>}
                       </li>
                     ))}

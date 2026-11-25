@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import ExcelJS from 'exceljs'
 import PDFDocument from 'pdfkit'
-import { getTimesheetData, timesheetDates } from './timesheetData.js'
+import { getTimesheetData, timesheetDates, timesheetRowKey } from './timesheetData.js'
 import { TIMESHEET_CODES } from './timesheetCodes.js'
 import { VACATION_TIMESHEET_CODES } from './vacationTypes.js'
 
@@ -21,21 +21,25 @@ const VACATION_COLOR = { background: 'DFEBFA', text: '1D4B82' }
 export async function getTimesheetExportData(db, timesheet, includeTest) {
   const { entries, employees, nonWorkingDays, transfers } = await getTimesheetData(timesheet, includeTest, db)
   const dates = timesheetDates(timesheet)
-  const marks = new Map(entries.map(e => [`${e.employee_id}:${e.date}`, e]))
+  const marks = new Map(entries.map(e => [`${e.date}:${timesheetRowKey(e.employee_id, e.staff_number)}`, e]))
   return {
     filename: `${timesheet.year}-${timesheet.month}-v${timesheet.version ?? 1}`,
     department: timesheet.department_name,
     period: `${PERIOD_FORMAT.format(new Date(Date.UTC(timesheet.year, timesheet.month - 1, 1)))} · Версия ${timesheet.version ?? 1}${timesheet.number ? ` № ${timesheet.number}` : ''} · ${timesheet.kind === 'correction' ? 'Корректирующий' : 'Первичный'} · ${timesheet.period === 'half' ? '1–15' : 'Месяц'}${timesheet.document_date ? ` · ${timesheet.document_date}` : ''}`,
     dates,
     nonWorkingDays: new Set(nonWorkingDays),
-    employees: employees.map(e => ({
-      name: [e.last_name, e.first_name, e.middle_name].filter(Boolean).join(' '),
-      marks: dates.map(date => marks.get(`${e.id}:${date}`)?.code ?? ''),
-      minutes: dates.map(date => marks.get(`${e.id}:${date}`)?.minutes ?? null),
-      transfers: transfers.filter(span => span.employee_id === e.id).map(span => ({
-        first: dates.indexOf(span.start_date), last: dates.indexOf(span.end_date), label: span.label,
-      })),
-    })),
+    employees: employees.map(employee => {
+      const key = timesheetRowKey(employee.id, employee.staff_number)
+      const name = [employee.last_name, employee.first_name, employee.middle_name].filter(Boolean).join(' ')
+      return {
+        name: employee.staff_number ? `${name} · ${employee.staff_number}` : name,
+        marks: dates.map(date => marks.get(`${date}:${key}`)?.code ?? ''),
+        minutes: dates.map(date => marks.get(`${date}:${key}`)?.minutes ?? null),
+        transfers: transfers.filter(span => timesheetRowKey(span.employee_id, span.staff_number) === key).map(span => ({
+          first: dates.indexOf(span.start_date), last: dates.indexOf(span.end_date), label: span.label,
+        })),
+      }
+    }),
   }
 }
 

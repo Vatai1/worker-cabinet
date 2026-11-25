@@ -15,7 +15,10 @@ function normalizeEmployeeText(value) {
 export async function resolveTimesheetImportEmployees(db, employees, { orgId, departmentId, includeTest }) {
   const { rows: roster } = await db.query(
     `SELECT u.id, CONCAT_WS(' ', u.last_name, u.first_name, u.middle_name) AS name, u.position,
-            settings.staff_number, COALESCE(settings.hourly, false) AS hourly, d.id AS department_id
+            COALESCE(settings.hourly, false) AS hourly, d.id AS department_id,
+            ARRAY(SELECT n.staff_number FROM timesheet_staff_numbers n
+                  WHERE n.organization_id = uo.org_id AND n.user_id = u.id
+                  ORDER BY (n.staff_number = settings.staff_number) DESC, n.staff_number) AS staff_numbers
      FROM user_organizations uo JOIN users u ON u.id = uo.user_id
      LEFT JOIN timesheet_employee_settings settings ON settings.user_id = u.id AND settings.organization_id = uo.org_id
      LEFT JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id)
@@ -24,21 +27,21 @@ export async function resolveTimesheetImportEmployees(db, employees, { orgId, de
        AND ($3::int IS NULL OR d.id = $3)`,
     [orgId, includeTest, departmentId]
   )
-  const byNumber = new Map(roster.filter(employee => employee.staff_number).map(employee => [employee.staff_number, employee]))
+  const byNumber = new Map(roster.flatMap(employee => employee.staff_numbers.map(number => [number, employee])))
   const byName = Map.groupBy(roster, employee => normalizeEmployeeText(employee.name))
   const unmatchedNumbers = employees.filter(employee => !byNumber.has(employee.staffNumber)).map(employee => employee.staffNumber)
   if (unmatchedNumbers.length) {
     const { rows: [used] } = await db.query(
-      'SELECT staff_number FROM timesheet_employee_settings WHERE organization_id = $1 AND staff_number = ANY($2::text[]) LIMIT 1',
+      'SELECT staff_number FROM timesheet_staff_numbers WHERE organization_id = $1 AND staff_number = ANY($2::text[]) LIMIT 1',
       [orgId, unmatchedNumbers]
     )
     if (used) throw new ConflictError(`Табельный номер «${used.staff_number}» уже занят в учреждении`)
   }
 
   const matches = new Map()
-  const assignments = []
+  const assignments = new Map()
+  let assignedCount = 0
   const unknown = []
-  const employeeIds = new Set()
   for (const { staffNumber, name, position } of employees) {
     const sameName = byName.get(normalizeEmployeeText(name)) ?? []
     const numbered = byNumber.get(staffNumber)
@@ -58,18 +61,17 @@ export async function resolveTimesheetImportEmployees(db, employees, { orgId, de
       unknown.push(staffNumber)
       continue
     }
-    if (employeeIds.has(employee.id)) throw new ConflictError(`Сотрудник «${name}» указан в файле с несколькими табельными номерами`)
     if (!numbered) {
-      if (employee.staff_number) throw new ConflictError(`У сотрудника «${name}» уже указан другой табельный номер. Проверьте номер «${staffNumber}» в файле`)
-      assignments.push({ employee_id: employee.id, staff_number: staffNumber })
+      if (!assignments.has(employee.id)) assignments.set(employee.id, { employee_id: employee.id, staff_numbers: [...employee.staff_numbers] })
+      assignments.get(employee.id).staff_numbers.push(staffNumber)
+      assignedCount++
     }
     matches.set(staffNumber, employee)
-    employeeIds.add(employee.id)
   }
   if (unknown.length) throw new ValidationError(`Не найдены работники ${departmentId ? 'отдела' : 'учреждения'} с табельными номерами: ${unknown.join(', ')}`)
   const withoutDepartment = [...matches].filter(([, employee]) => !employee.department_id).map(([staffNumber]) => staffNumber)
   if (withoutDepartment.length) throw new ValidationError(`Не указан отдел для работников с табельными номерами: ${withoutDepartment.join(', ')}`)
-  return { matches, assignments }
+  return { matches, assignments: [...assignments.values()], assignedCount }
 }
 
 function removeWorksheetDrawings(zip) {

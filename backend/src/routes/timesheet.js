@@ -8,7 +8,7 @@ import { asyncHandler, ConflictError, ForbiddenError, NotFoundError, ValidationE
 import { orgScopedQuery, currentOrgId } from '../lib/orgQuery.js'
 import { excludeTest, testScopeAware } from '../utils/testScope.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
-import { automaticTimesheetCode, getTimesheetData, getTimesheetEmployees, getTimesheetMarks, timesheetDates } from '../lib/timesheetData.js'
+import { automaticTimesheetCode, getTimesheetData, getTimesheetEmployees, getTimesheetMarks, timesheetDates, timesheetRowKey } from '../lib/timesheetData.js'
 import { createTimesheetWorkbook, getTimesheetExportData, writeTimesheetPdf } from '../lib/timesheetExport.js'
 import { requirePermission, hasPermission } from '../lib/permissions.js'
 import { MANUAL_CODES, MINUTE_CODES } from '../lib/timesheetCodes.js'
@@ -76,9 +76,19 @@ async function loadDay(db, sheet, date) {
 }
 
 async function getRoster(db, sheet, day, req) {
+  if (day?.staff_rows.length) {
+    const { rows } = await db.query(
+      `SELECT u.id, u.first_name, u.last_name, u.middle_name, r.staff_number, COALESCE(s.hourly, false) AS hourly
+       FROM jsonb_to_recordset($1::jsonb) r(employee_id int, staff_number text) JOIN users u ON u.id = r.employee_id
+       LEFT JOIN timesheet_employee_settings s ON s.user_id = u.id AND s.organization_id = $3
+       WHERE ($2 OR NOT u.is_test)`,
+      [JSON.stringify(day.staff_rows), testScopeAware(req), sheet.organization_id]
+    )
+    return rows
+  }
   if (day?.employee_ids.length) {
     const { rows } = await db.query(
-      `SELECT u.id, u.first_name, u.last_name, u.middle_name, COALESCE(s.hourly, false) AS hourly
+      `SELECT u.id, u.first_name, u.last_name, u.middle_name, s.staff_number, COALESCE(s.hourly, false) AS hourly
        FROM users u LEFT JOIN timesheet_employee_settings s ON s.user_id = u.id AND s.organization_id = $3
        WHERE u.id = ANY($1) AND ($2 OR NOT u.is_test)`,
       [day.employee_ids, testScopeAware(req), sheet.organization_id]
@@ -97,37 +107,48 @@ function groupEntries(entries, allowedDates) {
       throw new ValidationError('Некорректный работник в отметке')
     }
     if (entry.code !== null && !MANUAL_CODES.includes(entry.code)) throw new ValidationError('Недопустимый код посещаемости')
-    if (!byDate.has(entry.date)) byDate.set(entry.date, new Map())
-    const marks = byDate.get(entry.date)
-    if (marks.has(entry.employee_id)) throw new ValidationError('Отметка работника за эту дату указана дважды')
+    if (entry.staff_number != null && (typeof entry.staff_number !== 'string' || !entry.staff_number.trim() || entry.staff_number.length > 64)) {
+      throw new ValidationError('Некорректный табельный номер в отметке')
+    }
+    if (!byDate.has(entry.date)) byDate.set(entry.date, [])
     if (entry.minutes != null && (!Number.isInteger(entry.minutes) || entry.minutes < 0 || entry.minutes > 1440 || !MINUTE_CODES.includes(entry.code))) {
       throw new ValidationError('Время должно быть целым числом минут от 0 до 1440 и указываться только для отметки с учётом времени')
     }
-    marks.set(entry.employee_id, { code: entry.code, minutes: entry.minutes ?? null })
+    byDate.get(entry.date).push({ employee_id: entry.employee_id, staff_number: entry.staff_number, code: entry.code, minutes: entry.minutes ?? null })
   }
   return byDate
 }
 
 function checkEdits(edits, roster, date, calendar) {
-  const ids = new Set(roster.map(e => e.id))
-  for (const [id, mark] of edits) {
-    if (!ids.has(id)) throw new ForbiddenError('Работник не входит в состав отдела для этой даты')
+  const byEmployee = Map.groupBy(roster, employee => employee.id)
+  const marks = new Map()
+  for (const mark of edits) {
+    const id = mark.employee_id
+    const rows = byEmployee.get(id) ?? []
+    if (mark.staff_number === undefined && rows.length > 1) throw new ValidationError('Укажите табельный номер строки работника')
+    const row = mark.staff_number === undefined ? rows[0] : rows.find(item => item.staff_number === mark.staff_number)
+    if (!row) throw new ForbiddenError('Строка работника не входит в состав отдела для этой даты')
     if (calendar.vacations.has(`${id}:${date}`)) throw new ConflictError('Отметка согласованного отпуска устанавливается автоматически')
     if (calendar.nonWorkingDays.includes(date) && mark.code !== 'РП' && mark.code !== null) {
       throw new ValidationError('В нерабочий день можно указать только работу в выходной или праздничный день (РП)')
     }
+    const key = timesheetRowKey(id, row.staff_number)
+    if (marks.has(key)) throw new ValidationError('Отметка строки табеля за эту дату указана дважды')
+    marks.set(key, { ...mark, staff_number: row.staff_number })
   }
+  return marks
 }
 
 async function saveMarks(db, sheet, date, marks, submitted, actorId) {
   await db.query("SELECT set_config('app.timesheet_actor', $1, true)", [String(actorId)])
+  const rows = [...marks.values()]
   await db.query(
-    `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, minutes, is_submitted, organization_id, is_automatic)
-     SELECT $1, employee_id, $2, code, minutes, $3, $4, is_automatic
-     FROM unnest($5::int[], $6::text[], $7::int[], $8::boolean[]) AS marks(employee_id, code, minutes, is_automatic)
-     ON CONFLICT (timesheet_id, employee_id, date) DO UPDATE
+    `INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, minutes, is_submitted, organization_id, is_automatic, staff_number)
+     SELECT $1, employee_id, $2, code, minutes, $3, $4, is_automatic, staff_number
+     FROM unnest($5::int[], $6::text[], $7::int[], $8::boolean[], $9::text[]) AS marks(employee_id, code, minutes, is_automatic, staff_number)
+     ON CONFLICT (timesheet_id, employee_id, date, staff_number) DO UPDATE
      SET code = EXCLUDED.code, minutes = EXCLUDED.minutes, is_submitted = EXCLUDED.is_submitted, organization_id = EXCLUDED.organization_id, is_automatic = EXCLUDED.is_automatic`,
-    [sheet.id, date, submitted, sheet.organization_id, [...marks.keys()], [...marks.values()].map(m => m.code), [...marks.values()].map(m => m.minutes), [...marks.values()].map(m => m.is_automatic ?? false)]
+    [sheet.id, date, submitted, sheet.organization_id, rows.map(m => m.employee_id), rows.map(m => m.code), rows.map(m => m.minutes), rows.map(m => m.is_automatic ?? false), rows.map(m => m.staff_number)]
   )
 }
 
@@ -328,6 +349,7 @@ router.get('/days/submitted', requirePermission('timesheet:manage'), asyncHandle
  *                   name: { type: string }
  *                   department: { type: string, nullable: true }
  *                   code: { type: string, nullable: true }
+ *                   marks: { type: array, items: { $ref: '#/components/schemas/TimesheetReportMark' } }
  *       400: { description: Некорректная дата или не выбрано учреждение }
  *       403: { description: Нет права согласования табелей }
  */
@@ -344,7 +366,10 @@ router.get('/report', requirePermission('timesheet:manage'), asyncHandler(async 
     await db.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
     const result = await db.query(
       `SELECT u.id, CONCAT_WS(' ', u.last_name, u.first_name, u.middle_name) AS name, d.name AS department,
-              te.code, te.is_automatic, t.status = 'draft' AND (td.status IS NULL OR td.status = 'returned')
+              te.staff_number, te.code, te.is_automatic, te.employee_id IS NOT NULL AS has_mark, td.staff_rows,
+              ARRAY(SELECT n.staff_number FROM timesheet_staff_numbers n
+                    WHERE n.organization_id = uo.org_id AND n.user_id = u.id ORDER BY n.staff_number) AS staff_numbers,
+              t.status = 'draft' AND (td.status IS NULL OR td.status = 'returned')
                 AND (COALESCE(cardinality(td.employee_ids), 0) = 0 OR u.id = ANY(td.employee_ids)) AS open_day
        FROM user_organizations uo JOIN users u ON u.id = uo.user_id
        LEFT JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id) AND d.organization_id = uo.org_id ${excludeTest(req, 'd')}
@@ -354,18 +379,36 @@ router.get('/report', requirePermission('timesheet:manage'), asyncHandler(async 
        LEFT JOIN timesheet_days td ON td.timesheet_id = t.id AND td.date = $2
        LEFT JOIN timesheet_entries te ON te.timesheet_id = t.id AND te.organization_id = uo.org_id AND te.date = $2
          AND te.employee_id = u.id AND (COALESCE(cardinality(td.employee_ids), 0) = 0 OR u.id = ANY(td.employee_ids))
+         AND (COALESCE(jsonb_array_length(td.staff_rows), 0) = 0 OR td.staff_rows @> jsonb_build_array(
+                jsonb_build_object('employee_id', u.id, 'staff_number', te.staff_number)))
        WHERE uo.org_id = $1 AND uo.is_active AND u.status <> 'inactive' ${excludeTest(req, 'u')}
-       ORDER BY u.last_name, u.first_name, u.middle_name, u.id`,
+       ORDER BY u.last_name, u.first_name, u.middle_name, u.id, te.staff_number`,
       [orgId, date]
     )
     const openIds = result.rows.filter(row => row.open_day).map(row => row.id)
-    const marks = openIds.length ? await getTimesheetMarks(db, { organization_id: orgId }, [date], openIds) : null
-    return result.rows.map(({ id, name, department, code, is_automatic, open_day }) => ({
-      id, name, department,
-      code: open_day && marks
-        ? automaticTimesheetCode(marks, id, date, code) ?? (is_automatic || VACATION_TIMESHEET_CODES.includes(code) ? null : code)
-        : code,
-    }))
+    const calendar = openIds.length ? await getTimesheetMarks(db, { organization_id: orgId }, [date], openIds) : null
+    return [...Map.groupBy(result.rows, row => row.id).values()].map(personRows => {
+      const { id, name, department, open_day, staff_rows, staff_numbers } = personRows[0]
+      const saved = new Map(personRows.filter(row => row.has_mark).map(row => [row.staff_number, row]))
+      const numbers = new Set(saved.keys())
+      if (staff_rows?.length) {
+        for (const row of staff_rows) if (row.employee_id === id) numbers.add(row.staff_number)
+      } else if (open_day || !numbers.size) {
+        for (const number of staff_numbers) numbers.add(number)
+      }
+      if (!numbers.size) numbers.add(null)
+      const marks = [...numbers].sort().map(staff_number => {
+        const row = saved.get(staff_number)
+        const code = row?.code ?? null
+        return {
+          staff_number,
+          code: open_day && calendar
+            ? automaticTimesheetCode(calendar, id, date, code) ?? (row?.is_automatic || VACATION_TIMESHEET_CODES.includes(code) ? null : code)
+            : code,
+        }
+      })
+      return { id, name, department, code: marks[0].code, marks }
+    })
   })
   res.json(rows)
 }))
@@ -391,6 +434,7 @@ router.get('/report', requirePermission('timesheet:manage'), asyncHandler(async 
  *                   properties:
  *                     today: { type: string, format: date }
  *                     currentEmployeeIds: { type: array, items: { type: integer } }
+ *                     current_staff_rows: { type: array, items: { $ref: '#/components/schemas/TimesheetStaffRow' } }
  *                     nonWorkingDays: { type: array, items: { type: string, format: date } }
  *                     entries: { type: array, items: { $ref: '#/components/schemas/TimesheetEntry' } }
  *                     employees: { type: array, items: { $ref: '#/components/schemas/User' } }
@@ -401,6 +445,7 @@ router.get('/report', requirePermission('timesheet:manage'), asyncHandler(async 
  *                         type: object
  *                         properties:
  *                           employee_id: { type: integer }
+ *                           staff_number: { type: string, nullable: true }
  *                           start_date: { type: string, format: date }
  *                           end_date: { type: string, format: date }
  *                           label: { type: string }
@@ -451,8 +496,8 @@ router.put('/:id/entries', asyncHandler(async (req, res) => {
       const day = await loadDay(db, sheet, date)
       ensureWritable(sheet, day)
       const roster = await getRoster(db, sheet, day, req)
-      checkEdits(edits, roster, date, await getTimesheetMarks(db, sheet, [date], roster.map(e => e.id)))
-      await saveMarks(db, sheet, date, edits, false, req.user.id)
+      const marks = checkEdits(edits, roster, date, await getTimesheetMarks(db, sheet, [date], roster.map(e => e.id)))
+      await saveMarks(db, sheet, date, marks, false, req.user.id)
     }
     await db.query('UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2', [req.user.id, sheet.id])
   })
@@ -522,44 +567,54 @@ async function submitDay(req, res) {
     if (date > today) throw new ValidationError('Нельзя отправлять будущие даты')
     if (date !== today && day?.status !== 'returned') throw new ValidationError('Можно отправить сегодняшний день или день, возвращённый на доработку')
 
-    const edits = groupEntries(req.body?.entries ?? [], [date]).get(date) ?? new Map()
+    const edits = groupEntries(req.body?.entries ?? [], [date]).get(date) ?? []
     const roster = await getRoster(db, sheet, day, req)
     if (!roster.length) throw new ValidationError('В отделе нет работников для отправки табеля')
-    const ids = roster.map(e => e.id)
+    const staffRows = roster.map(employee => ({ employee_id: employee.id, staff_number: employee.staff_number }))
+    const ids = [...new Set(roster.map(e => e.id))]
     const calendar = await getTimesheetMarks(db, sheet, [date], ids)
-    checkEdits(edits, roster, date, calendar)
+    const checkedEdits = checkEdits(edits, roster, date, calendar)
     const { rows } = await db.query(
-      `SELECT employee_id, code, minutes, is_automatic FROM timesheet_entries
+      `SELECT employee_id, staff_number, code, minutes, is_automatic FROM timesheet_entries
        WHERE timesheet_id = $1 AND date = $2 AND organization_id = $3 AND employee_id = ANY($4)`,
       [sheet.id, date, sheet.organization_id, ids]
     )
-    const marks = new Map(rows.filter(row => !row.is_automatic && MANUAL_CODES.includes(row.code)).map(row => [row.employee_id, { code: row.code, minutes: row.minutes }]))
-    for (const [id, mark] of edits) marks.set(id, mark)
-    for (const id of ids) {
-      const automatic = automaticTimesheetCode(calendar, id, date, marks.get(id)?.code)
-      if (automatic) marks.set(id, { code: automatic, minutes: null, is_automatic: true })
+    const rowKeys = new Set(staffRows.map(row => timesheetRowKey(row.employee_id, row.staff_number)))
+    const marks = new Map()
+    for (const row of rows) {
+      const key = timesheetRowKey(row.employee_id, row.staff_number)
+      if (rowKeys.has(key) && !row.is_automatic && MANUAL_CODES.includes(row.code)) marks.set(key, row)
     }
-    const missing = roster.filter(e => !marks.get(e.id)?.code)
+    for (const [key, mark] of checkedEdits) marks.set(key, mark)
+    for (const row of staffRows) {
+      const key = timesheetRowKey(row.employee_id, row.staff_number)
+      const automatic = automaticTimesheetCode(calendar, row.employee_id, date, marks.get(key)?.code)
+      if (automatic) marks.set(key, { ...row, code: automatic, minutes: null, is_automatic: true })
+    }
+    const missing = roster.filter(e => !marks.get(timesheetRowKey(e.id, e.staff_number))?.code)
     if (missing.length) {
-      const names = missing.slice(0, 5).map(e => [e.last_name, e.first_name, e.middle_name].filter(Boolean).join(' '))
+      const names = missing.slice(0, 5).map(e => [[e.last_name, e.first_name, e.middle_name].filter(Boolean).join(' '), e.staff_number].filter(Boolean).join(' · '))
       throw new ValidationError(`Заполните отметки за ${date}. Не заполнено: ${missing.length} (${names.join(', ')})`)
     }
 
-    const withoutHours = roster.filter(e => e.hourly && MINUTE_CODES.includes(marks.get(e.id)?.code) && !marks.get(e.id)?.minutes)
-    if (withoutHours.length) throw new ValidationError('Заполните часы явки для работников с почасовым учётом')
+    const withoutHours = roster.some(employee => {
+      const mark = marks.get(timesheetRowKey(employee.id, employee.staff_number))
+      return employee.hourly && MINUTE_CODES.includes(mark?.code) && !mark?.minutes
+    })
+    if (withoutHours) throw new ValidationError('Заполните часы явки для работников с почасовым учётом')
     await saveMarks(db, sheet, date, marks, true, req.user.id)
     await auditTimesheet(db, sheet, req.user.id, 'Отправка', { date })
     const { rows: submitted } = await db.query(
-      `INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, submitted_by)
-       VALUES ($1, $2, 'submitted', $3, $4)
+      `INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, submitted_by, staff_rows)
+       VALUES ($1, $2, 'submitted', $3, $4, $5)
        ON CONFLICT (timesheet_id, date) DO UPDATE
        SET status = 'submitted', revision = timesheet_days.revision + 1,
-           employee_ids = EXCLUDED.employee_ids, submitted_by = EXCLUDED.submitted_by, reason = NULL
+           employee_ids = EXCLUDED.employee_ids, submitted_by = EXCLUDED.submitted_by, staff_rows = EXCLUDED.staff_rows, reason = NULL
        RETURNING date, status, revision`,
-      [sheet.id, date, ids, req.user.id]
+      [sheet.id, date, ids, req.user.id, JSON.stringify(staffRows)]
     )
     await db.query('UPDATE timesheets SET updated_by = $1, updated_at = NOW() WHERE id = $2', [req.user.id, sheet.id])
-    return { ...submitted[0], success: true, updated: ids.length }
+    return { ...submitted[0], success: true, updated: staffRows.length }
   })
   res.json(result)
 }

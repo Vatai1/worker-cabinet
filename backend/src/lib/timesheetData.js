@@ -9,14 +9,19 @@ export function timesheetDates({ year, month, period }) {
     `${prefix}-${String(i + 1).padStart(2, '0')}`)
 }
 
+export function timesheetRowKey(employeeId, staffNumber) {
+  return `${employeeId}:${staffNumber ?? ''}`
+}
+
 export async function getTimesheetEmployees(db, sheet, includeTest) {
   const { rows } = await db.query(
-    `SELECT u.id, u.first_name, u.last_name, u.middle_name, settings.staff_number, COALESCE(settings.hourly, false) AS hourly
+    `SELECT u.id, u.first_name, u.last_name, u.middle_name, n.staff_number, COALESCE(settings.hourly, false) AS hourly
      FROM users u JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = $1
      LEFT JOIN timesheet_employee_settings settings ON settings.user_id = u.id AND settings.organization_id = uo.org_id
+     LEFT JOIN timesheet_staff_numbers n ON n.organization_id = uo.org_id AND n.user_id = u.id
      WHERE COALESCE(uo.department_id, u.department_id) = $2 AND uo.is_active AND u.status <> 'inactive'
        AND ($3 OR NOT u.is_test)
-     ORDER BY u.last_name, u.first_name, u.id`,
+     ORDER BY u.last_name, u.first_name, u.id, n.staff_number`,
     [sheet.organization_id, sheet.department_id, includeTest]
   )
   return rows
@@ -59,24 +64,26 @@ export function automaticTimesheetCode(calendar, employeeId, date, manualCode) {
 export async function getTimesheetData(sheet, includeTest, db = { query }) {
   const employees = await getTimesheetEmployees(db, sheet, includeTest)
   const { rows: days } = await db.query(
-    'SELECT date, status, revision, employee_ids, reason FROM timesheet_days WHERE timesheet_id = $1 ORDER BY date DESC',
+    'SELECT date, status, revision, employee_ids, staff_rows, reason FROM timesheet_days WHERE timesheet_id = $1 ORDER BY date DESC',
     [sheet.id]
   )
   const { rows: stored } = await db.query(
-    `SELECT te.*, u.first_name, u.last_name, u.middle_name, settings.staff_number, COALESCE(settings.hourly, false) AS hourly
+    `SELECT te.*, u.first_name, u.last_name, u.middle_name, COALESCE(settings.hourly, false) AS hourly
      FROM timesheet_entries te JOIN users u ON u.id = te.employee_id
      LEFT JOIN timesheet_days td ON td.timesheet_id = te.timesheet_id AND td.date = te.date
      LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.org_id = te.organization_id
      LEFT JOIN timesheet_employee_settings settings ON settings.user_id = u.id AND settings.organization_id = te.organization_id
      WHERE te.timesheet_id = $1 AND te.organization_id = $2 AND ($4 OR NOT u.is_test)
-       AND CASE WHEN cardinality(td.employee_ids) > 0 THEN te.employee_id = ANY(td.employee_ids)
+       AND CASE WHEN jsonb_array_length(td.staff_rows) > 0 THEN td.staff_rows @> jsonb_build_array(
+                  jsonb_build_object('employee_id', te.employee_id, 'staff_number', te.staff_number))
+           WHEN cardinality(td.employee_ids) > 0 THEN te.employee_id = ANY(td.employee_ids)
            ELSE (uo.user_id IS NOT NULL AND ($5 OR COALESCE(uo.department_id, u.department_id) = $3))
              OR EXISTS (SELECT 1 FROM department_transfers tr
                         WHERE tr.user_id = te.employee_id AND tr.from_department_id = $3) END
      ORDER BY u.last_name, u.first_name, te.date`,
     [sheet.id, sheet.organization_id, sheet.department_id, includeTest, sheet.status === 'approved']
   )
-  const currentEmployeeIds = employees.map(e => e.id)
+  const currentEmployeeIds = [...new Set(employees.map(e => e.id))]
   const employeeById = new Map(employees.map(e => [e.id, e]))
   for (const { employee_id: id, first_name, last_name, middle_name, staff_number, hourly } of stored) {
     if (!employeeById.has(id)) employeeById.set(id, { id, first_name, last_name, middle_name, staff_number, hourly })
@@ -140,11 +147,36 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
   const calendar = await getTimesheetMarks(db, sheet, dates, [...employeeById.keys()])
   const { nonWorkingDays } = calendar
   const dayByDate = new Map(days.map(d => [d.date, d]))
+  const savedRowKeys = new Map(days.map(day => [day.date, new Set(day.staff_rows.map(row => timesheetRowKey(row.employee_id, row.staff_number)))]))
+  const inSavedRoster = (day, employeeId, staffNumber) => day && (day.staff_rows.length
+    ? savedRowKeys.get(day.date).has(timesheetRowKey(employeeId, staffNumber))
+    : day.employee_ids.includes(employeeId))
   const isLocked = date => sheet.status !== 'draft' || ['submitted', 'approved'].includes(dayByDate.get(date)?.status)
+  const today = toLocalDateStr(new Date())
+  const hasOpenDay = sheet.status === 'draft' && dates.some(date => date >= today && !dayByDate.has(date))
+  const displayRows = new Map()
+  if (hasOpenDay || (sheet.status === 'draft' && !days.length && !stored.length)) {
+    for (const employee of employees) displayRows.set(timesheetRowKey(employee.id, employee.staff_number), employee)
+  }
+  for (const entry of stored) {
+    displayRows.set(timesheetRowKey(entry.employee_id, entry.staff_number), { ...employeeById.get(entry.employee_id), staff_number: entry.staff_number })
+  }
+  for (const day of days) {
+    for (const { employee_id, staff_number } of day.staff_rows) {
+      if (employeeById.has(employee_id)) displayRows.set(timesheetRowKey(employee_id, staff_number), { ...employeeById.get(employee_id), staff_number })
+    }
+  }
+  const employeesWithRows = new Set([...displayRows.values()].map(employee => employee.id))
+  const historicalIds = new Set([...days.flatMap(day => day.employee_ids), ...recordedTransfers.map(transfer => transfer.user_id)])
+  for (const employee of employeeById.values()) {
+    if (!employeesWithRows.has(employee.id) && historicalIds.has(employee.id)) {
+      displayRows.set(timesheetRowKey(employee.id, employee.staff_number), employee)
+    }
+  }
   const entries = new Map()
   for (const entry of stored) {
-    const key = `${entry.employee_id}:${entry.date}`
-    const transferred = transferDates.has(key) && !dayByDate.get(entry.date)?.employee_ids.includes(entry.employee_id)
+    const key = `${entry.date}:${timesheetRowKey(entry.employee_id, entry.staff_number)}`
+    const transferred = transferDates.has(`${entry.employee_id}:${entry.date}`) && !inSavedRoster(dayByDate.get(entry.date), entry.employee_id, entry.staff_number)
     if (transferred && (!isLocked(entry.date) || entry.code === 'В')) continue
     if (isLocked(entry.date) || (!entry.is_automatic && !VACATION_TIMESHEET_CODES.includes(entry.code))) entries.set(key, entry)
   }
@@ -152,38 +184,44 @@ export async function getTimesheetData(sheet, includeTest, db = { query }) {
     for (const date of dates) {
       if (isLocked(date)) continue
       const day = dayByDate.get(date)
-      const roster = day?.employee_ids.length ? day.employee_ids : currentEmployeeIds
-      for (const id of roster) {
-        if (!employeeById.has(id)) continue
-        const key = `${id}:${date}`
-        if (transferDates.has(key) && !day?.employee_ids.includes(id)) continue
+      const roster = day?.employee_ids.length
+        ? [...displayRows.values()].filter(employee => inSavedRoster(day, employee.id, employee.staff_number))
+        : employees
+      for (const { id, staff_number, first_name, last_name, middle_name } of roster) {
+        const key = `${date}:${timesheetRowKey(id, staff_number)}`
+        if (transferDates.has(`${id}:${date}`) && !inSavedRoster(day, id, staff_number)) continue
         const code = automaticTimesheetCode(calendar, id, date, entries.get(key)?.code)
         if (code) {
-          const { first_name, last_name, middle_name } = employeeById.get(id)
-          entries.set(key, { employee_id: id, date, code, is_automatic: true, is_submitted: false, first_name, last_name, middle_name })
+          entries.set(key, { employee_id: id, staff_number, date, code, is_automatic: true, is_submitted: false, first_name, last_name, middle_name })
         }
       }
     }
   }
   const transfers = []
-  for (const id of employeeById.keys()) {
+  for (const { id, staff_number } of displayRows.values()) {
     let span
     for (const date of dates) {
-      const key = `${id}:${date}`
-      const label = entries.get(key)?.code || dayByDate.get(date)?.employee_ids.includes(id) ? null : transferDates.get(key)
+      const key = `${date}:${timesheetRowKey(id, staff_number)}`
+      const label = entries.get(key)?.code || inSavedRoster(dayByDate.get(date), id, staff_number) ? null : transferDates.get(`${id}:${date}`)
       if (!label) {
         span = undefined
       } else if (span?.label === label) {
         span.end_date = date
       } else {
-        span = { employee_id: id, start_date: date, end_date: date, label }
+        span = { employee_id: id, staff_number, start_date: date, end_date: date, label }
         transfers.push(span)
       }
     }
   }
   return {
-    employees: [...employeeById.values()], currentEmployeeIds, entries: [...entries.values()],
-    days: days.map(day => ({ ...day, employee_ids: day.employee_ids.filter(id => employeeById.has(id)) })),
+    employees: [...displayRows.values()].sort((a, b) => a.last_name.localeCompare(b.last_name, 'ru') || a.first_name.localeCompare(b.first_name, 'ru') || a.id - b.id || (a.staff_number ?? '').localeCompare(b.staff_number ?? '')),
+    currentEmployeeIds, current_staff_rows: employees.map(employee => ({ employee_id: employee.id, staff_number: employee.staff_number })),
+    entries: [...entries.values()],
+    days: days.map(day => ({
+      ...day,
+      employee_ids: day.employee_ids.filter(id => employeeById.has(id)),
+      staff_rows: day.staff_rows.filter(row => employeeById.has(row.employee_id)),
+    })),
     nonWorkingDays, transfers,
   }
 }

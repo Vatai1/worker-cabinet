@@ -54,7 +54,7 @@ export const test = base.extend<{ scenario: Scenario }>({
         else await world.call('DELETE', `/vacation/production-calendar/${today}`)
       }
       if (world.api) {
-        const changes = Object.values(world.users).map(user => ({ employee_id: user.id, staff_number: null, hourly: false }))
+        const changes = Object.values(world.users).map(user => ({ employee_id: user.id, staff_numbers: [], hourly: false }))
         if (changes.length) await world.call('PUT', '/timesheet/employees/settings', changes)
         await world.teardown()
       }

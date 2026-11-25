@@ -7,7 +7,7 @@ import { currentOrgId } from '../lib/orgQuery.js'
 import { testScopeAware } from '../utils/testScope.js'
 import { auditTimesheet } from '../lib/timesheetAccess.js'
 import { parseTimesheetImport, resolveTimesheetImportEmployees } from '../lib/timesheetImport.js'
-import { getTimesheetData, timesheetDates } from '../lib/timesheetData.js'
+import { getTimesheetData, timesheetDates, timesheetRowKey } from '../lib/timesheetData.js'
 import { saveTimesheetEmployeeSettings } from '../lib/timesheetEmployeeSettings.js'
 import { MINUTE_CODES } from '../lib/timesheetCodes.js'
 import { toLocalDateStr } from '../lib/dateUtils.js'
@@ -38,7 +38,7 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
    *     summary: Сотрудники учреждения, табельные номера и режим учёта (HR)
    *     security: [{ bearerAuth: [] }]
    *     responses:
-   *       200: { description: 'Массив { id, name, position, department_id, department_name, staff_number, hourly }, включая сотрудников без отдела' }
+   *       200: { description: 'Массив { id, name, position, department_id, department_name, staff_number, staff_numbers, hourly }, включая сотрудников без отдела' }
    *       400: { description: Не выбрано учреждение }
    *       403: { description: Нет права управления табелями }
    *   put:
@@ -60,9 +60,10 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
    *               properties:
    *                 employee_id: { type: integer }
    *                 staff_number: { type: string, nullable: true, maxLength: 64 }
+   *                 staff_numbers: { type: array, items: { type: string, maxLength: 64 }, description: Заменяет список номеров целиком }
    *                 hourly: { type: boolean }
    *     responses:
-   *       200: { description: '{ updated: [{ employee_id, staff_number, hourly }] }' }
+   *       200: { description: '{ updated: [{ employee_id, staff_number, staff_numbers, hourly }] }' }
    *       400: { description: Некорректные изменения или не выбрано учреждение }
    *       403: { description: Нет права управления или сотрудник не принадлежит учреждению }
    *       409: { description: Табельный номер уже занят }
@@ -72,7 +73,10 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
     if (!orgId) throw new ValidationError('Выберите учреждение')
     const { rows } = await query(
       `SELECT u.id, CONCAT_WS(' ', u.last_name, u.first_name, u.middle_name) AS name, u.position,
-        d.id AS department_id, d.name AS department_name, settings.staff_number, COALESCE(settings.hourly, false) AS hourly
+        d.id AS department_id, d.name AS department_name, settings.staff_number, COALESCE(settings.hourly, false) AS hourly,
+        ARRAY(SELECT n.staff_number FROM timesheet_staff_numbers n
+              WHERE n.organization_id = uo.org_id AND n.user_id = u.id
+              ORDER BY (n.staff_number = settings.staff_number) DESC, n.staff_number) AS staff_numbers
        FROM user_organizations uo JOIN users u ON u.id = uo.user_id
        LEFT JOIN departments d ON d.id = COALESCE(uo.department_id, u.department_id) AND d.organization_id = uo.org_id
        LEFT JOIN timesheet_employee_settings settings ON settings.user_id = u.id AND settings.organization_id = uo.org_id
@@ -256,12 +260,13 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
         WHERE department_id = $1 AND year = $3 AND month = $4 RETURNING *`, [sheet.department_id, sheet.organization_id, sheet.year, sheet.month, req.body?.number?.trim() || null, req.body?.period ?? sheet.period, req.user.id, documentDate, req.body?.kind ?? 'correction'])
       const sourceIds = (await getTimesheetData(sheet, testScopeAware(req), db)).employees.map(e => e.id)
       await db.query("SELECT set_config('app.timesheet_actor', $1, true)", [String(req.user.id)])
-      await db.query(`INSERT INTO timesheet_entries (timesheet_id, employee_id, date, code, minutes, organization_id, is_automatic)
-        SELECT $1,employee_id,date,code,minutes,organization_id,is_automatic FROM timesheet_entries WHERE timesheet_id = $2 AND date = ANY($3::date[]) AND employee_id = ANY($4::int[])`, [created.id, sheet.id, timesheetDates(created), sourceIds])
-      await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, reason)
-        SELECT $1,date,'returned',employee_ids,'Новая версия табеля' FROM timesheet_days WHERE timesheet_id = $2 AND date = ANY($3::date[])`, [created.id, sheet.id, timesheetDates(created)])
-      await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, reason)
-        SELECT $1,date,'returned',array_agg(employee_id ORDER BY employee_id),'Новая версия табеля'
+      await db.query(`INSERT INTO timesheet_entries (timesheet_id, employee_id, staff_number, date, code, minutes, organization_id, is_automatic)
+        SELECT $1,employee_id,staff_number,date,code,minutes,organization_id,is_automatic FROM timesheet_entries WHERE timesheet_id = $2 AND date = ANY($3::date[]) AND employee_id = ANY($4::int[])`, [created.id, sheet.id, timesheetDates(created), sourceIds])
+      await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, staff_rows, reason)
+        SELECT $1,date,'returned',employee_ids,staff_rows,'Новая версия табеля' FROM timesheet_days WHERE timesheet_id = $2 AND date = ANY($3::date[])`, [created.id, sheet.id, timesheetDates(created)])
+      await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, staff_rows, reason)
+        SELECT $1,date,'returned',array_agg(DISTINCT employee_id ORDER BY employee_id),
+               jsonb_agg(jsonb_build_object('employee_id', employee_id, 'staff_number', staff_number)), 'Новая версия табеля'
         FROM timesheet_entries WHERE timesheet_id = $1 GROUP BY date
         ON CONFLICT (timesheet_id, date) DO NOTHING`, [created.id])
       await auditTimesheet(db, created, req.user.id, 'Новая версия', { previous_id: sheet.id, version: created.version })
@@ -276,7 +281,7 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
    *   post:
    *     tags: [Timesheet]
    *     summary: Импорт XLSX формы 0504421 в новые версии табеля (HR)
-   *     description: Работники сопоставляются по табельному номеру в выбранном учреждении. Если номер ещё не задан, он берётся из файла при однозначном совпадении ФИО. Для полных тёзок дополнительно проверяется должность. Если отдел не указан, для каждого отдела из файла создаётся отдельная версия. Заполненные дни отправляются на проверку с отметками из файла, в том числе пустыми ячейками отдельных работников. Будущие отметки не допускаются. Любая ошибка отменяет назначение номеров и импорт во все отделы.
+   *     description: Работники сопоставляются по табельному номеру в выбранном учреждении. Свободные номера из файла добавляются при однозначном совпадении ФИО и при необходимости должности. У одного работника могут быть несколько номеров, отметки загружаются отдельной строкой для каждого из них. Заполненные дни отправляются на проверку. При ошибке отменяются все записи и назначения.
    *     security: [{ bearerAuth: [] }]
    *     requestBody:
    *       required: true
@@ -304,7 +309,7 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
       await db.query('SELECT id FROM organizations WHERE id = $1 FOR UPDATE', [orgId])
       const dept = req.body.department_id === undefined ? null : await department(req, db)
       const includeTest = testScopeAware(req)
-      const { matches, assignments } = await resolveTimesheetImportEmployees(db, imported.employees, {
+      const { matches, assignments, assignedCount } = await resolveTimesheetImportEmployees(db, imported.employees, {
         orgId, departmentId: dept?.id ?? null, includeTest,
       })
       const today = toLocalDateStr(new Date())
@@ -312,9 +317,10 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
       const filledDays = new Set()
       for (const employee of imported.employees) {
         const known = matches.get(employee.staffNumber)
-        if (!groups.has(known.department_id)) groups.set(known.department_id, { ids: [], marks: new Map() })
+        if (!groups.has(known.department_id)) groups.set(known.department_id, { staffRows: [], marks: new Map() })
         const group = groups.get(known.department_id)
-        group.ids.push(known.id)
+        const staffRow = { employee_id: known.id, staff_number: employee.staffNumber }
+        group.staffRows.push(staffRow)
         for (const entry of employee.entries) {
           if (entry.date > today) {
             if (entry.code) throw new ValidationError(`В файле заполнена будущая дата ${entry.date}`)
@@ -322,7 +328,7 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
           }
           if (known.hourly && MINUTE_CODES.includes(entry.code) && !entry.minutes) throw new ValidationError(`Заполните часы ${employee.staffNumber} за ${entry.date}`)
           if (!group.marks.has(entry.date)) group.marks.set(entry.date, new Map())
-          group.marks.get(entry.date).set(known.id, entry)
+          group.marks.get(entry.date).set(timesheetRowKey(known.id, employee.staffNumber), { ...entry, ...staffRow })
           if (entry.code) filledDays.add(entry.date)
         }
       }
@@ -337,19 +343,21 @@ export function timesheetFeatures({ loadTimesheet, saveMarks }) {
       }
       const createdSheets = []
       for (const { id } of departments) {
-        const { ids, marks } = groups.get(id)
+        const { staffRows, marks } = groups.get(id)
+        const ids = [...new Set(staffRows.map(row => row.employee_id))]
         const { rows: [created] } = await db.query(`INSERT INTO timesheets (department_id, organization_id, year, month, version, number, document_date, kind, period, created_by)
           SELECT $1,$2,$3,$4,COALESCE(MAX(version),0)+1,$5,$6,$7,$8,$9 FROM timesheets
           WHERE department_id = $1 AND year = $3 AND month = $4 RETURNING *`,
           [id, orgId, imported.year, imported.month, imported.number, imported.document_date, imported.kind, imported.period, req.user.id])
         for (const date of filledDays) {
           await saveMarks(db, created, date, marks.get(date), true, req.user.id)
-          await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, submitted_by) VALUES ($1,$2,'submitted',$3,$4)`, [created.id, date, ids, req.user.id])
+          await db.query(`INSERT INTO timesheet_days (timesheet_id, date, status, employee_ids, staff_rows, submitted_by)
+            VALUES ($1,$2,'submitted',$3,$4,$5)`, [created.id, date, ids, JSON.stringify(staffRows), req.user.id])
         }
         await auditTimesheet(db, created, req.user.id, 'Импорт', { filename: req.file.originalname, number: imported.number, employees: ids.length })
         createdSheets.push(created)
       }
-      return { sheets: createdSheets, assignedCount: assignments.length }
+      return { sheets: createdSheets, assignedCount }
     })
     res.status(201).json({ ...sheets[0], sheets, assigned_staff_numbers: assignedCount })
   }))
