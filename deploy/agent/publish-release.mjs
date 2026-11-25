@@ -6,7 +6,8 @@ import { validateRelease } from '../../backend/src/deployment/validation.js'
 const [version, commit, frontend, backend, destination] = process.argv.slice(2)
 if (!destination) throw new Error('Укажите версию, коммит, репозитории фронтенда и бэкенда, путь к манифесту')
 const digest = image => {
-  const value = execFileSync('docker', ['buildx', 'imagetools', 'inspect', '--format', '{{.Manifest.Digest}}', `${image}:${version}`], { encoding: 'utf8', timeout: 120000 }).trim()
+  const manifest = JSON.parse(execFileSync('docker', ['buildx', 'imagetools', 'inspect', '--format', '{{json .Manifest}}', `${image}:${version}`], { encoding: 'utf8', timeout: 120000 }))
+  const value = manifest.digest
   if (!/^sha256:[a-f0-9]{64}$/.test(value)) throw new Error('Не удалось получить digest опубликованного образа')
   return `${image}@${value}`
 }
