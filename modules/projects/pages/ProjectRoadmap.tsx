@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { Select } from '@/shared/components/ui/Select'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { useAuthStore } from '@/core/auth/store/authStore'
 import { Button } from '@/shared/components/ui/Button'
@@ -206,19 +207,19 @@ function TaskModal({ rows, cols, mode, task, defaultRowId, defaultStartCol, onSa
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Задача *</label>
-              <select value={rowId} onChange={e=>setRowId(e.target.value)}
-                className="w-full h-9 px-3 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/40">
+              <Select value={rowId} onChange={selectedValue => setRowId(selectedValue)}
+                className="w-full">
                 {rows.map(r=><option key={r.id} value={r.id}>{r.title}</option>)}
-              </select>
+              </Select>
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Статус</label>
-              <select value={status} onChange={e=>setStatus(e.target.value as RoadmapTask['status'])}
-                className="w-full h-9 px-3 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/40">
+              <Select value={status} onChange={selectedValue => setStatus(selectedValue as RoadmapTask['status'])}
+                className="w-full">
                 <option value="pending">Ожидает</option>
                 <option value="in_progress">В работе</option>
                 <option value="completed">Завершён</option>
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -227,26 +228,26 @@ function TaskModal({ rows, cols, mode, task, defaultRowId, defaultStartCol, onSa
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">С месяца *</label>
-                <select value={startM} onChange={e=>{setStartM(e.target.value);if(e.target.value>endM)setEndM(e.target.value)}}
-                  className="w-full h-9 px-3 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/40">
+                <Select value={startM} onChange={selectedValue => {setStartM(selectedValue);if(selectedValue>endM)setEndM(selectedValue)}}
+                  className="w-full">
                   {allMonths.map(m=>{const{mon,yr}=monthParts(m);return<option key={m} value={m}>{mon} {yr}</option>})}
-                </select>
+                </Select>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">По месяц *</label>
-                <select value={endM} onChange={e=>setEndM(e.target.value)}
-                  className="w-full h-9 px-3 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/40">
+                <Select value={endM} onChange={selectedValue => setEndM(selectedValue)}
+                  className="w-full">
                   {allMonths.filter(m=>m>=startM).map(m=>{const{mon,yr}=monthParts(m);return<option key={m} value={m}>{mon} {yr}</option>})}
-                </select>
+                </Select>
               </div>
             </div>
           ) : (
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Месяц вехи *</label>
-              <select value={startM} onChange={e=>setStartM(e.target.value)}
-                className="w-full h-9 px-3 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/40">
+              <Select value={startM} onChange={selectedValue => setStartM(selectedValue)}
+                className="w-full">
                 {allMonths.map(m=>{const{mon,yr}=monthParts(m);return<option key={m} value={m}>{mon} {yr}</option>})}
-              </select>
+              </Select>
             </div>
           )}
 

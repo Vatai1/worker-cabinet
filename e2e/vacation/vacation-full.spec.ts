@@ -1,7 +1,7 @@
 import { test, expect, request as pwRequest, type APIRequestContext, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { loginAs } from '../helpers'
+import { chooseSelectOption, loginAs } from '../helpers'
 import { workdayOffset, TEST_YEAR } from './fixtures'
 
 test.describe.configure({ mode: 'serial' })
@@ -241,7 +241,7 @@ async function selectRange(page: Page, startIso: string, endIso: string) {
 
 async function submitRequest(page: Page, comment: string) {
   await expect(page.getByText('Создать заявку на отпуск')).toBeVisible({ timeout: 5000 })
-  await page.locator('#vacationType').selectOption('annual_paid')
+  await chooseSelectOption(page.locator('#vacationType'), 'annual_paid')
   await page.getByPlaceholder('Укажите причину или дополнительные сведения...').fill(comment)
   const submit = page.getByRole('button', { name: 'Создать заявку' })
   await expect(submit).toBeEnabled()
@@ -557,7 +557,7 @@ test.describe('Модуль Отпуск — user stories (E2E)', () => {
       await openVacation(page, 'employee')
       await selectRange(page, F_S, F_E)
       await expect(page.getByText('Создать заявку на отпуск')).toBeVisible({ timeout: 5000 })
-      await page.locator('#vacationType').selectOption('annual_paid')
+      await chooseSelectOption(page.locator('#vacationType'), 'annual_paid')
       const submit = page.getByRole('button', { name: 'Создать заявку' })
       await expect(submit).toBeEnabled({ timeout: 15000 })
       await submit.click()

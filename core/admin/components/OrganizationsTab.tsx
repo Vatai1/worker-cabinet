@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Select } from '@/shared/components/ui/Select'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn, formatDateTime, personName } from '@/shared/lib/utils'
@@ -63,12 +64,6 @@ interface OrgModule {
 
 type DetailTab = 'info' | 'departments' | 'members' | 'modules' | 'settings'
 
-const ORG_ROLE_COLORS: Record<string, string> = {
-  employee: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  manager: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
-  hr: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-  admin: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-}
 
 // Учреждения образуют дерево (головная организация → подчинённые). Список
 // строится в порядке обхода дерева, чтобы иерархия была видна сразу, без
@@ -651,31 +646,31 @@ function InfoTab({ org, orgs, onToggleActive, onUpdated }: { org: Organization; 
         </div>
         <div className="space-y-1.5">
           <label className="text-xs text-muted-foreground">Руководитель учреждения</label>
-          <select
+          <Select
             value={org.head_id ?? ''}
             disabled={savingField}
-            onChange={(e) => saveOrgField('head_id', e.target.value ? Number(e.target.value) : null)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+            onChange={selectedValue => saveOrgField('head_id', selectedValue ? Number(selectedValue) : null)}
+            className="w-full"
           >
             <option value="">—</option>
             {members.map((m) => (
               <option key={m.id} value={m.id}>{m.last_name} {m.first_name} {m.middle_name || ''}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <label className="text-xs text-muted-foreground">Вышестоящая организация</label>
-          <select
+          <Select
             value={org.parent_id ?? ''}
             disabled={savingField}
-            onChange={(e) => saveOrgField('parent_id', e.target.value ? Number(e.target.value) : null)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+            onChange={selectedValue => saveOrgField('parent_id', selectedValue ? Number(selectedValue) : null)}
+            className="w-full"
           >
             <option value="">—</option>
             {orgs.filter((o) => o.id !== org.id).map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -862,20 +857,17 @@ function MembersTabContent({
                   <p className="text-xs text-muted-foreground">{member.department_name}</p>
                 )}
               </div>
-              <select
+              <Select
                 value={member.org_role}
-                onChange={(e) => changeRole(member.id, e.target.value)}
+                onChange={selectedValue => changeRole(member.id, selectedValue)}
                 disabled={updatingId === member.id}
-                className={cn(
-                  'text-xs font-medium rounded-md px-2 py-1 border-0 cursor-pointer disabled:opacity-50',
-                  ORG_ROLE_COLORS[member.org_role] || ORG_ROLE_COLORS.employee
-                )}
+                className="min-w-[140px]"
               >
                 <option value="employee">Работник</option>
                 <option value="manager">Руководитель</option>
                 <option value="hr">HR</option>
                 <option value="admin">Администратор</option>
-              </select>
+              </Select>
             </div>
           ))}
         </div>

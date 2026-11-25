@@ -9,11 +9,13 @@ RUN npm ci
 
 COPY . .
 RUN VITE_API_BASE_URL=$VITE_API_BASE_URL npm run build
+RUN node --input-type=module -e "import fs from 'node:fs'; const { version } = JSON.parse(fs.readFileSync('package.json')); fs.writeFileSync('dist/release.json', JSON.stringify({ version }))"
 
 FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY deploy/nginx-app.conf /etc/nginx/templates/default.conf.template
+COPY deploy/maintenance.html /usr/share/nginx/html/maintenance.html
 
 EXPOSE 80 443
 

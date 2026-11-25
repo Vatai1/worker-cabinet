@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
+import { Select } from '@/shared/components/ui/Select'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
@@ -438,16 +439,16 @@ export function Documents() {
 
               <div>
                 <label className="text-sm font-medium">Категория</label>
-                <select
+                <Select
                   value={uploadCategory}
-                  onChange={(e) => setUploadCategory(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  onChange={selectedValue => setUploadCategory(selectedValue)}
+                  className="mt-1 w-full"
                 >
                   <option value="contract">Договор</option>
                   <option value="certificate">Сертификат</option>
                   <option value="policy">Политика</option>
                   <option value="other">Другое</option>
-                </select>
+                </Select>
               </div>
 
               <div>

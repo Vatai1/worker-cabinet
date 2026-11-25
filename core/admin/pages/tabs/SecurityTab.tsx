@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Select } from '@/shared/components/ui/Select'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { personName } from '@/shared/lib/utils'
@@ -134,11 +135,11 @@ export function SecurityTab() {
               <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Неудачные попытки входа</CardTitle>
               <CardDescription>За последние {days} дней</CardDescription>
             </div>
-            <select value={days} onChange={(e) => setDays(parseInt(e.target.value))} className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm">
+            <Select value={days} onChange={selectedValue => setDays(parseInt(selectedValue))}>
               <option value={7}>7 дней</option>
               <option value={30}>30 дней</option>
               <option value={90}>90 дней</option>
-            </select>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>

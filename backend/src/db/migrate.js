@@ -200,6 +200,14 @@ async function runMigrations() {
     `).catch(e => console.log('  - organizations:', e.message))
     console.log('  ✓ organizations')
 
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS user_organization_pins (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        PRIMARY KEY (user_id, org_id)
+      )
+    `)
+
     await db.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS head_id INTEGER REFERENCES users(id) ON DELETE SET NULL`).catch(() => {})
 
     try {
@@ -1459,6 +1467,138 @@ async function runMigrations() {
 
     console.log('✅ Security tables created')
 
+    // Step: Inventory
+    console.log('Creating inventory tables...')
+
+    const hasOldCategories = await db.query("SELECT 1 FROM information_schema.tables WHERE table_name = 'inventory_categories'")
+    if (hasOldCategories.rows.length > 0) {
+      await db.query('ALTER TABLE inventory_categories RENAME TO inventory_sections').catch(() => {})
+      console.log('  ✓ inventory_categories → inventory_sections')
+    }
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS inventory_sections (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        icon VARCHAR(50),
+        sort_order INTEGER DEFAULT 0,
+        field_schema JSONB NOT NULL DEFAULT '[]',
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - inventory_sections:', e.message))
+
+    await db.query(`ALTER TABLE inventory_sections ADD COLUMN IF NOT EXISTS description TEXT`).catch(() => {})
+    await db.query(`ALTER TABLE inventory_sections ADD COLUMN IF NOT EXISTS icon VARCHAR(50)`).catch(() => {})
+    await db.query(`ALTER TABLE inventory_sections ADD COLUMN IF NOT EXISTS field_schema JSONB NOT NULL DEFAULT '[]'`).catch(() => {})
+    await db.query(`ALTER TABLE inventory_sections ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`).catch(() => {})
+
+    const hasCategoryColumn = await db.query("SELECT 1 FROM information_schema.columns WHERE table_name = 'inventory_items' AND column_name = 'category_id'")
+    if (hasCategoryColumn.rows.length > 0) {
+      await db.query('ALTER TABLE inventory_items RENAME COLUMN category_id TO section_id').catch(() => {})
+      console.log('  ✓ inventory_items.category_id → section_id')
+    }
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS inventory_items (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(200) NOT NULL,
+        inventory_number VARCHAR(100) UNIQUE NOT NULL,
+        section_id INTEGER REFERENCES inventory_sections(id) ON DELETE SET NULL,
+        serial_number VARCHAR(200),
+        status VARCHAR(30) NOT NULL DEFAULT 'in_stock',
+        condition VARCHAR(30) NOT NULL DEFAULT 'good',
+        location VARCHAR(200),
+        purchase_date DATE,
+        cost NUMERIC(12,2),
+        notes TEXT,
+        field_values JSONB NOT NULL DEFAULT '{}',
+        assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        organization_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - inventory_items:', e.message))
+
+    await db.query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS field_values JSONB NOT NULL DEFAULT '{}'`).catch(() => {})
+
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_inventory_items_status ON inventory_items (status)`).catch(() => {})
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_inventory_items_section ON inventory_items (section_id)`).catch(() => {})
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_inventory_items_assigned ON inventory_items (assigned_to)`).catch(() => {})
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS inventory_movements (
+        id SERIAL PRIMARY KEY,
+        item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        action VARCHAR(30) NOT NULL,
+        from_status VARCHAR(30),
+        to_status VARCHAR(30),
+        comment TEXT,
+        performed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `).catch(e => console.log('  - inventory_movements:', e.message))
+
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements (item_id)`).catch(() => {})
+
+    const inventorySectionsData = [
+      {
+        code: 'arm', name: 'АРМ', description: 'Автоматизированные рабочие места: компьютеры, мониторы, периферия', icon: 'Monitor', sort: 10,
+        fields: [
+          { key: 'type', label: 'Тип', type: 'select', required: true, options: ['Системный блок', 'Ноутбук', 'Моноблок', 'Тонкий клиент', 'Монитор'], unit: null },
+          { key: 'os', label: 'Операционная система', type: 'text', required: false, options: null, unit: null },
+          { key: 'ip', label: 'IP-адрес', type: 'text', required: false, options: null, unit: null },
+          { key: 'cpu', label: 'Процессор', type: 'text', required: false, options: null, unit: null },
+          { key: 'ram', label: 'ОЗУ', type: 'text', required: false, options: null, unit: null },
+          { key: 'warranty_until', label: 'Гарантия до', type: 'date', required: false, options: null, unit: null }
+        ]
+      },
+      {
+        code: 'furniture', name: 'Мебель', description: 'Столы, стулья, шкафы, стойки', icon: 'Armchair', sort: 20,
+        fields: [
+          { key: 'material', label: 'Материал', type: 'select', required: false, options: ['ДСП', 'МДФ', 'Металл', 'Стекло', 'Ткань', 'Кожа'], unit: null },
+          { key: 'color', label: 'Цвет', type: 'text', required: false, options: null, unit: null },
+          { key: 'dimensions', label: 'Габариты', type: 'text', required: false, options: null, unit: null }
+        ]
+      },
+      {
+        code: 'office_equipment', name: 'Оргтехника', description: 'Принтеры, сканеры, МФУ, проекторы', icon: 'Printer', sort: 30,
+        fields: [
+          { key: 'type', label: 'Тип', type: 'select', required: true, options: ['Принтер', 'Сканер', 'МФУ', 'Проектор', 'ИБП'], unit: null },
+          { key: 'consumable', label: 'Расходник', type: 'text', required: false, options: null, unit: null }
+        ]
+      },
+      {
+        code: 'appliances', name: 'Бытовая техника', description: 'Чайники, холодильники, кондиционеры', icon: 'Refrigerator', sort: 40,
+        fields: [
+          { key: 'power', label: 'Мощность', type: 'text', required: false, options: null, unit: 'Вт' },
+          { key: 'warranty_until', label: 'Гарантия до', type: 'date', required: false, options: null, unit: null }
+        ]
+      },
+      {
+        code: 'equipment', name: 'Оборудование', description: 'Серверы, сетевое и специализированное оборудование', icon: 'Server', sort: 50,
+        fields: [
+          { key: 'type', label: 'Тип', type: 'select', required: false, options: ['Сервер', 'Сетевое оборудование', 'Специализированное'], unit: null },
+          { key: 'ip', label: 'IP-адрес', type: 'text', required: false, options: null, unit: null }
+        ]
+      },
+      { code: 'other', name: 'Прочее', description: 'Иное имущество', icon: 'Package', sort: 60, fields: [] }
+    ]
+    for (const s of inventorySectionsData) {
+      await db.query(
+        `INSERT INTO inventory_sections (code, name, description, icon, sort_order, field_schema)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, icon = EXCLUDED.icon, sort_order = EXCLUDED.sort_order, field_schema = EXCLUDED.field_schema`,
+        [s.code, s.name, s.description, s.icon, s.sort, JSON.stringify(s.fields)]
+      )
+    }
+    console.log('  ✓ inventory sections seeded')
+    console.log('  ✓ inventory tables created')
+
     // Step: Modules toggle
     console.log('Creating modules table...')
     await db.query(`
@@ -1514,6 +1654,8 @@ async function runMigrations() {
       { code: 'appearance', name: 'Внешний вид', description: 'Тема оформления системы', icon: 'Palette', route: null, sort: 3, category: 'core' },
       { code: 'mailing', name: 'Рассылки', description: 'Рассылка информации работникам', icon: 'Send', route: '/hr/mailing', sort: 25, category: 'hr' },
       { code: 'day_offs', name: 'Отгулы', description: 'Начисление и оформление отгулов', icon: 'Coffee', route: null, sort: 12, category: 'hr' },
+      { code: 'inventory', name: 'Инвентаризация', description: 'Учёт оборудования, мебели и материальных ценностей', icon: 'Boxes', route: '/inventory', sort: 45, category: 'work' },
+      { code: 'knowledge', name: 'База знаний', description: 'Статьи, регламенты и инструкции с поиском по категориям', icon: 'BookMarked', route: '/knowledge', sort: 105, category: 'docs' },
     ]
     for (const m of defaultModules) {
       await db.query(
@@ -1996,6 +2138,7 @@ async function runMigrations() {
     await migrateDayOffs(db)
     await migrateVacationTypeRules(db)
     await migrateTimesheetCodes(db)
+    await migrateKnowledgeBase(db)
     await migratePermissionsMatrix(db)
     await migrateNotificationDelivery(db)
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name_genitive JSONB')
@@ -2010,6 +2153,8 @@ async function runMigrations() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`)
     await db.query("DELETE FROM system_settings WHERE key LIKE 'login_stat%' OR key IN ('login_show_stats', 'company_name')")
+
+    await migrateDeployment(db)
 
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
@@ -2385,6 +2530,37 @@ async function migrateNotificationDelivery(db) {
   console.log('  ✓ notification delivery')
 }
 
+async function migrateKnowledgeBase(db) {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS knowledge_categories (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+      name VARCHAR(200) NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.log('  - knowledge_categories:', e.message))
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_knowledge_categories_org_name ON knowledge_categories (organization_id, name)`).catch(() => {})
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS knowledge_articles (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+      category_id INTEGER REFERENCES knowledge_categories(id) ON DELETE SET NULL,
+      title VARCHAR(300) NOT NULL,
+      content TEXT NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+      author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      views INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `).catch(e => console.log('  - knowledge_articles:', e.message))
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_knowledge_articles_category ON knowledge_articles (category_id)`).catch(() => {})
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_knowledge_articles_status ON knowledge_articles (status)`).catch(() => {})
+  console.log('  ✓ knowledge base')
+}
+
 async function migratePermissionsMatrix(db) {
   const MATRIX_VERSION = '2'
   for (const p of PERMISSIONS) {
@@ -2617,4 +2793,43 @@ async function migrateTimesheetFeatures(db) {
     CREATE TRIGGER timesheet_entry_audit AFTER INSERT OR UPDATE ON timesheet_entries
       FOR EACH ROW EXECUTE FUNCTION audit_timesheet_entry();
   `)
+}
+
+export async function migrateDeployment(db) {
+  await db.query(`
+      CREATE TABLE IF NOT EXISTS deployment_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        settings JSONB NOT NULL DEFAULT '{"enabled":false,"frontend_url":"","backend_health_url":"","health_timeout_seconds":180}',
+        heartbeat_at TIMESTAMPTZ,
+        observed JSONB NOT NULL DEFAULT '{}',
+        catalog_error TEXT,
+        host_error TEXT
+      );
+      INSERT INTO deployment_state (id) VALUES (1) ON CONFLICT DO NOTHING;
+      CREATE TABLE IF NOT EXISTS deployment_releases (
+        version TEXT PRIMARY KEY,
+        manifest JSONB NOT NULL,
+        available BOOLEAN NOT NULL DEFAULT true,
+        published_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS deployment_jobs (
+        id UUID PRIMARY KEY,
+        release JSONB NOT NULL,
+        settings JSONB NOT NULL,
+        initiated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'recovery_required', 'completed', 'failed')),
+        stage TEXT NOT NULL DEFAULT 'queued',
+        events JSONB NOT NULL DEFAULT '[]',
+        before_state JSONB NOT NULL DEFAULT '{}',
+        after_state JSONB NOT NULL DEFAULT '{}',
+        backup TEXT,
+        resolution_requested BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        started_at TIMESTAMPTZ,
+        finished_at TIMESTAMPTZ
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS deployment_one_active ON deployment_jobs ((true))
+        WHERE status IN ('queued', 'running', 'recovery_required');
+    `)
 }

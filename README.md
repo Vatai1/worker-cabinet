@@ -156,9 +156,9 @@ Copy-Item .env.example .env
 worker-cabinet/
 ├── backend/                  # Backend API (Node.js + Express)
 │   └── src/
-│       ├── routes/           # 15 групп: auth, vacation, users, departments, projects,
+│       ├── routes/           # 17 групп: auth, vacation, users, departments, projects,
 │       │                     # surveys, onboarding, documents, notifications,
-│       │                     # hierarchy, dictionaries, timesheet, calendar, admin, assistant
+│       │                     # hierarchy, dictionaries, timesheet, calendar, admin, assistant, inventory, knowledge
 │       ├── middleware/       # JWT auth, multer upload, rate limiter, CSRF, validation
 │       ├── services/         # Бизнес-логика (ewsService, surveyService)
 │       ├── config/           # database.js, s3.js (MinIO), swagger.js
@@ -201,9 +201,9 @@ worker-cabinet/
 
 ## Тестирование
 
-### HTTP-интеграционные тесты (183 теста)
+### HTTP-интеграционные тесты (213 тестов)
 
-Тесты покрывают все 15 групп маршрутов API через HTTP-запросы к запущенному серверу.
+Тесты покрывают все 17 групп маршрутов API через HTTP-запросы к запущенному серверу.
 
 ```bash
 # Запустить сервер (если не запущен)
@@ -225,6 +225,7 @@ cd backend && node --test --test-concurrency=1 \
   src/tests/dictionaries.test.js \
   src/tests/vacation.test.js \
   src/tests/surveys.test.js \
+  src/tests/knowledge.test.js \
   src/tests/timesheet.test.js \
   src/tests/projects.test.js \
   src/tests/onboarding.test.js \
@@ -233,6 +234,8 @@ cd backend && node --test --test-concurrency=1 \
 
 Отдельные файлы:
 ```bash
+cd backend && node --test src/tests/inventory.test.js
+```
 cd backend && node --test src/tests/admin.test.js          # 39 тестов
 cd backend && node --test src/tests/dictionaries.test.js   # 15 тестов
 cd backend && node --test src/tests/projects.test.js       # 21 тест
@@ -246,11 +249,13 @@ cd backend && node --test src/tests/timesheet.test.js      # 14 тестов
 
 | Файл | Тестов | Маршруты |
 |------|--------|----------|
+| `inventory.test.js` | 30 | `/inventory/*` (разделы с конструктором полей, валидация field_values, позиции, выдача/возврат, статусы, история, статистика, права) |
 | `admin.test.js` | 39 | `/admin/*` (users, roles, permissions, settings, stats, reports, audit, modules) |
 | `projects.test.js` | 21 | `/projects/*` (CRUD, members, folders, documents, roadmap v1/v2) |
 | `dictionaries.test.js` | 15 | `/dictionaries/*` (departments, skills, vacation-types, positions, managers) |
 | `timesheet.test.js` | 14 | `/timesheet/*` (CRUD, entries, status workflow, export excel/pdf) |
 | `surveys.test.js` | 13 | `/surveys/*` (CRUD, publish, respond, analytics, close) |
+| `knowledge.test.js` | 17 | `/knowledge/*` (категории, статьи: черновики и публикация, поиск, просмотры, права) |
 | `onboarding.test.js` | 12 | `/onboarding/*` (templates, records, self-service) |
 | `users.test.js` | 12 | `/users/*` (list, search, profile, skills, projects) |
 | `vacation.test.js` | 12 | `/vacation/*` (requests, calendar, restrictions, transfers, application) |

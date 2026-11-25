@@ -1,4 +1,5 @@
 import swaggerJsdoc from 'swagger-jsdoc'
+import { deploymentSchemas } from '../deployment/openapi.js'
 
 const options = {
   definition: {
@@ -20,6 +21,7 @@ const options = {
         },
       },
       schemas: {
+        ...deploymentSchemas,
         Error: {
           type: 'object',
           properties: {
@@ -189,9 +191,10 @@ const options = {
           properties: {
             employee_id: { type: 'integer' },
             date: { type: 'string', format: 'date' },
-            code: { type: 'string', nullable: true, description: 'Ручные отметки: Я, К, Б, НН или null. Отпуска и выходные рассчитываются автоматически.' },
-            minutes: { type: 'integer', nullable: true, minimum: 0, maximum: 1440, description: 'Отработанные минуты, только при явке' },
+            code: { type: 'string', nullable: true, description: 'Отметка по классификатору или null. Согласованные отпуска подставляются автоматически. В нерабочий день вручную допускается РП.' },
+            minutes: { type: 'integer', nullable: true, minimum: 0, maximum: 1440, description: 'Минуты для Я, Н, С, РП, КР и ФК' },
             is_submitted: { type: 'boolean', readOnly: true },
+            is_automatic: { type: 'boolean', readOnly: true },
           },
         },
         TimesheetDay: {
@@ -235,6 +238,8 @@ const options = {
       { name: 'Instructions', description: 'Видеоинструкции: загрузка суперадмином и показ на дашборде' },
       { name: 'Appearance', description: 'Тема оформления системы' },
       { name: 'Push', description: 'Web Push уведомления (VAPID)' },
+      { name: 'Inventory', description: 'Инвентаризация оборудования, мебели и материальных ценностей' },
+      { name: 'Knowledge', description: 'База знаний: статьи и категории' },
     ],
   },
   apis: ['./src/routes/*.js'],

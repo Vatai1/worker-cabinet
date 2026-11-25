@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 type Role = 'employee' | 'manager' | 'hr' | 'admin' | 'superadmin'
 
@@ -38,4 +38,11 @@ export async function loginAs(page: Page, role: Role) {
       sameSite: 'Lax',
     },
   ])
+}
+
+export async function chooseSelectOption(control: Locator, value: string) {
+  await control.click()
+  const listId = await control.getAttribute('aria-controls')
+  if (!listId) throw new Error('Список выбора не открыт')
+  await control.page().locator(`[id=${JSON.stringify(listId)}] [role="option"][data-value=${JSON.stringify(value)}]`).click()
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { Select } from '@/shared/components/ui/Select'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { apiGet, apiPost, fetchWithRetry } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn, personName } from '@/shared/lib/utils'
@@ -333,16 +334,15 @@ export function DepartmentsTab() {
 
           <label className="flex flex-col gap-1.5">
             <span className="text-[12.5px] font-semibold text-muted-foreground">Входит в подразделение</span>
-            <select
+            <Select
               value={formParentId ?? ''}
-              onChange={e => setFormParentId(e.target.value ? Number(e.target.value) : null)}
-              className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
+              onChange={selectedValue => setFormParentId(selectedValue ? Number(selectedValue) : null)}
             >
               <option value="">—</option>
               {departments.map(d => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
-            </select>
+            </Select>
           </label>
 
           <p className="text-xs text-muted-foreground">Состав, запрет отпусков и видимость настраиваются после создания — кликните по отделу в списке</p>

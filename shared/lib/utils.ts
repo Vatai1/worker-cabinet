@@ -35,6 +35,16 @@ export function formatDateTime(date: Date | string): string {
   }).format(d)
 }
 
+export function formatCurrency(value: number | string): string {
+  const n = typeof value === 'string' ? Number(value) : value
+  if (Number.isNaN(n)) return '—'
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    maximumFractionDigits: 0,
+  }).format(n)
+}
+
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error

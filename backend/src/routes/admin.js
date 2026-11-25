@@ -15,7 +15,7 @@ import { createRequire } from 'module'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { requirePermission, invalidatePermissionCache } from '../lib/permissions.js'
-import { deliveryStats, retryFailedEmails } from '../lib/notificationDelivery.js'
+import { deliveryStats, retryFailedEmails, clearEmailQueue } from '../lib/notificationDelivery.js'
 
 const require = createRequire(import.meta.url)
 const pkg = require('../../package.json')
@@ -583,7 +583,7 @@ router.put('/users/:id', asyncHandler(async (req, res) => {
  *       200:
  *         description: Системные настройки
  */
-const INTERNAL_SETTING_KEYS = ['permissions_matrix_version', 'notification_delivery_version', 'vacation_type_rules_version']
+const INTERNAL_SETTING_KEYS = ['permissions_matrix_version', 'notification_delivery_version', 'vacation_type_rules_version', 'timesheet_codes_v2']
 
 router.get('/settings', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
   const result = await query(
@@ -924,6 +924,30 @@ router.get('/notifications/stats', requirePermission('admin:settings'), asyncHan
 
 router.post('/notifications/retry-failed', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
   res.json({ retried: await retryFailedEmails() })
+}))
+
+/**
+ * @swagger
+ * /admin/notifications/clear-email-queue:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Отменить ожидающие и неудавшиеся отправки писем во всех организациях
+ *     description: Уведомления в кабинете и push сохраняются. Письма в обработке продолжают отправляться.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Количество отменённых отправок
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 cancelled: { type: integer }
+ *       401: { description: Требуется авторизация }
+ *       403: { description: Требуется доступ к административным настройкам }
+ */
+router.post('/notifications/clear-email-queue', requirePermission('admin:settings'), asyncHandler(async (req, res) => {
+  res.json({ cancelled: await clearEmailQueue() })
 }))
 
 /**

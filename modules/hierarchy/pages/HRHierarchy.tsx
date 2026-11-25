@@ -34,6 +34,7 @@ import {
 } from '@xyflow/react'
 import { Building2, User, Trash2, Save, Network, Search, X, Pencil, ArrowLeft, ArrowLeftRight, AlignLeft, ExternalLink, Frame, Eye, AlertTriangle, BookOpen, Plus, ChevronDown, Briefcase, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
+import { Select } from '@/shared/components/ui/Select'
 import { Button } from '@/shared/components/ui/Button'
 import { Switch } from '@/shared/components/ui/Switch'
 import { DepartmentHierarchyOverlay } from '@/modules/hierarchy/components/DepartmentHierarchyOverlay'
@@ -758,16 +759,16 @@ function SelectEmployeeModal({
               className="w-full pl-9 pr-4 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors"
             />
           </div>
-          <select
+          <Select
             value={deptId ?? ''}
-            onChange={e => setDeptId(e.target.value === '' ? null : Number(e.target.value))}
-            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors"
+            onChange={selectedValue => setDeptId(selectedValue === '' ? null : Number(selectedValue))}
+            className="w-full"
           >
             <option value="">Все отделы</option>
             {departments.map(d => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
           {filtered.length === 0 ? (
@@ -929,16 +930,16 @@ function PositionInputModal({
             placeholder="Название должности..."
             className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors"
           />
-          <select
+          <Select
             value={departmentId ?? ''}
-            onChange={e => setDepartmentId(e.target.value === '' ? null : Number(e.target.value))}
-            className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg outline-none focus:border-primary transition-colors"
+            onChange={selectedValue => setDepartmentId(selectedValue === '' ? null : Number(selectedValue))}
+            className="w-full"
           >
             <option value="">Без отдела</option>
             {departments.map(d => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
-          </select>
+          </Select>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}

@@ -41,11 +41,12 @@ export function SearchableCheckList({
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          aria-label={searchPlaceholder}
           placeholder={searchPlaceholder}
-          className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
+          className="h-10 w-full rounded-xl border border-input bg-card py-2 pl-9 pr-3 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground hover:border-primary/35 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/15"
         />
       </div>
-      <div className="max-h-64 overflow-y-auto rounded-lg border border-border scrollbar-thin overscroll-contain">
+      <div className="max-h-64 overflow-y-auto rounded-xl border border-border bg-card p-1.5 scrollbar-thin overscroll-contain">
         {filtered.length === 0 ? (
           <p className="px-3 py-4 text-center text-xs text-muted-foreground">{emptyText}</p>
         ) : (
@@ -55,8 +56,8 @@ export function SearchableCheckList({
               <label
                 key={item.id}
                 className={cn(
-                  'flex cursor-pointer items-start gap-2.5 border-b border-border/50 px-3 py-2 text-sm transition-colors last:border-0 hover:bg-muted/50',
-                  checked && 'bg-primary/5'
+                  'flex min-h-10 cursor-pointer items-start gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted focus-within:bg-muted',
+                  checked && 'bg-primary/5 font-medium text-primary'
                 )}
               >
                 <input

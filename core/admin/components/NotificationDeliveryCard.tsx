@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Mail, RefreshCw, RotateCcw } from 'lucide-react'
+import { Mail, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
+import { confirmDialog } from '@/shared/components/ConfirmDialog'
 import { apiGet, apiPost } from '@/shared/lib/apiClient'
 import { cn, getErrorMessage } from '@/shared/lib/utils'
 
@@ -28,6 +29,7 @@ function formatAge(seconds: number | null) {
 export function NotificationDeliveryCard() {
   const [stats, setStats] = useState<DeliveryStats | null>(null)
   const [retrying, setRetrying] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -49,6 +51,26 @@ export function NotificationDeliveryCard() {
       toast.error(getErrorMessage(err))
     } finally {
       setRetrying(false)
+    }
+  }
+
+  const clear = async () => {
+    setClearing(true)
+    try {
+      const confirmed = await confirmDialog({
+        title: 'Очистить очередь писем?',
+        message: 'Отменить накопленные и недоставленные письма во всех организациях? Уведомления в кабинете и push сохранятся. Письма, которые уже отправляются, могут дойти до получателей.',
+        confirmText: 'Очистить очередь',
+        variant: 'danger',
+      })
+      if (!confirmed) return
+      const { cancelled } = await apiPost<{ cancelled: number }>('/admin/notifications/clear-email-queue')
+      toast.success(`Отменено отправок писем: ${cancelled}`)
+      await load()
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -75,10 +97,13 @@ export function NotificationDeliveryCard() {
                 : 'Почта не настроена (MAIL_HOST, MAIL_USER) — уведомления приходят только на сайт и push'}
             </CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={load}><RefreshCw className="mr-1 h-3.5 w-3.5" /> Обновить</Button>
-            <Button size="sm" onClick={retry} disabled={retrying || stats.email_failed === 0}>
+            <Button size="sm" onClick={retry} disabled={retrying || clearing || stats.email_failed === 0}>
               <RotateCcw className="mr-1 h-3.5 w-3.5" /> Повторить недоставленные
+            </Button>
+            <Button variant="destructive" size="sm" onClick={clear} disabled={clearing || retrying || stats.email_pending + stats.email_failed === 0}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" /> Очистить очередь писем
             </Button>
           </div>
         </div>

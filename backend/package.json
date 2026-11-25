@@ -25,6 +25,7 @@
     "test:users": "node --test src/tests/users.test.js",
     "test:vacation": "node --test src/tests/vacation-full.test.js",
     "test:surveys": "node --test src/tests/surveys.test.js",
+    "test:knowledge": "node --test src/tests/knowledge.test.js",
     "test:timesheet": "node --test src/tests/timesheet.test.js",
     "test:projects": "node --test src/tests/projects.test.js",
     "test:onboarding": "node --test src/tests/onboarding.test.js",

@@ -1,10 +1,12 @@
 import { create } from 'zustand'
-import { apiGet } from '@/shared/lib/apiClient'
+import { apiGet, apiPut } from '@/shared/lib/apiClient'
 import { getCookie, setCookie } from '@/shared/lib/cookies'
 
-interface Organization {
+export interface Organization {
   id: number
   name: string
+  parent_id: number | null
+  is_pinned: boolean
   slug: string
   inn?: string
   logo_s3_key?: string
@@ -20,6 +22,7 @@ interface OrgStore {
   error: string | null
   fetchOrgs: (force?: boolean) => Promise<void>
   setCurrentOrg: (id: number) => void
+  setOrgPinned: (id: number, pinned: boolean) => Promise<void>
   currentOrg: () => Organization | null
 }
 
@@ -46,6 +49,11 @@ export const useOrgStore = create<OrgStore>((set, get) => ({
     } catch (e) {
       set({ error: e instanceof Error && e.message ? e.message : 'Ошибка загрузки организаций', loading: false })
     }
+  },
+
+  setOrgPinned: async (id, pinned) => {
+    const result = await apiPut<{ id: number; is_pinned: boolean }>(`/organizations/${id}/pin`, { is_pinned: pinned })
+    set(state => ({ organizations: state.organizations.map(org => org.id === id ? { ...org, is_pinned: result.is_pinned } : org) }))
   },
 
   setCurrentOrg: (id: number) => {

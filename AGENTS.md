@@ -27,6 +27,7 @@ cd backend && node --test src/tests/auth.test.js
 cd backend && node --test --test-name-pattern="JWT Token" src/tests/auth.test.js
 cd backend && node --test src/tests/vacation-history.test.js
 cd backend && node --test src/tests/surveys.test.js
+cd backend && node --test src/tests/knowledge.test.js
 cd backend && node --test src/tests/timesheet.test.js
 
 # Test users (after seed): admin@example.com / ivanov@example.com / petrov@example.com — password: password123
@@ -123,7 +124,7 @@ finally { client.release() }
 
 **Error Classes** (`middleware/errors.js`): `ValidationError`(400), `UnauthorizedError`(401), `ForbiddenError`(403), `NotFoundError`(404), `ConflictError`(409). `asyncHandler` auto-catches; `errorHandler` also handles JWT + Postgres unique/FK violations.
 
-**Database**: `$1, $2...` parameterized queries. `RETURNING *` for INSERT/UPDATE. DATE columns return raw `YYYY-MM-DD` (custom pg parser). **15 route groups** under `/api` prefix.
+**Database**: `$1, $2...` parameterized queries. `RETURNING *` for INSERT/UPDATE. DATE columns return raw `YYYY-MM-DD` (custom pg parser). **17 route groups** under `/api` prefix.
 
 ### API Responses
 
@@ -136,7 +137,7 @@ finally { client.release() }
 JSDoc annotations on all route files generate OpenAPI 3.0 spec via `swagger-jsdoc` (`backend/src/config/swagger.js`).
 - Spec JSON: `GET /api-docs.json`
 - Custom UI: `GET /api-docs` (serves `backend/public/api-docs.html`, dev only)
-- Tags: Auth, Users, Vacation, Projects, Documents, Notifications, Departments, Surveys, Onboarding, Hierarchy, Dictionaries, Timesheet, Calendar
+- Tags: Auth, Users, Vacation, Projects, Documents, Notifications, Departments, Surveys, Onboarding, Hierarchy, Dictionaries, Timesheet, Calendar, Inventory, Knowledge
 - When adding new routes, add JSDoc `@swagger` annotation before the `router.get/post/...` call
 - YAML descriptions with colons must be quoted: `description: 'Доступно для ролей: hr, admin'`
 

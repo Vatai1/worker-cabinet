@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { useParams } from 'react-router-dom'
+import { Select } from '@/shared/components/ui/Select'
 import { API_BASE_URL } from '@/shared/lib/api'
 import { getAuthHeaders, getAuthHeadersWithContentType } from '@/shared/lib/authHeaders'
 import { getErrorMessage, formatDate } from '@/shared/lib/utils'
@@ -364,22 +365,20 @@ export function HROnboarding() {
       {tab === 'templates' && (
         <div className="space-y-4">
           <div className="flex gap-3 flex-wrap">
-            <select
+            <Select
               value={templateFilterDept}
-              onChange={e => handleTemplateFilter(e.target.value, templateFilterPos)}
-              className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onChange={selectedValue => handleTemplateFilter(selectedValue, templateFilterPos)}
             >
               <option value="">Все отделы</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-            <select
+            </Select>
+            <Select
               value={templateFilterPos}
-              onChange={e => handleTemplateFilter(templateFilterDept, e.target.value)}
-              className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onChange={selectedValue => handleTemplateFilter(templateFilterDept, selectedValue)}
             >
               <option value="">Все должности</option>
               {positions.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
+            </Select>
           </div>
           {templatesLoading ? (
             <div className="flex items-center justify-center py-12"><div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" /></div>
@@ -701,25 +700,25 @@ function AddOnboardingModal({ departments, positions, templates, onTemplatesNeed
             </div>
             <div className="space-y-1">
               <Label>Должность</Label>
-              <select
+              <Select
                 value={form.position}
-                onChange={e => setForm(prev => ({ ...prev, position: e.target.value }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onChange={selectedValue => setForm(prev => ({ ...prev, position: selectedValue }))}
+                className="w-full"
               >
                 <option value="">Выберите должность</option>
                 {positions.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Отдел</Label>
-              <select
+              <Select
                 value={form.department_id}
-                onChange={e => setForm(prev => ({ ...prev, department_id: e.target.value }))}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onChange={selectedValue => setForm(prev => ({ ...prev, department_id: selectedValue }))}
+                className="w-full"
               >
                 <option value="">Не выбран</option>
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -852,25 +851,25 @@ function TemplateModal({ template, departments, positions, onClose, onSuccess }:
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label>Отдел (опционально)</Label>
-              <select
+              <Select
                 value={departmentId}
-                onChange={e => setDepartmentId(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onChange={selectedValue => setDepartmentId(selectedValue)}
+                className="w-full"
               >
                 <option value="">Все отделы</option>
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Должность (опционально)</Label>
-              <select
+              <Select
                 value={position}
-                onChange={e => setPosition(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onChange={selectedValue => setPosition(selectedValue)}
+                className="w-full"
               >
                 <option value="">Любая должность</option>
                 {positions.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+              </Select>
             </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

@@ -112,7 +112,7 @@ export function Header() {
           </button>
         )}
         {loaded && organizations.length > 1 && (
-          <div className="rounded-full border bg-card px-3 py-1.5">
+          <div className="min-w-0">
             <OrgSwitcher />
           </div>
         )}

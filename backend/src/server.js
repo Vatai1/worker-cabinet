@@ -22,6 +22,7 @@ import timesheetRoutes from './routes/timesheet.js'
 import calendarRoutes from './routes/calendar.js'
 import notificationsRoutes from './routes/notifications.js'
 import adminRoutes from './routes/admin.js'
+import deploymentRoutes from './routes/deployment.js'
 import assistantRoutes from './routes/assistant.js'
 import onlyofficeRoutes from './routes/onlyoffice.js'
 import appearanceRoutes from './routes/appearance.js'
@@ -32,6 +33,8 @@ import bugReportsRoutes from './routes/bugReports.js'
 import bannerRoutes from './routes/banner.js'
 import instructionsRoutes from './routes/instructions.js'
 import pushRoutes from './routes/push.js'
+import inventoryRoutes from './routes/inventory.js'
+import knowledgeRoutes from './routes/knowledge.js'
 import { scheduleTimesheetCron } from './cron/timesheetCron.js'
 import { runMigrations } from './db/migrate.js'
 import { errorHandler, errorResponseLogger } from './middleware/errors.js'
@@ -151,6 +154,7 @@ app.use('/api/dictionaries', dictionariesRoutes)
 app.use('/api/timesheet', timesheetRoutes)
 app.use('/api/calendar', calendarRoutes)
 app.use('/api/notifications', notificationsRoutes)
+app.use('/api/admin/deployment', deploymentRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/assistant', assistantRoutes)
 app.use('/api/onlyoffice', onlyofficeRoutes)
@@ -162,6 +166,8 @@ app.use('/api/bug-reports', bugReportsRoutes)
 app.use('/api/banner', bannerRoutes)
 app.use('/api/instructions', instructionsRoutes)
 app.use('/api/push', pushRoutes)
+app.use('/api/inventory', inventoryRoutes)
+app.use('/api/knowledge', knowledgeRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

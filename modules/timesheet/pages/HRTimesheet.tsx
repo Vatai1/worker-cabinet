@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Select } from '@/shared/components/ui/Select'
 import { Button } from '@/shared/components/ui/Button'
 import { TimesheetEmployees } from '@/modules/timesheet/components/TimesheetEmployees'
 import { TimesheetReport } from '@/modules/timesheet/components/TimesheetReport'
@@ -186,19 +187,19 @@ function TimesheetReview({ settingsRevision, journal }: { settingsRevision: numb
       </section>}
 
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="Отдел" value={departmentId ?? ''} disabled={reviewing} onChange={e => { setDepartmentId(Number(e.target.value)); selectDate('') }} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+        <Select aria-label="Отдел" value={departmentId ?? ''} disabled={reviewing} onChange={selectedValue => { setDepartmentId(Number(selectedValue)); selectDate('') }}>
           {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-        <select aria-label="Месяц" value={month} disabled={reviewing} onChange={e => { setMonth(Number(e.target.value)); selectDate('') }} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+        </Select>
+        <Select aria-label="Месяц" value={month} disabled={reviewing} onChange={selectedValue => { setMonth(Number(selectedValue)); selectDate('') }}>
           {MONTH_NAMES.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
-        </select>
-        <select aria-label="Год" value={year} disabled={reviewing} onChange={e => { setYear(Number(e.target.value)); selectDate('') }} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+        </Select>
+        <Select aria-label="Год" value={year} disabled={reviewing} onChange={selectedValue => { setYear(Number(selectedValue)); selectDate('') }}>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
+        </Select>
         {!journal && day && (
-          <select aria-label="Дата табеля" value={day.date} disabled={reviewing} onChange={e => selectDate(e.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          <Select aria-label="Дата табеля" value={day.date} disabled={reviewing} onChange={selectedValue => selectDate(selectedValue)}>
             {currentSheet?.days.map(d => <option key={d.date} value={d.date}>{formatDate(d.date)} · {TIMESHEET_DAY_LABELS[d.status]}</option>)}
-          </select>
+          </Select>
         )}
         <Button variant="outline" size="sm" disabled={loading || reviewing} onClick={() => { setError(null); setReload(value => value + 1) }}>Обновить</Button>
       </div>

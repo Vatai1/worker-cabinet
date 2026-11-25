@@ -6,6 +6,7 @@ import { query, inTransaction } from '../config/database.js'
 import { notify, notifyBatch, getUnreadCount } from '../config/notifications.js'
 import { renderEmail } from '../lib/notificationEmail.js'
 import { listen, NOTIFICATION_CHANNEL } from '../lib/pgListen.js'
+import { clearEmailQueue, retryFailedEmails } from '../lib/notificationDelivery.js'
 
 const STAMP = Date.now()
 const users = []
@@ -119,6 +120,31 @@ describe('Доставка уведомлений', () => {
     assert.strictEqual(ids.length, 2)
     const rows = (await query('SELECT push_status FROM notification_queue WHERE id = ANY($1)', [ids])).rows
     assert.ok(rows.every((r) => r.push_status === null))
+  })
+
+  it('очистка отменяет очередь писем, сохраняет уведомления и исключает повторную отправку', async () => {
+    const rows = (await query(
+      `INSERT INTO notification_queue (user_id, type, channel, data, status, push_status, next_attempt_at)
+       SELECT $1, 'generic', 'email', '{}', state, 'pending', NOW()
+       FROM unnest(ARRAY['pending', 'failed', 'sent', 'processing', 'cancelled']) state
+       RETURNING id, status`,
+      [users[0].id]
+    )).rows
+    await clearEmailQueue()
+    await retryFailedEmails()
+    const kept = (await query(
+      'SELECT id, status, push_status, next_attempt_at, read_at FROM notification_queue WHERE id = ANY($1) ORDER BY id',
+      [rows.map(row => row.id)]
+    )).rows
+    assert.strictEqual(kept.length, rows.length)
+    for (const row of kept) {
+      const original = rows.find(item => item.id === row.id).status
+      assert.strictEqual(row.status, ['pending', 'failed'].includes(original) ? 'cancelled' : original)
+      assert.strictEqual(row.push_status, 'pending')
+      assert.strictEqual(row.read_at, null)
+      if (['pending', 'failed'].includes(original)) assert.strictEqual(row.next_attempt_at, null)
+    }
+    assert.strictEqual(await clearEmailQueue(), 0)
   })
 
   it('письмо уходит на адрес сотрудника со ссылкой на сайт', async () => {

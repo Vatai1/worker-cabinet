@@ -28,6 +28,8 @@ const Departments = lazy(() => import('@/modules/departments/pages/Departments')
 const DepartmentDetail = lazy(() => import('@/modules/departments/pages/DepartmentDetail').then(m => ({ default: m.DepartmentDetail })))
 const Surveys = lazy(() => import('@/modules/surveys/pages/Surveys').then(m => ({ default: m.Surveys })))
 const SurveyPage = lazy(() => import('@/modules/surveys/pages/SurveyPage').then(m => ({ default: m.SurveyPage })))
+const KnowledgeBase = lazy(() => import('@/modules/knowledge/pages/KnowledgeBase').then(m => ({ default: m.KnowledgeBase })))
+const KnowledgeArticlePage = lazy(() => import('@/modules/knowledge/pages/KnowledgeArticle').then(m => ({ default: m.KnowledgeArticlePage })))
 const Onboarding = lazy(() => import('@/modules/onboarding/pages/Onboarding').then(m => ({ default: m.Onboarding })))
 const HROnboarding = lazy(() => import('@/modules/onboarding/pages/HROnboarding').then(m => ({ default: m.HROnboarding })))
 const HRDocTemplateNew = lazy(() => import('@/modules/documents/pages/HRDocTemplateNew').then(m => ({ default: m.HRDocTemplateNew })))
@@ -38,6 +40,7 @@ const AdminPanel = lazy(() => import('@/core/admin/pages/AdminPanel').then(m => 
 const HRPanel = lazy(() => import('@/shared/pages/HRPanel').then(m => ({ default: m.HRPanel })))
 const SearchPage = lazy(() => import('@/shared/pages/SearchPage').then(m => ({ default: m.SearchPage })))
 const Assistant = lazy(() => import('@/modules/assistant/pages/Assistant').then(m => ({ default: m.Assistant })))
+const Inventory = lazy(() => import('@/modules/inventory/pages/Inventory').then(m => ({ default: m.Inventory })))
 
 function PageLoader() {
   return (
@@ -205,6 +208,9 @@ function App() {
                 <Route path="admin/org" element={<AdminRoute><AdminPanel mode="org" /></AdminRoute>} />
                 <Route path="admin" element={<AdminRedirect />} />
                 <Route path="assistant" element={<ModuleGuard module="assistant"><BlockOnboardingRoute><Assistant /></BlockOnboardingRoute></ModuleGuard>} />
+                <Route path="inventory" element={<ModuleGuard module="inventory"><BlockOnboardingRoute><Inventory /></BlockOnboardingRoute></ModuleGuard>} />
+                <Route path="knowledge" element={<ModuleGuard module="knowledge"><BlockOnboardingRoute><KnowledgeBase /></BlockOnboardingRoute></ModuleGuard>} />
+                <Route path="knowledge/:id" element={<ModuleGuard module="knowledge"><BlockOnboardingRoute><KnowledgeArticlePage /></BlockOnboardingRoute></ModuleGuard>} />
               </Route>
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>

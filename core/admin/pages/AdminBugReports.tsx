@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Select } from '@/shared/components/ui/Select'
 import { TelemetryActions } from '@/shared/components/TelemetryActions'
 import type { TelemetryAction } from '@/shared/lib/telemetry'
 import { useLocation } from 'react-router-dom'
@@ -190,28 +191,26 @@ export function AdminBugReports() {
             className="w-full pl-9 pr-3 h-9 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        <select
+        <Select
           value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-          className="h-9 px-3 rounded-lg border border-input bg-background text-sm"
+          onChange={selectedValue => { setStatusFilter(selectedValue); setPage(1) }}
         >
           <option value="">Все статусы</option>
           <option value="new">Новые</option>
           <option value="in_progress">В работе</option>
           <option value="resolved">Решённые</option>
           <option value="rejected">Отклонённые</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={priorityFilter}
-          onChange={(e) => { setPriorityFilter(e.target.value); setPage(1) }}
-          className="h-9 px-3 rounded-lg border border-input bg-background text-sm"
+          onChange={selectedValue => { setPriorityFilter(selectedValue); setPage(1) }}
         >
           <option value="">Любой приоритет</option>
           <option value="low">Низкий</option>
           <option value="medium">Средний</option>
           <option value="high">Высокий</option>
           <option value="critical">Критичный</option>
-        </select>
+        </Select>
       </div>
 
       {loading ? (
@@ -299,29 +298,29 @@ export function AdminBugReports() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs text-muted-foreground block mb-1">Статус</label>
-                        <select
+                        <Select
                           value={editStatus}
-                          onChange={(e) => setEditStatus(e.target.value)}
-                          className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm"
+                          onChange={selectedValue => setEditStatus(selectedValue)}
+                          className="w-full"
                         >
                           <option value="new">Новый</option>
                           <option value="in_progress">В работе</option>
                           <option value="resolved">Решён</option>
                           <option value="rejected">Отклонён</option>
-                        </select>
+                        </Select>
                       </div>
                       <div>
                         <label className="text-xs text-muted-foreground block mb-1">Приоритет</label>
-                        <select
+                        <Select
                           value={editPriority}
-                          onChange={(e) => setEditPriority(e.target.value)}
-                          className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm"
+                          onChange={selectedValue => setEditPriority(selectedValue)}
+                          className="w-full"
                         >
                           <option value="low">Низкий</option>
                           <option value="medium">Средний</option>
                           <option value="high">Высокий</option>
                           <option value="critical">Критичный</option>
-                        </select>
+                        </Select>
                       </div>
                     </div>
 

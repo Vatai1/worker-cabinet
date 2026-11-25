@@ -1,122 +1,155 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Building2, Check, Search, X } from 'lucide-react'
-import { useOrgStore } from '@/shared/store/orgStore'
-import { cn } from '@/shared/lib/utils'
 import { Input } from '@/shared/components/ui/Input'
+import { ChevronDown, ChevronRight, Building2, Check, Pin, Search, X } from 'lucide-react'
+import { useOrgStore } from '@/shared/store/orgStore'
+import { cn, getErrorMessage } from '@/shared/lib/utils'
+import { SELECT_TRIGGER_CLASS } from '@/shared/lib/selectStyles'
+import { buildOrganizationTree } from '@/shared/lib/organizationTree'
+import type { Organization } from '@/shared/store/orgStore'
 
 export function OrgSwitcher() {
-  const { organizations, currentOrgId, setCurrentOrg, fetchOrgs } = useOrgStore()
+  const { organizations, currentOrgId, setCurrentOrg, fetchOrgs, setOrgPinned, loading, error } = useOrgStore()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+  const [savingIds, setSavingIds] = useState<Set<number>>(new Set())
+  const [pinError, setPinError] = useState<string | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const currentOrg = organizations.find(o => o.id === currentOrgId)
 
   useEffect(() => { fetchOrgs() }, [fetchOrgs])
 
   useEffect(() => {
     if (!open) return
-    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    window.addEventListener('keydown', handleEsc)
-    return () => window.removeEventListener('keydown', handleEsc)
+    const trigger = triggerRef.current
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+      if (event.key !== 'Tab') return
+      const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input')
+      if (!controls?.length) return
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', handleKeydown)
+    return () => {
+      window.removeEventListener('keydown', handleKeydown)
+      trigger?.focus()
+    }
   }, [open])
 
   if (organizations.length <= 1) return null
 
-  const filtered = organizations.filter((org) => {
-    const q = search.toLowerCase()
-    return !q || org.name.toLowerCase().includes(q)
-  })
+  const rows = buildOrganizationTree(organizations, collapsed, search)
+  const pinned = organizations.filter(org => org.is_pinned && org.name.toLocaleLowerCase('ru').includes(search.trim().toLocaleLowerCase('ru')))
+
+  const togglePin = async (org: Organization) => {
+    if (loading || savingIds.has(org.id)) return
+    setSavingIds(ids => new Set(ids).add(org.id))
+    setPinError(null)
+    try {
+      await setOrgPinned(org.id, !org.is_pinned)
+    } catch (err) {
+      setPinError(getErrorMessage(err))
+    } finally {
+      setSavingIds(ids => { const next = new Set(ids); next.delete(org.id); return next })
+    }
+  }
+
+  const renderRow = (org: Organization, depth = 0, hasChildren = false, inTree = false) => (
+    <div key={org.id} className={cn('flex items-center rounded-xl pr-1', org.id === currentOrgId ? 'bg-primary/10' : 'hover:bg-muted/60')} style={{ paddingLeft: `${8 + depth * 20}px` }}>
+      {inTree && (hasChildren ? (
+        <button
+          type="button"
+          aria-label={`${collapsed.has(org.id) && !search.trim() ? 'Развернуть' : 'Свернуть'}: ${org.name}`}
+          aria-expanded={!!search.trim() || !collapsed.has(org.id)}
+          disabled={!!search.trim()}
+          onClick={() => setCollapsed(ids => {
+            const next = new Set(ids)
+            if (next.has(org.id)) next.delete(org.id)
+            else next.add(org.id)
+            return next
+          })}
+          className="shrink-0 rounded-lg p-1.5 hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          {collapsed.has(org.id) && !search.trim() ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+      ) : <span className="w-7 shrink-0" />)}
+      <button
+        type="button"
+        onClick={() => { if (org.id !== currentOrgId) setCurrentOrg(org.id); setOpen(false) }}
+        aria-current={org.id === currentOrgId ? 'true' : undefined}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-3 text-left focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className={cn('min-w-0 flex-1 break-words text-sm font-medium', org.id === currentOrgId && 'text-primary')}>{org.name}</span>
+        {org.id === currentOrgId && <Check className="h-4 w-4 shrink-0 text-primary" />}
+      </button>
+      <button
+        type="button"
+        aria-label={`${org.is_pinned ? 'Открепить' : 'Закрепить'}: ${org.name}`}
+        title={org.is_pinned ? 'Открепить организацию' : 'Закрепить организацию'}
+        aria-pressed={org.is_pinned}
+        disabled={loading || savingIds.has(org.id)}
+        onClick={() => void togglePin(org)}
+        className={cn('ml-1 shrink-0 rounded-lg p-2 hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40', org.is_pinned ? 'text-primary' : 'text-muted-foreground')}
+      >
+        <Pin className={cn('h-4 w-4', org.is_pinned && 'fill-current')} />
+      </button>
+    </div>
+  )
 
   return (
     <>
       <button
-        onClick={() => { setOpen(true); fetchOrgs(true) }}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium
-                   hover:bg-accent/50 transition-colors border border-border/40"
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => { setSearch(''); setPinError(null); setOpen(true); fetchOrgs(true) }}
+        className={cn(SELECT_TRIGGER_CLASS, 'gap-2', open && 'border-primary/50 ring-2 ring-primary/15')}
       >
         <Building2 className="h-4 w-4 text-muted-foreground" />
-        <span className="max-w-[140px] truncate">{currentOrg?.name || 'Орган.'}</span>
-        <ChevronDown className="h-3.5 w-3.5" />
+        <span className="max-w-[140px] truncate">{currentOrg?.name || 'Организация'}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
-
       {open && createPortal(
-        <div
-          className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] bg-black/50"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="bg-card rounded-2xl shadow-2xl w-full max-w-md mx-4 border border-border flex flex-col max-h-[60vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Выбор организации
-              </h3>
-              <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground">
-                <X className="h-5 w-5" />
-              </button>
+        <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/50 pt-[10vh]" onClick={() => setOpen(false)}>
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="org-switcher-title" className="mx-4 flex max-h-[75vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between border-b border-border p-4">
+              <h3 id="org-switcher-title" className="flex items-center gap-2 font-semibold"><Building2 className="h-5 w-5" />Выбор организации</h3>
+              <button type="button" aria-label="Закрыть выбор организации" onClick={() => setOpen(false)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
             </div>
-
-            <div className="p-3 border-b border-border shrink-0">
+            <div className="shrink-0 border-b border-border p-3">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Поиск по названию..."
-                  className="pl-9"
-                  autoFocus
-                />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={search} onChange={e => setSearch(e.target.value)} aria-label="Поиск организации" placeholder="Поиск по названию..." className="pl-9" autoFocus />
               </div>
             </div>
-
-            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain p-2 space-y-0.5">
-              {filtered.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  Ничего не найдено
-                </div>
-              ) : (
-                filtered.map((org) => (
-                  <button
-                    key={org.id}
-                    onClick={() => { setCurrentOrg(org.id); setOpen(false) }}
-                    className={cn(
-                      'flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-colors',
-                      org.id === currentOrgId ? 'bg-primary/10' : 'hover:bg-muted/60'
-                    )}
-                  >
-                    <div className={cn(
-                      'p-2 rounded-lg shrink-0',
-                      org.id === currentOrgId ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
-                    )}>
-                      <Building2 className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={cn('font-medium text-sm truncate', org.id === currentOrgId && 'text-primary')}>
-                        {org.name}
-                      </p>
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
-                        {org.slug && <span className="font-mono">{org.slug}</span>}
-                        {org.org_role && <span>· {org.org_role}</span>}
-                      </div>
-                    </div>
-                    {org.id === currentOrgId && <Check className="h-4 w-4 text-primary shrink-0" />}
-                  </button>
-                ))
+            {(pinError || error) && <p role="alert" className="px-4 py-2 text-sm text-destructive">{pinError || error}</p>}
+            <div className="scrollbar-thin min-h-0 flex-1 overflow-auto overscroll-contain p-2" aria-busy={loading}>
+              {pinned.length > 0 && (
+                <section aria-label="Закреплённые организации" className="mb-2 border-b border-border pb-2">
+                  <h4 className="px-3 py-2 text-xs font-semibold text-muted-foreground">Закреплённые</h4>
+                  {pinned.map(org => renderRow(org))}
+                </section>
               )}
+              <section aria-label="Дерево организаций">
+                <h4 className="px-3 py-2 text-xs font-semibold text-muted-foreground">Все организации</h4>
+                {rows.length ? rows.map(({ org, depth, hasChildren }) => renderRow(org, depth, hasChildren, true)) : <p className="py-8 text-center text-sm text-muted-foreground">Ничего не найдено</p>}
+              </section>
             </div>
-
-            {filtered.length > 0 && (
-              <div className="p-3 border-t border-border shrink-0">
-                <p className="text-xs text-muted-foreground text-center">
-                  Найдено: {filtered.length} из {organizations.length}
-                </p>
-              </div>
-            )}
+            <p className="shrink-0 border-t border-border p-3 text-center text-xs text-muted-foreground">Всего организаций: {organizations.length}</p>
           </div>
-        </div>,
-        document.body
+        </div>, document.body
       )}
     </>
   )

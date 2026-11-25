@@ -5,6 +5,7 @@ import { useUIStore } from '@/shared/store/uiStore'
 import { useModulesStore } from '@/shared/store/modulesStore'
 import { useOrgStore } from '@/shared/store/orgStore'
 import { useThemeStore } from '@/shared/theme/themeStore'
+import { useInventorySectionsStore } from '@/shared/store/inventorySectionsStore'
 import { cn, personName } from '@/shared/lib/utils'
 import {
   LayoutDashboard, User, FileText, FolderKanban,
@@ -13,7 +14,7 @@ import {
   Calendar, Bell, Crown, Bot, BarChart3,
   Send, UserPlus, Network, Briefcase,
   Key, ShieldCheck, Boxes, Settings2,
-  Activity, Palette,
+  Activity, Palette, BookMarked,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/Button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/Avatar'
@@ -56,6 +57,8 @@ const getEmployeeNavigation = (userId?: string): NavItem[] => [
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
+  { name: 'Инвентаризация', href: '/inventory', icon: Boxes, module: 'inventory', section: 'Работа' },
+  { name: 'База знаний', href: '/knowledge', icon: BookMarked, module: 'knowledge', section: 'Работа' },
   { name: 'Заявления', href: '/requests', icon: FileText, section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
 ]
@@ -67,6 +70,8 @@ const getManagerNavigation = (userId?: string): NavItem[] => [
   { name: 'Иерархия', href: '/my-hierarchy', icon: Network, section: 'Основное' },
   { name: 'Табель', href: '/leader/timesheet', icon: Calendar, module: 'timesheet', section: 'Управление', permission: 'timesheet:view' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Управление' },
+  { name: 'Инвентаризация', href: '/inventory', icon: Boxes, module: 'inventory', section: 'Управление' },
+  { name: 'База знаний', href: '/knowledge', icon: BookMarked, module: 'knowledge', section: 'Работа' },
   { name: 'Отпуск', href: '/vacation', icon: Plane, module: 'vacation', section: 'Работа' },
   { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Работа' },
@@ -102,6 +107,8 @@ const getHRNavigation = (userId?: string): NavItem[] => [
   { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Работа' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
+  { name: 'Инвентаризация', href: '/inventory', icon: Boxes, module: 'inventory', section: 'Работа' },
+  { name: 'База знаний', href: '/knowledge', icon: BookMarked, module: 'knowledge', section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
@@ -112,7 +119,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
 // показываем их и в разделе «Настройки организации» в сайдбаре.
 const ORG_HIDDEN_ITEM_NAMES = new Set([
   'Роли и доступы', 'Роли по должности', 'Учреждения', 'Иерархия',
-  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система', 'Тестовые данные', 'Видеоинструкции',
+  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система', 'Обновление системы', 'Тестовые данные', 'Видеоинструкции',
 ])
 
 const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg: boolean): NavItem[] => {
@@ -135,6 +142,7 @@ const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg:
       { name: 'Ошибки', href: `${basePath}?tab=errors`, permission: 'admin:errors' },
       { name: 'Баг-репорты', href: `${basePath}?tab=bug-reports`, permission: 'bug_reports:manage' },
       { name: 'Система', href: `${basePath}?tab=health` },
+      { name: 'Обновление системы', href: `${basePath}?tab=deployment` },
       { name: 'Тестовые данные', href: `${basePath}?tab=test-data` },
     ]},
     { name: 'Справочники', icon: Briefcase, section, children: [
@@ -164,6 +172,8 @@ const getAdminNavigation = (userId?: string, isSuper?: boolean): NavItem[] => [
   { name: 'Работники', href: '/employees', icon: Users, section: 'Работа' },
   { name: 'Отделы', href: '/departments', icon: Building2, section: 'Работа' },
   { name: 'Мои опросы', href: '/surveys', icon: ClipboardList, module: 'surveys', section: 'Работа' },
+  { name: 'Инвентаризация', href: '/inventory', icon: Boxes, module: 'inventory', section: 'Работа' },
+  { name: 'База знаний', href: '/knowledge', icon: BookMarked, module: 'knowledge', section: 'Работа' },
   { name: 'Проекты', href: '/projects', icon: FolderKanban, module: 'projects', section: 'Работа' },
   { name: 'Календарь', href: '/calendar', icon: Calendar, module: 'calendar', section: 'Работа' },
   { name: 'Уведомления', href: '/notifications', icon: Bell, module: 'notifications', section: 'Работа' },
@@ -199,12 +209,25 @@ export function useNavigation(): NavItem[] {
   const orgRole = useOrgStore((s) => s.currentOrg()?.org_role)
   const effectiveOrgRole = previewRole ?? orgRole
   const { isModuleEnabled, modulesLoaded } = useModulesStore()
+  const inventorySections = useInventorySectionsStore((s) => s.sections)
+  const fetchInventorySections = useInventorySectionsStore((s) => s.fetch)
+
+  useEffect(() => {
+    if (modulesLoaded && isModuleEnabled('inventory')) void fetchInventorySections()
+  }, [modulesLoaded, isModuleEnabled, fetchInventorySections])
 
   return useMemo(() => {
     const isSuper = user?.role === 'superadmin'
     const hasRole = (role: string) => isSuper || user?.role === role || effectiveOrgRole === role
     const isAdminRole = hasRole('admin')
+    const canManageInventory = isAdminRole || hasRole('hr')
     const has = (code: string) => permissions.includes(code)
+    const inventoryChildren: { name: string; href: string; module?: string; permission?: string }[] = [
+      { name: 'Каталог', href: '/inventory?tab=catalog' },
+      { name: 'Моё имущество', href: '/inventory?tab=my' },
+      ...inventorySections.map((s) => ({ name: s.name, href: `/inventory?section=${s.id}` })),
+      ...(canManageInventory ? [{ name: 'Настройки', href: '/inventory?tab=sections' }] : []),
+    ]
     const rawNavigation = withGrantedSections(
       user?.role === 'onboarding' ? getOnboardingNavigation() :
       isSuper ? getAdminNavigation(user?.id, true) :
@@ -214,6 +237,10 @@ export function useNavigation(): NavItem[] {
       getEmployeeNavigation(user?.id),
       has,
       user?.managesDepartment,
+    ).map((item) =>
+      item.module === 'inventory'
+        ? { ...item, children: inventoryChildren.map((child) => ({ ...child, module: 'inventory' })) }
+        : item
     )
 
     return (!modulesLoaded ? [] : rawNavigation)
@@ -232,7 +259,7 @@ export function useNavigation(): NavItem[] {
         return { ...item, children: filteredChildren }
       })
       .filter(Boolean) as NavItem[]
-  }, [modulesLoaded, isModuleEnabled, user?.role, user?.id, user?.managesDepartment, effectiveOrgRole, permissions])
+  }, [modulesLoaded, isModuleEnabled, user?.role, user?.id, user?.managesDepartment, effectiveOrgRole, permissions, inventorySections])
 }
 
 export function Sidebar() {
@@ -273,7 +300,7 @@ export function Sidebar() {
     navigation.forEach((item) => {
       if (item.children) {
         const key = `${item.section || 'Основное'}:${item.name}`
-        const hasActiveChild = item.children.some((child) => location.pathname === child.href)
+        const hasActiveChild = item.children.some((child) => child.href.split('?')[0] === location.pathname)
         if (hasActiveChild && !expandedItems.includes(key)) {
           setExpandedItems((prev) => [...prev, key])
         }
@@ -446,7 +473,7 @@ export function Sidebar() {
                         </button>
                         <div className={cn(
                           'overflow-hidden transition-all duration-300',
-                          isExpanded ? 'max-h-72 opacity-100' : 'max-h-0 opacity-0'
+                          isExpanded ? 'max-h-[480px] opacity-100' : 'max-h-0 opacity-0'
                         )}>
                           <div className="mt-0.5 space-y-0.5 py-1">
                             {item.children.map((child) => {

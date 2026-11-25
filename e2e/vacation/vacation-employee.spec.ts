@@ -1,3 +1,4 @@
+import { chooseSelectOption } from '../helpers'
 import { test, expect, type Page } from '@playwright/test'
 import { World, iso, ruDate, workdayOffset, selectRange, openVacationPage, approvalCards, THIS_YEAR, monthCard, monthName, dayOfMonth } from './fixtures'
 
@@ -89,7 +90,7 @@ test.describe('Отпуск: работник', () => {
     await world.loginPage(page, 'emp')
     await openVacationPage(page)
     await selectRange(page, T_EDU.s, T_EDU.e)
-    await page.locator('#vacationType').selectOption('educational')
+    await chooseSelectOption(page.locator('#vacationType'), 'educational')
     await expect(page.getByRole('button', { name: 'Создать заявку' })).toBeDisabled()
     await page.getByRole('button', { name: 'Отмена', exact: true }).click()
     await expect(page.getByText('Создать заявку на отпуск')).toHaveCount(0)
@@ -99,7 +100,7 @@ test.describe('Отпуск: работник', () => {
     await world.loginPage(page, 'emp')
     await openVacationPage(page)
     await selectRange(page, T_EDU.s, T_EDU.e)
-    await page.locator('#vacationType').selectOption('educational')
+    await chooseSelectOption(page.locator('#vacationType'), 'educational')
     await page.locator('#referenceFile').setInputFiles({ name: 'справка-вызов.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') })
     await expect(page.getByText('справка-вызов.pdf')).toBeVisible()
     const uploaded = page.waitForResponse((r) => r.url().endsWith('/vacation/reference-documents'))

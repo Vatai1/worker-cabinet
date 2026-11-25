@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useRef } from 'react'
 import { Building2, Tag, Palmtree, FileText, Plus, X, Upload, Paperclip, Copy, Check as CheckIcon } from 'lucide-react'
+import { Select } from '@/shared/components/ui/Select'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
@@ -272,11 +273,11 @@ export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Prop
               <>
                 <div className="space-y-2">
                   <Label htmlFor="dict-manager">Руководитель</Label>
-                  <select
+                  <Select
                     id="dict-manager"
-                    className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="w-full"
                     value={managerId}
-                    onChange={(e) => setManagerId(e.target.value)}
+                    onChange={selectedValue => setManagerId(selectedValue)}
                   >
                     <option value="">Не назначен</option>
                     {managers.map((m) => (
@@ -284,7 +285,7 @@ export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Prop
                         {m.last_name} {m.first_name}{m.middle_name ? ` ${m.middle_name}` : ''}{m.position ? ` — ${m.position}` : ''}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -305,17 +306,17 @@ export function AddDictItemModal({ open, onClose, onAdded, tab, editItem }: Prop
               <>
                 <div className="space-y-2">
                   <Label htmlFor="dict-purpose">Назначение</Label>
-                  <select
+                  <Select
                     id="dict-purpose"
-                    className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="w-full"
                     value={purpose}
-                    onChange={(e) => setPurpose(e.target.value)}
+                    onChange={selectedValue => setPurpose(selectedValue)}
                   >
                     <option value="">Не указано</option>
                     {PURPOSE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
 
                 {!isEdit && (

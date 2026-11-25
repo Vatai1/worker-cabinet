@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { Loader2, Plus, Trash2, Pencil, Save, X } from 'lucide-react'
+import { Select } from '@/shared/components/ui/Select'
 import { apiGet, apiPost, apiPut, apiDelete } from '@/shared/lib/apiClient'
 import { getErrorMessage, cn } from '@/shared/lib/utils'
 import { confirmDialog } from '@/shared/components/ConfirmDialog'
@@ -190,16 +191,15 @@ export function AdminRoleMappings() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Роль</label>
-              <select
+              <Select
                 value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="h-9 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                onChange={selectedValue => setRole(selectedValue)}
               >
                 <option value="employee">Работник</option>
                 <option value="manager">Начальник подразделения</option>
                 <option value="hr">HR</option>
                 <option value="admin">Администратор</option>
-              </select>
+              </Select>
             </div>
             <Button onClick={handleSubmit} disabled={saving}>
               {saving

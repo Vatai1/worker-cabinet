@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Megaphone, Loader2, Save } from 'lucide-react'
+import { Select } from '@/shared/components/ui/Select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Switch } from '@/shared/components/ui/Switch'
@@ -85,15 +86,15 @@ export function AdminBannerCard({ scope }: Props) {
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="space-y-1.5 flex-1">
                 <label className="text-xs text-muted-foreground">Уровень серьёзности</label>
-                <select
+                <Select
                   value={level}
-                  onChange={(e) => setLevel(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  onChange={selectedValue => setLevel(selectedValue)}
+                  className="w-full"
                 >
                   {LEVEL_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div className="flex items-center gap-2 pt-2 sm:pt-6">
                 <Switch checked={isActive} onCheckedChange={setIsActive} />

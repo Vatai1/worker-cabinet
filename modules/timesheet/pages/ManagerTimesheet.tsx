@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
+import { Select } from '@/shared/components/ui/Select'
 import { TimesheetGrid, TIMESHEET_DAY_LABELS } from '@/shared/components/timesheet/TimesheetGrid'
 import { TimesheetTools } from '@/shared/components/timesheet/TimesheetTools'
 import { TimesheetLegend } from '@/shared/components/timesheet/TimesheetLegend'
@@ -119,16 +120,16 @@ export function ManagerTimesheet() {
         extra={
           <div className="flex flex-wrap gap-2">
             {departments.length > 1 && (
-              <select aria-label="Отдел" value={departmentId ?? ''} onChange={e => { setDepartmentId(Number(e.target.value)); setSelectedDate('') }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
+              <Select aria-label="Отдел" value={departmentId ?? ''} onChange={selectedValue => { setDepartmentId(Number(selectedValue)); setSelectedDate('') }}>
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              </Select>
             )}
-            <select aria-label="Месяц" value={month} onChange={e => { setMonth(Number(e.target.value)); setSelectedDate('') }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
+            <Select aria-label="Месяц" value={month} onChange={selectedValue => { setMonth(Number(selectedValue)); setSelectedDate('') }}>
               {MONTH_NAMES.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
-            </select>
-            <select aria-label="Год" value={year} onChange={e => { setYear(Number(e.target.value)); setSelectedDate('') }} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
+            </Select>
+            <Select aria-label="Год" value={year} onChange={selectedValue => { setYear(Number(selectedValue)); setSelectedDate('') }}>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
+            </Select>
           </div>
         }
       />
@@ -140,12 +141,12 @@ export function ManagerTimesheet() {
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-medium">{currentSheet.department_name}</span>
             {dates.length > 0 && (
-              <select aria-label="Дата табеля" value={date} onChange={e => setSelectedDate(e.target.value)} className="rounded-lg border border-border bg-background px-3 py-2 text-sm">
+              <Select aria-label="Дата табеля" value={date} onChange={selectedValue => setSelectedDate(selectedValue)}>
                 {dates.map(d => {
                   const status = currentSheet.days.find(item => item.date === d)?.status
                   return <option key={d} value={d}>{formatDate(d)} · {status ? TIMESHEET_DAY_LABELS[status] : 'Черновик'}</option>
                 })}
-              </select>
+              </Select>
             )}
             {currentSheet.status !== 'draft' && <span className="text-sm text-muted-foreground">{currentSheet.status === 'approved' ? 'Месячный табель утверждён' : 'Месячный табель отправлен'}</span>}
           </div>

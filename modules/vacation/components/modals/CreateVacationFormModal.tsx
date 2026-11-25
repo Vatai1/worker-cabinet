@@ -1,4 +1,5 @@
 import { format } from 'date-fns'
+import { Select } from '@/shared/components/ui/Select'
 import { useVacationDuration, useReturnToWork, pluralDays } from '@/shared/lib/productionCalendar'
 import { useAllowOverBalance } from '@/modules/vacation/store/vacationSettingsStore'
 import { useState, useEffect, useRef } from 'react'
@@ -290,11 +291,11 @@ export function CreateVacationFormModal({
             <label htmlFor="vacationType" className="block text-sm font-medium text-muted-foreground mb-1.5">
               Тип отпуска
             </label>
-            <select
+            <Select
               id="vacationType"
               value={vacationType}
-              onChange={(e) => setVacationType(e.target.value as VacationType)}
-              className="w-full border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              onChange={selectedValue => setVacationType(selectedValue as VacationType)}
+              className="w-full"
               disabled={loading}
             >
               {Object.values(VacationType).filter((t) => t !== VacationType.DAY_OFF || isDayOff || dayOffsAvailable > 0).map((type) => {
@@ -305,7 +306,7 @@ export function CreateVacationFormModal({
                   </option>
                 )
               })}
-            </select>
+            </Select>
             {vacationTypeInfo?.description && (
               <p className="text-xs text-muted-foreground mt-1">{vacationTypeInfo.description}</p>
             )}

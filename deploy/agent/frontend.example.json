@@ -1,0 +1,9 @@
+{
+  "role": "frontend",
+  "root": "/opt/worker-cabinet",
+  "project": "worker-cabinet",
+  "compose": "/opt/worker-cabinet/docker-compose.frontend.yml",
+  "env": "/opt/worker-cabinet/.env",
+  "repository": "vatai12/worker-cabinet-frontend",
+  "maintenance": "/opt/worker-cabinet/maintenance"
+}

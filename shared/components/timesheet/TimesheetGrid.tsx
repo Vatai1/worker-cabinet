@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Select } from '@/shared/components/ui/Select'
 import { Button } from '@/shared/components/ui/Button'
 import { Send } from 'lucide-react'
 import { ATTENDANCE_CODES, CODE_COLORS, MINUTE_CODES } from '@/shared/lib/timesheetCodes'
@@ -262,16 +263,16 @@ export function TimesheetGrid({ sheet, selectedDate, editable = false, onSaved }
                       <td key={date} className={`border-b border-r text-center ${color ?? ''} ${date > today ? 'opacity-60' : ''}`}>
                         {canEdit(employee.id, date) ? (
                           <>
-                          <select
+                          <Select
                             aria-label={`Отметка за ${date} — ${name}`}
                             value={code === 'В' && !workingDay ? '' : code ?? ''}
                             disabled={!!working}
-                            onChange={e => changeCode(employee.id, e.target.value || null)}
-                            className="w-full cursor-pointer appearance-none bg-transparent py-2 text-center font-medium hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                            onChange={selectedValue => changeCode(employee.id, selectedValue || null)}
+                            className="w-full" variant="cell"
                           >
                             <option value="">{workingDay ? '—' : 'В'}</option>
                             {allowedCodes.map(c => <option key={c.code} value={c.code} title={c.label}>{c.code}</option>)}
-                          </select>
+                          </Select>
                           {code && MINUTE_CODES.includes(code) && (employee.hourly || code !== 'Я') && <div className="flex flex-col gap-1 pb-1">
                             <input type="number" min={0} max={24} aria-label={`Часы за ${date} — ${name}`} placeholder="ч" value={minutes == null ? '' : Math.floor(minutes / 60)} disabled={!!working} onChange={e => changeTime(employee.id, Number(e.target.value), (minutes ?? 0) % 60)} className="w-full bg-background text-center" />
                             <input type="number" min={0} max={59} aria-label={`Минуты за ${date} — ${name}`} placeholder="м" value={minutes == null ? '' : minutes % 60} disabled={!!working} onChange={e => changeTime(employee.id, Math.floor((minutes ?? 0) / 60), Number(e.target.value))} className="w-full bg-background text-center" />

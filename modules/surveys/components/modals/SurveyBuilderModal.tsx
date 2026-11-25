@@ -1,5 +1,6 @@
 ﻿import { useState, useRef, useEffect } from 'react'
 import { X, GripVertical, ChevronUp, ChevronDown, Plus, Trash2 } from 'lucide-react'
+import { Select } from '@/shared/components/ui/Select'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { surveyApi } from '@/modules/surveys/services/surveyApi'
@@ -220,15 +221,14 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-muted-foreground font-medium">Вопрос {idx + 1}</span>
                       <div className="flex items-center gap-1">
-                        <select
+                        <Select
                           value={q.type}
-                          onChange={(e) => updateQuestion(idx, { type: e.target.value as QuestionType, options: [''] })}
-                          className="text-xs bg-muted border border-border rounded px-2 py-1"
+                          onChange={selectedValue => updateQuestion(idx, { type: selectedValue as QuestionType, options: [''] })}
                         >
                           {(Object.entries(TYPE_LABELS) as [QuestionType, string][]).map(([v, l]) => (
                             <option key={v} value={v}>{l}</option>
                           ))}
-                        </select>
+                        </Select>
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => moveQuestion(idx, -1)}>
                           <ChevronUp className="h-3 w-3" />
                         </Button>
@@ -273,17 +273,16 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
                     {q.type === 'scale' && (
                       <div className="flex items-center gap-3">
                         <span className="text-xs font-medium">Диапазон:</span>
-                        <select
+                        <Select
                           value={`${q.scaleMin}-${q.scaleMax}`}
-                          onChange={(e) => {
-                            const [min, max] = e.target.value.split('-').map(Number)
+                          onChange={selectedValue => {
+                            const [min, max] = selectedValue.split('-').map(Number)
                             updateQuestion(idx, { scaleMin: min, scaleMax: max })
                           }}
-                          className="text-xs bg-muted border border-border rounded px-2 py-1"
                         >
                           <option value="1-5">1 – 5</option>
                           <option value="1-10">1 – 10</option>
-                        </select>
+                        </Select>
                       </div>
                     )}
 
@@ -339,26 +338,26 @@ export function SurveyBuilderModal({ open, onClose, onSaved, editSurvey }: Props
 
             <div>
               <label className="text-sm font-medium mb-1 block">Аудитория</label>
-              <select
+              <Select
                 value={targetType}
-                onChange={(e) => { setTargetType(e.target.value as typeof targetType); setTargetIds([]) }}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm mb-2"
+                onChange={selectedValue => { setTargetType(selectedValue as typeof targetType); setTargetIds([]) }}
+                className="w-full mb-2"
               >
                 <option value="all">Все работники</option>
                 <option value="department">Конкретный отдел</option>
                 <option value="employees">Конкретные работники</option>
-              </select>
+              </Select>
               {targetType === 'department' && (
-                <select
-                  className="w-full rounded border border-border bg-background text-foreground px-2 py-1 text-sm mt-2"
+                <Select
+                  className="w-full mt-2"
                   value={targetIds[0] ?? ''}
-                  onChange={(e) => setTargetIds(e.target.value ? [e.target.value] : [])}
+                  onChange={selectedValue => setTargetIds(selectedValue ? [selectedValue] : [])}
                 >
                   <option value="">— Выберите отдел —</option>
                   {departments.map((d) => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
-                </select>
+                </Select>
               )}
               {targetType === 'employees' && (
                 <div className="mt-2 border border-border rounded p-2 max-h-40 overflow-y-auto space-y-1">

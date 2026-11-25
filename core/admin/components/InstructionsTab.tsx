@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { Film, Loader2, Pencil, Plus, Trash2, Upload, X, ImageIcon } from 'lucide-react'
+import { Select } from '@/shared/components/ui/Select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
@@ -245,15 +246,15 @@ function InstructionFormModal({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <label className="block text-sm font-medium">Кому показывать</label>
-              <select
+              <Select
                 value={form.audience}
-                onChange={(e) => patch({ audience: e.target.value as InstructionAudience })}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/20"
+                onChange={selectedValue => patch({ audience: selectedValue as InstructionAudience })}
+                className="w-full"
               >
                 {INSTRUCTION_AUDIENCES.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <label className="block text-sm font-medium">Порядок</label>
@@ -262,16 +263,16 @@ function InstructionFormModal({
           </div>
           <div className="space-y-1.5">
             <label className="block text-sm font-medium">Где ещё показывать</label>
-            <select
+            <Select
               value={form.placement}
-              onChange={(e) => patch({ placement: e.target.value as InstructionPlacement | '' })}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/20"
+              onChange={selectedValue => patch({ placement: selectedValue as InstructionPlacement | '' })}
+              className="w-full"
             >
               <option value="">Только на дашборде</option>
               {INSTRUCTION_PLACEMENTS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
-            </select>
+            </Select>
             <p className="text-xs text-muted-foreground">Все инструкции показываются на дашборде; здесь можно добавить видео в раздел окна «Как это работает»</p>
           </div>
 

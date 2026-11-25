@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react'
+import { Select } from '@/shared/components/ui/Select'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
@@ -153,16 +154,16 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
 
             <div className="space-y-2">
               <Label htmlFor="cp-status">Статус</Label>
-              <select
+              <Select
                 id="cp-status"
-                className="w-full h-10 px-3 py-2 rounded-md border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full"
                 value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                onChange={selectedValue => setForm({ ...form, status: selectedValue })}
               >
                 {STATUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

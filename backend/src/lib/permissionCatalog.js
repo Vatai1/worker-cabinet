@@ -33,6 +33,7 @@ export const PERMISSIONS = [
   { code: 'dictionaries:manage', module: 'dictionaries', name: 'Справочники: теги, типы отпусков, должности', defaults: ['hr'] },
   { code: 'dictionaries:positions', module: 'dictionaries', name: 'Переименование и удаление должностей', defaults: [] },
   { code: 'documents:templates', module: 'documents', name: 'Шаблоны документов', defaults: ['hr'] },
+  { code: 'knowledge:manage', module: 'knowledge', name: 'База знаний: написание и редактирование статей', defaults: ['hr'] },
 
   { code: 'admin:access', module: 'admin', name: 'Доступ к панели администратора', defaults: [] },
   { code: 'admin:roles', module: 'admin', name: 'Роли, права доступа и сопоставление ролей', defaults: [] },

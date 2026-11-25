@@ -1,0 +1,9 @@
+FROM node:26-alpine
+RUN apk add --no-cache docker-cli docker-cli-compose openssh-client
+WORKDIR /app/backend
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --omit=dev
+COPY backend/src/config/database.js src/config/database.js
+COPY backend/src/deployment/ src/deployment/
+COPY deploy/agent/host.mjs /app/deploy/agent/host.mjs
+CMD ["node", "src/deployment/agent.js"]

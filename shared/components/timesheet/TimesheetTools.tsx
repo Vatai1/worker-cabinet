@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { Select } from '@/shared/components/ui/Select'
 import { TimesheetAuditLog } from '@/shared/components/timesheet/TimesheetAuditLog'
 import { Button } from '@/shared/components/ui/Button'
 import { formatDate, getErrorMessage } from '@/shared/lib/utils'
@@ -41,16 +42,16 @@ export function TimesheetTools({ sheet, versions, departmentId, manage = false, 
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center gap-2">
       {sheet && <>
-        <select aria-label="Версия табеля" disabled={busy} value={sheet.id} onChange={e => onSelect(Number(e.target.value))} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+        <Select aria-label="Версия табеля" disabled={busy} value={sheet.id} onChange={selectedValue => onSelect(Number(selectedValue))}>
           {versions.map(version => <option key={version.id} value={version.id}>Версия {version.version} · {version.number ? `№ ${version.number}` : 'Без номера'} · {version.document_date ? formatDate(version.document_date) : ''} · {version.kind === 'correction' ? 'Корректирующий' : 'Первичный'} · {version.period === 'half' ? '1–15' : 'Месяц'}</option>)}
-        </select>
+        </Select>
         {!manage && <Button variant="outline" size="sm" onClick={() => setAuditOpen(value => !value)}>{auditOpen ? 'Закрыть журнал' : 'Журнал'}</Button>}
       </>}
       {!journal && manage && <>
-        <select aria-label="Область импорта табеля" disabled={busy} value={importScope} onChange={event => setImportScope(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+        <Select aria-label="Область импорта табеля" disabled={busy} value={importScope} onChange={selectedValue => setImportScope(selectedValue)}>
           <option value="organization">По отделам учреждения</option>
           <option value="department" disabled={!departmentId}>В выбранный отдел</option>
-        </select>
+        </Select>
         <label className={`rounded-lg border border-border px-3 py-2 text-sm ${busy ? 'opacity-50' : 'cursor-pointer'}`}>
           Импорт 0504421 (XLSX)
           <input type="file" accept=".xlsx" disabled={busy || (importScope === 'department' && !departmentId)} className="sr-only" aria-label="Импорт формы 0504421" onChange={event => {
@@ -87,8 +88,8 @@ export function TimesheetTools({ sheet, versions, departmentId, manage = false, 
       }}>
         <label className="space-y-1">Номер<input aria-label="Номер новой версии" value={number} maxLength={64} onChange={e => setNumber(e.target.value)} className="block rounded border border-border bg-background p-2" /></label>
         <label className="space-y-1">Дата (пусто — сегодня)<input type="date" min="2000-01-01" max="2100-12-31" value={documentDate} onChange={e => setDocumentDate(e.target.value)} className="block rounded border border-border bg-background p-2" /></label>
-        <label className="space-y-1">Тип<select value={kind} onChange={e => setKind(e.target.value)} className="block rounded border border-border bg-background p-2"><option value="original">Первичный</option><option value="correction">Корректирующий</option></select></label>
-        <label className="space-y-1">Период<select value={period || sheet.period} onChange={e => setPeriod(e.target.value)} className="block rounded border border-border bg-background p-2"><option value="half">Первая половина</option><option value="month">Месяц</option></select></label>
+        <label className="space-y-1">Тип<Select value={kind} onChange={selectedValue => setKind(selectedValue)}><option value="original">Первичный</option><option value="correction">Корректирующий</option></Select></label>
+        <label className="space-y-1">Период<Select value={period || sheet.period} onChange={selectedValue => setPeriod(selectedValue)}><option value="half">Первая половина</option><option value="month">Месяц</option></Select></label>
         <Button size="sm" disabled={busy}>Создать версию</Button>
       </form>
       <p className="mt-2 text-xs text-muted-foreground">Отметки копируются, отправленные дни возвращаются на доработку в новой версии. Предыдущая версия сохраняется.</p>

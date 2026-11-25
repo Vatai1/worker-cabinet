@@ -44,6 +44,7 @@ async function checkOrgAdminOrHr(req, orgId) {
  *   get:
  *     tags: [Organizations]
  *     summary: Список организаций текущего пользователя
+ *     description: Каждая организация содержит parent_id и персональный признак is_pinned.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -53,13 +54,20 @@ async function checkOrgAdminOrHr(req, orgId) {
  *           application/json:
  *             schema:
  *               type: array
- *               items: { $ref: '#/components/schemas/Organization' }
+ *               items:
+ *                 allOf:
+ *                   - $ref: '#/components/schemas/Organization'
+ *                   - type: object
+ *                     properties:
+ *                       parent_id: { type: integer, nullable: true }
+ *                       is_pinned: { type: boolean }
  */
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   if (req.user.role === 'superadmin') {
     const result = await query(`
       SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
              o.is_active, o.created_at, o.head_id, o.parent_id,
+             EXISTS (SELECT 1 FROM user_organization_pins p WHERE p.org_id = o.id AND p.user_id = $1) as is_pinned,
              po.name as parent_name,
              h.first_name as head_first_name, h.last_name as head_last_name, h.middle_name as head_middle_name,
              (SELECT COUNT(*) FROM user_organizations WHERE org_id = o.id AND is_active = true) as member_count
@@ -68,13 +76,14 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
       LEFT JOIN users h ON o.head_id = h.id
       WHERE o.is_active = true
       ORDER BY o.name
-    `)
+    `, [req.user.id])
     return res.json(result.rows)
   }
 
   const result = await query(`
     SELECT o.id, o.name, o.slug, o.inn, o.address, o.logo_s3_key, o.settings,
            o.is_active, o.head_id, o.parent_id, uo.org_role, uo.is_active as membership_active,
+           EXISTS (SELECT 1 FROM user_organization_pins p WHERE p.org_id = o.id AND p.user_id = $1) as is_pinned,
            po.name as parent_name,
            h.first_name as head_first_name, h.last_name as head_last_name, h.middle_name as head_middle_name
     FROM user_organizations uo
@@ -85,6 +94,63 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     ORDER BY o.name
   `, [req.user.id])
   res.json(result.rows)
+}))
+
+/**
+ * @swagger
+ * /organizations/{id}/pin:
+ *   put:
+ *     tags: [Organizations]
+ *     summary: Закрепить или открепить доступную организацию для текущего пользователя
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer, minimum: 1 }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [is_pinned]
+ *             properties:
+ *               is_pinned: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Персональное закрепление сохранено
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: integer }
+ *                 is_pinned: { type: boolean }
+ *       400:
+ *         description: Некорректный идентификатор или признак закрепления
+ *       401:
+ *         description: Требуется авторизация
+ *       403:
+ *         description: Нет доступа к организации
+ *       404:
+ *         description: Активная организация не найдена
+ */
+router.put('/:id/pin', authenticateToken, asyncHandler(async (req, res) => {
+  const orgId = Number(req.params.id)
+  const { is_pinned } = req.body ?? {}
+  if (!Number.isSafeInteger(orgId) || orgId <= 0 || orgId > 2147483647) throw new ValidationError('Некорректный идентификатор организации')
+  if (typeof is_pinned !== 'boolean') throw new ValidationError('Признак закрепления должен быть логическим значением')
+  if (!(await checkOrgAccess(req, orgId))) throw new ForbiddenError('Нет доступа к организации')
+  const organization = await query('SELECT id FROM organizations WHERE id = $1 AND is_active = true', [orgId])
+  if (!organization.rows.length) throw new NotFoundError('Активная организация не найдена')
+  if (is_pinned) {
+    await query('INSERT INTO user_organization_pins (user_id, org_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.user.id, orgId])
+  } else {
+    await query('DELETE FROM user_organization_pins WHERE user_id = $1 AND org_id = $2', [req.user.id, orgId])
+  }
+  res.json({ id: orgId, is_pinned })
 }))
 
 /**

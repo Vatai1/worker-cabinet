@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import {
   AlertTriangle, ArrowRightLeft, Ban, Check, ChevronRight, Eye, Info, Loader2, Network, Search, Settings2, Trash2, UserPlus, Users, X,
 } from 'lucide-react'
+import { Select } from '@/shared/components/ui/Select'
 import { apiDelete, apiGet, apiPost, apiPut } from '@/shared/lib/apiClient'
 import { cn, getErrorMessage, personName } from '@/shared/lib/utils'
 import { useModalOpen } from '@/shared/hooks/useModalOpen'
@@ -334,17 +335,17 @@ export function DepartmentSettings({
 
               <label className="flex flex-col gap-1.5">
                 <span className="text-[12.5px] font-semibold text-muted-foreground">Входит в подразделение</span>
-                <select
+                <Select
                   value={parentId ?? ''}
                   disabled={dept.on_hierarchy}
-                  onChange={(e) => setParentId(e.target.value ? Number(e.target.value) : null)}
-                  className={fieldClass}
+                  onChange={selectedValue => setParentId(selectedValue ? Number(selectedValue) : null)}
+                  className="w-full"
                 >
                   <option value="">—</option>
                   {departments.filter((d) => !excludedParents.has(d.id)).map((d) => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
-                </select>
+                </Select>
                 {dept.on_hierarchy && (
                   <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                     <Network className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -525,16 +526,16 @@ function MembersSection({ dept, departments, onChanged }: { dept: Dept; departme
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
           <span className="text-sm font-medium">Выбрано: {selected.size}</span>
           <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
-          <select
+          <Select
             value={target}
-            onChange={(e) => setTarget(e.target.value ? Number(e.target.value) : '')}
-            className={cn(fieldClass, 'min-w-[160px] flex-1 py-1.5')}
+            onChange={selectedValue => setTarget(selectedValue ? Number(selectedValue) : '')}
+            className="min-w-[160px] flex-1"
           >
             <option value="">Перевести в отдел…</option>
             {departments.filter((d) => d.id !== dept.id).map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
-          </select>
+          </Select>
           <Button size="sm" onClick={moveSelected} disabled={target === '' || moving}>
             {moving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Перевести
@@ -706,12 +707,12 @@ export function DeleteDepartmentDialog({ dept, departments, onClose, onDeleted }
             <p className="text-sm text-muted-foreground">
               В отделе {dept.employee_count} чел. Выберите, куда их перевести — отдел удалится сразу после перевода.
             </p>
-            <select value={target} onChange={(e) => setTarget(e.target.value ? Number(e.target.value) : '')} className={cn(fieldClass, 'w-full')}>
+            <Select value={target} onChange={selectedValue => setTarget(selectedValue ? Number(selectedValue) : '')} className="w-full">
               <option value="">Выберите отдел…</option>
               {departments.filter((d) => d.id !== dept.id).map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
-            </select>
+            </Select>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">В отделе нет работников. Черновики табелей по отделу будут удалены.</p>

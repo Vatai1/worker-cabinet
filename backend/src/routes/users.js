@@ -143,11 +143,11 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  *       - in: query
  *         name: departmentId
  *         schema: { type: string }
- *         description: Фильтр по отделу(ам) — id или список id через запятую
+ *         description: Фильтр по отделу(ам) — id или список id через запятую; в глобальном режиме учитываются отделы всех активных членств
  *       - in: query
  *         name: q
  *         schema: { type: string }
- *         description: Поисковый запрос (ФИО, email, должность, теги)
+ *         description: Поисковый запрос (ФИО, email, должность, теги, активные организации сотрудника)
  *       - in: query
  *         name: tagId
  *         schema: { type: string }
@@ -175,7 +175,7 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  *       - in: query
  *         name: year
  *         schema: { type: integer }
- *         description: Год для баланса отпуска — при передаче в ответ добавляются total_days/used_days/reserved_days/available_days
+ *         description: Год для баланса отпуска — добавляются total_days/used_days/reserved_days/available_days выбранной организации, а в глобальном режиме основной активной организации сотрудника
  *       - in: query
  *         name: page
  *         schema: { type: integer }
@@ -322,6 +322,15 @@ router.get('/search', authenticateToken, async (req, res) => {
         params.push(currentOrgId(req))
         balOrgClause = ` AND vb.organization_id = $${params.length}`
       }
+      if (!req.org) {
+        balOrgClause = ` AND vb.organization_id = (
+          SELECT membership.org_id FROM user_organizations membership
+          JOIN organizations organization ON organization.id = membership.org_id
+          WHERE membership.user_id = u.id AND membership.is_active = true AND organization.is_active = true
+          ORDER BY membership.is_primary DESC NULLS LAST, membership.org_id
+          LIMIT 1
+        )`
+      }
       balanceJoin = `LEFT JOIN vacation_balances vb ON vb.user_id = u.id AND vb.year = $${yearIdx}${balOrgClause}`
     }
 
@@ -333,7 +342,7 @@ router.get('/search', authenticateToken, async (req, res) => {
         u.last_name,
         u.middle_name,
         u.position,
-        u.department_id,
+        ${req.org ? 'uo.department_id' : 'u.department_id'} as department_id,
         d.name as department_name,
         u.phone,
         u.hire_date,
@@ -361,7 +370,7 @@ router.get('/search', authenticateToken, async (req, res) => {
         ${year ? ', vb.total_days, vb.used_days, vb.reserved_days, vb.available_days' : ''}
       FROM users u
       ${orgJoin}
-      LEFT JOIN departments d ON u.department_id = d.id
+      LEFT JOIN departments d ON ${req.org ? 'uo.department_id' : 'u.department_id'} = d.id
       LEFT JOIN users m ON u.manager_id = m.id
       ${balanceJoin}
       WHERE 1=1${orgWhere} ${excludeTest(req, "u")}
@@ -369,7 +378,14 @@ router.get('/search', authenticateToken, async (req, res) => {
 
     const departmentIds = parseList(departmentId).map((v) => parseInt(v)).filter((n) => !Number.isNaN(n))
     if (departmentIds.length > 0) {
-      sql += ` AND u.department_id = ANY($${params.length + 1}::int[])`
+      sql += req.org
+        ? ` AND uo.department_id = ANY($${params.length + 1}::int[])`
+        : ` AND (u.department_id = ANY($${params.length + 1}::int[]) OR EXISTS (
+            SELECT 1 FROM user_organizations membership
+            JOIN organizations organization ON organization.id = membership.org_id
+            WHERE membership.user_id = u.id AND membership.is_active = true AND organization.is_active = true
+              AND membership.department_id = ANY($${params.length + 1}::int[])
+          ))`
       params.push(departmentIds)
     }
 
@@ -403,21 +419,27 @@ router.get('/search', authenticateToken, async (req, res) => {
     }
 
     const patterns = wordPrefixPatterns(q)
-    let orderBy = ' ORDER BY u.last_name, u.first_name'
+    let orderBy = ' ORDER BY u.last_name, u.first_name, u.id'
     if (patterns.length > 0) {
       for (const pattern of patterns) {
         params.push(pattern)
         const idx = params.length
-        sql += ` AND (u.last_name ~* $${idx} OR u.first_name ~* $${idx} OR u.middle_name ~* $${idx} OR u.position ~* $${idx} OR EXISTS (
+        sql += ` AND (u.last_name ~* $${idx} OR u.first_name ~* $${idx} OR u.middle_name ~* $${idx} OR u.position ~* $${idx} OR u.email ~* $${idx} OR EXISTS (
           SELECT 1 FROM user_skills us2 JOIN skills_dictionary sd2 ON us2.skill_id = sd2.id
           WHERE us2.user_id = u.id AND sd2.name ~* $${idx}
+        ) OR EXISTS (
+          SELECT 1 FROM user_organizations membership
+          JOIN organizations organization ON organization.id = membership.org_id
+          WHERE membership.user_id = u.id AND membership.is_active = true AND organization.is_active = true
+            ${req.org ? 'AND membership.org_id = uo.org_id' : ''}
+            AND organization.name ~* $${idx}
         ))`
       }
       params.push(phrasePrefixPattern(q))
       orderBy = ` ORDER BY EXISTS (
         SELECT 1 FROM user_skills us3 JOIN skills_dictionary sd3 ON us3.skill_id = sd3.id
         WHERE us3.user_id = u.id AND sd3.name ~* $${params.length}
-      ) DESC, u.last_name, u.first_name`
+      ) DESC, u.last_name, u.first_name, u.id`
     }
 
     if (page === null) {

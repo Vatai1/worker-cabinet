@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Select } from '@/shared/components/ui/Select'
 import { getAuthHeaders } from '@/shared/lib/authHeaders'
 import { fetchWithRetry } from '@/shared/lib/apiClient'
 import { cn } from '@/shared/lib/utils'
@@ -12,6 +13,9 @@ import type { AuditLogEntry } from '@/core/admin/types/admin'
 import { ROLE_LABELS } from '@/core/admin/pages/tabs/shared'
 
 const ACTION_LABELS: Record<string, string> = {
+  deployment_start: 'Запуск обновления системы',
+  deployment_settings: 'Настройки обновления системы',
+  deployment_recovery: 'Проверка восстановления системы',
   role_create: 'Создание роли',
   role_update: 'Обновление роли',
   role_delete: 'Удаление роли',
@@ -56,6 +60,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: st
 }
 
 const ENTITY_LABELS: Record<string, string> = {
+  deployment: 'Обновление системы',
   role: 'Роль',
   user: 'Пользователь',
   system: 'Система',
@@ -323,16 +328,16 @@ export function AuditTab() {
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Eye className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <select
+              <Select
                 value={filterAction}
-                onChange={(e) => { setFilterAction(e.target.value); setPage(1) }}
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm appearance-none"
+                onChange={selectedValue => { setFilterAction(selectedValue); setPage(1) }}
+                className="w-full pl-9"
               >
                 <option value="">Все типы действий</option>
                 {Object.entries(ACTION_LABELS).map(([key, label]) => (
                   <option key={key} value={key}>{label}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground whitespace-nowrap">с</span>

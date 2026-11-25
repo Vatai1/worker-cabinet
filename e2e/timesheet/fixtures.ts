@@ -1,3 +1,4 @@
+import { chooseSelectOption } from '../helpers'
 import { test as base, expect, type Page } from '@playwright/test'
 import { World, API } from '../vacation/fixtures'
 import type { TimesheetDetails } from '../../shared/components/timesheet/TimesheetGrid'
@@ -37,8 +38,8 @@ export const test = base.extend<{ scenario: Scenario }>({
         const intro = target.getByRole('button', { name: 'Понятно', exact: true })
         if (await intro.isVisible()) await intro.click()
         if (role === 'hr') {
-          await target.getByRole('combobox', { name: 'Отдел', exact: true }).selectOption(String(world.departments.dept))
-          await expect(target.getByRole('combobox', { name: 'Версия табеля', exact: true })).toHaveValue(String(sheet.id))
+          await chooseSelectOption(target.getByRole('combobox', { name: 'Отдел', exact: true }), String(world.departments.dept))
+          await expect(target.getByRole('combobox', { name: 'Версия табеля', exact: true })).toHaveAttribute('data-value', String(sheet.id))
         }
       }
       await world.loginPage(page, 'mgr')

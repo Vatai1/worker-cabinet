@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Download, Loader2, Plus, ChevronUp, Trash2, Repeat, FileText, ArrowRight, PlaneTakeoff, Info } from 'lucide-react'
 import { toast } from 'sonner'
+import { Select } from '@/shared/components/ui/Select'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { Label } from '@/shared/components/ui/Label'
@@ -384,10 +385,10 @@ export function VacationTransferApplicationPage() {
               {transferable.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Нет доступных для переноса отпусков</p>
               ) : (
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                <Select
+                  className="w-full"
                   value={form.vacationId}
-                  onChange={(e) => setForm((f) => ({ ...f, vacationId: e.target.value }))}
+                  onChange={selectedValue => setForm((f) => ({ ...f, vacationId: selectedValue }))}
                 >
                   <option value="">Выберите отпуск</option>
                   {transferable.map((v) => (
@@ -395,7 +396,7 @@ export function VacationTransferApplicationPage() {
                       {formatDate(v.start_date)} — {v.duration} дн. ({v.vacation_type_name})
                     </option>
                   ))}
-                </select>
+                </Select>
               )}
             </div>
 

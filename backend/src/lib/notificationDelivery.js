@@ -127,3 +127,13 @@ export async function retryFailedEmails() {
   )
   return result.rowCount
 }
+
+export async function clearEmailQueue() {
+  const result = await query(
+    `UPDATE notification_queue
+     SET status = 'cancelled', next_attempt_at = NULL, locked_at = NULL,
+         error = 'Отправка отменена администратором', updated_at = NOW()
+     WHERE channel = 'email' AND status IN ('pending', 'failed')`
+  )
+  return result.rowCount
+}

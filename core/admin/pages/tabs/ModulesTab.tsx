@@ -223,6 +223,8 @@ const MODULE_COLORS: Record<string, { active: string; inactive: string; icon: st
   hierarchy:    { active: 'from-indigo-500 to-blue-600',   inactive: 'bg-indigo-100 dark:bg-indigo-900/30', icon: 'text-indigo-600 dark:text-indigo-400' },
   dictionaries: { active: 'from-teal-500 to-emerald-600',  inactive: 'bg-teal-100 dark:bg-teal-900/30', icon: 'text-teal-600 dark:text-teal-400' },
   calendar:     { active: 'from-sky-500 to-blue-600',      inactive: 'bg-sky-100 dark:bg-sky-900/30', icon: 'text-sky-600 dark:text-sky-400' },
+  inventory:    { active: 'from-fuchsia-500 to-pink-600',  inactive: 'bg-fuchsia-100 dark:bg-fuchsia-900/30', icon: 'text-fuchsia-600 dark:text-fuchsia-400' },
+  knowledge:    { active: 'from-rose-500 to-red-600',     inactive: 'bg-rose-100 dark:bg-rose-900/30',   icon: 'text-rose-600 dark:text-rose-400' },
 }
 
 export function ModulesTab({ mode = 'global' }: { mode?: 'global' | 'org' }) {
