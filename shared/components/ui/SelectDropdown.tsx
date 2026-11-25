@@ -25,7 +25,7 @@ export function SelectDropdown({ options, value, onChange, placeholder = 'Выб
       options={options}
       selected={option ? [value] : []}
       onChange={values => onChange(values[0] ?? '')}
-      label={option?.label || placeholder}
+      label={option?.shortLabel ?? option?.label ?? placeholder}
       placeholder={!option}
       searchable={searchable ?? options.length >= 8}
     />

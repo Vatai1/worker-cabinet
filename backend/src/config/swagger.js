@@ -186,10 +186,25 @@ const options = {
             department_name: { type: 'string' },
           },
         },
+        TimesheetStaffRow: {
+          type: 'object',
+          properties: {
+            employee_id: { type: 'integer' },
+            staff_number: { type: 'string', nullable: true, maxLength: 64 },
+          },
+        },
+        TimesheetReportMark: {
+          type: 'object',
+          properties: {
+            staff_number: { type: 'string', nullable: true },
+            code: { type: 'string', nullable: true },
+          },
+        },
         TimesheetEntry: {
           type: 'object',
           properties: {
             employee_id: { type: 'integer' },
+            staff_number: { type: 'string', nullable: true, maxLength: 64, description: 'Требуется, если в табеле несколько строк на сотрудника' },
             date: { type: 'string', format: 'date' },
             code: { type: 'string', nullable: true, description: 'Отметка по классификатору или null. Согласованные отпуска подставляются автоматически. В нерабочий день вручную допускается РП.' },
             minutes: { type: 'integer', nullable: true, minimum: 0, maximum: 1440, description: 'Минуты для Я, Н, С, РП, КР и ФК' },
@@ -204,6 +219,7 @@ const options = {
             status: { type: 'string', enum: ['submitted', 'approved', 'returned'] },
             revision: { type: 'integer' },
             employee_ids: { type: 'array', items: { type: 'integer' } },
+            staff_rows: { type: 'array', items: { $ref: '#/components/schemas/TimesheetStaffRow' } },
             reason: { type: 'string', nullable: true },
           },
         },

@@ -79,8 +79,8 @@ export function DeploymentTab() {
       })}</div>
       <Card><CardHeader><CardTitle>Опубликованный релиз</CardTitle></CardHeader><CardContent className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-0 flex-1 space-y-2"><label htmlFor="deployment-version" className="text-sm font-medium">Версия для обоих серверов</label>
-            <SelectDropdown id="deployment-version" value={version} onChange={value => { setVersion(value); setConfirmVersion(null) }} disabled={!!active || busy} placeholder="Выберите релиз" options={data.releases.map(release => ({ value: release.version, label: `${release.version} · ${release.commit}` }))} />
+          <div className="min-w-0 flex-1 space-y-2"><span className="text-sm font-medium">Версия для обоих серверов</span>
+            <SelectDropdown aria-label="Версия для обоих серверов" value={version} onChange={value => { setVersion(value); setConfirmVersion(null) }} disabled={!!active || busy} placeholder="Выберите релиз" options={data.releases.map(release => ({ value: release.version, label: `${release.version} · ${release.commit}` }))} />
           </div><Button disabled={!canStart} onClick={() => setConfirmVersion(version)}><Rocket className="h-4 w-4" />Обновить прод</Button>
         </div>
         {!data.releases.length && <p className="text-sm text-muted-foreground">Опубликованных релизов пока нет.</p>}

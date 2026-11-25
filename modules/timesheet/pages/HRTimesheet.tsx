@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Select } from '@/shared/components/ui/Select'
 import { Button } from '@/shared/components/ui/Button'
+import { SelectDropdown } from '@/shared/components/ui/SelectDropdown'
 import { TimesheetEmployees } from '@/modules/timesheet/components/TimesheetEmployees'
 import { TimesheetReport } from '@/modules/timesheet/components/TimesheetReport'
 import { TimesheetAuditLog } from '@/shared/components/timesheet/TimesheetAuditLog'
@@ -15,6 +15,7 @@ import type { Timesheet, TimesheetDetails } from '@/shared/components/timesheet/
 type PendingDay = Pick<Timesheet, 'department_id' | 'department_name' | 'year' | 'month' | 'version' | 'number'> & { timesheet_id: number; date: string }
 
 const MONTH_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+const MONTH_OPTIONS = MONTH_NAMES.map((label, index) => ({ value: String(index + 1), label }))
 
 const TABS = [
   { id: 'review', label: 'Табель' },
@@ -187,19 +188,38 @@ function TimesheetReview({ settingsRevision, journal }: { settingsRevision: numb
       </section>}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Select aria-label="Отдел" value={departmentId ?? ''} disabled={reviewing} onChange={selectedValue => { setDepartmentId(Number(selectedValue)); selectDate('') }}>
-          {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </Select>
-        <Select aria-label="Месяц" value={month} disabled={reviewing} onChange={selectedValue => { setMonth(Number(selectedValue)); selectDate('') }}>
-          {MONTH_NAMES.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
-        </Select>
-        <Select aria-label="Год" value={year} disabled={reviewing} onChange={selectedValue => { setYear(Number(selectedValue)); selectDate('') }}>
-          {years.map(y => <option key={y} value={y}>{y}</option>)}
-        </Select>
-        {!journal && day && (
-          <Select aria-label="Дата табеля" value={day.date} disabled={reviewing} onChange={selectedValue => selectDate(selectedValue)}>
-            {currentSheet?.days.map(d => <option key={d.date} value={d.date}>{formatDate(d.date)} · {TIMESHEET_DAY_LABELS[d.status]}</option>)}
-          </Select>
+        <SelectDropdown
+          aria-label="Отдел"
+          placeholder="Выберите отдел"
+          options={departments.map(department => ({ value: String(department.id), label: department.name }))}
+          value={String(departmentId ?? '')}
+          disabled={reviewing}
+          className="max-w-64"
+          onChange={value => { setDepartmentId(Number(value)); selectDate('') }}
+        />
+        <SelectDropdown
+          aria-label="Месяц"
+          options={MONTH_OPTIONS}
+          value={String(month)}
+          disabled={reviewing}
+          onChange={value => { setMonth(Number(value)); selectDate('') }}
+        />
+        <SelectDropdown
+          aria-label="Год"
+          options={years.map(item => ({ value: String(item), label: String(item) }))}
+          value={String(year)}
+          className="min-w-24"
+          disabled={reviewing}
+          onChange={value => { setYear(Number(value)); selectDate('') }}
+        />
+        {!journal && currentSheet && day && (
+          <SelectDropdown
+            aria-label="Дата табеля"
+            options={currentSheet.days.map(item => ({ value: item.date, label: `${formatDate(item.date)} · ${TIMESHEET_DAY_LABELS[item.status]}` }))}
+            value={day.date}
+            disabled={reviewing}
+            onChange={selectDate}
+          />
         )}
         <Button variant="outline" size="sm" disabled={loading || reviewing} onClick={() => { setError(null); setReload(value => value + 1) }}>Обновить</Button>
       </div>

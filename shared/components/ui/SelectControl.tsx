@@ -8,6 +8,7 @@ import { SELECT_TRIGGER_CLASS } from '@/shared/lib/selectStyles'
 export interface SelectOption {
   value: string
   label: string
+  shortLabel?: string
   disabled?: boolean
   title?: string
   group?: string

@@ -116,11 +116,13 @@ describe('Перенос функций табеля', () => {
     assert.equal((await call('PUT', `/${data.id}/entries`, manager, [{ employee_id: worker.id, date: '2026-01-15', code: 'НН' }])).status, 409)
   })
 
-  it('импорт учреждения атомарно распределяет отметки по отделам и сохраняет данные Excel при согласованном отпуске', async () => {
+  it('импорт присваивает два номера одному сотруднику и сохраняет две строки вместе с отпуском', async () => {
     const { rows: [otherDept] } = await query('INSERT INTO departments (name, organization_id) VALUES ($1,1) RETURNING id', [`Импорт по отделам ${stamp}`])
     const other = await addUser('employee', otherDept.id)
     try {
+      await query('UPDATE departments SET manager_id = $1 WHERE id = $2', [manager.id, otherDept.id])
       const staffNumber = `002-${stamp}`
+      const secondNumber = `003-${stamp}`
       await query(`INSERT INTO vacation_requests (user_id,start_date,end_date,duration,vacation_type_id,status_id,organization_id)
         SELECT $1,'2020-11-02','2020-11-03',2,vt.id,rs.id,1 FROM vacation_types vt CROSS JOIN request_statuses rs
         WHERE vt.code='annual_paid' AND vt.organization_id=1 AND rs.code='approved'`, [other.id])
@@ -138,8 +140,15 @@ describe('Перенос функций табеля', () => {
       tab.getCell('D17').value = staffNumber
       tab.getCell('J17').value = 8
       tab.getCell('J18').value = 'Я'
-      const upload = async () => {
+      tab.getCell('C19').value = 'Работник второго отдела'
+      tab.getCell('D19').value = secondNumber
+      tab.getCell('J20').value = 'НН'
+      tab.getCell('L17').value = 6
+      tab.getCell('L18').value = 'Я'
+      tab.getCell('L20').value = 'НН'
+      const upload = async (departmentId) => {
         const body = new FormData()
+        if (departmentId) body.append('department_id', String(departmentId))
         body.append('file', new Blob([await book.xlsx.writeBuffer()]), 'test.xlsx')
         const res = await fetch(`${BASE}/timesheet/import`, { method: 'POST', headers: { Authorization: `Bearer ${hr.token}`, 'x-organization-id': '1' }, body })
         return { status: res.status, data: await res.json() }
@@ -148,25 +157,111 @@ describe('Перенос функций табеля', () => {
       assert.equal(unknown.status, 400)
       assert.match(unknown.data.error, /Не найдены работники учреждения/)
       assert.equal((await query('SELECT id FROM timesheets WHERE number = $1', [tab.getCell('T3').value])).rowCount, 0)
-      assert.equal((await call('PUT', '/employees/settings', hr, [{ employee_id: other.id, staff_number: staffNumber }])).status, 200)
+      await query("UPDATE users SET last_name='Васильева', first_name='Алёна', middle_name='Сергеевна' WHERE id=$1", [other.id])
+      tab.getCell('C17').value = 'васильева  алена СЕРГЕЕВНА'
+      tab.getCell('C19').value = 'Васильева Алёна Сергеевна'
+      assert.equal((await call('PUT', '/employees/settings', hr, [{ employee_id: other.id, hourly: true }])).status, 200)
+      tab.getCell('J17').value = null
+      assert.match((await upload()).data.error, /Заполните часы/)
+      const settingsForOther = async () => (await call('GET', '/employees/settings', hr)).data.find(item => item.id === other.id)
+      assert.equal((await settingsForOther()).staff_number, null)
+      assert.deepEqual((await settingsForOther()).staff_numbers, [])
+      tab.getCell('J17').value = 8
       const imported = await upload()
       assert.equal(imported.status, 201, JSON.stringify(imported))
+      assert.equal(imported.data.assigned_staff_numbers, 2)
+      const employeeSettings = await settingsForOther()
+      assert.equal(employeeSettings.staff_number, staffNumber)
+      assert.deepEqual(employeeSettings.staff_numbers, [staffNumber, secondNumber])
+      assert.equal(employeeSettings.hourly, true)
       assert.deepEqual(imported.data.sheets.map(item => item.department_id), [dept, otherDept.id])
       const { data } = await call('GET', `/${imported.data.sheets[1].id}`, hr)
-      assert.equal(data.days.length, 2)
-      assert.ok(data.days.every(day => day.status === 'submitted' && day.employee_ids[0] === other.id))
-      const entries = data.entries.filter(entry => ['2020-11-02', '2020-11-03'].includes(entry.date))
+      assert.equal(data.days.length, 3)
+      assert.ok(data.days.every(day => day.status === 'submitted' && day.employee_ids.length === 1 && day.employee_ids[0] === other.id && day.staff_rows.length === 2))
+      const entries = data.entries.filter(entry => entry.staff_number === staffNumber && ['2020-11-02', '2020-11-03'].includes(entry.date))
       assert.deepEqual(entries.map(({ date, code, minutes }) => ({ date, code, minutes })), [
         { date: '2020-11-02', code: null, minutes: null },
         { date: '2020-11-03', code: 'Я', minutes: 480 },
       ])
+      assert.equal(data.entries.find(entry => entry.staff_number === secondNumber && entry.date === '2020-11-03').code, 'НН')
+      const { data: report } = await call('GET', '/report?date=2020-11-03', hr)
+      assert.deepEqual(report.filter(item => item.id === other.id).map(item => item.marks), [[
+        { staff_number: staffNumber, code: 'Я' }, { staff_number: secondNumber, code: 'НН' },
+      ]])
+      const excel = await fetch(`${BASE}/timesheet/${data.id}/export/excel`, { headers: { Authorization: `Bearer ${hr.token}`, 'x-organization-id': '1' } })
+      assert.equal(excel.status, 200)
+      const exported = new ExcelJS.Workbook()
+      await exported.xlsx.load(Buffer.from(await excel.arrayBuffer()))
+      const exportedRows = exported.worksheets[0].getRows(6, 2)
+      assert.ok(exportedRows.some(row => row.getCell(1).text.endsWith(staffNumber) && row.getCell(4).text === 'Я\n8:00'))
+      assert.ok(exportedRows.some(row => row.getCell(1).text.endsWith(secondNumber) && row.getCell(4).text === 'НН'))
       assert.equal((await query('SELECT duration FROM vacation_requests WHERE user_id = $1', [other.id])).rows[0].duration, 2)
+      assert.equal((await upload(dept)).status, 409)
+      assert.equal((await call('PUT', '/employees/settings', hr, [{ employee_id: other.id, staff_numbers: [staffNumber] }])).status, 200)
+      const historical = (await call('GET', `/${data.id}`, hr)).data
+      assert.ok(historical.employees.some(employee => employee.id === other.id && employee.staff_number === secondNumber))
+      const next = await call('POST', `/${data.id}/versions`, hr, { number: 'Корректировка' })
+      assert.equal(next.status, 201, JSON.stringify(next))
+      const correction = (await call('GET', `/${next.data.id}`, hr)).data
+      assert.ok(correction.days.every(day => day.staff_rows.length === 2 && day.status === 'returned'))
+      const correctedDate = '2020-11-05'
+      const edit = { employee_id: other.id, date: correctedDate, code: 'Я', minutes: 90 }
+      assert.equal((await call('PUT', `/${correction.id}/entries`, manager, [edit])).status, 400)
+      const submitted = await call('POST', `/${correction.id}/days/${correctedDate}/submit`, manager, {
+        entries: [{ ...edit, staff_number: secondNumber }],
+      })
+      assert.equal(submitted.status, 200, JSON.stringify(submitted))
+      assert.equal((await call('PUT', `/${correction.id}/days/${correctedDate}/review`, hr, { status: 'approved', revision: submitted.data.revision })).status, 200)
+      const approved = (await call('GET', `/${correction.id}`, hr)).data
+      assert.equal(approved.entries.find(entry => entry.date === correctedDate && entry.staff_number === staffNumber).minutes, 360)
+      assert.equal(approved.entries.find(entry => entry.date === correctedDate && entry.staff_number === secondNumber).minutes, 90)
     } finally {
       await query('DELETE FROM timesheets WHERE department_id = $1', [otherDept.id])
       await query('DELETE FROM vacation_requests WHERE user_id = $1', [other.id])
       await query('DELETE FROM users WHERE id = $1', [other.id])
       await query('DELETE FROM departments WHERE id = $1', [otherDept.id])
     }
+  })
+
+  it('импорт останавливается на полных тёзках и при попытке привязать занятый номер к другому сотруднику', async () => {
+    const firstName = `Тёзка ${stamp}`
+    await query("UPDATE users SET last_name='Проверочный', first_name=$1 WHERE id=ANY($2::int[])", [firstName, [delegate.id, outsider.id]])
+    const workbook = new ExcelJS.Workbook()
+    const tab = workbook.addWorksheet('0504421')
+    tab.getCell('T3').value = `Конфликт-${stamp}`
+    tab.getCell('O6').value = 'за период с 1 по 15 января 2020 г.'
+    tab.getCell('AN6').value = '15.01.2020'
+    tab.getCell('AN9').value = 0
+    tab.getCell('C15').value = `Проверочный ${firstName}`
+    tab.getCell('D15').value = `009-${stamp}`
+    tab.getCell('H16').value = 'В'
+    const upload = async () => {
+      const body = new FormData()
+      body.append('file', new Blob([await workbook.xlsx.writeBuffer()]), 'test.xlsx')
+      const response = await fetch(`${BASE}/timesheet/import`, { method: 'POST', headers: { Authorization: `Bearer ${hr.token}`, 'x-organization-id': '1' }, body })
+      return { status: response.status, data: await response.json() }
+    }
+    const ambiguous = await upload()
+    assert.equal(ambiguous.status, 409)
+    assert.match(ambiguous.data.error, /несколько сотрудников с ФИО/)
+    tab.getCell('D15').value = `001-${stamp}`
+    const taken = await upload()
+    assert.equal(taken.status, 409)
+    assert.match(taken.data.error, /закреплён за другим сотрудником/)
+    assert.equal((await query('SELECT id FROM timesheets WHERE number = $1', [tab.getCell('T3').value])).rowCount, 0)
+    const { data: roster } = await call('GET', '/employees/settings', hr)
+    assert.equal(roster.find(item => item.id === delegate.id).staff_number, null)
+
+    await query("UPDATE users SET position='Старший специалист' WHERE id=$1", [delegate.id])
+    const newNumber = `009-${stamp}`
+    tab.getCell('D15').value = newNumber
+    tab.getCell('F15').value = 'Старший специалист'
+    const assigned = await upload()
+    assert.equal(assigned.status, 201, JSON.stringify(assigned))
+    assert.equal(assigned.data.assigned_staff_numbers, 1)
+    const { data: updated } = await call('GET', '/employees/settings', hr)
+    assert.equal(updated.find(item => item.id === delegate.id).staff_number, newNumber)
+    assert.equal(updated.find(item => item.id === outsider.id).staff_number, null)
   })
 
   it('новая версия старого утверждённого месяца сохраняет состав и открывает скопированные даты для исправлений', async () => {

@@ -1,6 +1,5 @@
-import { chooseSelectOption } from '../helpers'
 import { createRequire } from 'node:module'
-import { test, expect, API } from './fixtures'
+import { test, expect, API, chooseOption } from './fixtures'
 
 const { Workbook } = createRequire(new URL('../../backend/package.json', import.meta.url))('exceljs') as typeof import('../../backend/node_modules/exceljs')
 
@@ -38,7 +37,12 @@ test('UC-01: руководитель отправляет день с отпу�
     await page.getByText('Табель возвращён на доработку', { exact: true }).click()
     await expect(page).toHaveURL(new RegExp(`departmentId=${world.departments.dept}`))
     const mark = page.getByRole('combobox', { name: `Отметка за ${today} — Почасовой Иван`, exact: true })
-    await chooseSelectOption(mark, 'НН')
+    await mark.press('ArrowDown')
+    await expect(page.getByRole('listbox', { name: `Отметка за ${today} — Почасовой Иван` })).toBeVisible()
+    await mark.press('Escape')
+    await expect(mark).toBeFocused()
+    await expect(mark).toHaveAttribute('aria-expanded', 'false')
+    await chooseOption(mark, /^НН — Неявки/)
     await page.getByRole('button', { name: 'Отправить на проверку', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Отправить на проверку', exact: true })).toHaveCount(0)
 
@@ -55,14 +59,17 @@ test('UC-01: руководитель отправляет день с отпу�
 })
 
 test('UC-02: HR массово меняет учёт и номера; руководитель вводит часы, отправляет день и скачивает Excel/PDF', async ({ page, scenario }) => {
-  const { world, today, open } = scenario
+  const { world, sheet, today, open } = scenario
   const firstNumber = `001-${world.ns}`
   const secondNumber = `002-${world.ns}`
+  const additionalNumber = `003-${world.ns}`
   await open(page, 'hr')
   await page.getByRole('tab', { name: 'Сотрудники', exact: true }).click()
   const panel = page.getByRole('tabpanel', { name: 'Сотрудники', exact: true })
-  await chooseSelectOption(panel.getByRole('combobox', { name: 'Отдел сотрудников', exact: true }), String(world.departments.dept))
+  await chooseOption(panel.getByRole('combobox', { name: 'Отдел сотрудников', exact: true }), scenario.department)
   await panel.getByRole('textbox', { name: 'Табельный номер — Почасовой Иван', exact: true }).fill(firstNumber)
+  await panel.getByRole('button', { name: 'Добавить табельный номер — Почасовой Иван', exact: true }).click()
+  await panel.getByRole('textbox', { name: 'Табельный номер 2 — Почасовой Иван', exact: true }).fill(additionalNumber)
   await panel.getByRole('textbox', { name: 'Табельный номер — Табельников Антон', exact: true }).fill(secondNumber)
   await panel.getByRole('checkbox', { name: 'Выбрать всех показанных сотрудников', exact: true }).check()
   await panel.getByRole('button', { name: 'Включить почасовой учёт', exact: true }).click()
@@ -72,23 +79,35 @@ test('UC-02: HR массово меняет учёт и номера; руков
   await panel.getByRole('button', { name: 'Сохранить изменения (1)', exact: true }).click()
   await expect(panel.getByRole('alert')).toContainText('уже занят')
   await panel.getByRole('button', { name: 'Отменить изменения', exact: true }).click()
-  const rows = await world.ok<{ id: number; staff_number: string; hourly: boolean }[]>('GET', '/timesheet/employees/settings')
-  expect(rows.find(employee => employee.id === world.users.worker.id)).toMatchObject({ staff_number: firstNumber, hourly: true })
+  const rows = await world.ok<{ id: number; staff_number: string; staff_numbers: string[]; hourly: boolean }[]>('GET', '/timesheet/employees/settings')
+  expect(rows.find(employee => employee.id === world.users.worker.id)).toMatchObject({ staff_number: firstNumber, staff_numbers: [firstNumber, additionalNumber], hourly: true })
   await panel.getByPlaceholder('Поиск по ФИО, должности или табельному номеру').fill('Отпусков')
   await panel.getByRole('checkbox', { name: 'Выбрать всех показанных сотрудников', exact: true }).check()
   await panel.getByRole('button', { name: 'Отключить почасовой учёт', exact: true }).click()
   await panel.getByRole('button', { name: 'Сохранить изменения (1)', exact: true }).click()
   await expect(panel.getByRole('status').filter({ hasText: 'Сохранено сотрудников: 1' })).toBeVisible()
 
+  await page.setViewportSize({ width: 390, height: 844 })
   await open(page, 'mgr')
-  await page.getByRole('button', { name: 'Явка всем', exact: true }).click()
-  await chooseSelectOption(page.getByRole('combobox', { name: `Отметка за ${today} — Табельников Антон`, exact: true }), 'НН')
+  await page.getByRole('button', { name: 'Явка всем с обычным учётом', exact: true }).click()
+  const firstRow = `Почасовой Иван · ${firstNumber}`
+  const hours = page.getByRole('spinbutton', { name: `Часы за ${today} — ${firstRow}`, exact: true })
+  await expect(hours).toHaveCount(0)
+  await page.getByRole('button', { name: `Указать часы — ${firstRow}`, exact: true }).click()
+  await expect(hours).toBeFocused()
+  const managerMark = page.getByRole('combobox', { name: `Отметка за ${today} — Табельников Антон`, exact: true })
+  await chooseOption(managerMark, 'Указать часы работы')
+  await expect(page.getByRole('spinbutton', { name: `Часы за ${today} — Табельников Антон`, exact: true })).toBeFocused()
+  await chooseOption(managerMark, /^НН — Неявки/)
+  await chooseOption(page.getByRole('combobox', { name: `Отметка за ${today} — Почасовой Иван · ${additionalNumber}`, exact: true }), /^НН — Неявки/)
   await page.getByRole('button', { name: 'Отправить на проверку', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Заполните часы явки')
-  await page.getByRole('spinbutton', { name: `Часы за ${today} — Почасовой Иван`, exact: true }).fill('8')
-  await page.getByRole('spinbutton', { name: `Минуты за ${today} — Почасовой Иван`, exact: true }).fill('5')
-  await expect(page.getByRole('row').filter({ hasText: 'Почасовой Иван' })).toContainText('8:05')
+  await hours.fill('8')
+  await page.getByRole('spinbutton', { name: `Минуты за ${today} — ${firstRow}`, exact: true }).fill('5')
+  await expect(page.getByRole('row').filter({ hasText: firstNumber })).toContainText('8:05')
+  const submitted = page.waitForResponse(response => response.url().endsWith(`/timesheet/${sheet.id}/days/${today}/submit`) && response.request().method() === 'POST')
   await page.getByRole('button', { name: 'Отправить на проверку', exact: true }).click()
+  expect((await submitted).status()).toBe(200)
   await expect(page.getByRole('button', { name: 'Отправить на проверку', exact: true })).toHaveCount(0)
   for (const format of ['Excel', 'PDF']) {
     const downloaded = page.waitForEvent('download')
@@ -103,7 +122,9 @@ test('UC-02: HR массово меняет учёт и номера; руков
     if (format === 'Excel') {
       const book = new Workbook()
       await book.xlsx.load(bytes)
-      expect(book.worksheets[0].getRows(6, 3)?.some(row => row.values.includes('8:05'))).toBe(true)
+      const exported = book.worksheets[0].getRows(6, 4) ?? []
+      expect(exported.some(row => row.getCell(1).text.endsWith(firstNumber) && row.values.includes('8:05'))).toBe(true)
+      expect(exported.some(row => row.getCell(1).text.endsWith(additionalNumber) && row.values.includes('НН'))).toBe(true)
     } else {
       expect(bytes.subarray(0, 5).toString()).toBe('%PDF-')
       expect(bytes.toString('latin1')).toContain('/ToUnicode')
@@ -118,37 +139,50 @@ test('UC-03: HR импортирует только известных сотр�
   const tab = book.addWorksheet('0504421')
   tab.getCell('T3').value = '24'; tab.getCell('AN6').value = '16.01.2020'; tab.getCell('AN9').value = 0
   tab.getCell('O6').value = 'за период с 1 по 15 января 2020 г.'
-  tab.getCell('C15').value = 'Почасовой Иван'; tab.getCell('D15').value = staffNumber
+  tab.getCell('C15').value = 'Неизвестный Сотрудник'; tab.getCell('D15').value = staffNumber
   for (const column of ['H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V']) {
     tab.getCell(`${column}15`).value = 7.5; tab.getCell(`${column}16`).value = 'Я'
   }
-  const upload = { name: '0504421.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(await book.xlsx.writeBuffer()) }
+  const upload = async () => ({ name: '0504421.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(await book.xlsx.writeBuffer()) })
   await open(page, 'hr')
-  await page.getByLabel('Импорт формы 0504421', { exact: true }).setInputFiles(upload)
+  await page.getByLabel('Импорт формы 0504421', { exact: true }).setInputFiles(await upload())
   await expect(page.getByRole('alert')).toContainText(`Не найдены работники учреждения с табельными номерами: ${staffNumber}`)
-  await world.ok('PUT', '/timesheet/employees/settings', [{ employee_id: world.users.worker.id, staff_number: staffNumber, hourly: true }])
-  await page.getByLabel('Импорт формы 0504421', { exact: true }).setInputFiles(upload)
-  await expect(page.getByRole('combobox', { name: 'Год', exact: true })).toHaveAttribute('data-value', '2020')
+  await world.ok('PUT', '/timesheet/employees/settings', [{ employee_id: world.users.worker.id, hourly: true }])
+  tab.getCell('C15').value = 'Почасовой Иван'
+  await page.getByLabel('Импорт формы 0504421', { exact: true }).setInputFiles(await upload())
+  await expect(page.getByText('Присвоено табельных номеров: 1', { exact: true })).toBeVisible()
+  const staff = await world.ok<{ id: number; staff_number: string; hourly: boolean }[]>('GET', '/timesheet/employees/settings')
+  expect(staff.find(item => item.id === world.users.worker.id)).toMatchObject({ staff_number: staffNumber, hourly: true })
+  await expect(page.getByRole('combobox', { name: 'Год', exact: true })).toHaveText('2020')
+  const viewport = page.viewportSize()
+  await page.setViewportSize({ width: 390, height: 844 })
+  const month = page.getByRole('combobox', { name: 'Месяц', exact: true })
+  await month.evaluate(element => element.scrollIntoView({ block: 'end' }))
+  await month.click()
+  await expect(page.getByRole('listbox', { name: 'Месяц', exact: true })).toBeInViewport({ ratio: 0.99 })
+  await month.press('Escape')
+  if (viewport) await page.setViewportSize(viewport)
   const version = page.getByRole('combobox', { name: 'Версия табеля', exact: true })
-  await expect(version).toContainText('№ 24')
-  const importedId = Number(await version.getAttribute('data-value'))
-  expect(importedId).not.toBe(sheet.id)
+  await expect(version).toContainText('Версия 1 · № 24 ·')
+  const listPath = `/timesheet?departmentId=${world.departments.dept}&year=2020&month=1`
+  const [imported] = await world.ok<{ id: number }[]>('GET', listPath)
+  expect(imported.id).not.toBe(sheet.id)
   await page.getByText('Создать версию табеля', { exact: true }).click()
   await page.getByRole('textbox', { name: 'Номер новой версии', exact: true }).fill('24-К')
   await page.getByRole('button', { name: 'Создать версию', exact: true }).click()
-  await expect(version).toContainText('Версия 2')
-  await expect(version).not.toHaveAttribute('data-value', String(importedId))
-  const correctionId = await version.getAttribute('data-value')
+  await expect(version).toContainText('Версия 2 · № 24-К ·')
+  const [created] = await world.ok<{ id: number }[]>('GET', listPath)
+  expect(created.id).not.toBe(imported.id)
   await page.getByRole('tab', { name: 'Журнал', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Журнал табеля', exact: true })).toBeVisible()
   await expect(page.getByText(/Новая версия/).first()).toBeVisible()
-  await chooseSelectOption(version, String(importedId))
+  await chooseOption(version, /^Версия 1 · № 24 ·/)
   await expect(page.getByText('0504421.xlsx', { exact: true })).toBeVisible()
   await page.getByRole('tab', { name: 'Табель', exact: true }).click()
-  await expect(version).toHaveAttribute('data-value', String(importedId))
-  const original = await world.ok<{ days: { status: string }[] }>('GET', `/timesheet/${importedId}`)
+  await expect(version).toContainText('Версия 1 · № 24 ·')
+  const original = await world.ok<{ days: { status: string }[] }>('GET', `/timesheet/${imported.id}`)
   expect(original.days.every(day => day.status === 'submitted')).toBe(true)
-  const correction = await world.ok<{ days: { status: string }[] }>('GET', `/timesheet/${correctionId}`)
+  const correction = await world.ok<{ days: { status: string }[] }>('GET', `/timesheet/${created.id}`)
   expect(correction.days.every(day => day.status === 'returned')).toBe(true)
   await expect(page.getByRole('button', { name: 'Руководители табеля', exact: true })).toHaveCount(0)
 })

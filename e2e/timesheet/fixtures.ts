@@ -1,5 +1,4 @@
-import { chooseSelectOption } from '../helpers'
-import { test as base, expect, type Page } from '@playwright/test'
+import { test as base, expect, type Locator, type Page } from '@playwright/test'
 import { World, API } from '../vacation/fixtures'
 import type { TimesheetDetails } from '../../shared/components/timesheet/TimesheetGrid'
 
@@ -9,6 +8,11 @@ interface Scenario {
   today: string
   department: string
   open: (page: Page, role: 'mgr' | 'hr' | 'worker' | 'leave', path?: string) => Promise<void>
+}
+
+export async function chooseOption(trigger: Locator, name: string | RegExp) {
+  await trigger.click()
+  await trigger.page().getByRole('option', { name, exact: true }).click()
 }
 
 export const test = base.extend<{ scenario: Scenario }>({
@@ -38,8 +42,8 @@ export const test = base.extend<{ scenario: Scenario }>({
         const intro = target.getByRole('button', { name: 'Понятно', exact: true })
         if (await intro.isVisible()) await intro.click()
         if (role === 'hr') {
-          await chooseSelectOption(target.getByRole('combobox', { name: 'Отдел', exact: true }), String(world.departments.dept))
-          await expect(target.getByRole('combobox', { name: 'Версия табеля', exact: true })).toHaveAttribute('data-value', String(sheet.id))
+          await chooseOption(target.getByRole('combobox', { name: 'Отдел', exact: true }), department)
+          await expect(target.getByRole('combobox', { name: 'Версия табеля', exact: true })).toContainText(`Версия ${sheet.version} ·`)
         }
       }
       await world.loginPage(page, 'mgr')
@@ -50,7 +54,7 @@ export const test = base.extend<{ scenario: Scenario }>({
         else await world.call('DELETE', `/vacation/production-calendar/${today}`)
       }
       if (world.api) {
-        const changes = Object.values(world.users).map(user => ({ employee_id: user.id, staff_number: null, hourly: false }))
+        const changes = Object.values(world.users).map(user => ({ employee_id: user.id, staff_numbers: [], hourly: false }))
         if (changes.length) await world.call('PUT', '/timesheet/employees/settings', changes)
         await world.teardown()
       }

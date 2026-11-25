@@ -9,15 +9,17 @@ interface AuditRow {
   employee: string
   action: string
   created_at: string
-  data: { date?: string; before?: unknown; after?: unknown; filename?: string; reason?: string }
+  data: { date?: string; staff_number?: string | null; before?: unknown; after?: unknown; filename?: string; reason?: string }
 }
 
 function auditValue(value: unknown): string {
   if (value == null) return '—'
   if (Array.isArray(value)) return value.join(', ') || '—'
   if (typeof value === 'object') {
-    const fields: Record<string, string> = { code: 'Отметка', minutes: 'Минуты', staff_number: 'Табельный номер', hourly: 'Почасовой учёт' }
-    return Object.entries(value).map(([key, item]) => `${fields[key] ?? key}: ${typeof item === 'boolean' ? item ? 'да' : 'нет' : item ?? '—'}`).join(', ')
+    const fields: Record<string, string> = { code: 'Отметка', minutes: 'Минуты', staff_number: 'Табельный номер', staff_numbers: 'Табельные номера', hourly: 'Почасовой учёт' }
+    return Object.entries(value)
+      .filter(([key]) => key !== 'staff_number' || !('staff_numbers' in value))
+      .map(([key, item]) => `${fields[key] ?? key}: ${typeof item === 'boolean' ? item ? 'да' : 'нет' : auditValue(item)}`).join(', ')
   }
   return String(value)
 }
@@ -59,7 +61,7 @@ export function TimesheetAuditLog({ sheetId, refreshKey = 0 }: { sheetId: number
     {loading && <p role="status" className="text-sm text-muted-foreground">Загрузка журнала…</p>}
     {!loading && !error && !rows.length && <p className="text-sm text-muted-foreground">Событий пока нет</p>}
     <ol className="space-y-3">{rows.map(row => <li key={row.id} className="border-b border-border pb-3 text-sm last:border-0 last:pb-0">
-      <p>{formatDateTime(row.created_at)} · {row.actor || 'Система'} · {row.action} {row.employee} {row.data.date && formatDate(row.data.date)}</p>
+      <p>{formatDateTime(row.created_at)} · {row.actor || 'Система'} · {row.action} {row.employee}{row.data.staff_number && ` · ${row.data.staff_number}`} {row.data.date && formatDate(row.data.date)}</p>
       {(row.data.before !== undefined || row.data.after !== undefined) && <p className="mt-1 break-words text-xs text-muted-foreground">Было: {auditValue(row.data.before)} → Стало: {auditValue(row.data.after)}</p>}
       {row.data.filename && <p className="mt-1 text-xs text-muted-foreground">{row.data.filename}</p>}
       {row.data.reason && <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{row.data.reason}</p>}

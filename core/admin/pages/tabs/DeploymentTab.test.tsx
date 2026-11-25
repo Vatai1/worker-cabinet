@@ -19,7 +19,7 @@ describe('Обновление системы', () => {
     render(<DeploymentTab />)
     const start = await screen.findByRole('button', { name: 'Обновить прод' })
     expect((start as HTMLButtonElement).disabled).toBe(true)
-    await user.click(screen.getByRole('combobox'))
+    await user.click(screen.getByRole('combobox', { name: 'Версия для обоих серверов' }))
     await user.click(screen.getByRole('option', { name: '2.4.62 · abcdef0' }))
     await user.click(start)
     expect(apiPost).not.toHaveBeenCalled()

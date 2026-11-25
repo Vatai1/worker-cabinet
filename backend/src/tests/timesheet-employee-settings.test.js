@@ -57,8 +57,8 @@ describe('Сотрудники табеля', () => {
     assert.equal(swapped.status, 200)
     const changed = await call('PUT', hr, [{ employee_id: first.id, hourly: false }, { employee_id: second.id, hourly: false }])
     assert.equal(changed.status, 200)
-    assert.deepEqual(changed.data.updated.find(item => item.employee_id === first.id), { employee_id: first.id, staff_number: '002', hourly: false })
-    assert.deepEqual(changed.data.updated.find(item => item.employee_id === second.id), { employee_id: second.id, staff_number: '001', hourly: false })
+    assert.deepEqual(changed.data.updated.find(item => item.employee_id === first.id), { employee_id: first.id, staff_number: '002', staff_numbers: ['002'], hourly: false })
+    assert.deepEqual(changed.data.updated.find(item => item.employee_id === second.id), { employee_id: second.id, staff_number: '001', staff_numbers: ['001'], hourly: false })
   })
 
   it('конфликт номера или чужой сотрудник отменяют все изменения', async () => {
