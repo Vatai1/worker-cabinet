@@ -148,7 +148,7 @@ describe('Доставка уведомлений', () => {
   })
 
   it('письмо уходит на адрес сотрудника со ссылкой на сайт', async () => {
-    const id = (await query("SELECT id FROM notification_queue WHERE user_id = $1 AND type = 'vacation_status_changed'", [users[0].id])).rows[0].id
+    const id = await notify({ userId: users[0].id, type: 'vacation_status_changed', data: { status: 'approved', startDate: '01.07.2031', endDate: '10.07.2031', requestId: 1 } })
     const row = await deliverUntil(id, (r) => r.status !== 'pending' && r.status !== 'processing')
     assert.strictEqual(row.status, 'sent', JSON.stringify(row))
     const mail = received.find((m) => m.to === users[0].email)
