@@ -22,6 +22,7 @@ const OnlineUsersTab = lazy(() => import('@/core/admin/components/OnlineUsersTab
 const RolesTab = lazy(() => import('@/core/admin/pages/tabs/RolesTab').then((m) => ({ default: m.RolesTab })))
 const SettingsTab = lazy(() => import('@/core/admin/pages/tabs/SettingsTab').then((m) => ({ default: m.SettingsTab })))
 const AuditTab = lazy(() => import('@/core/admin/pages/tabs/AuditTab').then((m) => ({ default: m.AuditTab })))
+const DeploymentTab = lazy(() => import('@/core/admin/pages/tabs/DeploymentTab').then((m) => ({ default: m.DeploymentTab })))
 const HealthTab = lazy(() => import('@/core/admin/pages/tabs/HealthTab').then((m) => ({ default: m.HealthTab })))
 const ErrorsTab = lazy(() => import('@/core/admin/pages/tabs/ErrorsTab').then((m) => ({ default: m.ErrorsTab })))
 const SecurityTab = lazy(() => import('@/core/admin/pages/tabs/SecurityTab').then((m) => ({ default: m.SecurityTab })))
@@ -29,7 +30,7 @@ const ModulesTab = lazy(() => import('@/core/admin/pages/tabs/ModulesTab').then(
 const TestDataTab = lazy(() => import('@/core/admin/pages/tabs/TestDataTab').then((m) => ({ default: m.TestDataTab })))
 const AppearanceTab = lazy(() => import('@/core/admin/pages/tabs/AppearanceTab').then((m) => ({ default: m.AppearanceTab })))
 
-type TabId = 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'online' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports' | 'test-data' | 'instructions'
+type TabId = 'deployment' | 'users' | 'roles' | 'role-mappings' | 'departments' | 'settings' | 'audit' | 'health' | 'errors' | 'online' | 'security' | 'organizations' | 'global-hierarchy' | 'modules' | 'appearance' | 'dict_positions' | 'dict_vacation' | 'dict_skills' | 'bug-reports' | 'test-data' | 'instructions'
 
 interface TabItem {
   id: TabId
@@ -92,6 +93,7 @@ const TAB_GROUPS: TabGroup[] = [
       { id: 'audit', name: 'Аудит', icon: Activity, description: 'Лог действий', color: 'from-indigo-500 to-blue-600' },
       { id: 'errors', name: 'Ошибки', icon: AlertCircle, description: 'Лог ошибок системы', color: 'from-orange-500 to-red-600' },
       { id: 'bug-reports', name: 'Баг-репорты', icon: Bug, description: 'Отчёты пользователей', color: 'from-amber-500 to-orange-600' },
+      { id: 'deployment', name: 'Обновление системы', icon: Server, description: 'Обновление двух серверов', color: 'from-teal-500 to-emerald-600' },
       { id: 'health', name: 'Система', icon: Server, description: 'БД, память, подключения', color: 'from-teal-500 to-emerald-600' },
       { id: 'test-data', name: 'Тестовые данные', icon: FlaskConical, description: 'Тестовый отдел и работники', color: 'from-lime-500 to-green-600' },
     ],
@@ -124,7 +126,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
   }, [])
 
   const permissions = useAuthStore((s) => s.permissions)
-  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'global-hierarchy', 'bug-reports', 'test-data', 'instructions']
+  const HIDDEN_FOR_ORG_ADMIN: TabId[] = ['deployment', 'roles', 'role-mappings', 'security', 'health', 'errors', 'organizations', 'global-hierarchy', 'bug-reports', 'test-data', 'instructions']
 
   const filteredGroups = TAB_GROUPS
     .map((group) => ({
@@ -189,6 +191,7 @@ export function AdminPanel({ mode = 'global' }: Props) {
           {activeTab === 'settings' && <SettingsTab mode={mode} />}
           {activeTab === 'audit' && <AuditTab />}
           {activeTab === 'health' && <HealthTab />}
+          {activeTab === 'deployment' && <DeploymentTab />}
           {activeTab === 'errors' && <ErrorsTab />}
           {activeTab === 'online' && <OnlineUsersTab />}
           {activeTab === 'security' && <SecurityTab />}

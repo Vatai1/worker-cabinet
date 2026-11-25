@@ -1,4 +1,5 @@
 import swaggerJsdoc from 'swagger-jsdoc'
+import { deploymentSchemas } from '../deployment/openapi.js'
 
 const options = {
   definition: {
@@ -20,6 +21,7 @@ const options = {
         },
       },
       schemas: {
+        ...deploymentSchemas,
         Error: {
           type: 'object',
           properties: {

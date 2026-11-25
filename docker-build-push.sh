@@ -435,6 +435,10 @@ step_tag_latest() {
     docker buildx imagetools create -t "${BACKEND_IMAGE}:latest" "${BACKEND_IMAGE}:${VERSION}" || return 1
 }
 
+step_release_manifest() {
+    node "${BUILD_DIR}/deploy/agent/publish-release.mjs" "$VERSION" "$COMMIT" "$FRONTEND_IMAGE" "$BACKEND_IMAGE" "${SCRIPT_DIR}/release-artifacts/${VERSION}.json"
+}
+
 main() {
     echo "=== Сборка и публикация (${PLATFORM}, v${VERSION}, ${COMMIT}) ==="
     run_step "Проверка окружения" check_environment
@@ -471,6 +475,7 @@ main() {
     echo ""
     echo "=== Сборка бэкенда (${PLATFORM}) ==="
     run_step "Образ бэкенда ${VERSION}" step_build_backend
+    run_step "Манифест релиза с digest обоих образов" step_release_manifest
     run_step "Тег latest для обоих образов" step_tag_latest
 
     print_summary

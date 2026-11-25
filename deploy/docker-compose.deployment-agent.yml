@@ -1,0 +1,17 @@
+services:
+  deployment-agent:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.deployment-agent
+    image: worker-cabinet-deployment-agent:local
+    restart: unless-stopped
+    init: true
+    env_file: ${DEPLOY_AGENT_ENV_FILE:-./agent/.env}
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DEPLOY_ROOT:?Укажите DEPLOY_ROOT}:${DEPLOY_ROOT}
+      - /etc/worker-cabinet/backend-deploy.json:/etc/worker-cabinet/backend-deploy.json:ro
+      - /etc/worker-cabinet/deploy-ssh:/run/deploy-ssh:ro
+      - /root/.docker:/root/.docker:ro

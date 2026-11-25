@@ -12,6 +12,9 @@ import type { AuditLogEntry } from '@/core/admin/types/admin'
 import { ROLE_LABELS } from '@/core/admin/pages/tabs/shared'
 
 const ACTION_LABELS: Record<string, string> = {
+  deployment_start: 'Запуск обновления системы',
+  deployment_settings: 'Настройки обновления системы',
+  deployment_recovery: 'Проверка восстановления системы',
   role_create: 'Создание роли',
   role_update: 'Обновление роли',
   role_delete: 'Удаление роли',
@@ -56,6 +59,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ComponentType<{ className?: st
 }
 
 const ENTITY_LABELS: Record<string, string> = {
+  deployment: 'Обновление системы',
   role: 'Роль',
   user: 'Пользователь',
   system: 'Система',

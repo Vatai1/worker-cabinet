@@ -112,7 +112,7 @@ const getHRNavigation = (userId?: string): NavItem[] => [
 // показываем их и в разделе «Настройки организации» в сайдбаре.
 const ORG_HIDDEN_ITEM_NAMES = new Set([
   'Роли и доступы', 'Роли по должности', 'Учреждения', 'Иерархия',
-  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система', 'Тестовые данные', 'Видеоинструкции',
+  'Безопасность', 'Ошибки', 'Баг-репорты', 'Система', 'Обновление системы', 'Тестовые данные', 'Видеоинструкции',
 ])
 
 const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg: boolean): NavItem[] => {
@@ -135,6 +135,7 @@ const getAdminSettingsItems = (basePath: string, section: string, restrictToOrg:
       { name: 'Ошибки', href: `${basePath}?tab=errors`, permission: 'admin:errors' },
       { name: 'Баг-репорты', href: `${basePath}?tab=bug-reports`, permission: 'bug_reports:manage' },
       { name: 'Система', href: `${basePath}?tab=health` },
+      { name: 'Обновление системы', href: `${basePath}?tab=deployment` },
       { name: 'Тестовые данные', href: `${basePath}?tab=test-data` },
     ]},
     { name: 'Справочники', icon: Briefcase, section, children: [

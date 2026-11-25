@@ -1,0 +1,9 @@
+{
+  "role": "backend",
+  "root": "/opt/worker-cabinet",
+  "project": "worker-cabinet",
+  "compose": "/opt/worker-cabinet/docker-compose.backend.yml",
+  "env": "/opt/worker-cabinet/.env",
+  "repository": "vatai12/worker-cabinet-backend",
+  "backups": "/opt/worker-cabinet/backups"
+}

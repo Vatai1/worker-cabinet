@@ -2012,6 +2012,8 @@ async function runMigrations() {
     )`)
     await db.query("DELETE FROM system_settings WHERE key LIKE 'login_stat%' OR key IN ('login_show_stats', 'company_name')")
 
+    await migrateDeployment(db)
+
     console.log('✅ Migrations completed successfully')
     console.log('Database "worker_cabinet" ready')
 
@@ -2652,4 +2654,43 @@ async function migrateTimesheetFeatures(db) {
     CREATE TRIGGER timesheet_entry_audit AFTER INSERT OR UPDATE ON timesheet_entries
       FOR EACH ROW EXECUTE FUNCTION audit_timesheet_entry();
   `)
+}
+
+export async function migrateDeployment(db) {
+  await db.query(`
+      CREATE TABLE IF NOT EXISTS deployment_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        settings JSONB NOT NULL DEFAULT '{"enabled":false,"frontend_url":"","backend_health_url":"","health_timeout_seconds":180}',
+        heartbeat_at TIMESTAMPTZ,
+        observed JSONB NOT NULL DEFAULT '{}',
+        catalog_error TEXT,
+        host_error TEXT
+      );
+      INSERT INTO deployment_state (id) VALUES (1) ON CONFLICT DO NOTHING;
+      CREATE TABLE IF NOT EXISTS deployment_releases (
+        version TEXT PRIMARY KEY,
+        manifest JSONB NOT NULL,
+        available BOOLEAN NOT NULL DEFAULT true,
+        published_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS deployment_jobs (
+        id UUID PRIMARY KEY,
+        release JSONB NOT NULL,
+        settings JSONB NOT NULL,
+        initiated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'recovery_required', 'completed', 'failed')),
+        stage TEXT NOT NULL DEFAULT 'queued',
+        events JSONB NOT NULL DEFAULT '[]',
+        before_state JSONB NOT NULL DEFAULT '{}',
+        after_state JSONB NOT NULL DEFAULT '{}',
+        backup TEXT,
+        resolution_requested BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        started_at TIMESTAMPTZ,
+        finished_at TIMESTAMPTZ
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS deployment_one_active ON deployment_jobs ((true))
+        WHERE status IN ('queued', 'running', 'recovery_required');
+    `)
 }

@@ -22,6 +22,7 @@ import timesheetRoutes from './routes/timesheet.js'
 import calendarRoutes from './routes/calendar.js'
 import notificationsRoutes from './routes/notifications.js'
 import adminRoutes from './routes/admin.js'
+import deploymentRoutes from './routes/deployment.js'
 import assistantRoutes from './routes/assistant.js'
 import onlyofficeRoutes from './routes/onlyoffice.js'
 import appearanceRoutes from './routes/appearance.js'
@@ -151,6 +152,7 @@ app.use('/api/dictionaries', dictionariesRoutes)
 app.use('/api/timesheet', timesheetRoutes)
 app.use('/api/calendar', calendarRoutes)
 app.use('/api/notifications', notificationsRoutes)
+app.use('/api/admin/deployment', deploymentRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/assistant', assistantRoutes)
 app.use('/api/onlyoffice', onlyofficeRoutes)
