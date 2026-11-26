@@ -38,6 +38,7 @@ interface EmployeeRow {
   first_name: string
   last_name: string
   middle_name: string | null
+  second_name?: string | null
   position: string | null
   department_id: number | null
   department_name: string | null
@@ -406,6 +407,7 @@ function EmployeeSettingsModal({
   const [firstName, setFirstName] = useState(employee.first_name)
   const [lastName, setLastName] = useState(employee.last_name)
   const [middleName, setMiddleName] = useState(employee.middle_name || '')
+  const [secondName, setSecondName] = useState(employee.second_name || '')
   const [position, setPosition] = useState(employee.position || '')
   const [phone, setPhone] = useState(employee.phone || '')
   const [office, setOffice] = useState(employee.office || '')
@@ -549,6 +551,7 @@ function EmployeeSettingsModal({
     firstName: employee.first_name,
     lastName: employee.last_name,
     middleName: employee.middle_name || '',
+    secondName: employee.second_name || '',
     position: employee.position || '',
     phone: employee.phone || '',
     office: employee.office || '',
@@ -560,7 +563,7 @@ function EmployeeSettingsModal({
     isActive: employee.org_is_active !== false,
   }))
 
-  const profileDirty = firstName !== baseline.firstName || lastName !== baseline.lastName || middleName !== baseline.middleName
+  const profileDirty = firstName !== baseline.firstName || lastName !== baseline.lastName || middleName !== baseline.middleName || secondName !== baseline.secondName
     || position !== baseline.position || phone !== baseline.phone || office !== baseline.office || cabinet !== baseline.cabinet
     || hireDate !== baseline.hireDate || managerId !== baseline.managerId || departmentId !== baseline.departmentId
   const orgDirty = !!currentOrgId && (orgRole !== baseline.orgRole || departmentId !== baseline.departmentId || isActive !== baseline.isActive)
@@ -604,6 +607,7 @@ function EmployeeSettingsModal({
           first_name: firstName,
           last_name: lastName,
           middle_name: middleName,
+          second_name: secondName,
           position,
           phone,
           office,
@@ -614,12 +618,13 @@ function EmployeeSettingsModal({
         }),
         done: () => {
           if (hireDate !== baseline.hireDate) loadTravel()
-          setBaseline((b) => ({ ...b, firstName, lastName, middleName, position, phone, office, cabinet, hireDate, managerId, departmentId }))
+          setBaseline((b) => ({ ...b, firstName, lastName, middleName, secondName, position, phone, office, cabinet, hireDate, managerId, departmentId }))
           const dept = departments.find((d) => String(d.id) === departmentId)
           onUpdated(employee.id, {
             first_name: firstName,
             last_name: lastName,
             middle_name: middleName,
+            second_name: secondName,
             position,
             phone,
             office,
@@ -904,6 +909,11 @@ function EmployeeSettingsModal({
               <Input placeholder="Фамилия" value={lastName} onChange={(e) => setLastName(e.target.value)} className="h-9 text-sm" />
               <Input placeholder="Имя" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="h-9 text-sm" />
               <Input placeholder="Отчество" value={middleName} onChange={(e) => setMiddleName(e.target.value)} className="h-9 text-sm" />
+            </div>
+            <div className="mb-3 space-y-1.5">
+              <label htmlFor="employee-second-name" className="text-xs font-medium">Второе имя (полное ФИО)</label>
+              <Input id="employee-second-name" placeholder="Например, Пак Сон Бо" value={secondName} onChange={(e) => setSecondName(e.target.value)} maxLength={300} aria-describedby="employee-second-name-hint" className="h-9 text-sm" />
+              <p id="employee-second-name-hint" className="text-xs text-muted-foreground">Укажите другое ФИО из документов или внешней системы. При импорте учитываются оба имени.</p>
             </div>
             {genitiveInfo && genitive && (
               <details data-testid="employee-name-genitive" className="group mb-3 rounded-xl border border-border/60">

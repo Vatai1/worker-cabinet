@@ -2142,6 +2142,7 @@ async function runMigrations() {
     await migrateKnowledgeBase(db)
     await migratePermissionsMatrix(db)
     await migrateNotificationDelivery(db)
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS second_name VARCHAR(300)')
     await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name_genitive JSONB')
     await db.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS name_genitive TEXT')
     await db.query('ALTER TABLE vacation_requests ADD COLUMN IF NOT EXISTS reference_document_key TEXT')

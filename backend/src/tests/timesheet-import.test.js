@@ -2,7 +2,7 @@ import { it } from 'node:test'
 import assert from 'node:assert/strict'
 import ExcelJS from 'exceljs'
 import PizZip from 'pizzip'
-import { parseTimesheetImport } from '../lib/timesheetImport.js'
+import { parseTimesheetImport, resolveTimesheetImportEmployees } from '../lib/timesheetImport.js'
 
 export async function importFixture() {
   const workbook = new ExcelJS.Workbook()
@@ -82,4 +82,66 @@ it('форма 0504421 с рисунками, повторной шапкой и
     { date: '2026-01-01', code: 'Я', minutes: 367 },
     { date: '2026-01-02', code: null, minutes: null },
   ])
+})
+
+function rosterDb(roster) {
+  return {
+    query: async (sql) => ({ rows: sql.includes('FROM user_organizations') ? roster : [] }),
+  }
+}
+
+const IMPORT_SCOPE = { orgId: 1, departmentId: null, includeTest: false }
+const KOREAN_EMPLOYEE = { id: 1, name: 'Сон Татьяна Витальевна', second_name: 'Пак Сон Бо', position: 'Врач', staff_numbers: [], department_id: 1 }
+
+it('импорт сопоставляет основное и второе ФИО одного работника и назначает оба номера', async () => {
+  const result = await resolveTimesheetImportEmployees(rosterDb([KOREAN_EMPLOYEE]), [
+    { staffNumber: '001', name: 'Сон Татьяна Витальевна', position: 'Врач' },
+    { staffNumber: '002', name: '  ПАК   СОН\u00a0БО  ', position: 'Врач' },
+  ], IMPORT_SCOPE)
+  assert.deepEqual([...result.matches.values()].map(employee => employee.id), [1, 1])
+  assert.deepEqual(result.assignments, [{ employee_id: 1, staff_numbers: ['001', '002'] }])
+})
+
+it('одинаковые основное и второе ФИО не создают неоднозначность; ё и е равнозначны', async () => {
+  const employee = { ...KOREAN_EMPLOYEE, name: 'Пак Сён Бо', second_name: 'Пак Сен Бо' }
+  const result = await resolveTimesheetImportEmployees(rosterDb([employee]), [
+    { staffNumber: '001', name: 'Пак Сен Бо', position: '' },
+  ], IMPORT_SCOPE)
+  assert.equal(result.matches.get('001').id, 1)
+})
+
+it('совпадение второго ФИО с основным другого работника требует уточнения', async () => {
+  const other = { ...KOREAN_EMPLOYEE, id: 2, name: 'Пак Сон Бо', second_name: null, position: 'Медсестра' }
+  const db = rosterDb([KOREAN_EMPLOYEE, other])
+  await assert.rejects(resolveTimesheetImportEmployees(db, [
+    { staffNumber: '001', name: 'Пак Сон Бо', position: '' },
+  ], IMPORT_SCOPE), /Найдено несколько сотрудников/)
+  const result = await resolveTimesheetImportEmployees(db, [
+    { staffNumber: '001', name: 'Пак Сон Бо', position: 'Врач' },
+  ], IMPORT_SCOPE)
+  assert.equal(result.matches.get('001').id, 1)
+})
+
+it('второе ФИО учитывается при проверке занятого табельного номера', async () => {
+  const employee = { ...KOREAN_EMPLOYEE, staff_numbers: ['001'] }
+  const other = { ...KOREAN_EMPLOYEE, id: 2, name: 'Другой работник', second_name: 'Другое имя', staff_numbers: ['002'] }
+  const db = rosterDb([employee, other])
+  const result = await resolveTimesheetImportEmployees(db, [
+    { staffNumber: '001', name: 'Пак Сон Бо', position: '' },
+  ], IMPORT_SCOPE)
+  assert.equal(result.assignedCount, 0)
+  assert.equal(result.matches.get('001').id, 1)
+  await assert.rejects(resolveTimesheetImportEmployees(db, [
+    { staffNumber: '002', name: 'Пак Сон Бо', position: '' },
+  ], IMPORT_SCOPE), /закреплён за другим сотрудником/)
+})
+
+it('работник без второго имени по-прежнему находится по основному ФИО', async () => {
+  const result = await resolveTimesheetImportEmployees(rosterDb([{ ...KOREAN_EMPLOYEE, second_name: null }]), [
+    { staffNumber: '001', name: KOREAN_EMPLOYEE.name, position: '' },
+  ], IMPORT_SCOPE)
+  assert.equal(result.matches.get('001').id, 1)
+  await assert.rejects(resolveTimesheetImportEmployees(rosterDb([KOREAN_EMPLOYEE]), [
+    { staffNumber: '002', name: 'Неизвестный работник', position: '' },
+  ], IMPORT_SCOPE), /Не найдены работники/)
 })

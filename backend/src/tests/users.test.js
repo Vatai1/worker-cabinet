@@ -80,6 +80,37 @@ describe('Users API', () => {
     assert.strictEqual(res.status, 200)
   })
 
+  it('PUT /users/:id сохраняет, возвращает и удаляет второе ФИО; проверяет формат', async () => {
+    const { rows: [original] } = await query('SELECT second_name FROM users WHERE id = $1', [employeeUser.id])
+    const update = (secondName) => fetch(`${BASE}/users/${employeeUser.id}`, {
+      method: 'PUT',
+      headers: headersJSON(hrToken),
+      body: JSON.stringify({ second_name: secondName }),
+    })
+    try {
+      const saved = await update('  Пак   Сон Бо  ')
+      assert.strictEqual(saved.status, 200)
+      const profile = await fetch(`${BASE}/users/${employeeUser.id}`, { headers: headers(hrToken) })
+      assert.strictEqual(profile.status, 200)
+      assert.strictEqual((await profile.json()).second_name, 'Пак Сон Бо')
+      const list = await fetch(`${BASE}/users/search?q=${encodeURIComponent('Пак Сон Бо')}`, { headers: headers(hrToken) })
+      assert.strictEqual(list.status, 200)
+      assert.ok((await list.json()).some(user => user.id === employeeUser.id && user.second_name === 'Пак Сон Бо'))
+      for (const invalid of [123, {}, 'А'.repeat(301)]) {
+        const response = await update(invalid)
+        assert.strictEqual(response.status, 400)
+        assert.strictEqual((await response.json()).code, 'VALIDATION_ERROR')
+      }
+      for (const empty of ['', null]) {
+        assert.strictEqual((await update(empty)).status, 200)
+        const { rows: [user] } = await query('SELECT second_name FROM users WHERE id = $1', [employeeUser.id])
+        assert.strictEqual(user.second_name, null)
+      }
+    } finally {
+      await query('UPDATE users SET second_name = $1 WHERE id = $2', [original.second_name, employeeUser.id])
+    }
+  })
+
   it('POST /users/:id/skills adds a skill', async () => {
     const res = await fetch(`${BASE}/users/${employeeUser.id}/skills`, {
       method: 'POST',

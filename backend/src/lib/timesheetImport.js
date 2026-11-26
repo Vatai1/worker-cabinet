@@ -14,7 +14,7 @@ function normalizeEmployeeText(value) {
 
 export async function resolveTimesheetImportEmployees(db, employees, { orgId, departmentId, includeTest }) {
   const { rows: roster } = await db.query(
-    `SELECT u.id, CONCAT_WS(' ', u.last_name, u.first_name, u.middle_name) AS name, u.position,
+    `SELECT u.id, CONCAT_WS(' ', u.last_name, u.first_name, u.middle_name) AS name, u.second_name, u.position,
             COALESCE(settings.hourly, false) AS hourly, d.id AS department_id,
             ARRAY(SELECT n.staff_number FROM timesheet_staff_numbers n
                   WHERE n.organization_id = uo.org_id AND n.user_id = u.id
@@ -28,7 +28,15 @@ export async function resolveTimesheetImportEmployees(db, employees, { orgId, de
     [orgId, includeTest, departmentId]
   )
   const byNumber = new Map(roster.flatMap(employee => employee.staff_numbers.map(number => [number, employee])))
-  const byName = Map.groupBy(roster, employee => normalizeEmployeeText(employee.name))
+  const byName = new Map()
+  for (const employee of roster) {
+    const names = new Set([employee.name, employee.second_name].filter(Boolean).map(normalizeEmployeeText))
+    for (const name of names) {
+      if (!name) continue
+      if (!byName.has(name)) byName.set(name, [])
+      byName.get(name).push(employee)
+    }
+  }
   const unmatchedNumbers = employees.filter(employee => !byNumber.has(employee.staffNumber)).map(employee => employee.staffNumber)
   if (unmatchedNumbers.length) {
     const { rows: [used] } = await db.query(

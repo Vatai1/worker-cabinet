@@ -147,7 +147,7 @@ router.get('/positions/all', authenticateToken, async (req, res) => {
  *       - in: query
  *         name: q
  *         schema: { type: string }
- *         description: Поисковый запрос (ФИО, email, должность, теги, активные организации сотрудника)
+ *         description: Поисковый запрос (основное или второе ФИО, email, должность, теги, активные организации сотрудника)
  *       - in: query
  *         name: tagId
  *         schema: { type: string }
@@ -341,6 +341,7 @@ router.get('/search', authenticateToken, async (req, res) => {
         u.first_name,
         u.last_name,
         u.middle_name,
+        u.second_name,
         u.position,
         ${req.org ? 'uo.department_id' : 'u.department_id'} as department_id,
         d.name as department_name,
@@ -424,7 +425,7 @@ router.get('/search', authenticateToken, async (req, res) => {
       for (const pattern of patterns) {
         params.push(pattern)
         const idx = params.length
-        sql += ` AND (u.last_name ~* $${idx} OR u.first_name ~* $${idx} OR u.middle_name ~* $${idx} OR u.position ~* $${idx} OR u.email ~* $${idx} OR EXISTS (
+        sql += ` AND (u.last_name ~* $${idx} OR u.first_name ~* $${idx} OR u.middle_name ~* $${idx} OR u.second_name ~* $${idx} OR u.position ~* $${idx} OR u.email ~* $${idx} OR EXISTS (
           SELECT 1 FROM user_skills us2 JOIN skills_dictionary sd2 ON us2.skill_id = sd2.id
           WHERE us2.user_id = u.id AND sd2.name ~* $${idx}
         ) OR EXISTS (
@@ -517,6 +518,7 @@ router.get('/', authenticateToken, requirePermission('users:view'), async (req, 
         u.first_name,
         u.last_name,
         u.middle_name,
+        u.second_name,
         u.position,
         u.department_id,
         d.name as department_name,
@@ -1079,6 +1081,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         u.first_name,
         u.last_name,
         u.middle_name,
+        u.second_name,
         u.position,
         u.department_id,
         d.name as department_name,
@@ -1575,6 +1578,7 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
  *               first_name: { type: string }
  *               last_name: { type: string }
  *               middle_name: { type: string }
+ *               second_name: { type: string, maxLength: 300, nullable: true, description: Полное альтернативное ФИО для сопоставления при импорте; пустое значение удаляет второе имя }
  *               phone: { type: string }
  *               responsibility_area: { type: string }
  *               office: { type: string, description: 'Офис (адрес)' }
@@ -1593,7 +1597,7 @@ router.delete('/:id/projects/:projectId', authenticateToken, async (req, res) =>
  *               properties:
  *                 success: { type: boolean }
  *       400:
- *         description: Отдел или руководитель не найдены в текущей организации
+ *         description: Некорректное второе имя, отдел или руководитель не найдены в текущей организации
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
@@ -1607,7 +1611,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
     const targetId = parseInt(id)
-    const { responsibility_area, phone, first_name, last_name, middle_name, office, cabinet, position, hire_date, department_id, manager_id } = req.body
+    const { responsibility_area, phone, first_name, last_name, middle_name, second_name, office, cabinet, position, hire_date, department_id, manager_id } = req.body
 
     if (!checkProfileEditAccess(req, targetId)) {
       return res.status(403).json({ error: 'Forbidden' })
@@ -1640,6 +1644,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (middle_name !== undefined && typeof middle_name === 'string') {
       updates.push(`middle_name = $${paramIndex++}`)
       values.push(middle_name.trim())
+    }
+
+    if (second_name !== undefined) {
+      if (second_name !== null && (typeof second_name !== 'string' || second_name.trim().length > 300)) {
+        return res.status(400).json({ error: 'Второе имя должно быть строкой длиной до 300 символов', code: 'VALIDATION_ERROR' })
+      }
+      updates.push(`second_name = $${paramIndex++}`)
+      values.push(second_name?.trim().replace(/\s+/gu, ' ') || null)
     }
 
     if (office !== undefined && typeof office === 'string') {

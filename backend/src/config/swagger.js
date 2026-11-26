@@ -38,6 +38,7 @@ const options = {
             first_name: { type: 'string' },
             last_name: { type: 'string' },
             middle_name: { type: 'string' },
+            second_name: { type: 'string', nullable: true, maxLength: 300, description: 'Полное альтернативное ФИО для сопоставления при импорте' },
             position: { type: 'string' },
             department: { type: 'string' },
             department_id: { type: 'integer' },
