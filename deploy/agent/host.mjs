@@ -37,8 +37,18 @@ export async function command(file, args, { cwd, input, inputFile, outputFile, a
   })
 }
 
-export async function readHostConfig(file) {
-  const config = JSON.parse(await readFile(file, 'utf8'))
+export async function readHostConfig(file, env = process.env) {
+  const role = env.DEPLOY_ROLE || 'backend'
+  const root = env.DEPLOY_ROOT
+  const config = file ? JSON.parse(await readFile(file, 'utf8')) : {
+    role, root,
+    project: env.DEPLOY_PROJECT,
+    compose: env.DEPLOY_COMPOSE_FILE,
+    env: env.DEPLOY_APP_ENV_FILE,
+    repository: role === 'frontend' ? env.DEPLOY_FRONTEND_REPOSITORY : env.DEPLOY_BACKEND_REPOSITORY,
+    backups: env.DEPLOY_BACKUP_DIR || (root && path.join(root, 'backups')),
+    maintenance: env.DEPLOY_MAINTENANCE_DIR || (root && path.join(root, 'maintenance')),
+  }
   if (!['backend', 'frontend'].includes(config.role) || !/^[a-z0-9][a-z0-9_-]*$/.test(config.project || '') || !/^[a-z0-9][a-z0-9./:_-]+$/.test(config.repository || '')) throw new Error('Некорректная конфигурация сервера')
   for (const key of ['root', 'compose', 'env']) if (!path.isAbsolute(config[key] || '')) throw new Error('Пути конфигурации должны быть абсолютными')
   if (config.role === 'backend' && !path.isAbsolute(config.backups || '')) throw new Error('Укажите абсолютный путь резервных копий')
@@ -49,7 +59,7 @@ export async function readHostConfig(file) {
 export function createHost(config, run = command, signal) {
   const services = config.role === 'backend' ? ['backend', 'notification-worker'] : ['frontend']
   const composeArgs = ['compose', '--project-name', config.project, '--project-directory', config.root, '--env-file', config.env, '-f', config.compose]
-  const docker = (args, options = {}) => run('docker', args, { cwd: config.root, signal, ...options })
+  const docker = (args, options = {}) => run('docker', args, { cwd: config.root, signal, ...(['inspect', 'ps'].includes(args[0]) ? { timeout: 10000 } : {}), ...options })
   const compose = (args, options) => docker([...composeArgs, ...args], options)
   const validateImage = image => {
     if (typeof image !== 'string' || !image.startsWith(`${config.repository}@sha256:`) || !/^[a-f0-9]{64}$/.test(image.split('@sha256:')[1] || '')) throw new Error('Недопустимый образ')
@@ -63,20 +73,23 @@ export function createHost(config, run = command, signal) {
     const data = JSON.parse(await docker(['inspect', '--format', format, id]))
     return { ...data, healthy: data.health === 'healthy' }
   }
+  const serviceIds = async service => (await docker(['ps', '-a', '-q', '--filter', `label=com.docker.compose.project=${config.project}`, '--filter', `label=com.docker.compose.service=${service}`, '--filter', 'label=com.docker.compose.oneoff=False'])).split(/\s+/).filter(Boolean)
   const inspect = async () => {
-    await compose(['version'])
+    await compose(['version'], { timeout: 10000 })
     const result = {}
+    const containers = {}
     for (const service of services) {
-      const ids = (await compose(['ps', '-a', '-q', service])).split(/\s+/).filter(Boolean)
+      const ids = await serviceIds(service)
       if (ids.length !== 1) throw new Error('Ожидается один контейнер каждого сервиса')
+      containers[service] = ids[0]
       result[service === 'notification-worker' ? 'worker' : service] = await inspectContainer(ids[0])
     }
     if (config.role === 'frontend') {
       await mkdir(config.maintenance, { recursive: true })
-      const id = await compose(['ps', '-a', '-q', 'frontend'])
+      const id = containers.frontend
       const mounts = JSON.parse(await docker(['inspect', '--format', '{{json .Mounts}}', id]))
       if (!mounts.some(mount => mount.Destination === '/etc/nginx/maintenance' && path.resolve(mount.Source) === path.resolve(config.maintenance))) throw new Error('Каталог обслуживания не подключён к frontend')
-      await docker(['exec', id, 'sh', '-c', 'grep -q /etc/nginx/maintenance/enabled /etc/nginx/conf.d/default.conf'])
+      await docker(['exec', id, 'sh', '-c', 'grep -q /etc/nginx/maintenance/enabled /etc/nginx/conf.d/default.conf'], { timeout: 10000 })
       result.maintenance = await stat(path.join(config.maintenance, 'enabled')).then(() => true, () => false)
     }
     return result
@@ -121,9 +134,7 @@ export function createHost(config, run = command, signal) {
       if (action === 'migrate') {
         const name = migrationName(payload.jobId)
         await persistImage(payload.image)
-        const override = path.join(config.root, `.deployment-migration-${payload.jobId}.json`)
-        await writeFile(override, JSON.stringify({ services: { backend: { restart: 'no' } } }), { mode: 0o600 })
-        await docker([...composeArgs, '-f', override, 'run', '-d', '--no-deps', '--pull', 'never', '--name', name, '--entrypoint', 'npm', 'backend', 'run', 'migrate'])
+        await docker([...composeArgs, '-f', '-', 'run', '-d', '--no-deps', '--pull', 'never', '--name', name, '--entrypoint', 'npm', 'backend', 'run', 'migrate'], { input: JSON.stringify({ services: { backend: { restart: 'no' } } }) })
         const code = await docker(['wait', name])
         if (code !== '0') throw new Error('Миграции завершились с ошибкой')
         return {}

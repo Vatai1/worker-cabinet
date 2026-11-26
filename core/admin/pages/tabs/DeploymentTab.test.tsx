@@ -53,3 +53,14 @@ describe('Обновление системы', () => {
     expect((screen.getByRole('button', { name: 'Обновить прод' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
+
+it('показывает проверку реестра и запрашивает поиск версий без запуска обновления', async () => {
+  const user = userEvent.setup()
+  vi.mocked(apiGet).mockResolvedValue({ ...fixture(), catalog_checked_at: '2026-11-26T03:00:00Z', catalog_source: 'https://nexus.example' })
+  render(<DeploymentTab />)
+  const button = await screen.findByRole('button', { name: 'Найти новые версии' })
+  expect(screen.getByText('Источник: https://nexus.example')).toBeTruthy()
+  await user.click(button)
+  await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/admin/deployment/refresh'))
+  expect(apiPost).not.toHaveBeenCalledWith('/admin/deployment/jobs', expect.anything())
+})

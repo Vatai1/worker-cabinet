@@ -1,0 +1,15 @@
+services:
+  frontend-agent:
+    image: ${DEPLOY_AGENT_IMAGE:?Укажите готовый образ deployment-agent}
+    container_name: worker-cabinet-frontend-agent
+    restart: unless-stopped
+    init: true
+    env_file: ${DEPLOY_AGENT_ENV_FILE:-.env.frontend-agent}
+    environment:
+      DEPLOY_ROLE: frontend
+      DOCKER_CONFIG: /run/docker
+    tmpfs:
+      - /run/docker:mode=0700
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DEPLOY_ROOT:?Укажите DEPLOY_ROOT}:${DEPLOY_ROOT}

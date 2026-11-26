@@ -65,6 +65,7 @@ COMMIT="$(git rev-parse --short HEAD)"
 
 FRONTEND_IMAGE="${DOCKER_USER}/worker-cabinet-frontend"
 BACKEND_IMAGE="${DOCKER_USER}/worker-cabinet-backend"
+AGENT_IMAGE="${DOCKER_USER}/worker-cabinet-deployment-agent"
 
 RESULTS=()
 BACKEND_PID=""
@@ -245,7 +246,7 @@ check_git() {
 
 check_version_tags() {
     local image exists=()
-    for image in "$FRONTEND_IMAGE" "$BACKEND_IMAGE"; do
+    for image in "$FRONTEND_IMAGE" "$BACKEND_IMAGE" "$AGENT_IMAGE"; do
         if docker buildx imagetools inspect "${image}:${VERSION}" >/dev/null 2>&1; then
             exists+=("${image}:${VERSION}")
         fi
@@ -430,9 +431,18 @@ step_build_backend() {
         -f "${BUILD_DIR}/Dockerfile.backend" "${BUILD_DIR}" --push
 }
 
+step_build_agent() {
+    docker buildx build --platform "${PLATFORM}" \
+        -t "${AGENT_IMAGE}:${VERSION}" \
+        --label "org.opencontainers.image.version=${VERSION}" \
+        --label "org.opencontainers.image.revision=${COMMIT}" \
+        -f "${BUILD_DIR}/deploy/Dockerfile.deployment-agent" "${BUILD_DIR}" --push
+}
+
 step_tag_latest() {
     docker buildx imagetools create -t "${FRONTEND_IMAGE}:latest" "${FRONTEND_IMAGE}:${VERSION}" || return 1
     docker buildx imagetools create -t "${BACKEND_IMAGE}:latest" "${BACKEND_IMAGE}:${VERSION}" || return 1
+    docker buildx imagetools create -t "${AGENT_IMAGE}:latest" "${AGENT_IMAGE}:${VERSION}" || return 1
 }
 
 step_release_manifest() {
@@ -471,18 +481,20 @@ main() {
     run_step "Экспорт исходников коммита" step_export_source
     echo ""
     echo "=== Сборка фронтенда (${PLATFORM}) ==="
+    run_step "Образ сервиса деплоя ${VERSION}" step_build_agent
     run_step "Образ фронтенда ${VERSION}" step_build_frontend
     echo ""
     echo "=== Сборка бэкенда (${PLATFORM}) ==="
     run_step "Образ бэкенда ${VERSION}" step_build_backend
     run_step "Манифест релиза с digest обоих образов" step_release_manifest
-    run_step "Тег latest для обоих образов" step_tag_latest
+    run_step "Тег latest для всех образов" step_tag_latest
 
     print_summary
     echo ""
     echo "=== Готово ==="
     echo "Фронтенд: ${FRONTEND_IMAGE}:${VERSION} (+ latest)"
     echo "Бэкенд:   ${BACKEND_IMAGE}:${VERSION} (+ latest)"
+    echo "Деплой:   ${AGENT_IMAGE}:${VERSION} (+ latest)"
     echo "Коммит:   ${COMMIT}"
 }
 

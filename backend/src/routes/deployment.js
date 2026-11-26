@@ -31,6 +31,9 @@ export function createDeploymentRouter({ database = pool, authenticate = authent
    *                 online: { type: boolean }
    *                 observed: { type: object, additionalProperties: true }
    *                 catalog_error: { type: string, nullable: true }
+   *                 catalog_checked_at: { type: string, format: date-time, nullable: true }
+   *                 catalog_source: { type: string, nullable: true }
+   *                 catalog_refresh_requested: { type: boolean }
    *                 host_error: { type: string, nullable: true }
    *                 releases: { type: array, items: { $ref: '#/components/schemas/DeploymentRelease' } }
    *                 jobs: { type: array, items: { $ref: '#/components/schemas/DeploymentJob' } }
@@ -41,7 +44,32 @@ export function createDeploymentRouter({ database = pool, authenticate = authent
     const [state, releases, jobs] = await Promise.all([store.state(), store.releases(), store.jobs()])
     res.json({ settings: state.settings, heartbeat_at: state.heartbeat_at,
       online: !!state.heartbeat_at && Date.now() - new Date(state.heartbeat_at).getTime() < 30000,
-      observed: state.observed, catalog_error: state.catalog_error, host_error: state.host_error, releases, jobs })
+      observed: state.observed, catalog_error: state.catalog_error, catalog_checked_at: state.catalog_checked_at, catalog_source: state.catalog_source, catalog_refresh_requested: state.catalog_refresh_requested, host_error: state.host_error, releases, jobs })
+  }))
+
+  /**
+   * @swagger
+   * /admin/deployment/refresh:
+   *   post:
+   *     tags: [Admin]
+   *     summary: Запросить поиск новых версий в Docker Registry или Nexus
+   *     description: Сервис выполняет поиск асинхронно, не чаще раза в 30 секунд. Во время обновления запрос ожидает завершения задания. Результат доступен в GET /admin/deployment.
+   *     security: [{ bearerAuth: [] }]
+   *     responses:
+   *       200:
+   *         description: Поиск запрошен
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 catalog_refresh_requested: { type: boolean }
+   *       401: { description: Требуется авторизация }
+   *       403: { description: Требуется суперадминистратор без имперсонации }
+   */
+  router.post('/refresh', asyncHandler(async (req, res) => {
+    await database.query('UPDATE deployment_state SET catalog_refresh_requested = true WHERE id = 1')
+    res.json({ catalog_refresh_requested: true })
   }))
 
   /**

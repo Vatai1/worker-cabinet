@@ -130,3 +130,32 @@ it('каталог принимает только неизменяемые ра
     assert.equal(current.available, true)
   } finally { client.release(); await rm(root, { recursive: true, force: true }) }
 })
+
+it('запрашивает поиск версий в Registry и возвращает время проверки без секретов', { skip: !enabled }, async () => {
+  assert.equal((await request('POST', '/refresh', {}, 'admin')).status, 403)
+  assert.equal((await request('POST', '/refresh', {}, 'superadmin', { 'x-impersonate': 'true' })).status, 403)
+  const refreshed = await request('POST', '/refresh', {})
+  assert.equal(refreshed.status, 200)
+  assert.equal(refreshed.data.catalog_refresh_requested, true)
+  await database.query("UPDATE deployment_state SET catalog_checked_at = NOW(), catalog_source = 'https://nexus.example'")
+  const state = (await request('GET')).data
+  assert.equal(state.catalog_refresh_requested, true)
+  assert.equal(state.catalog_source, 'https://nexus.example')
+  assert.ok(state.catalog_checked_at)
+})
+
+it('сортирует версии численно и допускает перенос тех же digest в Nexus без подмены релиза', { skip: !enabled }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wc-nexus-'))
+  const client = await database.connect()
+  try {
+    const file = path.join(root, 'index.json')
+    const values = [release, { ...release, version: '1.2.10' }, { ...release, version: '1.2.9' }]
+    await writeFile(file, JSON.stringify(values))
+    await syncCatalog(new DeploymentStore(client), file, { frontend: 'example/frontend', backend: 'example/backend' })
+    assert.deepEqual((await request('GET')).data.releases.map(item => item.version), ['1.2.10', '1.2.9', '1.2.3'])
+    const moved = { ...release, frontend: release.frontend.replace('example/', 'nexus.example/example/'), backend: release.backend.replace('example/', 'nexus.example/example/') }
+    await writeFile(file, JSON.stringify([moved]))
+    await syncCatalog(new DeploymentStore(client), file, { frontend: 'nexus.example/example/frontend', backend: 'nexus.example/example/backend' })
+    assert.equal((await request('GET')).data.releases[0].frontend, moved.frontend)
+  } finally { client.release(); await rm(root, { recursive: true, force: true }) }
+})

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { ACTIVE_STATUSES } from './validation.js'
+import { compareVersions } from './registry.js'
 
 export const DEPLOY_LOCK = 187431502
 
@@ -11,7 +12,7 @@ export class DeploymentStore {
   }
 
   async releases() {
-    return (await this.db.query('SELECT manifest FROM deployment_releases WHERE available ORDER BY published_at DESC, version DESC')).rows.map(row => row.manifest)
+    return (await this.db.query('SELECT manifest FROM deployment_releases WHERE available ORDER BY published_at DESC, version DESC')).rows.map(row => row.manifest).sort((left, right) => compareVersions(left.version, right.version))
   }
 
   async jobs() {

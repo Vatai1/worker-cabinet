@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { runDeployment, recoverInterrupted, resolveDeployment } from '../deployment/orchestrator.js'
 import { validateRelease, validateSettings } from '../deployment/validation.js'
-import { createHost, command } from '../../../deploy/agent/host.mjs'
+import { createHost, command, readHostConfig } from '../../../deploy/agent/host.mjs'
 
 const release = { version: '1.2.3', commit: 'abcdef0', backend: `example/backend@sha256:${'a'.repeat(64)}`, frontend: `example/frontend@sha256:${'b'.repeat(64)}` }
 const job = { id: '12345678-1234-1234-1234-123456789abc', release, settings: { enabled: true, frontend_url: 'https://example.ru', backend_health_url: 'http://localhost:5000/api/health', health_timeout_seconds: 30 } }
@@ -121,4 +121,43 @@ it('команды не исполняют переданные значения
   const literal = '$(echo LEAK); `echo LEAK`'
   assert.equal(await command(process.execPath, ['-e', 'process.stdout.write(process.argv[1])', literal]), literal)
   await assert.rejects(command(process.execPath, ['-e', 'process.stderr.write("password=DO_NOT_EXPOSE");process.exit(1)']), error => !error.message.includes('DO_NOT_EXPOSE'))
+})
+
+it('читает конфигурацию из env без JSON-файлов и кода на хосте', async () => {
+  const config = await readHostConfig(undefined, { DEPLOY_ROLE: 'frontend', DEPLOY_ROOT: '/root', DEPLOY_PROJECT: 'root', DEPLOY_COMPOSE_FILE: '/root/docker-compose.yml', DEPLOY_APP_ENV_FILE: '/root/.env', DEPLOY_FRONTEND_REPOSITORY: 'nexus.example/frontend' })
+  assert.equal(config.maintenance, '/root/maintenance')
+  assert.equal(config.repository, 'nexus.example/frontend')
+})
+
+it('исключает one-off контейнеры миграций при проверке основных сервисов', async () => {
+  const calls = []
+  const host = createHost({ role: 'backend', root: '/root', project: 'root', compose: '/root/docker-compose.yml', env: '/root/.env' }, async (_file, args) => {
+    calls.push(args)
+    if (args[0] === 'ps') return args.includes('label=com.docker.compose.service=backend') ? 'api-container' : 'worker-container'
+    if (args[0] === 'inspect') return JSON.stringify({ running: true, health: 'healthy' })
+    return ''
+  })
+  const result = await host.perform('inspect')
+  assert.equal(result.backend.healthy, true)
+  assert.equal(calls.filter(args => args.includes('label=com.docker.compose.oneoff=False')).length, 2)
+  assert.ok(!calls.some(args => args[0] === 'compose' && args.includes('ps')))
+})
+
+it('передаёт Compose override миграций через stdin без файлов на хосте', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wc-migration-env-'))
+  try {
+    const env = path.join(root, '.env')
+    await writeFile(env, 'BACKEND_IMAGE=old:latest\n')
+    const calls = []
+    const host = createHost({ role: 'backend', root, project: 'root', compose: path.join(root, 'compose.yml'), env, repository: 'example/backend' }, async (_file, args, options) => {
+      calls.push({ args, options })
+      return args[0] === 'wait' ? '0' : ''
+    })
+    await host.perform('migrate', { jobId: job.id, image: release.backend })
+    const migration = calls.find(call => call.args.includes('run'))
+    assert.ok(migration.args.includes('-'))
+    assert.deepEqual(JSON.parse(migration.options.input), { services: { backend: { restart: 'no' } } })
+    const { readdir } = await import('node:fs/promises')
+    assert.deepEqual(await readdir(root), ['.env'])
+  } finally { await rm(root, { recursive: true, force: true }) }
 })

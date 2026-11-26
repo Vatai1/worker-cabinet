@@ -23,7 +23,7 @@ interface DeploymentJob {
   initiated_by: number | null
   created_at: string
 }
-interface DeploymentState { settings: Settings; online: boolean; observed: Observed; catalog_error: string | null; host_error: string | null; releases: Release[]; jobs: DeploymentJob[] }
+interface DeploymentState { settings: Settings; online: boolean; observed: Observed; catalog_error: string | null; catalog_checked_at?: string | null; catalog_source?: string | null; catalog_refresh_requested?: boolean; host_error: string | null; releases: Release[]; jobs: DeploymentJob[] }
 const STATUS_LABELS = { queued: 'В очереди', running: 'Обновление выполняется', recovery_required: 'Требуется восстановление', completed: 'Завершено', failed: 'Не выполнено' }
 const ACTIVE_STATUSES = ['queued', 'running', 'recovery_required']
 const SERVICES = [['frontend', 'Фронтенд'], ['backend', 'API'], ['worker', 'Уведомления']] as const
@@ -77,7 +77,18 @@ export function DeploymentTab() {
           {container?.reference && <p className="break-all text-xs text-muted-foreground">{container.reference}</p>}
         </CardContent></Card>
       })}</div>
-      <Card><CardHeader><CardTitle>Опубликованный релиз</CardTitle></CardHeader><CardContent className="space-y-4">
+      <Card><CardHeader><CardTitle>Версии из Docker Registry</CardTitle></CardHeader><CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <p>Новые версии находятся автоматически. Для запуска нужны образы фронтенда и API одной версии и одного коммита.</p>
+            <p>{data.catalog_checked_at ? `Последняя успешная проверка: ${formatDateTime(data.catalog_checked_at)}` : 'Реестр ещё не проверен'}</p>
+            {data.releases[0] && <p>Последняя найденная версия: <strong className="text-foreground">{data.releases[0].version}</strong></p>}
+            {data.catalog_source && <p className="break-all">Источник: {data.catalog_source}</p>}
+          </div>
+          <Button variant="outline" disabled={busy || !data.online || data.catalog_refresh_requested} onClick={() => void perform(() => apiPost('/admin/deployment/refresh'))}>
+            <RefreshCw className="h-4 w-4" />{data.catalog_refresh_requested ? 'Поиск запрошен…' : 'Найти новые версии'}
+          </Button>
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-0 flex-1 space-y-2"><span className="text-sm font-medium">Версия для обоих серверов</span>
             <SelectDropdown aria-label="Версия для обоих серверов" value={version} onChange={value => { setVersion(value); setConfirmVersion(null) }} disabled={!!active || busy} placeholder="Выберите релиз" options={data.releases.map(release => ({ value: release.version, label: `${release.version} · ${release.commit}` }))} />

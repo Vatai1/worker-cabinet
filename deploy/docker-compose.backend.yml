@@ -181,6 +181,8 @@ services:
   notification-worker:
     image: ${BACKEND_IMAGE:-vatai12/worker-cabinet-backend:latest}
     container_name: worker-cabinet-notification-worker
+    healthcheck:
+      disable: true
     restart: unless-stopped
     command: ["node", "src/worker.js"]
     environment: *backend-environment

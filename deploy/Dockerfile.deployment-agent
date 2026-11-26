@@ -5,5 +5,7 @@ COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev
 COPY backend/src/config/database.js src/config/database.js
 COPY backend/src/deployment/ src/deployment/
-COPY deploy/agent/host.mjs /app/deploy/agent/host.mjs
-CMD ["node", "src/deployment/agent.js"]
+COPY deploy/agent/host.mjs deploy/agent/frontend.mjs /app/deploy/agent/
+ENV DOCKER_CONFIG=/run/docker
+RUN mkdir -p /run/docker
+CMD ["node", "src/deployment/entrypoint.js"]

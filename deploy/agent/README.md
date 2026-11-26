@@ -1,88 +1,151 @@
-# Обновление двух серверов из админки
+# Обновления из Docker Registry / Nexus
 
-Сервис деплоя работает отдельно от API и читает очередь из PostgreSQL. Публичных портов и административного HTTP-интерфейса у него нет: доступ к очереди использует учётные данные БД, доступ к frontend-серверу — отдельный SSH-ключ. Ключи, пароли БД и Docker Hub остаются на серверах. В браузер передаются только версии, этапы и несекретные настройки.
+Приложение и сервис управления поставляются готовыми образами. На проде не нужны Git, исходники, npm, Node.js или локальная сборка. На APP помощник исполняется внутри контейнера через ограниченную SSH-команду `docker exec`. На BACKEND отдельный контейнер читает задания из PostgreSQL и управляет существующим Compose-проектом.
 
-## Первоначальная установка
+Образы собираются и публикуются только на машине сборки. `docker-build-push.sh` публикует frontend, backend и `worker-cabinet-deployment-agent` одной версии. Образ сервиса одинаковый для обоих серверов; роль определяется переменной окружения. Версии приложения обнаруживаются автоматически по Docker Registry HTTP API V2, без GitHub и передачи JSON-манифестов.
 
-Первое развёртывание этой функции выполняется вручную на обоих серверах. Нужны Docker Compose v2 с `--pull never`, Node.js 26 на frontend-сервере для SSH-помощника, SSH-связность backend → frontend и доступ сервиса к PostgreSQL. Обновляйте только после проверки схемы на тестовом окружении.
+## Как находятся версии
 
-1. Установите код этого релиза, выполните `npm run migrate` в backend-контейнере и обновите frontend-образ вручную. Новый nginx должен содержать проверки `/etc/nginx/maintenance/enabled`, исключения `/api/admin/deployment`, `/api/health`, `/release.json`. Старый frontend не поддерживает режим обслуживания.
-2. На frontend-сервере установите `deploy/agent/host.mjs` и `deploy/agent/frontend.mjs`, например в `/opt/worker-cabinet/deploy/agent/`. Скопируйте `frontend.example.json` в `/etc/worker-cabinet/frontend-deploy.json`, заполните абсолютные пути, репозиторий и **фактическое имя существующего Compose-проекта**. Имя можно получить командой `docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' worker-cabinet-frontend`. Создавать другой проект нельзя: изменится сеть, а для backend — имена томов БД.
-3. Создайте `/opt/worker-cabinet/maintenance`. В frontend `.env` задайте `MAINTENANCE_PATH=/opt/worker-cabinet/maintenance`. Пересоздайте frontend с обновлённым `docker-compose.frontend.yml`, чтобы каталог был подключён к `/etc/nginx/maintenance`.
-4. Создайте отдельный ключ на backend-сервере. Публичный ключ добавьте в `authorized_keys` пользователя `wc-deploy` на frontend с принудительной командой и ограничениями:
+Сервис проверяет теги frontend/backend в Registry/Nexus каждые 30 секунд по умолчанию. Интервал задаёт `DEPLOY_REGISTRY_POLL_SECONDS`. Кнопка «Найти новые версии» ставит запрос в очередь. Поиск выполняется не чаще одного раза в 30 секунд, после завершения активного обновления или предыдущей проверки.
+
+В список попадают последние 30 общих стабильных версий `X.Y.Z`, для которых:
+
+- оба образа опубликованы и содержат выбранную платформу, по умолчанию `linux/amd64`;
+- OCI-метка `org.opencontainers.image.version` совпадает с тегом;
+- метки `org.opencontainers.image.revision` у frontend/backend совпадают;
+- манифесты и конфигурации прошли проверку SHA-256.
+
+`latest`, prerelease, неполные пары и образы разных коммитов не предлагаются. Версии сортируются численно. Для запуска сохраняется пара immutable digest, а не изменяемых тегов. Сканирование выполняет GET-запросы к реестру и не скачивает слои образов. `docker pull` выполняется только при обновлении.
+
+Сбой реестра сохраняет прежний каталог в БД, но блокирует новые запуски до успешной проверки. Уже начатое обновление использует сохранённые digest и не прерывается из-за очередного сканирования. Перепубликация существующей версии с другими digest блокируется. Перенос тех же digest в Nexus допустим; история заданий сохраняет первоначальные ссылки.
+
+Протокол: [Registry API V2](https://distribution.github.io/distribution/spec/api/), [Bearer-авторизация](https://distribution.github.io/distribution/spec/auth/token/). Поддерживаются Basic, Bearer и пагинация списка тегов. Реестр должен предоставлять `/v2/<repository>/tags/list`, manifests и blobs. Если Docker pull через Nexus работает, но `tags/list` недоступен, необходимо открыть этот read-only API на стороне Nexus — доступа к GitHub всё равно не требуется.
+
+## Что остаётся на серверах
+
+Compose, `.env`, стандартные SSH-ключи/known_hosts и сертификаты при необходимости. Данные приложения, резервные копии и флаг обслуживания хранятся в подключаемых каталогах. Исходники и исполняемые JS-файлы находятся внутри образов; Docker CLI и Compose plugin также включены в образ сервиса, их не нужно монтировать с хоста.
+
+`DEPLOY_ROOT` подключается в контейнер по тому же абсолютному пути, что на хосте. Он должен содержать действующий Compose и `.env`; Docker daemon использует абсолютные пути файлов из этого Compose. Не меняйте имя существующего проекта приложения: это может изменить сети и тома.
+
+Проверка проекта без вывода секретов:
+
+```bash
+docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' worker-cabinet-backend
+docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' worker-cabinet-frontend
+```
+
+Проверьте фактические имена контейнеров; примеры предполагают сервисы `backend`, `notification-worker`, `postgres` и `frontend`. Полный `docker inspect`/`compose config` может содержать секреты — не публикуйте его в чат.
+
+## Установка на BACKEND
+
+После публикации нового релиза доставьте на сервер только:
+
+- `deploy/docker-compose.deployment-agent.yml`;
+- `deploy/agent/.env.example`, сохранённый как `.env.deployment-agent` рядом с Compose.
+
+Установите `DEPLOY_AGENT_IMAGE` на опубликованный тег или, предпочтительно, digest образа `worker-cabinet-deployment-agent`. Значение `VERSION` в примере — placeholder, не опубликованный тег. В примере роль backend, приложение находится в `/root`, проект `root`, сеть `root_worker-cabinet-network`. Укажите фактические значения.
+
+`DEPLOY_PROJECT`, `DEPLOY_COMPOSE_FILE`, `DEPLOY_APP_ENV_FILE`, `DEPLOY_BACKUP_DIR` относятся к действующему приложению. Сам сервис запускается отдельным проектом, например `wc-deployment-control`.
+
+Укажите `DB_HOST=postgres` и внутренний порт PostgreSQL в общей существующей Docker-сети. Имя базы для текущего монолитного мигратора — `worker_cabinet`. Не открывайте PostgreSQL наружу ради агента. Перенесите пароль в закрытый `.env` на сервере, не выводя его в журнал.
+
+### Nexus и приватные образы
+
+Пример согласованных параметров:
+
+```dotenv
+DEPLOY_REGISTRY_URL=https://nexus.example.ru:5000
+DEPLOY_BACKEND_REPOSITORY=nexus.example.ru:5000/vatai12/worker-cabinet-backend
+DEPLOY_FRONTEND_REPOSITORY=nexus.example.ru:5000/vatai12/worker-cabinet-frontend
+DEPLOY_REGISTRY_USERNAME=readonly-deploy
+DEPLOY_REGISTRY_PASSWORD=SERVER_SECRET
+DEPLOY_REGISTRY_POLL_SECONDS=30
+DEPLOY_PLATFORM=linux/amd64
+```
+
+API URL — адрес Docker connector Nexus; у некоторых конфигураций есть дополнительный путь, который можно включить в `DEPLOY_REGISTRY_URL`. Имена репозиториев должны совпадать с путями, доступными этому connector. Для закрытой сети используйте Nexus, а не публичный `registry-1.docker.io` из примера по умолчанию.
+
+Если Nexus уже настроен как daemon mirror и действующие ссылки `vatai12/...` работают без явного hostname, можно сохранить их и указать Nexus только как API URL. Для приватных репозиториев предпочтительны полные имена Nexus: login, API и pull тогда используют один registry host. При legacy mirror-подключении потребуется существующая рабочая конфигурация авторизации Docker; её можно подключить через отдельный Compose override вместо стандартного tmpfs `/run/docker`.
+
+Секреты реестра задаются только в `.env`; сервис выполняет `docker login --password-stdin` внутри контейнера и хранит Docker credentials в tmpfs `/run/docker`. На APP задайте аналогичные credentials для чтения frontend. Пользователям админки эти секреты не возвращаются.
+
+HTTPS обязателен по умолчанию. Для внутреннего HTTP-реестра необходимо явное `DEPLOY_REGISTRY_ALLOW_HTTP=true`. Для собственного CA подключите его в контейнер и задайте `NODE_EXTRA_CA_CERTS`; Docker daemon на каждом хосте должен доверять реестру независимо от Node.js. Не отключайте проверку TLS. Если Bearer realm расположен на другом внутреннем origin, явно добавьте его в `DEPLOY_REGISTRY_AUTH_ORIGINS` через запятую. Для Docker Hub `https://auth.docker.io` разрешён автоматически. Credentials не передаются произвольным redirect/pagination origins.
+
+Подготовьте существующий отдельный SSH-ключ и проверенный `known_hosts` в `/etc/worker-cabinet/deploy-ssh`. Права каталога `700`, ключа `600`. Путь можно изменить через `DEPLOY_SSH_DIRECTORY`. Поддерживается `DEPLOY_SSH_PORT`, по умолчанию 22; конфигурация `~/.ssh/config` не используется.
+
+Запуск из каталога с двумя файлами:
+
+```bash
+docker compose --project-name wc-deployment-control --env-file .env.deployment-agent -f docker-compose.deployment-agent.yml pull
+docker compose --project-name wc-deployment-control --env-file .env.deployment-agent -f docker-compose.deployment-agent.yml up -d --no-build
+docker compose --project-name wc-deployment-control --env-file .env.deployment-agent -f docker-compose.deployment-agent.yml logs --tail=100
+```
+
+В production Compose нет `build:` и подключения исходников. Публичных портов у сервиса нет.
+
+## Установка на APP
+
+Доставьте `deploy/docker-compose.frontend-agent.yml` и `deploy/agent/.env.frontend.example`. Сохраните пример как `.env.frontend-agent` рядом с Compose и заполните фактические значения. Укажите готовый `DEPLOY_AGENT_IMAGE` той же версии.
+
+Роль frontend, `DEPLOY_ROOT`, `DEPLOY_PROJECT`, `DEPLOY_COMPOSE_FILE`, `DEPLOY_APP_ENV_FILE`, `DEPLOY_FRONTEND_REPOSITORY` относятся к действующему frontend. `DEPLOY_MAINTENANCE_DIR` указывает на существующий каталог обслуживания. Он должен быть подключён в nginx по пути `/etc/nginx/maintenance`; изменения фронтенд-образа и nginx из 2.4.64 должны уже присутствовать.
+
+```bash
+docker compose --project-name wc-frontend-control --env-file .env.frontend-agent -f docker-compose.frontend-agent.yml pull
+docker compose --project-name wc-frontend-control --env-file .env.frontend-agent -f docker-compose.frontend-agent.yml up -d --no-build
+```
+
+Помощник находится в постоянно запущенном контейнере `worker-cabinet-frontend-agent`. Он не публикует сетевых портов. В `authorized_keys` отдельного пользователя `wc-deploy` замените прежнюю принудительную команду с `/usr/bin/node /root/...` на:
 
 ```text
-restrict,command="/usr/bin/node /opt/worker-cabinet/deploy/agent/frontend.mjs" ssh-ed25519 REPLACE_PUBLIC_KEY
+restrict,command="/usr/bin/docker exec --interactive worker-cabinet-frontend-agent node /app/deploy/agent/frontend.mjs" ssh-ed25519 ACTUAL_PUBLIC_KEY
 ```
 
-Помощник принимает JSON через stdin и разрешает только проверку контейнера, скачивание образа из заданного репозитория по digest, обновление frontend и переключение обслуживания. Пользователю нужны доступ к Docker и запись в frontend `.env` и каталог обслуживания. Доступ к Docker даёт широкие права на сервере; учётная запись и SSH-ключ должны использоваться только для деплоя. Настройте `docker login` для этого пользователя, если образы приватные.
+Проверьте фактический путь к Docker на APP. Пользователю нужны доступ к Docker и стандартная shell для SSH; доступ к `/root` с хоста и Node.js на хосте больше не нужны. Docker даёт широкие права на сервере — ключ должен использоваться только для деплоя. Сохраните права `.ssh`/`authorized_keys` и остальные ключи.
 
-5. На backend-сервере установите исходники сервиса в отдельную стабильную директорию. Скопируйте `backend.example.json` в `/etc/worker-cabinet/backend-deploy.json`. Пути `root`, `compose`, `env`, `backups` указывают на **действующую установку приложения**, а не на исходники сервиса. `project` должен совпадать с проектом действующих API/PostgreSQL. Каталог `backups` должен находиться внутри `DEPLOY_ROOT`, чтобы он был доступен контейнеру сервиса.
-6. В `/etc/worker-cabinet/deploy-ssh` положите приватный ключ `id_ed25519` и файл `known_hosts` с проверенным ключом frontend-сервера. Убедитесь в владельце и правах: каталог `700`, приватный ключ `600`. Проверяйте отпечаток ключа сервера по доверенному каналу; SSH-проверка ключей обязательна.
-7. Скопируйте `deploy/agent/.env.example` в `deploy/agent/.env` в исходниках сервиса. Заполните параметры БД, адрес SSH, репозиторий. `DB_NAME` — `worker_cabinet`. `DB_HOST` должен быть доступен из контейнера сервиса: пример использует `host.docker.internal` и опубликованный порт PostgreSQL. Не открывайте PostgreSQL в интернет. Для закрытой Docker-сети подключите агент к существующей сети backend и укажите `DB_HOST=postgres` через локальный Compose override.
-8. Создайте `/opt/worker-cabinet/releases/index.json` с содержимым `[]`. Каталог релизов должен быть доступен агенту только для чтения по назначению; управляет им оператор публикации. Установите Docker Hub credentials на backend-сервере, если образы приватные. Пример Compose подключает `/root/.docker` для пользователя root; при другом расположении поменяйте mount и `DOCKER_CONFIG`.
-9. Из корня исходников сервиса запустите:
+Проверка с BACKEND выполняется **из контейнера** deployment-agent, а не через Node.js на хосте:
 
 ```bash
-docker compose --env-file deploy/agent/.env -f deploy/docker-compose.deployment-agent.yml up -d --build
-docker compose --env-file deploy/agent/.env -f deploy/docker-compose.deployment-agent.yml logs -f
+docker compose --project-name wc-deployment-control --env-file .env.deployment-agent -f docker-compose.deployment-agent.yml exec -T deployment-agent sh -c 'printf "%s" "{\"action\":\"inspect\"}" | ssh -F /dev/null -T -p "$DEPLOY_SSH_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o UserKnownHostsFile="$DEPLOY_SSH_KNOWN_HOSTS" -i "$DEPLOY_SSH_KEY" "$DEPLOY_SSH_TARGET"'
 ```
 
-`DEPLOY_ROOT` подключается по одинаковому абсолютному пути на хосте и внутри агента. Это нужно Docker daemon для путей Compose, `.env`, резервных копий и подключаемых файлов. В примере конфигурация и SSH-файлы подключены только для чтения. Ни один контейнер инфраструктуры агент не пересоздаёт.
+Ожидается JSON состояния frontend. Проверка исключает one-off контейнеры миграций по Compose labels и совместима с поведением Compose v5 из продового отчёта.
 
-10. Откройте «Глобальные настройки → Диагностика → Обновление системы». Укажите адрес сайта без пути и внутренний адрес `/api/health`, доступный агенту. Настройки сохраняются в PostgreSQL. Дождитесь подключения агента и успешной проверки обоих серверов, затем разрешите обновления.
+## Переход с установки 2.4.64 из продового отчёта
 
-Проверка SSH без изменения приложения с backend-сервера:
+1. Выпустите новую версию с этими изменениями. До выпуска новый готовый образ агента отсутствует; не используйте старый 2.4.64/случайный `latest` как замену.
+2. Сохраните закрытые копии действующих `.env`, Compose и параметров сервиса. Не удаляйте `/root/backups`, БД, данные, SSH-ключи или флаг обслуживания.
+3. Убедитесь, что нет `queued`, `running` или `recovery_required` заданий. Завершите/восстановите их прежним агентом до смены конфигурации репозиториев.
+4. Обновите приложение по обычному сценарию из нового образа с миграцией. Она добавляет поля состояния сканирования в `deployment_state`, сохраняя настройки и историю. Обычный updater не обновляет собственный контейнер.
+5. Подготовьте APP-контейнер помощника и его `.env`, скачайте готовый образ, запустите его отдельным проектом. Старую SSH-команду пока сохраните в резервной копии.
+6. Остановите только старый deployment-agent. Не оставляйте два агента на разных настройках: advisory lock исключает работу второго, но старая конфигурация не должна снова захватить управление.
+7. Переключите `authorized_keys` на `docker exec`, запустите новый backend deployment-agent из готового образа и проверьте SSH, БД, Docker и Nexus.
+8. Сохраните в админке действующие URL сайта/API, дождитесь успешного поиска. При сохранении тех же digest новый registry hostname допустим; содержимое уже опубликованной версии менять нельзя.
+9. Проверьте контролируемое обновление в согласованное окно, затем удалите старые bind mounts Docker CLI/Compose plugin, исходников и JSON-конфигов. Новые сервисы не должны зависеть от `/opt/worker-cabinet-deployer`, `/root/deploy/agent`, Node.js на хостах или локального `Dockerfile.deployment-agent.local`.
+10. Только после успешной проверки удалите устаревшие исходники/скрипты и лишний host Node.js, если они не используются другими приложениями. Нужные SSH-конфиги, CA, рабочие `.env`, Compose, данные и копии остаются.
 
-```bash
-printf '%s' '{"action":"inspect"}' | ssh -F /dev/null -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o UserKnownHostsFile=/etc/worker-cabinet/deploy-ssh/known_hosts -i /etc/worker-cabinet/deploy-ssh/id_ed25519 wc-deploy@frontend.example.ru
-```
+Каталог `/root/releases/index.json` больше не участвует в обычном обнаружении версий; переносить следующий JSON вручную не нужно. Старые файлы можно оставить архивом до проверки. Источником каталога является Nexus, результат хранится в PostgreSQL.
 
-## Публикация релиза
+## Работа и восстановление
 
-`docker-build-push.sh` после публикации версионных образов получает digest из реестра и создаёт `release-artifacts/VERSION.json`. В манифесте — версия, коммит и два образа по digest. Файл не содержит секретов. Образы собираются из HEAD, поэтому перед сборкой исходники этой функции должны быть закоммичены согласно проверкам скрипта.
+Откройте `/admin/global?tab=deployment` под глобальным superadmin без имперсонации. Отображаются источник и время последней успешной проверки, версии контейнеров, доступные релизы и история. Поиск версий не запускает установку автоматически: администратор выбирает релиз и подтверждает обновление.
 
-Скопируйте манифест на backend-сервер и добавьте его в индекс. Запускайте команды публикации каталога последовательно одним оператором:
+Порядок обновления: preflight → параллельный pull → обслуживание → остановка API/worker → custom dump PostgreSQL и проверка архива → однократные миграции → API/worker и health → frontend → проверки сайта/API → снятие обслуживания. Миграционный Compose override передаётся через stdin, временные JS/JSON-файлы на хосте не создаются. Worker больше не наследует неподходящий HTTP-healthcheck API в поставляемом backend Compose. В действующем серверном Compose добавьте для `notification-worker` `healthcheck: { disable: true }`, если у него осталась именно унаследованная HTTP-проверка API; собственную корректную проверку worker сохраняйте.
 
-```bash
-node deploy/agent/catalog.mjs /tmp/VERSION.json /opt/worker-cabinet/releases/index.json vatai12/worker-cabinet-frontend vatai12/worker-cabinet-backend
-```
+При ошибке после начала изменений сохраняется `recovery_required`. Не удаляйте блокировку вручную и не повторяйте миграции вслепую. Проверьте `wc-migration-UUID`, БД и совместимость текущих образов. После ручного восстановления нажмите «Проверить восстановление». Автоматического отката БД нет. Dump-файлы и миграционные контейнеры не удаляются автоматически; срок хранения и внешнее хранение копий настраиваются отдельно.
 
-Запускайте эту команду из исходников сервиса: рядом требуется `backend/src/deployment/validation.js`. Агент перечитывает индекс примерно каждые пять секунд между заданиями. Повторное добавление той же версии с теми же digest допустимо, подмена опубликованной версии отклоняется. Для удаления релиза из выбора удалите его запись из JSON-массива; уже созданное задание хранит собственный снимок манифеста. При недоступном или повреждённом индексе новые запуски запрещены. Номер версии необходимо увеличивать для каждого релиза.
+## Проверки для разработчика
 
-## Что происходит при нажатии
-
-Один активный запуск защищён уникальным индексом PostgreSQL; повторное нажатие той же версии возвращает существующее задание. Отдельная advisory-блокировка разрешает работу только одному агенту. Запуск и настройки доступны только глобальному `superadmin` вне имперсонации и предпросмотра роли. Действия записываются в аудит.
-
-Агент проверяет оба сервера, скачивает образы параллельно, включает обслуживание и останавливает API/воркер. Затем создаёт PostgreSQL custom dump и проверяет его через `pg_restore --list`, выполняет миграции отдельным именованным контейнером, запускает новый API/воркер, проверяет готовность API и стабильность воркера, обновляет frontend и проверяет `/release.json` и API через nginx. После снятия обслуживания повторно проверяет сайт. Фактические образы до и после, этап ошибки, файл копии и инициатор сохраняются в БД.
-
-Копия делается после остановки приложения для согласованного состояния до миграций. Пока API остановлен, страница временно не получает статусы; после его запуска polling продолжится. Другие работающие страницы не обходят обслуживание. Административный API состояния и health-проверки nginx пропускает; они сохраняют свои серверные проверки доступа. Статический сайт в этот период отвечает 503.
-
-Обычные последующие ручные команды Compose читают обновлённый `BACKEND_IMAGE` или `FRONTEND_IMAGE` из действующего `.env`. Агент атомарно меняет только соответствующий ключ. Не задавайте конфликтующие переменные образов в оболочке при ручном запуске.
-
-## Ошибки и восстановление
-
-При ошибке скачивания образы действующих контейнеров не меняются. При сбое после начала обслуживания задание остаётся `recovery_required` и блокирует новые обновления. При перезапуске агента незавершённые `running` переводятся в такое же состояние: агент сверяет контейнеры и миграцию, автоматически не повторяет команды миграции.
-
-1. Посмотрите историю в админке и журналы на обоих серверах. Миграционный контейнер сохраняется с именем `wc-migration-UUID`; используйте `docker logs wc-migration-UUID` и `docker inspect wc-migration-UUID`. Не удаляйте ещё работающий миграционный контейнер и не запускайте миграции параллельно.
-2. Резервная копия находится в `backups/UUID.dump`. Проверка `pg_restore --list` подтверждает читаемость архива, но не заменяет тест восстановления. Храните копии вне сервера и настройте срок хранения отдельно; автоматического удаления копий и контейнеров миграций нет.
-3. Если миграции не начинались, можно вручную вернуть прежние образы из `before_state`. Если схема менялась, сначала определите совместимость. Возврат старых образов не откатывает схему.
-4. Восстановление БД из копии выполняется оператором при остановленном приложении после оценки потери новых данных. Проверьте восстановление сначала в отдельной БД. Учитывайте: копия содержит таблицы заданий и аудита в состоянии до миграций; после восстановления перезапустите агент, чтобы он вновь отметил незавершённое задание как требующее проверки.
-5. Когда схема и данные проверены, вручную запустите совместимые API, notification-worker и frontend. Если API не работает, кнопка восстановления недоступна — сначала восстановите его на сервере.
-6. В админке отметьте «Я проверил схему и данные БД» и нажмите «Проверить восстановление». Агент проверит отсутствие работающей миграции, готовность контейнеров/API и сайта, снимет обслуживание. Если образы совпадают с целевым релизом, задание станет `completed`, иначе `failed`; блокировка нового запуска будет снята. Образы и данные эта кнопка не меняет.
-
-При необходимости ручного снятия обслуживания удалите только файл `/opt/worker-cabinet/maintenance/enabled` на frontend-сервере после проверки приложения. Не используйте `docker compose down -v` для обновления или восстановления.
-
-## Проверки
+Эти команды выполняются на машине разработки/сборки, не на проде:
 
 ```bash
-node --test backend/src/tests/deployment.test.js
-DEPLOY_DOCKER_TEST=1 DEPLOY_TEST_AGENT_IMAGE=worker-cabinet-deployment-agent:local node --test backend/src/tests/deployment-docker.test.js
+node --test backend/src/tests/deployment.test.js backend/src/tests/deployment-registry.test.js
 DEPLOY_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/worker_cabinet node --test backend/src/tests/deployment-api.test.js
+DEPLOY_DOCKER_TEST=1 DEPLOY_TEST_AGENT_IMAGE=worker-cabinet-deployment-agent:test node --test backend/src/tests/deployment-docker.test.js
+npx vitest run core/admin/pages/tabs/DeploymentTab.test.tsx --environment jsdom
 npm run lint
 npm run typecheck
 npm run build
-npx vitest run core/admin/pages/tabs/DeploymentTab.test.tsx --environment jsdom
+docker build -f deploy/Dockerfile.deployment-agent -t worker-cabinet-deployment-agent:test .
 ```
 
-API-тесты используют отдельную временную PostgreSQL-схему и не обращаются к Docker/SSH. Переменная тестовой БД обязательна; без неё API-тесты пропускаются. Используйте выделенную тестовую БД. До установки на прод нужно проверить полный цикл на тестовой паре серверов и восстановление копии в отдельную БД.
+Для API-тестов используйте выделенную БД: они создают отдельную временную схему. Для production-развёртывания нужны только готовые образы и серверные конфигурации. Release-скрипт собирает и публикует все три образа из HEAD; на закрытых серверах `--build` не используется.

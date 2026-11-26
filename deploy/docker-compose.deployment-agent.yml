@@ -1,17 +1,22 @@
 services:
   deployment-agent:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.deployment-agent
-    image: worker-cabinet-deployment-agent:local
+    image: ${DEPLOY_AGENT_IMAGE:?Укажите готовый образ deployment-agent}
     restart: unless-stopped
     init: true
-    env_file: ${DEPLOY_AGENT_ENV_FILE:-./agent/.env}
-    extra_hosts:
-      - host.docker.internal:host-gateway
+    env_file: ${DEPLOY_AGENT_ENV_FILE:-.env.deployment-agent}
+    environment:
+      DEPLOY_ROLE: backend
+      DOCKER_CONFIG: /run/docker
+    tmpfs:
+      - /run/docker:mode=0700
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DEPLOY_ROOT:?Укажите DEPLOY_ROOT}:${DEPLOY_ROOT}
-      - /etc/worker-cabinet/backend-deploy.json:/etc/worker-cabinet/backend-deploy.json:ro
-      - /etc/worker-cabinet/deploy-ssh:/run/deploy-ssh:ro
-      - /root/.docker:/root/.docker:ro
+      - ${DEPLOY_SSH_DIRECTORY:-/etc/worker-cabinet/deploy-ssh}:/run/deploy-ssh:ro
+    networks:
+      - application
+
+networks:
+  application:
+    external: true
+    name: ${DEPLOY_NETWORK:?Укажите существующую сеть приложения}

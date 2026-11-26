@@ -2841,6 +2841,9 @@ export async function migrateDeployment(db) {
         catalog_error TEXT,
         host_error TEXT
       );
+      ALTER TABLE deployment_state ADD COLUMN IF NOT EXISTS catalog_checked_at TIMESTAMPTZ;
+      ALTER TABLE deployment_state ADD COLUMN IF NOT EXISTS catalog_source TEXT;
+      ALTER TABLE deployment_state ADD COLUMN IF NOT EXISTS catalog_refresh_requested BOOLEAN NOT NULL DEFAULT false;
       INSERT INTO deployment_state (id) VALUES (1) ON CONFLICT DO NOTHING;
       CREATE TABLE IF NOT EXISTS deployment_releases (
         version TEXT PRIMARY KEY,

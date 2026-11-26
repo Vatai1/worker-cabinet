@@ -6,12 +6,17 @@ import { createHost, command, readHostConfig } from '../../../deploy/agent/host.
 import { DeploymentStore, DEPLOY_LOCK } from './store.js'
 import { validateRelease, validateSettings, matchesRelease } from './validation.js'
 import { recoverInterrupted, runDeployment, resolveDeployment } from './orchestrator.js'
+import { RegistryClient, registryOrigin, dockerCredentials } from './registry.js'
 
 export async function syncCatalog(store, file, repositories) {
   const text = await readFile(file, 'utf8')
   if (text.length > 1048576) throw new Error('Слишком большой каталог релизов')
   const values = JSON.parse(text)
   if (!Array.isArray(values) || values.length > 500) throw new Error('Некорректный каталог релизов')
+  return syncReleases(store, values, repositories)
+}
+
+export async function syncReleases(store, values, repositories) {
   const releases = values.map(value => validateRelease(value, repositories))
   if (new Set(releases.map(release => release.version)).size !== releases.length) throw new Error('Повтор версии в каталоге')
   await store.db.query('BEGIN')
@@ -19,12 +24,12 @@ export async function syncCatalog(store, file, repositories) {
     await store.db.query('UPDATE deployment_releases SET available = false')
     for (const release of releases) {
       const existing = (await store.db.query('SELECT manifest FROM deployment_releases WHERE version = $1', [release.version])).rows[0]
-      if (existing && ['commit', 'frontend', 'backend'].some(key => existing.manifest[key] !== release[key])) throw new Error('Опубликованный релиз нельзя перезаписывать')
+      if (existing && (existing.manifest.commit !== release.commit || ['frontend', 'backend'].some(key => existing.manifest[key].split('@')[1] !== release[key].split('@')[1]))) throw new Error('Опубликованный релиз нельзя перезаписывать')
       await store.db.query(`INSERT INTO deployment_releases (version, manifest) VALUES ($1, $2)
-        ON CONFLICT (version) DO UPDATE SET available = true`, [release.version, release])
+        ON CONFLICT (version) DO UPDATE SET available = true, manifest = EXCLUDED.manifest`, [release.version, release])
     }
     await store.db.query('COMMIT')
-    await store.db.query('UPDATE deployment_state SET catalog_error = NULL WHERE id = 1')
+    await store.db.query('UPDATE deployment_state SET catalog_error = NULL, catalog_checked_at = NOW() WHERE id = 1')
   } catch (error) { await store.db.query('ROLLBACK'); throw error }
 }
 
@@ -79,9 +84,17 @@ export async function startAgent() {
   const stop = () => controller.abort()
   process.once('SIGTERM', stop)
   process.once('SIGINT', stop)
+  const signal = controller.signal
+  const repositories = { backend: config.repository, frontend: process.env.DEPLOY_FRONTEND_REPOSITORY }
+  const credentials = await dockerCredentials(process.env, config.repository)
+  const registry = new RegistryClient({ url: process.env.DEPLOY_REGISTRY_URL || registryOrigin(config.repository), ...credentials, allowHttp: process.env.DEPLOY_REGISTRY_ALLOW_HTTP === 'true', authOrigins: (process.env.DEPLOY_REGISTRY_AUTH_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean), platform: process.env.DEPLOY_PLATFORM || 'linux/amd64', signal })
+  const interval = Number(process.env.DEPLOY_REGISTRY_POLL_SECONDS || 30)
+  const sshPort = Number(process.env.DEPLOY_SSH_PORT || 22)
+  if (!Number.isInteger(interval) || interval < 30 || interval > 86400 || !Number.isInteger(sshPort) || sshPort < 1 || sshPort > 65535) throw new Error('Некорректный интервал проверки или SSH-порт')
   const client = await pool.connect()
   client.on('error', stop)
-  const signal = controller.signal
+  let nextScan = 0
+  let lastScan = 0
   let heartbeat
   try {
     const locked = (await client.query('SELECT pg_try_advisory_lock($1) AS locked', [DEPLOY_LOCK])).rows[0].locked
@@ -89,7 +102,7 @@ export async function startAgent() {
     const store = new DeploymentStore(client)
     const host = createHost(config, command, signal)
     const remote = async (action, payload = {}) => JSON.parse(await command('ssh', [
-      '-F', '/dev/null', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'IdentitiesOnly=yes',
+      '-F', '/dev/null', '-T', '-p', String(sshPort), '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'IdentitiesOnly=yes',
       '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3',
       '-o', `UserKnownHostsFile=${process.env.DEPLOY_SSH_KNOWN_HOSTS}`, '-i', process.env.DEPLOY_SSH_KEY, target,
     ], { input: JSON.stringify({ action, payload }), signal }))
@@ -100,10 +113,16 @@ export async function startAgent() {
     await recoverInterrupted(store, host, remote)
     await client.query("UPDATE deployment_jobs SET resolution_requested = false WHERE status = 'recovery_required'")
     while (!signal.aborted) {
-      try {
-        await syncCatalog(store, process.env.DEPLOY_RELEASES_FILE, { backend: config.repository, frontend: process.env.DEPLOY_FRONTEND_REPOSITORY })
-      } catch {
-        await client.query("UPDATE deployment_state SET catalog_error = 'Каталог релизов недоступен, повреждён или содержит изменённую версию' WHERE id = 1")
+      const state = await store.state()
+      if (Date.now() >= nextScan || (state.catalog_refresh_requested && Date.now() - lastScan >= 30000)) {
+        lastScan = Date.now()
+        await client.query('UPDATE deployment_state SET catalog_refresh_requested = false, catalog_source = $1 WHERE id = 1', [registry.base.href])
+        try {
+          await syncReleases(store, await registry.discover(repositories), repositories)
+        } catch {
+          await client.query("UPDATE deployment_state SET catalog_error = 'Не удалось проверить версии в Docker Registry. Проверьте адрес Nexus, доступ, сертификаты и неизменяемость опубликованных версий' WHERE id = 1")
+        }
+        nextScan = lastScan + interval * 1000
       }
       let ready = false
       try {

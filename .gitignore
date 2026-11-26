@@ -80,3 +80,6 @@ deploy/backups/
 backend/test_kc*.mjs
 .agents/skills/instruction-videos/.out/
 .opencode/package-lock.json
+
+deploy/.env.deployment-agent
+deploy/.env.frontend-agent
