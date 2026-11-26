@@ -68,6 +68,13 @@ export function SelectControl({ options, selected, onChange, label, placeholder,
       const trigger = triggerRef.current
       if (!trigger) return
       const rect = trigger.getBoundingClientRect()
+      let zIndex = 200
+      let ancestor: HTMLElement | null = trigger
+      while (ancestor) {
+        const layer = Number.parseInt(window.getComputedStyle(ancestor).zIndex, 10)
+        if (Number.isFinite(layer)) zIndex = Math.max(zIndex, layer + 1)
+        ancestor = ancestor.parentElement
+      }
       const viewportHeight = window.visualViewport?.height ?? window.innerHeight
       const viewportWidth = document.documentElement.clientWidth || window.innerWidth
       const below = viewportHeight - rect.bottom - 12
@@ -75,7 +82,7 @@ export function SelectControl({ options, selected, onChange, label, placeholder,
       const upwards = below < 220 && above > below
       const maxHeight = Math.max(0, Math.min(360, upwards ? above : below))
       const width = Math.min(Math.max(rect.width, 240), viewportWidth - 24)
-      setPosition({ position: 'fixed', left: Math.max(12, Math.min(rect.left, viewportWidth - width - 12)), width, maxHeight, ...(upwards ? { bottom: viewportHeight - rect.top + 6 } : { top: rect.bottom + 6 }) })
+      setPosition({ position: 'fixed', zIndex, left: Math.max(12, Math.min(rect.left, viewportWidth - width - 12)), width, maxHeight, ...(upwards ? { bottom: viewportHeight - rect.top + 6 } : { top: rect.bottom + 6 }) })
     }
     updatePosition()
     if (searchable) searchRef.current?.focus({ preventScroll: true })

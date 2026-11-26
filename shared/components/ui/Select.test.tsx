@@ -142,13 +142,14 @@ describe('Единые селекты', () => {
 
   it('выносит список из контейнера со скрытым переполнением и открывает вверх у края экрана', async () => {
     const user = userEvent.setup()
-    const { container } = render(<div style={{ overflow: 'hidden' }}><SelectDropdown options={options} value="1" onChange={vi.fn()} /></div>)
+    const { container } = render(<div style={{ overflow: 'hidden', position: 'relative', zIndex: 9999 }}><SelectDropdown options={options} value="1" onChange={vi.fn()} /></div>)
     const trigger = screen.getByRole('combobox')
     vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({ x: 30, y: 700, top: 700, bottom: 740, left: 30, right: 230, width: 200, height: 40, toJSON() {} })
     await user.click(trigger)
     const popup = screen.getByRole('listbox').parentElement!
     expect(container.contains(popup)).toBe(false)
     expect(popup.style.position).toBe('fixed')
+    expect(Number(popup.style.zIndex)).toBeGreaterThan(9999)
     expect(popup.style.bottom).not.toBe('')
     expect(within(popup).getAllByRole('option')).toHaveLength(3)
     fireEvent.resize(window)

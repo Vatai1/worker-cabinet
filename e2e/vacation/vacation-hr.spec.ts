@@ -54,9 +54,9 @@ const ruleRow = (page: Page, text: string) => page.locator('div.rounded-lg.borde
 test.describe('Отпуск: HR', () => {
   test('дни отпуска по должности: правило меняет баланс работника на этот и следующий год, удаление убирает правило', async ({ page }) => {
     await openHrVacation(page, 'Дни отпуска')
-    await page.getByRole('button', { name: 'Выберите должности' }).click()
+    await page.getByRole('combobox', { name: 'Выберите должности' }).click()
     await page.getByPlaceholder('Поиск по должности…').fill(POSITION)
-    await page.locator('label', { hasText: POSITION }).locator('input[type="checkbox"]').check()
+    await page.getByRole('option', { name: POSITION, exact: true }).click()
     await page.getByRole('heading', { name: /Дни отпуска/ }).first().click().catch(() => page.mouse.click(5, 5))
     const addRow = page.locator('div.border-dashed').filter({ has: page.getByRole('button', { name: /Добавить \(1\)/ }) }).first()
     await addRow.locator('input[type="number"]').fill('33')
@@ -164,7 +164,7 @@ test.describe('Отпуск: HR', () => {
     await card.locator(`[data-day="${THIS_YEAR}-01-15"]`).click()
     await card.locator('input[type="date"]').fill(CUSTOM_DAY)
     await card.getByTitle('Праздник (не входит в отпуск)').click()
-    await card.getByRole('option', { name: 'Выходной (входит в отпуск)', exact: true }).click()
+    await page.getByRole('option', { name: 'Выходной (входит в отпуск)', exact: true }).click()
     await card.getByPlaceholder('Например, День города').fill('e2e-vhr день')
     await card.getByRole('button', { name: 'Сохранить' }).click()
 

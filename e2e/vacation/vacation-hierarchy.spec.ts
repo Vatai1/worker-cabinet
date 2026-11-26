@@ -60,13 +60,13 @@ async function buildParentChild(page: Page) {
 async function openTeamCalendarOf(page: Page, departmentName: string) {
   await openVacationPage(page)
   await page.getByRole('button', { name: 'Вся команда', exact: true }).click()
-  await page.getByRole('button', { name: PARENT_DEPT, exact: true }).click()
-  await page.locator('label', { hasText: PARENT_DEPT }).locator('input[type="checkbox"]').uncheck()
+  await page.getByRole('combobox', { name: PARENT_DEPT, exact: true }).click()
+  await page.getByRole('option', { name: PARENT_DEPT, exact: true }).click()
   const loaded = page.waitForResponse((r) => r.url().includes('/vacation/requests') && r.url().includes(`departmentId=${world.departments.child}`), { timeout: 15000 })
-  await page.locator('label', { hasText: departmentName }).locator('input[type="checkbox"]').check()
+  await page.getByRole('option', { name: departmentName, exact: true }).click()
   await loaded
   await page.getByRole('heading', { name: 'Отпуска', exact: true }).click()
-  await expect(page.getByRole('button', { name: departmentName, exact: true })).toBeVisible({ timeout: 5000 })
+  await expect(page.getByRole('combobox', { name: departmentName, exact: true })).toBeVisible({ timeout: 5000 })
 }
 
 async function hoverDay(page: Page, dateIso: string) {
