@@ -114,8 +114,17 @@ export function SelectControl({ options, selected, onChange, label, placeholder,
   }, [open, disabled, searchable])
 
   useLayoutEffect(() => {
-    if (open) document.getElementById(`${listId}-${activeIndex}`)?.scrollIntoView?.({ block: 'nearest' })
-  }, [open, activeIndex, listId])
+    if (!open || disabled || position.maxHeight === undefined) return
+    const list = document.getElementById(listId)
+    const option = document.getElementById(`${listId}-${activeIndex}`)
+    if (!list || !option) return
+
+    const top = list.getBoundingClientRect().top + list.clientTop
+    const bottom = top + list.clientHeight
+    const optionRect = option.getBoundingClientRect()
+    if (optionRect.top < top) list.scrollTop += Math.floor(optionRect.top - top)
+    else if (optionRect.bottom > bottom) list.scrollTop += Math.ceil(optionRect.bottom - bottom)
+  }, [open, disabled, activeIndex, listId, position.maxHeight])
 
   const choose = (index: number) => {
     const option = items[index]

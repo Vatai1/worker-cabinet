@@ -297,6 +297,14 @@ step_typecheck() {
     npm run typecheck
 }
 
+step_component_tests() {
+    npm run test:components
+}
+
+step_visual_tests() {
+    npm run test:visual -- --reporter=line
+}
+
 step_build() {
     npx vite build
 }
@@ -464,6 +472,8 @@ main() {
         run_step "Зависимости (бэкенд)" step_deps_backend
         run_step "Линт (фронтенд)" step_lint
         run_step "Тайпчек (фронтенд)" step_typecheck
+        run_step "Компонентные тесты (фронтенд)" step_component_tests
+        run_step "Визуальные тесты (Playwright)" step_visual_tests
         run_step "Сборка (фронтенд)" step_build
         run_step "Синтаксис (бэкенд)" step_syntax
         run_step "Временная БД (postgres)" step_test_db

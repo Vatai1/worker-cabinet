@@ -26,6 +26,8 @@
     "backend:seed": "cd backend && npm run seed",
     "test": "playwright test --ui",
     "test:ci": "playwright test",
+    "test:components": "vitest run",
+    "test:visual": "playwright test --config playwright.visual.config.ts",
     "test:headed": "playwright test --headed",
     "test:vacation": "playwright test e2e/vacation/vacation-full.spec.ts",
     "deploy:dev": "node ./deploy/deploy.js dev start",

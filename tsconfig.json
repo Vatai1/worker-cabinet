@@ -26,7 +26,7 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["core/**/*.ts", "core/**/*.tsx", "modules/**/*.ts", "modules/**/*.tsx", "shared/**/*.ts", "shared/**/*.tsx", "*.ts", "*.tsx"],
+  "include": ["core/**/*.ts", "core/**/*.tsx", "modules/**/*.ts", "modules/**/*.tsx", "shared/**/*.ts", "shared/**/*.tsx", "e2e/timesheet/visual/*.ts", "e2e/timesheet/visual/*.tsx", "*.ts", "*.tsx"],
   "exclude": ["vite.config.ts", "playwright-ct.config.ts", "docker", "node_modules"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
